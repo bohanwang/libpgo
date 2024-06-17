@@ -18,7 +18,7 @@
   "attachment-stiffness": 1e5,
 
   "solver-eps": 1e-3,
-  "solver-max-iter": 3000,
+  "solver-max-iter": 200,
 
   "elastic-material": "stable-neo",
 
