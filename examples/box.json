@@ -1,0 +1,27 @@
+{
+  "tet-mesh": "box.veg",
+  "surface-mesh": "box.obj",
+  "fixed-vertices": "",
+  "external-objects": ["bottom.obj"],
+  "g": [0, -9.81, 0],
+  "init-vel": [0, -200, 0],
+  "scale": 1.0,
+  "timestep": 0.002,
+  "num-timestep": 1000,
+  "damping-params": [0, 0],
+  "sim-type": "dynamic",
+  
+  "contact-stiffness": 40000,
+  "contact-sample": 6,
+  "contact-friction-coeff": 0.3,
+  "contact-vel-eps": 1e-5,
+  "attachment-stiffness": 1e5,
+
+  "solver-eps": 1e-3,
+  "solver-max-iter": 3000,
+
+  "elastic-material": "stable-neo",
+
+  "dump-interval": 10,
+  "output": "ret-box"
+}
