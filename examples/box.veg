@@ -1079,7 +1079,7 @@ TET
 827 174 20 89 242
 
 *MATERIAL defaultMaterial
-ENU, 1000, 10000, 0.45
+ENU, 1000, 100000, 0.45
 
 *REGION
 allElements, defaultMaterial

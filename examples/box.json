@@ -11,14 +11,14 @@
   "damping-params": [0, 0],
   "sim-type": "dynamic",
   
-  "contact-stiffness": 40000,
+  "contact-stiffness": 10000,
   "contact-sample": 6,
   "contact-friction-coeff": 0.3,
   "contact-vel-eps": 1e-5,
   "attachment-stiffness": 1e5,
 
   "solver-eps": 1e-3,
-  "solver-max-iter": 200,
+  "solver-max-iter": 500,
 
   "elastic-material": "stable-neo",
 
