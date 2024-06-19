@@ -11,7 +11,8 @@ FetchContent_Declare(
   URL https://github.com/boostorg/boost/releases/download/boost-1.85.0/boost-1.85.0-cmake.tar.xz
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
-  FIND_PACKAGE_ARGS NAMES Boost COMPONENTS any foreach format graph heap logic math multiprecision property_map system thread variant system program_options serialization
+  OVERRIDE_FIND_PACKAGE
+  # FIND_PACKAGE_ARGS NAMES Boost COMPONENTS any foreach format graph heap logic math multiprecision property_map system thread variant system program_options serialization
 )
 
 FetchContent_MakeAvailable(boost)
