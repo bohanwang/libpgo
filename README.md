@@ -215,5 +215,5 @@ In instances where specific licensing details are not provided within a source f
 - [ ] Support cmake of lower version
 - [ ] Documentation
 - [ ] More python interface
-- [ ] Cleanup source code with "problematic" licence.
+- [ ] Cleanup source code with non-MIT/non-FreeBSD licence.
 - [ ] GUI
