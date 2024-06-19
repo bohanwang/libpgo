@@ -135,7 +135,7 @@ We provide three python scripts to test the installation.
 
     | Rest Shape    | Deformed Shape |
     | ------------- | -------------- |
-    | ![Rest!](/examples/dragon-img/rest.png) | ![Rest!](/examples/dragon-img/deformed.png) |
+    | ![Rest!](/examples/dragon-img/rest.png) | ![Deformed!](/examples/dragon-img/deformed.png) |
 
 3. `pgo_test_03.py`. It runs a dynamic simulation with contact handling.
 
@@ -144,7 +144,10 @@ We provide three python scripts to test the installation.
         python ../src/python/pypgo/pgo_test_03.py
     ```
 
-    In this scene, a box is dropped on the curved ground. The running speed of this demo is slow, so you may run it only if you are interested in the results. The result is a sequence of `.obj` files, each of which is the deformed shape of one timestep. These files are saved in `ret-box` folder. The result will look like:
+    In this scene, a box is dropped on the curved ground. The running speed of this demo is slow, so you may run it only if you are interested in the results. The result is a sequence of `.obj` files, each of which is the deformed shape of ecah timestep. These files are saved in `ret-box` folder. The result will look like:
+    |   Box    |      |
+    | -------| ---- |
+    | ![box!](/examples/box-img/output.gif) | ![white!](/examples/box-img/white.png) |
 
 ---
 
