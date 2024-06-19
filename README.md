@@ -205,13 +205,13 @@ autodiff, boost, ceres, cgal, fmt, knitro, mkl, json, pybind11, spdlog, suitespa
 
 This library is developed using [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) along with various third-party libraries, each governed by their respective licenses. Detailed copyright and license information is included within the majority of the source files.
 
-In instances where specific licensing details are not provided within a source file, the copyright remains with the original author. The licensing for those source files adhere to the principles of the pre-existing license framework. For instance, if a source file without licensing details incorporates components that fall under the GPL parts of CGAL, then that file will adhere to the GPL. All other source files default to the MIT License unless stated otherwise.
+In instances where specific licensing details are not provided within a source file, the copyright remains with the author. The licensing for those source files adhere to the principles of the pre-existing license framework. For instance, if a source file without licensing details incorporates components that fall under the GPL parts of CGAL, then that file will adhere to the GPL. All other source files default to the MIT License unless stated otherwise.
 
 ---
 
 ## TODO
 
-- [x] Functional and Compilable on three major platforms.
+- [x] Functional and compilable on three major platforms.
 - [ ] Support cmake of lower version
 - [ ] Documentation
 - [ ] More python interface
