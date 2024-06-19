@@ -5,7 +5,7 @@ The source code extends [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) an
 
 ---
 
-## Prerequisites (Important!)
+## Prerequisites
 
 1. CMake >= **3.28**\
     We use several functionalities that are only supported by 3.28+. 
