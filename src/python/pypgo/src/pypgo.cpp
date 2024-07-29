@@ -103,7 +103,7 @@ PYBIND11_MODULE(pypgo, m)
   TetMeshGeo_class.def(py::init<>());
 
   py::class_<TriMeshGeo> TriMeshGeo_class(m, "TriMeshGeo");
-  TetMeshGeo_class.def(py::init<>());
+  TriMeshGeo_class.def(py::init<>());
 
   py::class_<TetMesh> TetMesh_class(m, "TetMesh");
   TetMesh_class.def(py::init<>());
