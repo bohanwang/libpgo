@@ -9,6 +9,7 @@ set(SUITESPARSE_DEMOS OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(SUITESPARSE_ENABLE_PROJECTS "suitesparse_config;amd;camd;ccolamd;colamd;cholmod;cxsparse;klu;umfpack;spqr;" CACHE STRING "" FORCE)
 set(SUITESPARSE_USE_FORTRAN OFF CACHE BOOL "" FORCE)
+set(SUITESPARSE_USE_OPENMP OFF CACHE BOOL "" FORCE)
 
 include(FetchContent)
 FetchContent_Declare(

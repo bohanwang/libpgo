@@ -34,6 +34,7 @@ if(OPENMP_FOUND)
   set(OPENMP_FLAG "${OpenMP_CXX_FLAGS}")
   add_compile_definitions(USE_OPENMP)
 endif()
+# openmp may cause mkl pardiso error
 
 include(Find_AVX)
 CHECK_FOR_AVX()
