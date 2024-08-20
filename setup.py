@@ -156,7 +156,7 @@ class CMakeBuild(build_ext):
 # logic and declaration, and simpler if you include description/version in a file.
 setup(
     name="pypgo",
-    version="0.0.1",
+    version="0.0.2",
     author="Bohan Wang",
     author_email="wangbh11@gmail.com",
     description="build pypgo",

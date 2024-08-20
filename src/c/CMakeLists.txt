@@ -9,7 +9,7 @@ set(LIBPGO_C_SOURCES
 add_library(pgo_c SHARED ${LIBPGO_C_SOURCES} ${LIBPGO_C_HEADERS})
 
 set_target_properties(pgo_c PROPERTIES
-  VERSION 0.0.1
+  VERSION 0.0.2
   OUTPUT_NAME pgo_c
   SOVERSION 0
   PUBLIC_HEADER "pgo_c.h"
