@@ -1,9 +1,4 @@
-project(stb LANGUAGES CXX)
+add_library(stb STATIC stb_libs.cpp stb_image.h stb_image_write.h)
+target_include_directories(stb PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-find_path(STB_INCLUDE_DIRS "stb_image.h")
-
-add_library(stb STATIC stb_libs.cpp)
-target_include_directories(stb PRIVATE ${STB_INCLUDE_DIRS})
-
-
-set_property(TARGET stb PROPERTY FOLDER "3rdParty")
+set_property(TARGET stb PROPERTY FOLDER "third-party")

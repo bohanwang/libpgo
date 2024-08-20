@@ -8,14 +8,18 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+OPTION(PGO_USE_MKL "Use MKL" OFF)
+option(PGO_ENABLE_PYTHON "Build python module" OFF)
+OPTION(PGO_ENABLE_FULL "Enable all functionalities" OFF)
+option(PGO_BUILD_SUBPROJECTS "Include subprojects" OFF)
+
+option(PGO_UI "Build pgo ui" OFF)
+option(PGO_RENDER_USE_ASSIMP "Use Assimp" OFF)
 OPTION(PGO_RELEASE_MODE_DEBUG "Enable debug in release mode" OFF)
 OPTION(PGO_IGNORE_DEBUG_FLAG "Ignore debug flag" OFF)
 OPTION(PGO_CREATE_MISSING_FILE "Create file when it is missing" OFF)
-OPTION(PGO_USE_MKL "Use MKL" OFF)
-OPTION(PGO_ENABLE_FULL "Enable all functionalities" OFF)
 OPTION(PGO_OPT_USE_IPOPT "Use IPOPT" OFF)
 OPTION(PGO_OPT_USE_KNITRO "Use KNITRO" OFF)
-option(PGO_ENABLE_PYTHON "Build python module" OFF)
 option(PGO_MKL_LINK_DYNAMIC "MKL Link" ON)
 
 set(PGO_CMAKE_MODULES ${CMAKE_SOURCE_DIR}/CMakeModules)
@@ -158,10 +162,23 @@ endif()
 # ================== third party ==========================
 find_package(Threads REQUIRED)
 
+if(PGO_UI)
+  find_package(Vulkan REQUIRED)
+
+  if(PGO_RENDER_USE_ASSIMP)
+    find_package(assimp REQUIRED)
+  endif()
+
+  include(${PROJECT_SOURCE_DIR}/CMakeModules/third-party/glfw.cmake)
+  include(${PROJECT_SOURCE_DIR}/CMakeModules/third-party/glm.cmake)
+endif()
+
+add_subdirectory(third-party)
+
 include(CMakeModules/third-party/tbb.cmake)
 include(CMakeModules/third-party/mkl.cmake)
 
-if(PGO_ENABLE_FULL)
+if(PGO_ENABLE_PYTHON OR PGO_ENABLE_FULL)
   include(CMakeModules/third-party/suitesparse.cmake)
 endif()
 
@@ -170,6 +187,7 @@ include(CMakeModules/third-party/fmt.cmake)
 include(CMakeModules/third-party/nlohmann_json.cmake)
 include(CMakeModules/third-party/spdlog.cmake)
 include(CMakeModules/third-party/autodiff.cmake)
+include(CMakeModules/third-party/argparse.cmake)
 
 if(PGO_OPT_USE_KNITRO)
   include(CMakeModules/third-party/knitro.cmake)
@@ -179,14 +197,23 @@ if(PGO_OPT_USE_KNITRO)
   endif()
 endif()
 
-if(PGO_ENABLE_FULL)
+if(PGO_ENABLE_PYTHON OR PGO_ENABLE_FULL)
   include(CMakeModules/third-party/ceres.cmake)
   include(CMakeModules/third-party/boost.cmake)
   include(CMakeModules/third-party/cgal.cmake)
+endif()
+
+if(PGO_ENABLE_FULL)
+  include(CMakeModules/third-party/geogram.cmake)
+  include(CMakeModules/third-party/libigl.cmake)
+
+  igl_include(copyleft core)
+  igl_include(copyleft cgal)
+
   # include(CMakeModules/third-party/arpackng.cmake)
 endif()
 
-if (PGO_ENABLE_PYTHON)
+if(PGO_ENABLE_PYTHON)
   include(CMakeModules/third-party/pybind11.cmake)
 endif()
 
@@ -204,8 +231,6 @@ else()
 endif()
 
 # =================== external ====================
-add_subdirectory(third-party)
-
 if(MSVC)
   find_program(POWERSHELL_PATH powershell REQUIRED)
   message(STATUS "Powershell: ${POWERSHELL_PATH}")
@@ -325,6 +350,10 @@ function(add_libpgo_tools tgt sources deps)
 endfunction()
 
 add_subdirectory(src)
+
+if(PGO_BUILD_SUBPROJECTS)
+  add_subdirectory(projects)
+endif()
 
 # generate config file to be used in common build tree
 configure_package_config_file(

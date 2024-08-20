@@ -1,2 +1,2 @@
-add_subdirectory(testAny)
 add_subdirectory(runSim)
+add_subdirectory(remeshSurface)

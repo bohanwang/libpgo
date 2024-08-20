@@ -27,24 +27,38 @@
 #include "NewtonRaphsonSolver.h"
 #include "createTriMesh.h"
 
+#include <argparse/argparse.hpp>
+
 #include <iostream>
 
 int main(int argc, char *argv[])
 {
-  if (argc != 2) {
-    std::cerr << argv[0] << " <config file json>" << std::endl;
-    return 1;
-  }
-
   using namespace pgo;
   using namespace pgo::EigenSupport;
   namespace ES = EigenSupport;
 
+  // git add subparser
+  argparse::ArgumentParser program("Run Simulation");
+  program.add_argument("config")
+    .help("Config File")
+    .required();
+
+  try {
+    program.parse_args(argc, argv);  // Example: ./main --color orange
+  }
+  catch (const std::exception &err) {
+    std::cerr << err.what() << std::endl;
+    std::cerr << program;
+    return 1;
+  }
+
   pgo::Logging::init();
   pgo::Mesh::initPredicates();
 
+  std::string configFilename = program.get<std::string>("config");
+
   ConfigFileJSON jconfig;
-  if (jconfig.open(argv[1]) != true) {
+  if (jconfig.open(configFilename.c_str()) != true) {
     return 0;
   }
 

@@ -7,7 +7,7 @@ target_link_libraries(CCD_SafeCCD PUBLIC compilation_flag)
 set_property(TARGET CCD_SafeCCD PROPERTY CXX_STANDARD 17)
 
 add_library(CCD::SafeCCD ALIAS CCD_SafeCCD)
-set_property(TARGET CCD_SafeCCD PROPERTY FOLDER "3rdParty/CCD")
+set_property(TARGET CCD_SafeCCD PROPERTY FOLDER "third-party/CCD")
 
 # Eaxct CCD
 add_library(CCD_ExactCCD STATIC ./ExactCCD/expansion.h ./ExactCCD/interval.h ./ExactCCD/vec.h ./ExactCCD/rootparitycollisiontest.h ./ExactCCD/interval_base.h 
@@ -19,4 +19,4 @@ add_library(CCD::Exact ALIAS CCD_ExactCCD)
 target_link_libraries(CCD_ExactCCD PUBLIC compilation_flag)
 target_include_directories(CCD_ExactCCD PUBLIC ./ExactCCD)
 
-set_property(TARGET CCD_ExactCCD PROPERTY FOLDER "3rdParty/CCD")
+set_property(TARGET CCD_ExactCCD PROPERTY FOLDER "third-party/CCD")

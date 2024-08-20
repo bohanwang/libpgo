@@ -1,0 +1,23 @@
+-- v0.0.2
+
+- Add more functionalities in the direction of geometry processing
+  - libigl support
+  - geogram support
+  - tetgen support
+  - add a tool that can call several remeshers in cgal and geogram
+
+- clean up bugs, errors, unnecessary parts
+  - bugs in pgo python binding
+  - bugs in lagrangian
+  - cleanup third-party unnecessary code  
+  - remove unnecessary code in python
+  - add .clang-format
+  - restructure code for the latter usage
+    cpp -> core
+  - add supports to new projects that is based on libpgo. Users can clone them into projects folder to make it compile
+  - further polish cmake 
+  - remove unnecessary in tools
+
+-- v0.0.1
+
+- Initial push

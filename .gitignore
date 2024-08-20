@@ -40,3 +40,5 @@ _skbuild
 .clang-format
 
 *.pyd
+
+projects

@@ -4,7 +4,7 @@ set(PGO_GLOBAL_LIBRARY_TARGETS
   pgoLogging
   basicIO
   eigenSupport
-  configFileJSON  
+  configFileJSON
   mesh
   nonlinearOptimization
   genericPotentialEnergies
@@ -16,11 +16,18 @@ set(PGO_GLOBAL_LIBRARY_TARGETS
   solidDeformationModel
   simulation
   cgalInterface
+  geogramInterface
+  libiglInterface
+  tetgenInterface
 )
 
 foreach(lib ${PGO_GLOBAL_LIBRARY_TARGETS})
-  add_subdirectory(cpp/${lib})
+  add_subdirectory(core/${lib})
 endforeach()
+
+if(PGO_UI)
+  message(FATAL_ERROR "Not supported yet")
+endif()
 
 add_subdirectory(c)
 

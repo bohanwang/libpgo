@@ -57,7 +57,6 @@ class CMakeBuild(build_ext):
 
         cmake_args += [
             f"-DPGO_ENABLE_PYTHON=1",
-            f"-DPGO_ENABLE_FULL=1",
         ]
 
         if "macOS" in platform.platform():
