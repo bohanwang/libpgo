@@ -38,19 +38,19 @@ if(WIN32)
     set(TGT_FILE "$ENV{CONDA_PREFIX}/Library/bin/gmp-10.dll")
 
     if(NOT EXISTS ${TGT_FILE})
-      file(COPY_FILE "{CMAKE_SOURCE_DIR}/third-party/gmp-msvc/release/gmp-10.dll" "${TGT_FILE}")
+      file(COPY_FILE "${CMAKE_SOURCE_DIR}/third-party/gmp-msvc/release/gmp-10.dll" "${TGT_FILE}")
     endif()
 
     set(TGT_FILE "$ENV{CONDA_PREFIX}/Library/bin/gmpxx-4.dll")
 
     if(NOT EXISTS ${TGT_FILE})
-      file(COPY_FILE "{CMAKE_SOURCE_DIR}/third-party/gmp-msvc/release/gmpxx-4.dll" "${TGT_FILE}")
+      file(COPY_FILE "${CMAKE_SOURCE_DIR}/third-party/gmp-msvc/release/gmpxx-4.dll" "${TGT_FILE}")
     endif()
 
     set(TGT_FILE "$ENV{CONDA_PREFIX}/Library/bin/mpfr-6.dll")
 
     if(NOT EXISTS ${TGT_FILE})
-      file(COPY_FILE "{CMAKE_SOURCE_DIR}/third-party/mpfr-msvc/release/mpfr-6.dll" "${TGT_FILE}")
+      file(COPY_FILE "${CMAKE_SOURCE_DIR}/third-party/mpfr-msvc/release/mpfr-6.dll" "${TGT_FILE}")
     endif()
   endif()
 endif()
