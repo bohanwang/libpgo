@@ -17,6 +17,7 @@
   - add supports to new projects that is based on libpgo. Users can clone them into projects folder to make it compile
   - further polish cmake 
   - remove unnecessary in tools
+  - when compiled with openmp on linux for suitesparse, the gomp lib has conflicts with MKL, casuing pardiso not working correctly.
 
 -- v0.0.1
 
