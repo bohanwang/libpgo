@@ -16,9 +16,9 @@ copyright to MIT, USC
 #include "pgoLogging.h"
 
 #if defined(_MSC_VER)
-#if defined(ERROR)
-#  undef ERROR
-#endif
+#  if defined(ERROR)
+#    undef ERROR
+#  endif
 #endif
 
 #include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
@@ -40,6 +40,11 @@ copyright to MIT, USC
 #include <CGAL/Polygon_mesh_processing/orient_polygon_soup.h>
 #include <CGAL/Polygon_mesh_processing/polygon_soup_to_polygon_mesh.h>
 #include <CGAL/Polygon_mesh_processing/clip.h>
+
+#include <CGAL/Surface_mesh_simplification/Policies/Edge_collapse/Edge_count_ratio_stop_predicate.h>
+#include <CGAL/Surface_mesh_simplification/Policies/Edge_collapse/Bounded_normal_change_placement.h>
+#include <CGAL/Surface_mesh_simplification/Policies/Edge_collapse/GarlandHeckbert_policies.h>
+#include <CGAL/Surface_mesh_simplification/edge_collapse.h>
 
 #include <CGAL/Subdivision_method_3/subdivision_hosts_3.h>
 
@@ -643,6 +648,90 @@ bool pgo::CGALInterface::isManifold(const Mesh::TriMeshGeo &meshIn)
 
   bool ret = CGAL::Polygon_mesh_processing::is_polygon_soup_a_polygon_mesh(faces);
   return ret;
+}
+
+pgo::Mesh::TriMeshGeo pgo::CGALInterface::simplifyMesh(const Mesh::TriMeshGeo &meshIn, double edgeStoppingRatio)
+{
+  namespace SMS = CGAL::Surface_mesh_simplification;
+  using K = KernelInexact;
+  using SM = CGAL::Surface_mesh<K::Point_3>;
+  using vertex_descriptor = boost::graph_traits<SM>::vertex_descriptor;
+
+  SM surface_mesh;
+  triangleMesh2SurfaceMesh<SM, SM::Property_map<vertex_descriptor, int>>(meshIn, surface_mesh, nullptr);
+
+  CGAL::Polygon_mesh_processing::remove_almost_degenerate_faces(surface_mesh);
+
+  SMS::Edge_count_ratio_stop_predicate<SM> stop(edgeStoppingRatio);
+
+  int r = SMS::edge_collapse(surface_mesh, stop);
+
+  Mesh::TriMeshGeo meshOut;
+  surfaceMesh2TriangleMesh<K>(surface_mesh, meshOut);
+
+  return meshOut;
+}
+
+namespace pgo::CGALInterface
+{
+
+// Garland & Heckbert simplification policies
+template<typename Mesh, typename GHPolicies>
+void collapseMesh(Mesh &mesh, double edgeStoppingRatio)
+{
+  namespace SMS = CGAL::Surface_mesh_simplification;
+
+  typedef typename GHPolicies::Get_cost GH_cost;
+  typedef typename GHPolicies::Get_placement GH_placement;
+  typedef SMS::Bounded_normal_change_placement<GH_placement> Bounded_GH_placement;
+
+  GHPolicies gh_policies(mesh);
+  SMS::Edge_count_ratio_stop_predicate<Mesh> stop(edgeStoppingRatio);
+
+  const GH_cost &gh_cost = gh_policies.get_cost();
+  const GH_placement &gh_placement = gh_policies.get_placement();
+  Bounded_GH_placement placement(gh_placement);
+
+  int r = SMS::edge_collapse(mesh, stop, CGAL::parameters::get_cost(gh_cost).get_placement(placement));
+}
+}  // namespace pgo::CGALInterface
+
+pgo::Mesh::TriMeshGeo pgo::CGALInterface::simplifyMeshGH(const Mesh::TriMeshGeo &meshIn, const std::string &method, double edgeStoppingRatio)
+{
+  typedef CGAL::Simple_cartesian<double> Kernel;
+  typedef Kernel::FT FT;
+  typedef Kernel::Point_3 Point_3;
+  typedef CGAL::Surface_mesh<Point_3> Surface_mesh;
+  namespace SMS = CGAL::Surface_mesh_simplification;
+
+  typedef SMS::GarlandHeckbert_plane_policies<Surface_mesh, Kernel> Classic_plane;
+  typedef SMS::GarlandHeckbert_probabilistic_plane_policies<Surface_mesh, Kernel> Prob_plane;
+  typedef SMS::GarlandHeckbert_triangle_policies<Surface_mesh, Kernel> Classic_tri;
+  typedef SMS::GarlandHeckbert_probabilistic_triangle_policies<Surface_mesh, Kernel> Prob_tri;
+
+  Surface_mesh mesh;
+
+  using vertex_descriptor = boost::graph_traits<Surface_mesh>::vertex_descriptor;
+  triangleMesh2SurfaceMesh<Surface_mesh, Surface_mesh::Property_map<vertex_descriptor, int>>(meshIn, mesh, nullptr);
+  CGAL::Polygon_mesh_processing::remove_almost_degenerate_faces(mesh);
+
+  if (method == "cp") {
+    collapseMesh<Surface_mesh, Classic_plane>(mesh, edgeStoppingRatio);
+  }
+  else if (method == "ctri") {
+    collapseMesh<Surface_mesh, Classic_tri>(mesh, edgeStoppingRatio);
+  }
+  else if (method == "pp") {
+    collapseMesh<Surface_mesh, Prob_plane>(mesh, edgeStoppingRatio);
+  }
+  else if (method == "ptri") {
+    collapseMesh<Surface_mesh, Prob_tri>(mesh, edgeStoppingRatio);
+  }
+
+  Mesh::TriMeshGeo meshOut;
+  surfaceMesh2TriangleMesh<Kernel>(mesh, meshOut);
+
+  return meshOut;
 }
 
 void pgo::CGALInterface::segmentMesh(const Mesh::TriMeshGeo &meshIn, int nClusters, std::vector<int> &classID)

@@ -322,8 +322,11 @@ void getSubTriMeshOnlyOnSortedSubVertexIDs(const TriMeshRef &mesh, BasicAlgorith
 
 // simple merge of mesh by retaining all vertices and triangles from both meshes
 TriMeshGeo mergeMesh(const TriMeshRef mesh1, const TriMeshRef mesh2);
-
 TriMeshGeo mergeMesh(size_t numMeshes, const TriMeshRef *meshes);
+
+void triMeshGeoToMatrices(const TriMeshGeo &mesh, EigenSupport::MXd &vtx, EigenSupport::MXi &tri);
+void matricesToTriMeshGeo(const EigenSupport::MXd &vtx, const EigenSupport::MXi &tri, TriMeshGeo &mesh);
+TriMeshGeo matricesToTriMeshGeo(const EigenSupport::MXd &vtx, const EigenSupport::MXi &tri);
 
 // =========================================================
 //                  Implementations

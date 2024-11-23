@@ -6,7 +6,6 @@
 
 namespace pgo
 {
-
 using Vec2d = EigenSupport::V2d;
 using Vec3d = EigenSupport::V3d;
 using Vec4d = EigenSupport::V4d;

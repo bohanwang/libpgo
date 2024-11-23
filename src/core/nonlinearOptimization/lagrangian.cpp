@@ -44,10 +44,14 @@ Lagrangian::Lagrangian(PotentialEnergy_const_p eng, ConstraintFunctions_const_p 
     // [ H J' ]
     // [ J 0  ]
 
-    for (Eigen::Index i = 0; i < constraintHessian.outerSize(); i++) {
-      for (ES::SpMatD::InnerIterator it(constraintHessian, i); it; ++it) {
+    // for (Eigen::Index i = 0; i < constraintHessian.outerSize(); i++) {
+    //   for (ES::SpMatD::InnerIterator it(constraintHessian, i); it; ++it) {
+    //     entries.emplace_back((int)it.row() + energy->getNumDOFs(), (int)it.col(), 1.0);
+    //     entries.emplace_back((int)it.col() + energy->getNumDOFs(), (int)it.row(), 1.0);
+    for (Eigen::Index i = 0; i < constraintJac.outerSize(); i++) {
+      for (ES::SpMatD::InnerIterator it(constraintJac, i); it; ++it) {
         entries.emplace_back((int)it.row() + energy->getNumDOFs(), (int)it.col(), 1.0);
-        entries.emplace_back((int)it.col() + energy->getNumDOFs(), (int)it.row(), 1.0);
+        entries.emplace_back((int)it.col(), (int)it.row() + energy->getNumDOFs(), 1.0);
       }
     }
 

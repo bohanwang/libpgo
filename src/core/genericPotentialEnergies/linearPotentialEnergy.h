@@ -38,5 +38,5 @@ protected:
   // const EigenSupport::VXd &b;
   EigenSupport::VXd b;
 };
-}  // namespace NonlinearOptimization
+}  // namespace PredefinedPotentialEnergies
 }  // namespace pgo

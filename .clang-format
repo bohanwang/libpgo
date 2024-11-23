@@ -1,0 +1,113 @@
+Language: Cpp
+BasedOnStyle: Google
+AccessModifierOffset: -2
+AlignAfterOpenBracket: DontAlign
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignConsecutiveMacros: false
+AlignEscapedNewlines:  Left
+AlignOperands: false
+AlignTrailingComments: true
+AllowAllArgumentsOnNextLine: true
+AllowAllConstructorInitializersOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+# AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Inline
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterDefinitionReturnType: None
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+AlwaysBreakTemplateDeclarations: Yes
+BinPackArguments: true
+BinPackParameters: true
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: false
+  AfterClass: true
+  AfterControlStatement: false
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeCatch: true
+  BeforeElse: true
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: false
+BreakConstructorInitializers: AfterColon
+BreakInheritanceList: AfterColon
+BreakStringLiterals: false
+ColumnLimit: 0
+# CommentPragmas
+CompactNamespaces: false
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+ConstructorInitializerIndentWidth: 2
+ContinuationIndentWidth: 2
+Cpp11BracedListStyle: false
+DerivePointerAlignment: false
+DisableFormat: false
+# ExperimentalAutoDetectBinPacking (bool)
+FixNamespaceComments: true
+# ForEachMacros (std::vector<std::string>)
+IncludeBlocks: Preserve
+IncludeCategories:
+  - Regex:           '^".*'
+    Priority:        2
+  - Regex:           '^(<.*/)'
+    Priority:        3
+  - Regex:           '<[[:alnum:].]+>'
+    Priority:        4
+
+# IncludeIsMainRegex (std::string)
+IndentCaseLabels: false
+# IndentGotoLabels: false
+IndentPPDirectives: AfterHash
+IndentWidth: 2
+IndentWrappedFunctionNames: false
+KeepEmptyLinesAtTheStartOfBlocks: false
+# MacroBlockBegin (std::string)
+# MacroBlockEnd (std::string)
+MaxEmptyLinesToKeep: 1
+NamespaceIndentation: None
+# NamespaceMacros (std::vector<std::string>)
+# PenaltyBreakAssignment:
+PenaltyBreakBeforeFirstCallParameter: 1000
+# PenaltyBreakComment
+PenaltyBreakFirstLessLess: 100
+PenaltyBreakString: 100
+# PenaltyBreakTemplateDeclaration (unsigned)
+# PenaltyExcessCharacter (unsigned)
+PenaltyReturnTypeOnItsOwnLine: 0
+PointerAlignment: Right
+# RawStringFormats (std::vector<RawStringFormat>)
+ReflowComments: true
+SortIncludes: false
+SortUsingDeclarations: false
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceAfterTemplateKeyword: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: false
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpacesBeforeTrailingComments: 2
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpacesInContainerLiterals: true
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+Standard: Cpp11
+# StatementMacros: (std::vector<std::string>)
+TabWidth: 2
+# TypenameMacros (std::vector<std::string>)
+UseTab: Never
