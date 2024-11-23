@@ -355,6 +355,7 @@ add_subdirectory(src)
 if(PGO_BUILD_SUBPROJECTS)
   # add_subdirectory(projects/MSD)
   add_subdirectory(projects/physcomp)
+  set(PGO_ENABLE_PHYS_COMP ON)
 endif()
 
 if(PGO_ENABLE_PYTHON)

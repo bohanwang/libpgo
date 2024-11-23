@@ -3,6 +3,11 @@ target_link_libraries(pypgo PRIVATE pybind11::module pybind11::lto pybind11::win
 target_link_libraries(pypgo PRIVATE pgo_c_static)
 target_compile_definitions(pypgo PRIVATE VERSION_INFO=${PYPGO_VERSION_INFO})
 
+if (PGO_ENABLE_PHYS_COMP)
+  target_compile_definitions(pypgo PRIVATE PGO_ENABLE_PHYS_COMP=1)
+  target_link_libraries(pypgo PRIVATE physcomp_c)
+endif()
+
 pybind11_extension(pypgo)
 if(NOT MSVC AND NOT ${CMAKE_BUILD_TYPE} MATCHES Debug|RelWithDebInfo)
     # Strip unnecessary sections of the binary on Linux/macOS

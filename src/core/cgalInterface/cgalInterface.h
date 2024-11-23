@@ -19,6 +19,9 @@ Mesh::TriMeshGeo smoothMesh(const Mesh::TriMeshGeo &mesh, int numIter, double an
   std::vector<int> *constrainedVertices = nullptr, std::vector<std::pair<int, int>> *constrainedEdges = nullptr);
 Mesh::TriMeshGeo smoothShape(const Mesh::TriMeshGeo &mesh, double time, int numIter);
 
+Mesh::TriMeshGeo simplifyMesh(const Mesh::TriMeshGeo &meshIn, double edgeStoppingRatio);
+Mesh::TriMeshGeo simplifyMeshGH(const Mesh::TriMeshGeo &meshIn, const std::string &method, double edgeStoppingRatio);
+
 Mesh::TriMeshGeo refineMesh(const Mesh::TriMeshGeo &mesh, double density);
 Mesh::TriMeshGeo refineSharpRegionOnMesh(const Mesh::TriMeshGeo &mesh, double density, double angle);
 Mesh::TriMeshGeo subdivideMesh(const Mesh::TriMeshGeo &meshIn, int nIter, double smallSize = -1);

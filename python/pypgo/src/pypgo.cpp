@@ -1,5 +1,9 @@
 #include "pgo_c.h"
 
+#ifdef PGO_ENABLE_PHYS_COMP
+#  include "physcomp_c.h"
+#endif
+
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
@@ -497,6 +501,7 @@ PYBIND11_MODULE(pypgo, m)
       return pgo_run_sim_from_config(filename.c_str());
     });
 
+#ifdef PGO_ENABLE_PHYS_COMP
   //// PhysComp
   m.def("run_quasi_static_sim", [](const std::string &tetMeshFile, const std::string &fixedVtxFile, const std::string &saveFile) -> TetMesh {
     std::vector<int> fixedVertices;
@@ -534,6 +539,7 @@ PYBIND11_MODULE(pypgo, m)
   m.def("stability_opt", [](const std::string &tetMeshFile, const std::string &fixedVtxFile, const std::string &saveFile, int verbose = 3) {
     pgo_stability_opt(tetMeshFile.c_str(), fixedVtxFile.c_str(), saveFile.c_str(), verbose);
   });
+#endif
 
 #ifdef VERSION_INFO
   m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
