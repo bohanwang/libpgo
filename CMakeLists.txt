@@ -354,7 +354,7 @@ add_subdirectory(src)
 
 if(PGO_BUILD_SUBPROJECTS)
   # add_subdirectory(projects/MSD)
-  add_subdirectory(projects/physcomp)
+  add_subdirectory(projects/PhysComp)
   set(PGO_ENABLE_PHYS_COMP ON)
 endif()
 
