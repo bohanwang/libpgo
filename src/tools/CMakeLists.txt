@@ -1,0 +1,2 @@
+add_subdirectory(runSim)
+add_subdirectory(remeshSurface)
