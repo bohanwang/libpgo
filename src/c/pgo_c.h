@@ -47,6 +47,8 @@ typedef struct pgoSparseMatrixStruct *pgoSparseMatrixStructHandle;
 
 LIBPGO_C_EXPORT void pgo_init();
 
+LIBPGO_C_EXPORT int pgo_load_1d_int_text(const char *filename, int **ptr, int sorted);
+
 LIBPGO_C_EXPORT pgoTetMeshGeoStructHandle pgo_create_tetmeshgeo(int nv, double *vertices, int ntet, int *tets);
 LIBPGO_C_EXPORT pgoTetMeshGeoStructHandle pgo_create_tetmeshgeo_from_file(char *filename);
 LIBPGO_C_EXPORT int pgo_tetmeshgeo_get_num_vertices(pgoTetMeshGeoStructHandle tetmesh);
@@ -54,7 +56,6 @@ LIBPGO_C_EXPORT int pgo_tetmeshgeo_get_num_tets(pgoTetMeshGeoStructHandle tetmes
 LIBPGO_C_EXPORT void pgo_tetmeshgeo_get_vertices(pgoTetMeshGeoStructHandle tetmesh, double *vertices);
 LIBPGO_C_EXPORT void pgo_tetmeshgeo_get_tets(pgoTetMeshGeoStructHandle tetmesh, int *tets);
 LIBPGO_C_EXPORT void pgo_destroy_tetmeshgeo(pgoTetMeshGeoStructHandle tetmesh);
-
 
 LIBPGO_C_EXPORT pgoTetMeshStructHandle pgo_create_tetmesh_from_file(const char *filename);
 LIBPGO_C_EXPORT pgoTetMeshStructHandle pgo_create_tetmesh(int nv, double *vertices, int ntet, int *tets, double E, double nu, double density);

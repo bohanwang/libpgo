@@ -42,3 +42,4 @@ _skbuild
 *.pyd
 
 projects
+build-test

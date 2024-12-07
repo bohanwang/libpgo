@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <chrono>
+#include <fstream>
 
 namespace py = pybind11;
 
@@ -208,6 +209,28 @@ m.def("create_tetmesh", [](pyArrayFloat vertices, pyArrayInt elements, float E, 
 
   m.def("save_tetmesh_to_file", [](const TetMesh &tetmesh, const std::string &tetmeshFilename) {
     pgo_save_tetmesh_to_file(tetmesh.handle, const_cast<char *>(tetmeshFilename.c_str()));
+  });
+
+  m.def("get_tetmesh_vertex_positions", [](TetMesh &tetmesh) -> py::array_t<float> {
+    int nVertices = pgo_tetmesh_get_num_vertices(tetmesh.handle);
+    Eigen::VectorXd vertices(nVertices * 3);
+    pgo_tetmesh_get_vertices(tetmesh.handle, vertices.data());
+    auto ret = py::array_t<float>(nVertices * 3);
+    py::buffer_info binfo = ret.request();
+    (Eigen::Map<Eigen::VectorXf>((float *)binfo.ptr, nVertices * 3)) = vertices.cast<float>();
+    ret.resize({ nVertices, 3 });
+    return ret;
+  });
+
+  m.def("get_tetmesh_element_indices", [](TetMesh &tetmesh) -> py::array_t<int> {
+    int nElements = pgo_tetmesh_get_num_tets(tetmesh.handle);
+    Eigen::VectorXi elements(nElements * 4);
+    pgo_tetmesh_get_elements(tetmesh.handle, elements.data());
+    auto ret = py::array_t<int>(nElements * 4);
+    py::buffer_info binfo = ret.request();
+    (Eigen::Map<Eigen::VectorXi>((int *)binfo.ptr, nElements * 4)) = elements.cast<int>();
+    ret.resize({ nElements, 4 });
+    return ret;
   });
 
   m.def("update_tetmesh_vertices", [](TetMesh &tetmesh, pyArrayFloat vtxNew) -> TetMesh {
@@ -473,6 +496,49 @@ m.def("create_tetmesh", [](pyArrayFloat vertices, pyArrayInt elements, float E, 
     "run_sim_from_config", [](const std::string &filename) -> int {
       return pgo_run_sim_from_config(filename.c_str());
     });
+
+  m.def("run_quasi_static_sim", [](const std::string &tetMeshFile, const std::string &fixedVtxFile, const std::string &saveFile) -> TetMesh {
+    if (tetMeshFile.length() == 0ull) {
+      std::cerr << "zero length tet mesh filename" << std::endl;
+      return TetMesh();
+
+    }
+
+    if (fixedVtxFile.length() == 0ull) {
+      std::cerr << "zero length fixed vertices mesh filename" << std::endl;
+      return TetMesh();
+    }
+
+    int *fixedVertices;
+    int nFixedVertices = pgo_load_1d_int_text(fixedVtxFile.c_str(), &nFixedVertices);
+
+    pgoTetMeshStructHandle tetmesh = pgo_create_tetmesh_from_file(tetMeshFile.c_str());
+
+    int n = pgo_tetmesh_get_num_vertices(tetmesh);
+    int nele = pgo_tetmesh_get_num_tets(tetmesh);
+
+    ///// 1. quasi-static simulation on initShapeMeshFile
+    std::vector<double> xStaticEqRes(n * 3 + nele * 6);
+    pgo_create_quastic_static_sim(tetmesh, fixedVertices.data(), (int)fixedVertices.size(), xStaticEqRes.data(), nullptr, true);
+
+    pgoTetMeshStructHandle tetMeshStaticEqRes = pgo_tetmesh_update_vertices(tetmesh, xStaticEqRes.data());
+    pgo_save_tetmesh_to_file(tetMeshStaticEqRes, saveFile.c_str());
+    return TetMesh(tetMeshStaticEqRes);
+  });
+
+  m.def("inverse_plasticity_opt", [](const std::string &tetMeshFile, const std::string &fixedVtxFile, const std::string &saveFile, double stepSize = 0.5, int verbose = 3) {
+    pgo_inverse_plasticity_opt(tetMeshFile.c_str(), fixedVtxFile.c_str(), saveFile.c_str(), stepSize, verbose);
+  });
+
+  m.def("stablity_preprocess", [](const TriMeshGeo &surfMesh, const std::string &surfMeshFlattenedFile) -> double {
+    double minZ = pgo_stablity_preprocess(surfMesh.handle, surfMeshFlattenedFile.c_str());
+    return minZ;
+  });
+
+  m.def("stability_opt", [](const std::string &tetMeshFile, const std::string &fixedVtxFile, const std::string &saveFile, int verbose = 3) {
+    pgo_stability_opt(tetMeshFile.c_str(), fixedVtxFile.c_str(), saveFile.c_str(), verbose);
+  });
+
 
 #ifdef VERSION_INFO
   m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);

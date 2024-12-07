@@ -27,6 +27,7 @@ Mesh::TriMeshGeo refineSharpRegionOnMesh(const Mesh::TriMeshGeo &mesh, double de
 Mesh::TriMeshGeo subdivideMesh(const Mesh::TriMeshGeo &meshIn, int nIter, double smallSize = -1);
 
 bool corefineAndComputeUnion(const Mesh::TriMeshGeo &mesh1, const Mesh::TriMeshGeo &mesh2, Mesh::TriMeshGeo &unionMesh);
+bool corefineAndComputeIntersection(const Mesh::TriMeshGeo &mesh1, const Mesh::TriMeshGeo &mesh2, Mesh::TriMeshGeo &intersectionMesh);
 void corefineOnly(Mesh::TriMeshGeo &mesh1, Mesh::TriMeshGeo &mesh2, bool noModify1 = false, bool noModify2 = false, double edgeLengthThreshold = 1e-5);
 
 Mesh::TriMeshGeo triangulateHolePolyline(const std::vector<Vec3d> &polyline);

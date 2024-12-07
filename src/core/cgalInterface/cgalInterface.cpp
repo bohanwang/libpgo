@@ -382,6 +382,25 @@ bool pgo::CGALInterface::corefineAndComputeUnion(const Mesh::TriMeshGeo &mesh1, 
   return valid_union;
 }
 
+bool pgo::CGALInterface::corefineAndComputeIntersection(const Mesh::TriMeshGeo &mesh1, const Mesh::TriMeshGeo &mesh2, Mesh::TriMeshGeo &intersectionMesh)
+{
+  using K = KernelExact;
+  using SM = CGAL::Surface_mesh<K::Point_3>;
+  using vertex_descriptor = boost::graph_traits<SM>::vertex_descriptor;
+  namespace PMP = CGAL::Polygon_mesh_processing;
+  SM surfMesh1;
+  triangleMesh2SurfaceMesh<SM, SM::Property_map<vertex_descriptor, int>>(mesh1, surfMesh1, nullptr);
+  SM surfMesh2;
+  triangleMesh2SurfaceMesh<SM, SM::Property_map<vertex_descriptor, int>>(mesh2, surfMesh2, nullptr);
+  SM outSurfMesh;
+  bool valid_intersection = PMP::corefine_and_compute_intersection(surfMesh1, surfMesh2, outSurfMesh);
+  std::cout << "CGAL valid_intersection: " << valid_intersection << std::endl;
+  if (valid_intersection) {
+    surfaceMesh2TriangleMesh<K>(outSurfMesh, intersectionMesh);
+  }
+  return valid_intersection;
+}
+
 pgo::Mesh::TriMeshGeo pgo::CGALInterface::triangulateHolePolyline(const std::vector<Vec3d> &polyline)
 {
   using K = KernelInexact;
@@ -695,7 +714,6 @@ pgo::Mesh::TriMeshGeo pgo::CGALInterface::simplifyMeshGH(const Mesh::TriMeshGeo 
   using vertex_descriptor = boost::graph_traits<Surface_mesh>::vertex_descriptor;
   triangleMesh2SurfaceMesh<Surface_mesh, Surface_mesh::Property_map<vertex_descriptor, int>>(meshIn, mesh, nullptr);
   CGAL::Polygon_mesh_processing::remove_almost_degenerate_faces(mesh);
-
 
   if (method == "cp") {
     collapseMesh<Surface_mesh, Classic_plane>(mesh, edgeStoppingRatio);

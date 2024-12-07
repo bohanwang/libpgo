@@ -3,6 +3,7 @@ set(GEOMETRY_POTENTIAL_ENERGIES_HEADERS
   surfaceTriangleDeformation.h
   vertexAffineToPositionEnergy.h
   triangleAffineToPositionEnergy.h
+  centerOfMassMatchingEnergy.h
 )
 
 set(GEOMETRY_POTENTIAL_ENERGIES_SOURCES
@@ -10,6 +11,7 @@ set(GEOMETRY_POTENTIAL_ENERGIES_SOURCES
   surfaceTriangleDeformation.cpp
   vertexAffineToPositionEnergy.cpp
   triangleAffineToPositionEnergy.cpp
+  centerOfMassMatchingEnergy.cpp
 )
 
 set(GEOMETRY_POTENTIAL_ENERGIES_DEPS nonlinearOptimization mesh)
