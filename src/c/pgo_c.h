@@ -3,33 +3,9 @@
 #ifndef _LIBPGO_C_H_
 #  define _LIBPGO_C_H_
 
+#  include "pgo_c_def.h"
+
 #  include <stdint.h>
-
-#  ifdef __cplusplus
-#    define LIBPGO_EXTERN_C_BEG \
-      extern "C"                \
-      {
-#    define LIBPGO_EXTERN_C_END }
-#  else
-#    define LIBPGO_EXTERN_C_BEG
-#    define LIBPGO_EXTERN_C_END
-#  endif
-
-#  ifdef LIBPGO_C_BUILD_DLL
-#    ifdef _MSC_VER
-#      define LIBPGO_C_EXPORT __declspec(dllexport)
-#    else
-#      define LIBPGO_C_EXPORT __attribute__((visibility("default")))
-#    endif
-#  elif LIBPGO_C_LOAD_DLL
-#    ifdef _MSC_VER
-#      define LIBPGO_C_EXPORT __declspec(dllimport)
-#    else
-#      define LIBPGO_C_EXPORT
-#    endif
-#  else
-#      define LIBPGO_C_EXPORT
-#  endif
 
 LIBPGO_EXTERN_C_BEG
 

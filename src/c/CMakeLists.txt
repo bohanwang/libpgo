@@ -33,7 +33,7 @@ endforeach()
 
 add_flag_poxis(pgo_c PRIVATE -fvisibility=hidden)
 add_link_flag(pgo_c GNU All -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pgo_c.version)
-add_link_flag(pgo_c AppleClang All -Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/pgo_c.symobl.txt)
+add_link_flag(pgo_c AppleClang All -Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/pgo_c.symbol.txt)
 
 # pog_c install
 include(CMakePackageConfigHelpers)

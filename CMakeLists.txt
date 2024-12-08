@@ -353,7 +353,11 @@ endfunction()
 add_subdirectory(src)
 
 if(PGO_BUILD_SUBPROJECTS)
-  add_subdirectory(projects/PhysComp)
+  file(GLOB PGO_PROJ "projects/*")
+  foreach(proj ${PGO_PROJ})
+    message(STATUS "Add ${proj}")
+    add_subdirectory(${proj})
+  endforeach()
 endif()
 
 # generate config file to be used in common build tree
