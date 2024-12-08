@@ -19,7 +19,7 @@ public:
   virtual void gradient(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad) const override;
   virtual void hessian(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const override {}
 
-  void compute_com_and_energy_and_grad(ES::ConstRefVecXd x, ES::V3d &com,  double &energy, ES::RefVecXd grad) const;
+  void compute_com_and_energy_and_grad(EigenSupport::ConstRefVecXd x, EigenSupport::V3d &com, double &energy, EigenSupport::RefVecXd grad) const;
 
   virtual void createHessian(EigenSupport::SpMatD &hess) const { hess = hessTemplate; }
   virtual void getDOFs(std::vector<int> &dofs) const { dofs = allDOFs; }
