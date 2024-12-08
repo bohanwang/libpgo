@@ -1,6 +1,4 @@
-
-
-add_library(pypgo MODULE src/pypgo.cpp)
+add_library(pypgo MODULE pypgo.cpp)
 target_link_libraries(pypgo PRIVATE pybind11::module pybind11::lto pybind11::windows_extras)
 target_link_libraries(pypgo PRIVATE pgo_c_static)
 target_compile_definitions(pypgo PRIVATE VERSION_INFO=${PYPGO_VERSION_INFO})

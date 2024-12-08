@@ -353,7 +353,7 @@ endfunction()
 add_subdirectory(src)
 
 if(PGO_BUILD_SUBPROJECTS)
-  add_subdirectory(projects/MSD)
+  add_subdirectory(projects/PhysComp)
 endif()
 
 # generate config file to be used in common build tree
