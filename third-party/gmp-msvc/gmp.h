@@ -2330,10 +2330,6 @@ enum
   GMP_ERROR_MPZ_OVERFLOW = 16
 };
 
-/* Define CC and CFLAGS which were used to build this version of GMP */
-#define __GMP_CC "compile cl.exe"
-#define __GMP_CFLAGS "-Xcompiler -nologo -Xcompiler -W3 -Xcompiler -utf-8 -Xcompiler -MP -Xcompiler -MD -Xcompiler -O2 -Xcompiler -Oi -Xcompiler -Gy -Xcompiler -Z7"
-
 /* Major version number is the value of __GNU_MP__ too, above. */
 #define __GNU_MP_VERSION            6
 #define __GNU_MP_VERSION_MINOR      3
