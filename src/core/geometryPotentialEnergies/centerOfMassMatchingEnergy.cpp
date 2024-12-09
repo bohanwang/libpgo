@@ -81,6 +81,11 @@ CenterOfMassMatchingEnergy::CenterOfMassMatchingEnergy(const pgo::Mesh::TetMeshG
   m_projMat = projMat;
 }
 
+CenterOfMassMatchingEnergy::~CenterOfMassMatchingEnergy()
+{
+}
+
+
 double CenterOfMassMatchingEnergy::func(EigenSupport::ConstRefVecXd x) const
 {
   // Assuming ES::V3d and ES::MXd support reduction by using tbb::combinable

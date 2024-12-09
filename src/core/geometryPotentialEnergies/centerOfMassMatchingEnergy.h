@@ -24,8 +24,10 @@ public:
   virtual void createHessian(EigenSupport::SpMatD &hess) const { hess = hessTemplate; }
   virtual void getDOFs(std::vector<int> &dofs) const { dofs = allDOFs; }
   virtual int getNumDOFs() const { return (int)allDOFs.size(); }
-
   virtual int hasHessian() const { return 0; }
+
+  const EigenSupport::V3d &getTgtCoM() const { return m_tgtCoM; }
+  const EigenSupport::M3d &getProjMat() const { return m_projMat; }
 
 protected:
   EigenSupport::MXi m_tet;

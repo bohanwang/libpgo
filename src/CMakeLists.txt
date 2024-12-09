@@ -19,6 +19,7 @@ set(PGO_GLOBAL_LIBRARY_TARGETS
   geogramInterface
   libiglInterface
   tetgenInterface
+  CACHE INTERNAL ""
 )
 
 foreach(lib ${PGO_GLOBAL_LIBRARY_TARGETS})
