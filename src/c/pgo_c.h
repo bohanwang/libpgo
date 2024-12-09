@@ -23,8 +23,6 @@ typedef struct pgoSparseMatrixStruct *pgoSparseMatrixStructHandle;
 
 LIBPGO_C_EXPORT void pgo_init();
 
-LIBPGO_C_EXPORT int pgo_load_1d_int_text(const char *filename, int **ptr, int sorted);
-
 LIBPGO_C_EXPORT pgoTetMeshGeoStructHandle pgo_create_tetmeshgeo(int nv, double *vertices, int ntet, int *tets);
 LIBPGO_C_EXPORT pgoTetMeshGeoStructHandle pgo_create_tetmeshgeo_from_file(char *filename);
 LIBPGO_C_EXPORT int pgo_tetmeshgeo_get_num_vertices(pgoTetMeshGeoStructHandle tetmesh);

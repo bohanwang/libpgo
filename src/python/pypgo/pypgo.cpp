@@ -14,23 +14,8 @@ namespace py = pybind11;
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
 
-PYBIND11_MODULE(pypgo, m)
+void pypgo_init(py::module &m)
 {
-  // m.doc() = R"pbdoc(
-  //     Pybind11 example plugin
-  //     -----------------------
-
-  //     .. currentmodule:: python_example
-
-  //     .. autosummary::
-  //        :toctree: _generate
-
-  //        add
-  //        subtract
-  // )pbdoc";
-
-  static pypgoInit init;
-
   py::class_<TetMeshGeo> TetMeshGeo_class(m, "TetMeshGeo");
   TetMeshGeo_class.def(py::init<>());
 
@@ -112,7 +97,7 @@ PYBIND11_MODULE(pypgo, m)
     pgo_destroy_tetmeshgeo(tetmesh.handle);
   });
 
-m.def("create_tetmesh", [](pyArrayFloat vertices, pyArrayInt elements, float E, float nu, float density) -> TetMesh {
+  m.def("create_tetmesh", [](pyArrayFloat vertices, pyArrayInt elements, float E, float nu, float density) -> TetMesh {
     py::buffer_info vtxInfo = vertices.request();
     py::buffer_info tetInfo = elements.request();
 

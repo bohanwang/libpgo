@@ -57,16 +57,3 @@ struct SparseMatrix
   pgoSparseMatrixStructHandle handle;
 };
 
-class pypgoInit
-{
-public:
-  pypgoInit()
-  {
-    pgo_init();
-    // code initialization
-  }
-  ~pypgoInit()
-  {
-    // finalize
-  }
-};

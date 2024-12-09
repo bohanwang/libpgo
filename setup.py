@@ -57,6 +57,7 @@ class CMakeBuild(build_ext):
 
         cmake_args += [
             f"-DPGO_ENABLE_PYTHON=1",
+            f"-DPGO_BUILD_SUBPROJECTS=1"
         ]
 
         if "macOS" in platform.platform():
@@ -141,15 +142,15 @@ class CMakeBuild(build_ext):
 
         subprocess.run(["cmake", ext.sourcedir, *cmake_args], cwd=build_temp, check=True)
         subprocess.run(["cmake", "--build", ".", "--target", "pypgo", *build_args], cwd=build_temp, check=True)
-        subprocess.run(["cmake", "--build", ".", "--target", "pgo_c", *build_args], cwd=build_temp, check=True)
+        # subprocess.run(["cmake", "--build", ".", "--target", "pgo_c", *build_args], cwd=build_temp, check=True)
         
-        if "CONDA_PREFIX" in os.environ:       
-            if "Windows" in platform.platform():
-                install_prefix = os.path.join(os.environ["CONDA_PREFIX"], "Library")
-            else:
-                install_prefix = os.environ["CONDA_PREFIX"] 
+        # if "CONDA_PREFIX" in os.environ:       
+        #     if "Windows" in platform.platform():
+        #         install_prefix = os.path.join(os.environ["CONDA_PREFIX"], "Library")
+        #     else:
+        #         install_prefix = os.environ["CONDA_PREFIX"] 
         
-            subprocess.run(["cmake", "--install", ".", "--prefix", install_prefix, *build_args], cwd=build_temp, check=True)
+        #     subprocess.run(["cmake", "--install", ".", "--prefix", install_prefix, *build_args], cwd=build_temp, check=True)
 
 
 # The information here can also be placed in setup.cfg - better separation of

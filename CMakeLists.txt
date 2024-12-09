@@ -34,8 +34,8 @@ if(OPENMP_FOUND)
   set(OPENMP_FLAG "${OpenMP_CXX_FLAGS}")
   add_compile_definitions(USE_OPENMP)
 endif()
-# openmp may cause mkl pardiso error
 
+# openmp may cause mkl pardiso error
 include(Find_AVX)
 CHECK_FOR_AVX()
 
@@ -354,10 +354,15 @@ add_subdirectory(src)
 
 if(PGO_BUILD_SUBPROJECTS)
   file(GLOB PGO_PROJ "projects/*")
+
   foreach(proj ${PGO_PROJ})
     message(STATUS "Add ${proj}")
     add_subdirectory(${proj})
   endforeach()
+endif()
+
+if(PGO_ENABLE_PYTHON)
+  include(CMakeModules/python_list.cmake)
 endif()
 
 # generate config file to be used in common build tree
