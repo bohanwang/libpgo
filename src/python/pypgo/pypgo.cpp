@@ -47,7 +47,7 @@ void pypgo_init(py::module &m)
 #if defined(_WIN32)
       if (tetInfo.ndim != (py::ssize_t)1) {
 #else
-        if (tetInfo.ndim != (py::ssize_t)1 || (tetInfo.format != py::format_descriptor<int>::format())) {
+      if (tetInfo.ndim != (py::ssize_t)1 || (tetInfo.format != py::format_descriptor<int>::format())) {
 #endif
         std::cerr << "Wrong tet type:" << tetInfo.ndim << ',' << tetInfo.format << ',' << py::format_descriptor<int64_t>::format() << std::endl;
         return TetMeshGeo();
