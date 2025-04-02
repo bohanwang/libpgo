@@ -1,3 +1,7 @@
+/*
+author: Minghao Guo
+*/
+
 #include "centerOfMassMatchingEnergy.h"
 
 #include <autodiff/reverse/var/eigen.hpp>
