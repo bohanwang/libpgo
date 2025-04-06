@@ -22,9 +22,10 @@ OPTION(PGO_OPT_USE_IPOPT "Use IPOPT" OFF)
 OPTION(PGO_OPT_USE_KNITRO "Use KNITRO" OFF)
 option(PGO_MKL_LINK_DYNAMIC "MKL Link" ON)
 
+# message(STATUS "CMake module path: ${CMAKE_MODULE_PATH}")
 set(PGO_CMAKE_MODULES ${CMAKE_SOURCE_DIR}/CMakeModules)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PGO_CMAKE_MODULES})
-message(STATUS "CMake module path: ${CMAKE_MODULE_PATH}")
+list(APPEND CMAKE_MODULE_PATH "${PGO_CMAKE_MODULES}")
+message(STATUS "CMake Module Path: ${CMAKE_MODULE_PATH}")
 
 include(CompilationUtils)
 
@@ -353,12 +354,7 @@ endfunction()
 add_subdirectory(src)
 
 if(PGO_BUILD_SUBPROJECTS)
-  file(GLOB PGO_PROJ "projects/*")
-
-  foreach(proj ${PGO_PROJ})
-    message(STATUS "Add ${proj}")
-    add_subdirectory(${proj})
-  endforeach()
+  add_subdirectory(projects)
 endif()
 
 if(PGO_ENABLE_PYTHON)

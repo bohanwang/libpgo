@@ -8,9 +8,11 @@ import subprocess
 import sys
 import platform
 from pathlib import Path
+import shutil
 
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
+
 
 # Convert distutils Windows platform specifiers to CMake -A arguments
 PLAT_TO_CMAKE = {
@@ -140,6 +142,22 @@ class CMakeBuild(build_ext):
         if not build_temp.exists():
             build_temp.mkdir(parents=True)
 
+        # e.g., copy a known DLL into the same folder as the built .pyd/.so
+        # for the extension named mypackage._example
+        if "Windows" in platform.platform():
+            ext_build_path = self.get_ext_fullpath(ext.name)
+            ext_dir = os.path.dirname(os.path.abspath(ext_build_path))
+
+            third_party_folder = (Path.cwd() / "third-party").resolve()
+
+            for folder in [f"{third_party_folder}/gmp-msvc/release", f"{third_party_folder}/mpfr-msvc/release"]:
+                for file in os.listdir(folder):
+                    full_filename = os.path.join(folder, file)
+                    if os.path.isfile(full_filename) and file.lower().endswith(".dll"):
+                        dest_dll = os.path.join(ext_dir, file)
+                        print(f"copying {full_filename} to {dest_dll}")
+                        shutil.copyfile(full_filename, dest_dll)
+
         subprocess.run(["cmake", ext.sourcedir, *cmake_args], cwd=build_temp, check=True)
         subprocess.run(["cmake", "--build", ".", "--target", "pypgo", *build_args], cwd=build_temp, check=True)
         # subprocess.run(["cmake", "--build", ".", "--target", "pgo_c", *build_args], cwd=build_temp, check=True)
@@ -165,6 +183,12 @@ setup(
     ext_modules=[CMakeExtension("pypgo")],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
+    install_requires=["tbb", "tbb-devel", "mkl", "mkl-devel", "mkl-include"],
     extras_require={"test": ["pytest>=6.0"]},
     python_requires=">=3.9",
+    # Tell setuptools to include extra non-Python files in the wheel
+    # include_package_data=include_package_data,  # needs a MANIFEST.in or package_data below
+    # package_dir=package_dir,
+    # One way: use package_data
+    # package_data=package_data,
 )

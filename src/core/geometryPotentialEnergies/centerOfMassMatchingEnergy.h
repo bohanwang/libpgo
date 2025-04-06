@@ -1,3 +1,6 @@
+/*
+author: Minghao Guo
+*/
 #pragma once
 
 #include "potentialEnergy.h"
