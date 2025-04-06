@@ -408,11 +408,6 @@ void pypgo_init(py::module &m)
     return std::make_tuple(ret_w, ret_i);
   });
 
-  m.def(
-    "run_sim_from_config", [](const std::string &filename) -> int {
-      return pgo_run_sim_from_config(filename.c_str());
-    });
-
   m.def("debug", []() {
     std::cout << "Test!!!" << std::endl;
   });
