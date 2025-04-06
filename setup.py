@@ -57,10 +57,7 @@ class CMakeBuild(build_ext):
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
         ]
 
-        cmake_args += [
-            f"-DPGO_ENABLE_PYTHON=1",
-            f"-DPGO_BUILD_SUBPROJECTS=1"
-        ]
+        cmake_args += [f"-DPGO_ENABLE_PYTHON=1", f"-DPGO_BUILD_SUBPROJECTS=1"]
 
         if "macOS" in platform.platform():
             cmake_args += [
@@ -147,6 +144,8 @@ class CMakeBuild(build_ext):
         if "Windows" in platform.platform():
             ext_build_path = self.get_ext_fullpath(ext.name)
             ext_dir = os.path.dirname(os.path.abspath(ext_build_path))
+            if not os.path.exists(ext_dir):
+                os.makedirs(ext_dir, exist_ok=True)
 
             third_party_folder = (Path.cwd() / "third-party").resolve()
 
@@ -161,13 +160,13 @@ class CMakeBuild(build_ext):
         subprocess.run(["cmake", ext.sourcedir, *cmake_args], cwd=build_temp, check=True)
         subprocess.run(["cmake", "--build", ".", "--target", "pypgo", *build_args], cwd=build_temp, check=True)
         # subprocess.run(["cmake", "--build", ".", "--target", "pgo_c", *build_args], cwd=build_temp, check=True)
-        
-        # if "CONDA_PREFIX" in os.environ:       
+
+        # if "CONDA_PREFIX" in os.environ:
         #     if "Windows" in platform.platform():
         #         install_prefix = os.path.join(os.environ["CONDA_PREFIX"], "Library")
         #     else:
-        #         install_prefix = os.environ["CONDA_PREFIX"] 
-        
+        #         install_prefix = os.environ["CONDA_PREFIX"]
+
         #     subprocess.run(["cmake", "--install", ".", "--prefix", install_prefix, *build_args], cwd=build_temp, check=True)
 
 
