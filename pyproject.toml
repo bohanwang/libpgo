@@ -2,10 +2,5 @@
 requires = [
     "setuptools>=42",
     "wheel",
-    "tbb",
-    "tbb-devel",
-    "mkl",
-    "mkl-devel",
-    "mkl-include"
 ]
 build-backend = "setuptools.build_meta"

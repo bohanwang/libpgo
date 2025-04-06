@@ -413,13 +413,6 @@ void pypgo_init(py::module &m)
       return pgo_run_sim_from_config(filename.c_str());
     });
 
-  m.def(
-    "compute_parameterization", [](TriMeshGeo m, int mode) -> TriMeshGeo {
-      pgoTriMeshGeoStructHandle hOut = pgo_compute_parameterization(m.handle, mode);
-      TriMeshGeo mOut(hOut);
-      return mOut;
-    });
-
   m.def("debug", []() {
     std::cout << "Test!!!" << std::endl;
   });
