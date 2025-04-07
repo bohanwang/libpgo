@@ -13,6 +13,11 @@ import shutil
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
+if "macOS" not in platform.platform():
+    install_requires=["tbb", "tbb-devel", "mkl", "mkl-devel", "mkl-include"]
+else:
+    install_requires=[]
+
 
 # Convert distutils Windows platform specifiers to CMake -A arguments
 PLAT_TO_CMAKE = {
@@ -182,7 +187,7 @@ setup(
     ext_modules=[CMakeExtension("pypgo")],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
-    install_requires=["tbb", "tbb-devel", "mkl", "mkl-devel", "mkl-include"],
+    install_requires=install_requires,
     extras_require={"test": ["pytest>=6.0"]},
     python_requires=">=3.9",
     # Tell setuptools to include extra non-Python files in the wheel

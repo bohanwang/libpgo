@@ -1,3 +1,19 @@
+-- v0.0.2b
+
+- Support building wheel, and the prebuilt wheel are in ./dist folder. The following platforms have been prebuilt
+  - windows 11, visual studio 2022 wheel
+  - ubuntu 24.04 wheel
+
+- Support subprojects better
+  - support subprojects that include python module
+
+- Cleanups, bugs
+  - fix MKL incorrect linked
+  - some missing copyright info
+  - add dependency in setup.py
+  - gmp mpfr update
+  - MKL 2025 incompatible with eigen
+
 -- v0.0.2
 
 - Add more functionalities in the direction of geometry processing
