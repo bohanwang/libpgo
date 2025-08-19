@@ -103,6 +103,7 @@ add_flag_poxis(compilation_flag INTERFACE -frounding-math)
 add_flag_poxis(compilation_flag INTERFACE -fvisibility=hidden)
 add_flag_poxis(compilation_flag INTERFACE -march=native)
 add_flag_poxis(compilation_flag INTERFACE -mtune=native)
+add_flag_poxis(compilation_flag INTERFACE -Wno-template-body)
 
 add_link_flag_poxis(compilation_flag -march=native)
 add_link_flag_poxis(compilation_flag -mtune=native)
