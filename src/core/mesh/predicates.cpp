@@ -203,12 +203,12 @@ bool intersectSegTri(const double sega[3], const double segb[3], const double tr
   const auto ret = CGAL::intersection(seg, tri);
   if (ret) {
     K::Point_3 pt;
-    if (const K::Segment_3 *s = boost::get<K::Segment_3>(&*ret)) {
+    if (const K::Segment_3 *s = std::get_if<K::Segment_3>(&*ret)) {
       std::cout << "Segment is exactly on triangle. pick v0" << std::endl;
       pt = s->vertex(0);
     }
     else {
-      const K::Point_3 *p = boost::get<K::Point_3>(&*ret);
+      const K::Point_3 *p = std::get_if<K::Point_3>(&*ret);
       pt = *p;
     }
 
@@ -352,12 +352,12 @@ bool intersectSegSeg2d(const double sa[2], const double sb[2], const double ta[2
   const auto ret = CGAL::intersection(seg1, seg2);
   if (ret) {
     K::Point_2 pt;
-    if (const K::Segment_2 *s = boost::get<K::Segment_2>(&*ret)) {
+    if (const K::Segment_2 *s = std::get_if<K::Segment_2>(&*ret)) {
       std::cout << "Segment is exactly on Segment. pick v0" << std::endl;
       pt = s->vertex(0);
     }
     else {
-      const K::Point_2 *p = boost::get<K::Point_2>(&*ret);
+      const K::Point_2 *p = std::get_if<K::Point_2>(&*ret);
       pt = *p;
     }
 

@@ -25,6 +25,9 @@ void pgo::Logging::init(const char *filename)
   }
 
   logger->set_level(spdlog::level::trace);
+  logger->flush_on(spdlog::level::debug);
+  
+  spdlog::set_default_logger(logger);
 
   //if (spdlog::get("pgo") != nullptr)
   //  return;

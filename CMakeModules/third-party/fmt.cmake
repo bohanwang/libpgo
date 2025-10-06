@@ -7,7 +7,7 @@ message(STATUS "Loading fmtlib...")
 include(FetchContent)
 FetchContent_Declare(
   fmt
-  URL https://github.com/fmtlib/fmt/releases/download/10.2.1/fmt-10.2.1.zip
+  URL https://github.com/fmtlib/fmt/archive/refs/tags/11.1.4.zip
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
   FIND_PACKAGE_ARGS NAMES fmt

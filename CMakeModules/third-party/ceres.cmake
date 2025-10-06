@@ -13,6 +13,7 @@ set(BUILD_EXAMPLES OFF CACHE BOOL "Build examples" FORCE)
 set(BUILD_BENCHMARKS OFF CACHE BOOL "Build Ceres benchmarking suite" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build Ceres as a shared library." FORCE)
 set(PROVIDE_UNINSTALL_TARGET OFF CACHE BOOL "Add a custom target to ease removal of installed targets" FORCE)
+set(LAPACK OFF CACHE BOOL "Use LAPACK" FORCE)
 
 include(FetchContent)
 FetchContent_Declare(

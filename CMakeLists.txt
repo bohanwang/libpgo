@@ -4,6 +4,7 @@ project(libpgo LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -12,6 +13,7 @@ option(PGO_USE_MKL "Use MKL" OFF)
 option(PGO_ENABLE_PYTHON "Build python module" OFF)
 option(PGO_ENABLE_FULL "Enable all functionalities" OFF)
 option(PGO_BUILD_SUBPROJECTS "Include subprojects" OFF)
+option(PGO_CHECK_CONDA "Check conda" OFF)
 
 option(PGO_UI "Build pgo ui" OFF)
 option(PGO_RENDER_USE_ASSIMP "Use Assimp" OFF)
@@ -212,7 +214,9 @@ if(PGO_ENABLE_FULL)
 
   igl_include(copyleft core)
   igl_include(copyleft cgal)
+endif()
 
+if(PGO_ENABLE_FULL)
   # include(CMakeModules/third-party/arpackng.cmake)
 endif()
 

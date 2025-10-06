@@ -11,3 +11,4 @@ endforeach()
 add_libpgo_lib(pgoLogging pgoLogging.cpp "${PGOLOGGING_HEADERS}")
 
 target_link_libraries(pgoLogging PUBLIC ${PGOLOGGING_DEPS})
+target_compile_definitions(pgoLogging PUBLIC FMT_UNICODE=0)

@@ -81,6 +81,8 @@ if(GEOGRAM_WITH_GARGANTUA)
   add_definitions(-DGARGANTUA)
 endif()
 
+add_compile_options("-Wno-template-body")
+
 
 ##############################################################################
 # Get SVN revision info

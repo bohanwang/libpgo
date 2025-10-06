@@ -3,7 +3,7 @@
 #include "potentialEnergy.h"
 
 #if defined(PGO_HAS_MKL)
-#include "EigenMKLPardisoSupport.h"
+#  include "EigenMKLPardisoSupport.h"
 #endif
 
 #include <cfloat>
@@ -48,6 +48,9 @@ public:
   void setFixedDOFs(const std::vector<int> &fixedDOFs, const double *fixedValues);
   int solve(double *x, int numIter, double epsilon, int verbose);
 
+  using AlphaTestFunc = std::function<double(const EigenSupport::VXd &, const EigenSupport::VXd &)>;
+  void setAlphaTestFunc(AlphaTestFunc func) { alphaTestFunc = func; }
+
 protected:
   void filterVector(EigenSupport::VXd &v);
 
@@ -59,11 +62,11 @@ protected:
   EigenSupport::SpMatD sysFull, A11, A12;
   EigenSupport::SpMatI A11Mapping, A12Mapping;
 
-  #if defined(PGO_HAS_MKL)
+#if defined(PGO_HAS_MKL)
   std::shared_ptr<EigenSupport::EigenMKLPardisoSupport> solver;
-  #else
+#else
   std::shared_ptr<EigenSupport::SymSolver> solver;
-  #endif
+#endif
 
   std::vector<int> allDOFs, fixedDOFs;
   std::vector<int> rhss2b, rhsb2s;
@@ -73,6 +76,8 @@ protected:
 
   EigenSupport::VXd historyx;
   double historyGradNormMin;
+
+  AlphaTestFunc alphaTestFunc;
 };
 }  // namespace NonlinearOptimization
 }  // namespace pgo

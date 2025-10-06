@@ -1,5 +1,6 @@
 #pragma once
 
+#define SPDLOG_ACTIVE_LEVEL 1
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 

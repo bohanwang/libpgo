@@ -191,6 +191,10 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
     solver->factorize(A11);
     deltaxSmall.noalias() = solver->solve(rhs);
 #endif
+
+    if (verbose >= 3 && iter % printGap == 0)
+      std::cout << (A11 * deltaxSmall - rhs).norm() << ' ' << rhs.norm() << std::endl;
+
     memset(deltax.data(), 0, sizeof(double) * n3);
     ES::transferSmallToBig(deltaxSmall, deltax, rhss2b);
 
@@ -218,6 +222,8 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
     if (solverParam.sst == SST_SUBITERATION_LINE_SEARCH) {
       double alpha = 1;
       double stepSize = 0;
+
+      alpha = alphaTestFunc ? alphaTestFunc(x, deltax) : 1.0;
 
       lineSearchx.noalias() = x + deltax;
       double eng1 = energy->func(lineSearchx);
@@ -274,7 +280,7 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
       x += deltax * alpha;
 
       stepSize = std::abs(alpha * deltax.cwiseAbs().maxCoeff());
-      if (stepSize < 1e-10) {
+      if (stepSize < 1e-12) {
         if (verbose >= 1) {
           std::cout << "    Iter=" << iter << "; dx = " << stepSize << "; no delta x improvement." << std::endl;
         }
