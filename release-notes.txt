@@ -1,3 +1,19 @@
+-- v0.0.3
+  - fix various bug in cmake
+  - fix bugs about misusage of eigen library
+  - adding alignment of eigen library
+  - fix bugs in simulator tools
+  - improve Newton solver (adding damping, improve line search, etc.)
+  - improve finite difference library
+  - substantially improve solid deformation models
+  - add koiter shell models
+  - add tetgen tool
+  - add msh conversion tool (require gmesh)
+  - add conversion tool that convert animation sequence to Alembic  (require Alembic)
+  - add new examples
+  - add small meshing tools
+  - 
+
 -- v0.0.2b
 
 - Support building wheel, and the prebuilt wheel are in ./dist folder. The following platforms have been prebuilt
