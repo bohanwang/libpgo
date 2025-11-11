@@ -1,61 +1,64 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #pragma once
+
+#include "deformationModelManager.h"
+#include "EigenDef.h"
+
+#include <memory>
 
 namespace pgo
 {
 namespace SolidDeformationModel
 {
-class HessianMatrixHandle;
-class DeformationModelManager;
-class DeformationModelAssemblerImpl;
-
-enum class DeformationModelAssemblingType
-{
-  AT_ELASTIC,
-  AT_ELASTIC_MULTI_PARAM,
-  AT_ELASTIC_FULL_PARAM,
-  AT_ELASTIC_MULTI_PLASTIC,
-  AT_ELASTIC_FULL_PLASTIC,
-};
-
 class DeformationModelAssemblerCacheData;
 
 class DeformationModelAssembler
 {
 public:
-  DeformationModelAssembler(const DeformationModelManager *dm, DeformationModelAssemblingType at, const double *elementFlags = nullptr);
+  DeformationModelAssembler(std::shared_ptr<const DeformationModelManager> dm, const double *elementFlags = nullptr);
   virtual ~DeformationModelAssembler();
 
-  void setFixedParameters(const double *param, int size);
-  int getFixedParameters(double *param) const;
+  double computeEnergy(const double *x, const double *plasticParams, const double *elasticParams) const;
+  void computeGradient(const double *x, const double *plasticParams, const double *elasticParams, double *grad) const;
+  void computeHessian(const double *x, const double *plasticParams, const double *elasticParams, EigenSupport::SpMatD &hess) const;
 
-  virtual DeformationModelAssemblerCacheData *allocateCache() const = 0;
-  virtual void freeCache(DeformationModelAssemblerCacheData *data) const = 0;
+  void compute_df_da(const double *x, const double *plasticParams, const double *elasticParams, EigenSupport::SpMatD &hess) const;
+  void compute_df_db(const double *x, const double *plasticParams, const double *elasticParams, EigenSupport::SpMatD &hess) const;
 
-  virtual double computeEnergy(const double *x_param, DeformationModelAssemblerCacheData *cache) const = 0;
-  virtual void computeGradient(const double *x_param, double *grad, DeformationModelAssemblerCacheData *cache) const = 0;
-  virtual void computeHessian(const double *x_param, HessianMatrixHandle *hess, DeformationModelAssemblerCacheData *cache) const = 0;
-  virtual void computeHessian(const double *x_param, double *hess, DeformationModelAssemblerCacheData *cache) const;
-  virtual void compute3rdOrderTensor(const double *x_param, const double *lambda, HessianMatrixHandle *hess, DeformationModelAssemblerCacheData *cache) const;
-  virtual int getNumDOFs() const = 0;
+  void computeVonMisesStresses(const double *x, const double *plasticParams, const double *elasticParams, double *elementStresses) const;
+  void computeMaxStrains(const double *x, const double *plasticParams, const double *elasticParams, double *elementStrain) const;
 
-  const DeformationModelManager *getDeformationModelManager() const { return deformationModelManager; }
-  const HessianMatrixHandle *getHessianTemplate() const;
+  int getNumDOFs() const { return n3; }
+
+  std::shared_ptr<const DeformationModelManager> getDeformationModelManager() const { return deformationModelManager; }
+  const EigenSupport::SpMatD &getHessianTemplate() const { return KTemplate; }
+  const EigenSupport::SpMatD &get_dfda_Template() const { return dfdaTemplate; }
+  const EigenSupport::SpMatD &get_dfdb_Template() const { return dfdbTemplate; }
 
 protected:
-  virtual void getFixedPlasticParameters(int ele, double *param) const = 0;
-  virtual void getFixedElasticParameters(int ele, double *param) const = 0;
-  virtual const double *getFixedDeformation() const = 0;
+  void getPlasticParameters(int ele, const double *paramsAll, double *param) const;
+  void getElasticParameters(int ele, const double *paramsAll, double *param) const;
 
-  const DeformationModelManager *deformationModelManager;
-  DeformationModelAssemblingType assemblingType;
+  std::shared_ptr<const DeformationModelManager> deformationModelManager;
+  DeformationModelAssemblerCacheData *data;
+
   int n3, nele, nvtx, neleVtx;
+  int numElasticParams = 0;
+  int numPlasticParams = 0;
 
-  DeformationModelAssemblerImpl *impl;
+  typedef Eigen::Matrix<std::ptrdiff_t, 24, 24> IndexMatrix;
+  typedef Eigen::Matrix<std::ptrdiff_t, Eigen::Dynamic, Eigen::Dynamic> DynamicIndexMatrix;
+
+  EigenSupport::VXd restPositions;
+  EigenSupport::SpMatD KTemplate, dfdaTemplate, dfdbTemplate;
+  std::vector<IndexMatrix> elementKInverseIndices, element_dfda_InverseIndices, element_dfdb_InverseIndices;
+
+  std::vector<double> elementFlags;
+  std::vector<const DeformationModel *> femModels;
 
   const int enableSanityCheck = 1;
 };

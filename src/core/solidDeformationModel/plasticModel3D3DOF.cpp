@@ -1,6 +1,6 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #include "plasticModel3D3DOF.h"
@@ -17,7 +17,7 @@ using MapC3 = Eigen::Map<const ES::M3d>;
 using namespace pgo::SolidDeformationModel;
 
 PlasticModel3D3DOF::PlasticModel3D3DOF(const double R_[9]):
-  PlasticModel(3)
+  PlasticModel3DDeformationGradient(3)
 {
   std::memcpy(R, R_, sizeof(double) * 9);
   (Map3(RT)) = Map3(R).transpose();

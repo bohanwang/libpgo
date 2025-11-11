@@ -229,7 +229,7 @@ void ElasticModelStableNeoHookeanMaterial::compute_dPdF(const double * /*param*/
   ES::V3d S(SIn[0], SIn[1], SIn[2]);
 
   ES::M9d dPdF;
-  if (enforceSPD_) {
+  if (enforceSPD_ == 0) {
     const ES::V9d pjpf = PartialJpartialFVec(F);
     dPdF = _mu * ES::M9d::Identity() + _lambda * pjpf * pjpf.transpose() + ComputeFJSecondDerivContribs(_lambda, _ratio, F);
   }

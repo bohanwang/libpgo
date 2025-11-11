@@ -81,7 +81,9 @@ if(GEOGRAM_WITH_GARGANTUA)
   add_definitions(-DGARGANTUA)
 endif()
 
-add_compile_options("-Wno-template-body")
+if (NOT MSVC)
+  add_compile_options("-Wno-template-body")
+endif()
 
 
 ##############################################################################

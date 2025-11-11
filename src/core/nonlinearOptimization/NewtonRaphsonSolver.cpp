@@ -128,6 +128,15 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
 
   // double error0 = 0;
   int iter = 0;
+  double lambdaScale = 1.0;
+  double lambda0 = 1.0;
+  // compute lambda initial
+  memset(grad.data(), 0, sizeof(double) * grad.size());
+  energy->gradient(x, grad);
+  filterVector(grad);
+  lambda0 = grad.cwiseAbs().maxCoeff();
+
+  double gradNormLast = lambda0;
   for (; iter < numIter; iter++) {
     if (verbose >= 2 && iter % printGap == 0)
       std::cout << "    Iter=" << iter << std::endl;
@@ -157,7 +166,7 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
     if (iter) {
       if (gradNorm < epsilon) {
         if (verbose >= 1) {
-          std::cout << "    Iter=" << iter << "; ||grad|| < eps. Done." << std::endl;
+          std::cout << "    Iter=" << iter << "; ||grad||=" << gradNorm << " < eps. Done." << std::endl;
         }
 
         break;
@@ -167,8 +176,41 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
     memset(sysFull.valuePtr(), 0, sizeof(double) * sysFull.nonZeros());
     energy->hessian(x, sysFull);
 
+    // grad too small, we don't need damping
+    if (gradNorm < 1e-4) {
+      lambdaScale = 0.0;
+    }
+    else {
+      // if lambda too small, we set it to zero
+      if (lambdaScale < 1e-8) {
+        lambdaScale = 0;
+      }
+      else {
+        // if gradient increasing, we increase lambda
+        if (gradNorm > gradNormLast) {
+        }
+        else {
+          // otherwise we decrease lambda
+          lambdaScale *= 0.9;
+        }
+
+        // clamp
+        lambdaScale = std::min(lambdaScale, 1.0);
+      }
+    }
+    gradNormLast = gradNorm;
+
+    // std::cout << "        Damping lambda=" << lambda << std::endl;
+
     // remove column rows
     ES::transferBigToSmall(sysFull, A11, A11Mapping, 1);
+
+    if (solverParam.addDamping) {
+      for (int i = 0; i < A11.rows(); i++) {
+        A11.coeffRef(i, i) += lambdaScale * lambda0;
+      }
+    }
+
     // ES::transferBigToSmall(sysFull, A12, A12Mapping, 1);
     ES::transferBigToSmall(grad, rhs, rhsb2s, 1);
 
@@ -227,7 +269,7 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
 
       lineSearchx.noalias() = x + deltax;
       double eng1 = energy->func(lineSearchx);
-      int maxIter = 10;
+      int maxIter = 50;
       if (eng1 < eng) {
         maxIter = 3;
       }
@@ -236,6 +278,7 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
         lineSearchHandle->nativeLineSearch->setMaxIterations(maxIter);
         LineSearch::Result ret = lineSearchHandle->nativeLineSearch->golden(x.data(), deltax.data(), eng);
         alpha = ret.alpha;
+        eng1 = ret.f;
 
         if (verbose >= 2 && iter % printGap == 0) {
           std::cout << "        f=" << ret.f << ";alpha=" << alpha << std::endl;
@@ -245,6 +288,7 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
         lineSearchHandle->nativeLineSearch->setMaxIterations(maxIter);
         LineSearch::Result ret = lineSearchHandle->nativeLineSearch->BrentsMethod(x.data(), deltax.data(), eng);
         alpha = ret.alpha;
+        eng1 = ret.f;
 
         if (verbose >= 2 && iter % printGap == 0) {
           std::cout << "        f=" << ret.f << ";alpha=" << alpha << std::endl;
@@ -254,14 +298,15 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
         lineSearchHandle->nativeLineSearch->setMaxIterations(maxIter);
         LineSearch::Result ret = lineSearchHandle->nativeLineSearch->backtracking(x.data(), deltax.data(), eng, grad.data(), 0.0001, 0.5);
         alpha = ret.alpha;
+        eng1 = ret.f;
 
         if (verbose >= 2 && iter % printGap == 0) {
           std::cout << "        f=" << ret.f << ";alpha=" << alpha << std::endl;
         }
       }
       else if (solverParam.lsm == LSM_SIMPLE) {
-        double eng1 = eng;
-        for (int i = 0; i < 50; i++) {
+        eng1 = eng;
+        for (int i = 0; i < 100; i++) {
           lineSearchx.noalias() = x + deltax * alpha;
           eng1 = energy->func(lineSearchx);
 
@@ -277,12 +322,20 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
         }
       }
 
+      if (eng1 > eng) {
+        if (verbose >= 1) {
+          std::cout << "    Iter=" << iter << "; line search failed." << std::endl;
+        }
+
+        break;
+      }
+
       x += deltax * alpha;
 
       stepSize = std::abs(alpha * deltax.cwiseAbs().maxCoeff());
-      if (stepSize < 1e-12) {
+      if (stepSize < 1e-15) {
         if (verbose >= 1) {
-          std::cout << "    Iter=" << iter << "; dx = " << stepSize << "; no delta x improvement." << std::endl;
+          std::cout << "    Iter=" << iter << "; dx = " << stepSize << "; dx too small." << std::endl;
         }
 
         break;
@@ -306,6 +359,10 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
         std::cout << "        E= " << eng << "; ||grad||_max=" << grad.cwiseAbs().maxCoeff() << "; ||grad||=" << grad.norm() << std::endl;
 
       x += deltax * solverParam.alpha;
+    }
+
+    if (stepFunc) {
+      stepFunc(x, iter);
     }
   }
 

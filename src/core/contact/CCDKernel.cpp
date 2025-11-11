@@ -84,17 +84,17 @@ bool pgo::CCDKernel::TriangleCCD::computeCCDPlane(int numVertices, const double 
     int vid2 = ccdData.eid[1];
     int vid3 = (ccdData.eid[1] + 1) % 3;
 
-    ES::V3d edgeA0_t0(vtxA0[vid0]);
-    ES::V3d edgeA1_t0(vtxA0[vid1]);
-    ES::V3d edgeA0_t1(vtxA1[vid0]);
-    ES::V3d edgeA1_t1(vtxA1[vid1]);
+    ES::V3d edgeA0_t0 = asVec3d(vtxA0[vid0]);
+    ES::V3d edgeA1_t0 = asVec3d(vtxA0[vid1]);
+    ES::V3d edgeA0_t1 = asVec3d(vtxA1[vid0]);
+    ES::V3d edgeA1_t1 = asVec3d(vtxA1[vid1]);
     ES::V3d edgeA0_t = edgeA0_t0 * (1 - ccdData.t) + edgeA0_t1 * ccdData.t;
     ES::V3d edgeA1_t = edgeA1_t0 * (1 - ccdData.t) + edgeA1_t1 * ccdData.t;
 
-    ES::V3d edgeB0_t0(vtxB0[vid2]);
-    ES::V3d edgeB1_t0(vtxB0[vid3]);
-    ES::V3d edgeB0_t1(vtxB1[vid2]);
-    ES::V3d edgeB1_t1(vtxB1[vid3]);
+    ES::V3d edgeB0_t0 = asVec3d(vtxB0[vid2]);
+    ES::V3d edgeB1_t0 = asVec3d(vtxB0[vid3]);
+    ES::V3d edgeB0_t1 = asVec3d(vtxB1[vid2]);
+    ES::V3d edgeB1_t1 = asVec3d(vtxB1[vid3]);
     ES::V3d edgeB0_t = edgeB0_t0 * (1 - ccdData.t) + edgeB0_t1 * ccdData.t;
     ES::V3d edgeB1_t = edgeB1_t0 * (1 - ccdData.t) + edgeB1_t1 * ccdData.t;
 
@@ -118,16 +118,16 @@ bool pgo::CCDKernel::TriangleCCD::computeCCDPlane(int numVertices, const double 
     (ES::Mp<ES::V3d>(planePoint)) = contactPoint;
   }
   else if (ccdData.ccdCase == CCDC_VTXA_TRIB) {
-    ES::V3d vtxA_t0(vtxA0[ccdData.vid]);
-    ES::V3d vtxA_t1(vtxA1[ccdData.vid]);
+    ES::V3d vtxA_t0 = asVec3d(vtxA0[ccdData.vid]);
+    ES::V3d vtxA_t1 = asVec3d(vtxA1[ccdData.vid]);
     ES::V3d vtxA_t = vtxA_t0 * (1 - ccdData.t) + vtxA_t1 * ccdData.t;
 
-    ES::V3d triB0_t0(vtxB0[0]);
-    ES::V3d triB1_t0(vtxB0[1]);
-    ES::V3d triB2_t0(vtxB0[2]);
-    ES::V3d triB0_t1(vtxB1[0]);
-    ES::V3d triB1_t1(vtxB1[1]);
-    ES::V3d triB2_t1(vtxB1[2]);
+    ES::V3d triB0_t0 = asVec3d(vtxB0[0]);
+    ES::V3d triB1_t0 = asVec3d(vtxB0[1]);
+    ES::V3d triB2_t0 = asVec3d(vtxB0[2]);
+    ES::V3d triB0_t1 = asVec3d(vtxB1[0]);
+    ES::V3d triB1_t1 = asVec3d(vtxB1[1]);
+    ES::V3d triB2_t1 = asVec3d(vtxB1[2]);
     ES::V3d triB0_t = triB0_t0 * (1 - ccdData.t) + triB0_t1 * ccdData.t;
     ES::V3d triB1_t = triB1_t0 * (1 - ccdData.t) + triB1_t1 * ccdData.t;
     ES::V3d triB2_t = triB2_t0 * (1 - ccdData.t) + triB2_t1 * ccdData.t;
@@ -152,16 +152,16 @@ bool pgo::CCDKernel::TriangleCCD::computeCCDPlane(int numVertices, const double 
     (ES::Mp<ES::V3d>(planePoint)) = contactPoint;
   }
   else if (ccdData.ccdCase == CCDC_VTXB_TRIA) {
-    ES::V3d vtxB_t0(vtxB0[ccdData.vid]);
-    ES::V3d vtxB_t1(vtxB1[ccdData.vid]);
+    ES::V3d vtxB_t0 = asVec3d(vtxB0[ccdData.vid]);
+    ES::V3d vtxB_t1 = asVec3d(vtxB1[ccdData.vid]);
     ES::V3d vtxB_t = vtxB_t0 * (1 - ccdData.t) + vtxB_t1 * ccdData.t;
 
-    ES::V3d triA0_t0(vtxA0[0]);
-    ES::V3d triA1_t0(vtxA0[1]);
-    ES::V3d triA2_t0(vtxA0[2]);
-    ES::V3d triA0_t1(vtxA1[0]);
-    ES::V3d triA1_t1(vtxA1[1]);
-    ES::V3d triA2_t1(vtxA1[2]);
+    ES::V3d triA0_t0 = asVec3d(vtxA0[0]);
+    ES::V3d triA1_t0 = asVec3d(vtxA0[1]);
+    ES::V3d triA2_t0 = asVec3d(vtxA0[2]);
+    ES::V3d triA0_t1 = asVec3d(vtxA1[0]);
+    ES::V3d triA1_t1 = asVec3d(vtxA1[1]);
+    ES::V3d triA2_t1 = asVec3d(vtxA1[2]);
     ES::V3d triA0_t = triA0_t0 * (1 - ccdData.t) + triA0_t1 * ccdData.t;
     ES::V3d triA1_t = triA1_t0 * (1 - ccdData.t) + triA1_t1 * ccdData.t;
     ES::V3d triA2_t = triA2_t0 * (1 - ccdData.t) + triA2_t1 * ccdData.t;
@@ -198,22 +198,22 @@ bool pgo::CCDKernel::TriangleCCD::computeCCDPlane(int numVertices, const double 
   computeSign(numVertices, pos_t0, pos_t1, numTriangles, triangles, ccdData, planePoint, planeNormal, signA, signB);
 
   if (signA * signB > 0) {
-    ES::V3d triA0_t0(vtxA0[0]);
-    ES::V3d triA1_t0(vtxA0[1]);
-    ES::V3d triA2_t0(vtxA0[2]);
-    ES::V3d triA0_t1(vtxA1[0]);
-    ES::V3d triA1_t1(vtxA1[1]);
-    ES::V3d triA2_t1(vtxA1[2]);
+    ES::V3d triA0_t0 = asVec3d(vtxA0[0]);
+    ES::V3d triA1_t0 = asVec3d(vtxA0[1]);
+    ES::V3d triA2_t0 = asVec3d(vtxA0[2]);
+    ES::V3d triA0_t1 = asVec3d(vtxA1[0]);
+    ES::V3d triA1_t1 = asVec3d(vtxA1[1]);
+    ES::V3d triA2_t1 = asVec3d(vtxA1[2]);
     ES::V3d triA0_t = triA0_t0 * (1 - ccdData.t) + triA0_t1 * ccdData.t;
     ES::V3d triA1_t = triA1_t0 * (1 - ccdData.t) + triA1_t1 * ccdData.t;
     ES::V3d triA2_t = triA2_t0 * (1 - ccdData.t) + triA2_t1 * ccdData.t;
 
-    ES::V3d triB0_t0(vtxB0[0]);
-    ES::V3d triB1_t0(vtxB0[1]);
-    ES::V3d triB2_t0(vtxB0[2]);
-    ES::V3d triB0_t1(vtxB1[0]);
-    ES::V3d triB1_t1(vtxB1[1]);
-    ES::V3d triB2_t1(vtxB1[2]);
+    ES::V3d triB0_t0 = asVec3d(vtxB0[0]);
+    ES::V3d triB1_t0 = asVec3d(vtxB0[1]);
+    ES::V3d triB2_t0 = asVec3d(vtxB0[2]);
+    ES::V3d triB0_t1 = asVec3d(vtxB1[0]);
+    ES::V3d triB1_t1 = asVec3d(vtxB1[1]);
+    ES::V3d triB2_t1 = asVec3d(vtxB1[2]);
     ES::V3d triB0_t = triB0_t0 * (1 - ccdData.t) + triB0_t1 * ccdData.t;
     ES::V3d triB1_t = triB1_t0 * (1 - ccdData.t) + triB1_t1 * ccdData.t;
     ES::V3d triB2_t = triB2_t0 * (1 - ccdData.t) + triB2_t1 * ccdData.t;
@@ -353,8 +353,8 @@ bool pgo::CCDKernel::TriangleCCD::computeDCDPlane(int, const double *pos_t0, int
     pos_t0 + triangles[ccdData.triB][2] * 3
   };
 
-  ES::V3d vtxA[3] = { ES::V3d(vtxA0[0]), ES::V3d(vtxA0[1]), ES::V3d(vtxA0[2]) };
-  ES::V3d vtxB[3] = { ES::V3d(vtxB0[0]), ES::V3d(vtxB0[1]), ES::V3d(vtxB0[2]) };
+  ES::V3d vtxA[3] = { asVec3d(vtxA0[0]), asVec3d(vtxA0[1]), asVec3d(vtxA0[2]) };
+  ES::V3d vtxB[3] = { asVec3d(vtxB0[0]), asVec3d(vtxB0[1]), asVec3d(vtxB0[2]) };
 
   ES::V3d nA = (vtxA[1] - vtxA[0]).cross(vtxA[2] - vtxA[0]);
   if (nA.dot(nA) < 1e-40) {
@@ -474,19 +474,19 @@ void pgo::CCDKernel::TriangleCCD::computeSign(int, const double *pos_t0, const d
   //   pos_t1 + triangles[ccdData.triB][2] * 3
   // };
 
-  ES::V3d p(planePoint), pn(planeNormal);
+  ES::V3d p = asVec3d(planePoint), pn = asVec3d(planeNormal);
 
   if (ccdData.ccdCase == CCDC_EDGEA_EDGEB) {
     int vid0 = (ccdData.eid[0] + 2) % 3;
     int vid1 = (ccdData.eid[1] + 2) % 3;
 
-    ES::V3d otherA_t0(vtxA0[vid0]);
+    ES::V3d otherA_t0 = asVec3d(vtxA0[vid0]);
     // ES::V3d otherA_t1(vtxA1[vid0]);
     // ES::V3d otherA_t = otherA_t0 * (1 - ccdData.t) + otherA_t1 * ccdData.t;
     // signA = dot(pn, otherA_t - p);
     signA = pn.dot(otherA_t0 - p);
 
-    ES::V3d otherB_t0(vtxB0[vid1]);
+    ES::V3d otherB_t0 = asVec3d(vtxB0[vid1]);
     // ES::V3d otherB_t1(vtxB1[vid1]);
     // ES::V3d otherB_t = otherB_t0 * (1 - ccdData.t) + otherB_t1 * ccdData.t;
     // signB = dot(pn, otherB_t - p);
@@ -495,11 +495,11 @@ void pgo::CCDKernel::TriangleCCD::computeSign(int, const double *pos_t0, const d
     // ALOG(signA * signB <= 0);
   }
   else if (ccdData.ccdCase == CCDC_VTXA_TRIB) {
-    ES::V3d vtxA_t0(vtxA0[(ccdData.vid + 1) % 3]);
+    ES::V3d vtxA_t0 = asVec3d(vtxA0[(ccdData.vid + 1) % 3]);
     // ES::V3d vtxA_t1(vtxA1[(ccdData.vid + 1) % 3]);
     // ES::V3d vtxA_t = vtxA_t0 * (1 - ccdData.t) + vtxA_t1 * ccdData.t;
 
-    ES::V3d vtxB_t0(vtxB0[0]);
+    ES::V3d vtxB_t0 = asVec3d(vtxB0[0]);
 
     // signA = dot(pn, vtxA_t - p);
     signA = pn.dot(vtxA_t0 - p);
@@ -507,11 +507,11 @@ void pgo::CCDKernel::TriangleCCD::computeSign(int, const double *pos_t0, const d
     // signB = -signA;
   }
   else if (ccdData.ccdCase == CCDC_VTXB_TRIA) {
-    ES::V3d vtxB_t0(vtxB0[(ccdData.vid + 1) % 3]);
+    ES::V3d vtxB_t0 = asVec3d(vtxB0[(ccdData.vid + 1) % 3]);
     // ES::V3d vtxB_t1(vtxB1[(ccdData.vid + 1) % 3]);
     // ES::V3d vtxB_t = vtxB_t0 * (1 - ccdData.t) + vtxB_t1 * ccdData.t;
 
-    ES::V3d vtxA_t0(vtxA0[0]);
+    ES::V3d vtxA_t0 = asVec3d(vtxA0[0]);
 
     // signB = dot(pn, vtxB_t - p);
     signB = pn.dot(vtxB_t0 - p);
@@ -567,12 +567,12 @@ void pgo::CCDKernel::TriangleCCD::dumpCCD(int, const double *pos_t0, const doubl
   outTriangles.emplace_back(numVtx, numVtx + 1, numVtx + 2);
   numVtx += 3;
 
-  ES::V3d triA0_t0(vtxA0[0]);
-  ES::V3d triA1_t0(vtxA0[1]);
-  ES::V3d triA2_t0(vtxA0[2]);
-  ES::V3d triA0_t1(vtxA1[0]);
-  ES::V3d triA1_t1(vtxA1[1]);
-  ES::V3d triA2_t1(vtxA1[2]);
+  ES::V3d triA0_t0 = asVec3d(vtxA0[0]);
+  ES::V3d triA1_t0 = asVec3d(vtxA0[1]);
+  ES::V3d triA2_t0 = asVec3d(vtxA0[2]);
+  ES::V3d triA0_t1 = asVec3d(vtxA1[0]);
+  ES::V3d triA1_t1 = asVec3d(vtxA1[1]);
+  ES::V3d triA2_t1 = asVec3d(vtxA1[2]);
   ES::V3d triA0_t = triA0_t0 * (1 - ccdData.t) + triA0_t1 * ccdData.t;
   ES::V3d triA1_t = triA1_t0 * (1 - ccdData.t) + triA1_t1 * ccdData.t;
   ES::V3d triA2_t = triA2_t0 * (1 - ccdData.t) + triA2_t1 * ccdData.t;
@@ -598,12 +598,12 @@ void pgo::CCDKernel::TriangleCCD::dumpCCD(int, const double *pos_t0, const doubl
   outTriangles.emplace_back(numVtx, numVtx + 1, numVtx + 2);
   numVtx += 3;
 
-  ES::V3d triB0_t0(vtxB0[0]);
-  ES::V3d triB1_t0(vtxB0[1]);
-  ES::V3d triB2_t0(vtxB0[2]);
-  ES::V3d triB0_t1(vtxB1[0]);
-  ES::V3d triB1_t1(vtxB1[1]);
-  ES::V3d triB2_t1(vtxB1[2]);
+  ES::V3d triB0_t0 = asVec3d(vtxB0[0]);
+  ES::V3d triB1_t0 = asVec3d(vtxB0[1]);
+  ES::V3d triB2_t0 = asVec3d(vtxB0[2]);
+  ES::V3d triB0_t1 = asVec3d(vtxB1[0]);
+  ES::V3d triB1_t1 = asVec3d(vtxB1[1]);
+  ES::V3d triB2_t1 = asVec3d(vtxB1[2]);
   ES::V3d triB0_t = triB0_t0 * (1 - ccdData.t) + triB0_t1 * ccdData.t;
   ES::V3d triB1_t = triB1_t0 * (1 - ccdData.t) + triB1_t1 * ccdData.t;
   ES::V3d triB2_t = triB2_t0 * (1 - ccdData.t) + triB2_t1 * ccdData.t;
@@ -811,10 +811,10 @@ bool pgo::CCDKernel::TriangleCCD::CCDTestVega(int, const double *pos_t0, const d
     comB[i] = 1.0 / 3 * (triangleBPos[0][i] + triangleBPos[1][i] + triangleBPos[2][i]);
   }
 
-  ES::V3d comAv(comA);
-  ES::V3d comBv(comB);
-  ES::V3d APosv[3] = { ES::V3d(triangleAPos[0]), ES::V3d(triangleAPos[1]), ES::V3d(triangleAPos[2]) };
-  ES::V3d BPosv[3] = { ES::V3d(triangleBPos[0]), ES::V3d(triangleBPos[1]), ES::V3d(triangleBPos[2]) };
+  ES::V3d comAv = asVec3d(comA);
+  ES::V3d comBv = asVec3d(comB);
+  ES::V3d APosv[3] = { asVec3d(triangleAPos[0]), asVec3d(triangleAPos[1]), asVec3d(triangleAPos[2]) };
+  ES::V3d BPosv[3] = { asVec3d(triangleBPos[0]), asVec3d(triangleBPos[1]), asVec3d(triangleBPos[2]) };
 
   double r0 = 0;
   for (int i = 0; i < 3; i++) {

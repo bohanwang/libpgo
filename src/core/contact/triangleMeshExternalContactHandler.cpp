@@ -335,7 +335,7 @@ void TriangleMeshExternalContactHandler::execute(const double *u0)
   curP.noalias() = restP + Eigen::Map<const ES::VXd>(u0, n3);
 
   for (int i = 0; i < surfaceMeshRuntime.numVertices(); i++) {
-    surfaceMeshRuntime.pos(i) = ES::V3d(curP.data() + i * 3);
+    surfaceMeshRuntime.pos(i) = asVec3d(curP.data() + i * 3);
   }
   // BoundingBox bb(surfaceMeshRuntime.positions());
 
@@ -376,7 +376,7 @@ void TriangleMeshExternalContactHandler::execute()
   tbb::parallel_for(0, (int)sampleInfoAndIDs.size(), [&](int si) {
     // for (int vi = 0; vi < (int)vertices.size(); vi++) {
     // for (int si = 0; si < (int)sampleInfoAndIDs.size(); si++) {
-    ES::V3d srcPos = ES::V3d(sampleCurP.data() + si * 3);
+    ES::V3d srcPos = asVec3d(sampleCurP.data() + si * 3);
     int triID = sampleInfoAndIDs[si].triangleID;
     if (std::binary_search(excludedTriangles.begin(), excludedTriangles.end(), triID))
       return;

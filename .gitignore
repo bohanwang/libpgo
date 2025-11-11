@@ -40,6 +40,11 @@ _skbuild
 .clang-format
 
 *.pyd
+*.pyc
+__pycache__/
 
 projects
 build-test
+
+*.obj
+*.png

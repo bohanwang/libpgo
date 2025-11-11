@@ -100,7 +100,7 @@ void MultipleVertexPulling::hessian(ES::ConstRefVecXd, ES::SpMatD &hess) const
 
   for (size_t vi = 0; vi < vertexIndices.size(); vi++) {
     for (int i = 0; i < 3; i++) {
-      hess.valuePtr()[KIndices[vi](i, i)] = coeffs[i] * coeffAll;
+      hess.valuePtr()[KIndices[vi](i, i)] = coeffs[vi] * coeffAll;
     }
   }
 }

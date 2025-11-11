@@ -1,6 +1,6 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #include "invariantBasedMaterialStVK.h"
@@ -38,6 +38,10 @@ double InvariantBasedMaterialStVK::compute_psi(const double invariants[3]) const
 
     if (J < 1) {
       energy += -coeffJ * (J - 1.0) * (J - 1.0) * (J - 1.0) / 2592.0;
+      // (J-1)^3 = (I^(1/2) - 1)^3
+      // 3 * (I^(1/2) - 1)^2 1/2 I^(-1/2)
+      // 6 * (I^(1/2 - 1)) (1/2) I^(-1/2) (1/2) I^(-1/2) + 3 * (I^(1/2) - 1)^2 (1/2) (-1/2) I^(-3/2)
+      // 6/4 * (J - 1) / J + 3 (J - 1)^2 (-1/4) / J^3
     }
   }
 

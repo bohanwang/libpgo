@@ -1,6 +1,6 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #pragma once
@@ -22,7 +22,7 @@ public:
 class DeformationModel
 {
 public:
-  DeformationModel(const ElasticModel *elasticModel, const PlasticModel *plasticModel):
+  DeformationModel(ElasticModel *elasticModel, PlasticModel *plasticModel):
     em(elasticModel), pm(plasticModel) {}
   virtual ~DeformationModel() {}
 
@@ -49,12 +49,12 @@ public:
 
   virtual void compute_d2E_dadb(const CacheData *cacheData, double *hess) const = 0;
 
-  virtual void compute_d3E_dx3(const CacheData *cacheData, double *tensor) const = 0;
-  virtual void compute_d3E_dxdadx(const CacheData *cacheData, double *tensor) const = 0;
-  virtual void compute_d3E_dxdada(const CacheData *cacheData, double *tensor) const = 0;
+  // virtual void compute_d3E_dx3(const CacheData *cacheData, double *tensor) const = 0;
+  // virtual void compute_d3E_dxdadx(const CacheData *cacheData, double *tensor) const = 0;
+  // virtual void compute_d3E_dxdada(const CacheData *cacheData, double *tensor) const = 0;
 
-  inline static double d3E_dx3_ijk(const double *tensor, int i, int j, int k, int dim) { return tensor[k * dim * dim + j * dim + i]; }
-  inline static double &d3E_dx3_ijk(double *tensor, int i, int j, int k, int dim) { return tensor[k * dim * dim + j * dim + i]; }
+  // inline static double d3E_dx3_ijk(const double *tensor, int i, int j, int k, int dim) { return tensor[k * dim * dim + j * dim + i]; }
+  // inline static double &d3E_dx3_ijk(double *tensor, int i, int j, int k, int dim) { return tensor[k * dim * dim + j * dim + i]; }
 
   const PlasticModel *getPlasticModel() const { return pm; }
   const ElasticModel *getElasticModel() const { return em; }
@@ -64,16 +64,16 @@ public:
 
   // advanced routines
   virtual int getNumMaterialLocations() const { return 1; }
-  virtual void computeF(const double *x, int materialLocationIDs, double F[9]) const {}
-  virtual void computeP(const CacheData *cacheDataBase, int materialLocationIDs, double P[9]) const {}
-  virtual void computedPdF(const CacheData *cacheDataBase, int materialLocationIDs, double dPdF[81]) const {}
-  virtual void computedFdx(const CacheData *cacheDataBase, int materialLocationIDs, double *dFdx) const {}
+  // virtual void computeF(const double *x, int materialLocationIDs, double F[9]) const {}
+  // virtual void computeP(const CacheData *cacheDataBase, int materialLocationIDs, double P[9]) const {}
+  // virtual void computedPdF(const CacheData *cacheDataBase, int materialLocationIDs, double dPdF[81]) const {}
+  // virtual void computedFdx(const CacheData *cacheDataBase, int materialLocationIDs, double *dFdx) const {}
 
 protected:
   int numMaterialLocations = 1;
 
-  const ElasticModel *em;
-  const PlasticModel *pm;
+  ElasticModel *em;
+  PlasticModel *pm;
 };
 }  // namespace SolidDeformationModel
 }  // namespace pgo

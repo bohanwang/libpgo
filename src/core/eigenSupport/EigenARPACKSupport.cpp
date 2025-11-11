@@ -1,5 +1,5 @@
 #include "EigenARPACKSupport.h"
-#include "EigenPardisoSupport.h"
+#include "EigenMKLPardisoSupport.h"
 
 #include <iostream>
 
@@ -52,16 +52,17 @@ int EigenSupport::solveGenEigShInv(const SpMatD &A, const SpMatD &B, int numEige
   // EigenPardisoSupport invASolver(*AMinusSigmaB, EigenPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
   //   EigenPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
 
-  Eigen::PardisoLDLT<SpMatD> invASolver;
+  EigenMKLPardisoSupport invASolver(*AMinusSigmaB, EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
+    EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
+
+  // Eigen::PardisoLDLT<SpMatD> invASolver;
   // invASolver.analyze(*AMinusSigmaB);
-  invASolver.analyzePattern(*AMinusSigmaB);
+  // invASolver.analyzePattern(*AMinusSigmaB);
+  // invASolver.factorize(*AMinusSigmaB);
+  invASolver.analyze(*AMinusSigmaB);
   invASolver.factorize(*AMinusSigmaB);
 
   // create (A-sigma*B)^{-1}*B solver
-  auto invABSolver = [&]() {
-
-  };
-
   const int maxIter = 10000;
 
   // call ARPACK
@@ -123,9 +124,9 @@ int EigenSupport::solveGenEigShInv(const SpMatD &A, const SpMatD &B, int numEige
       {
         double *X = WORKD.data() + IPNTR[0] - 1;
         double *Y = WORKD.data() + IPNTR[1] - 1;
-        Mv(B, Mp<const VXd>(X, B.cols()), buffer);
-        // invASolver.solve(Y, buffer.data(), 1);
-        Eigen::Map<VXd>(Y, N) = invASolver.solve(buffer);
+        mv(B, Mp<const VXd>(X, B.cols()), buffer);
+        invASolver.solve(Y, buffer.data(), 1);
+        // Eigen::Map<VXd>(Y, N) = invASolver.solve(buffer);
       }
       break;
     case 1:
@@ -137,8 +138,8 @@ int EigenSupport::solveGenEigShInv(const SpMatD &A, const SpMatD &B, int numEige
       {
         double *Y = WORKD.data() + IPNTR[1] - 1;
         double *Z = WORKD.data() + IPNTR[2] - 1;
-        // invASolver.solve(Y, Z, 1);
-        Eigen::Map<VXd>(Y, N) = invASolver.solve(Eigen::Map<VXd>(Z, N));
+        invASolver.solve(Y, Z, 1);
+        // Eigen::Map<VXd>(Y, N) = invASolver.solve(Eigen::Map<VXd>(Z, N));
       }
       break;
     case 2:
@@ -149,7 +150,7 @@ int EigenSupport::solveGenEigShInv(const SpMatD &A, const SpMatD &B, int numEige
       {
         double *X = WORKD.data() + IPNTR[0] - 1;
         double *Y = WORKD.data() + IPNTR[1] - 1;
-        Mv(B, Mp<const VXd>(X, B.cols()), Mp<VXd>(Y, B.cols()));
+        mv(B, Mp<const VXd>(X, B.cols()), Mp<VXd>(Y, B.cols()));
       }
       break;
     case 3:

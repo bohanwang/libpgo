@@ -129,12 +129,12 @@ PointTrianglePairCouplingEnergyWithCollision::PointTrianglePairCouplingEnergyWit
           }
         }
       }  // vj
-    }    // vi
+    }  // vi
 
     // for the triangle, we get the neighbors
     int triObjID = getTriangleObjectID(pi);
     int triID = triangleIDs[pi];
-    Vec3i triVtxID = surfaceMeshesRest[triObjID].tri(triID);
+    ES::V3i triVtxID = surfaceMeshesRest[triObjID].tri(triID);
 
     neighboringTriangles[pi].reserve(50);
 
@@ -147,7 +147,7 @@ PointTrianglePairCouplingEnergyWithCollision::PointTrianglePairCouplingEnergyWit
 
     int count = (int)neighboringTriangles[pi].size();
     for (int ti = 0; ti < count; ti++) {
-      Vec3i n = surfaceMeshNeighbors_[triObjID].getTriangleNeighbors(neighboringTriangles[pi][ti]);
+      ES::V3i n = surfaceMeshNeighbors_[triObjID].getTriangleNeighbors(neighboringTriangles[pi][ti]);
       for (int j = 0; j < 3; j++) {
         int ni = n[j];
         if (ni >= 0)
@@ -233,12 +233,12 @@ std::tuple<bool, int> PointTrianglePairCouplingEnergyWithCollision::checkContact
     int closestTriID = neighboringTriangles[pi][0];
     int closestFeature = -1;
     int triObjID = getTriangleObjectID(pi);
-    Vec3d closestPos;
+    ES::V3d closestPos;
     std::array<ES::V3d, 3> closestTrip;
 
     for (int trii = 0; trii < (int)neighboringTriangles[pi].size(); trii++) {
       int triID = neighboringTriangles[pi][trii];
-      Vec3i triVtxID = buf->surfaceMeshesRuntime[triObjID].tri(triID);
+      ES::V3i triVtxID = buf->surfaceMeshesRuntime[triObjID].tri(triID);
       std::array<ES::V3d, 3> trip{ ES::V3d::Zero(), ES::V3d::Zero(), ES::V3d::Zero() };
 
       // compute position
@@ -249,7 +249,7 @@ std::tuple<bool, int> PointTrianglePairCouplingEnergyWithCollision::checkContact
       }
 
       int feature;
-      Vec3d pt, w;
+      ES::V3d pt, w;
       double dist = getSquaredDistanceToTriangle(asVec3d(xlocal.data()),
         trip[0], trip[1], trip[2], feature, pt, w);
 
@@ -277,7 +277,7 @@ std::tuple<bool, int> PointTrianglePairCouplingEnergyWithCollision::checkContact
   else {
     int triObjID = getTriangleObjectID(pi);
     int triID = neighboringTriangles[pi][0];
-    Vec3i triVtxID = surfaceMeshesRest[triObjID].tri(triID);
+    ES::V3i triVtxID = surfaceMeshesRest[triObjID].tri(triID);
     // compute position
     for (int vi = 0; vi < 3; vi++) {
       int vid = triVtxID[vi];
@@ -794,8 +794,8 @@ void PointTrianglePairCouplingEnergyWithCollision::computeClosestPosition(const 
 
   ES::Mp<const ES::VXd> x(x_, objectDOFOffsets[numObjects]);
 
-  // std::vector<Vec3d> ppp;
-  // std::vector<Vec3i> ttt;
+  // std::vector<ES::V3d> ppp;
+  // std::vector<ES::V3i> ttt;
   ////std::vector<int> depidx;
   // for (int pi = 0; pi < numPairs; pi++) {
   //   //  LG_ << "pi: " << pi << '\n';
@@ -834,10 +834,12 @@ void PointTrianglePairCouplingEnergyWithCollision::computeClosestPosition(const 
     inContact = std::get<0>(checkContact(x, pi, xlocal, 1));
     contactStatus[pi] = 1;  // inContact ? 1 : 0;
 
-    Vec3d va(xlocal.data() + 3), vb(xlocal.data() + 6), vc(xlocal.data() + 9);
-    Vec3d v0(xlocal.data());
+    ES::V3d va = xlocal.segment<3>(3);
+    ES::V3d vb = xlocal.segment<3>(6);
+    ES::V3d vc = xlocal.segment<3>(9);
+    ES::V3d v0 = xlocal.segment<3>(0);
     int feature;
-    Vec3d w, pt;
+    ES::V3d w, pt;
     double d2 = getSquaredDistanceToTriangle(v0, va, vb, vc, feature, pt, w);
 
     barycentricWeights[pi] = ES::V3d(w[0], w[1], w[2]);

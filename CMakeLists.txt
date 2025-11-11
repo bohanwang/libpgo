@@ -23,6 +23,8 @@ option(PGO_CREATE_MISSING_FILE "Create file when it is missing" OFF)
 option(PGO_OPT_USE_IPOPT "Use IPOPT" OFF)
 option(PGO_OPT_USE_KNITRO "Use KNITRO" OFF)
 option(PGO_MKL_LINK_DYNAMIC "MKL Link" ON)
+option(PGO_ENABLE_ALEMBIC "Enable Alembic support" OFF)
+option(PGO_ENABLE_GMSH "Enable GMSH support" OFF)
 
 # message(STATUS "CMake module path: ${CMAKE_MODULE_PATH}")
 set(PGO_CMAKE_MODULES ${CMAKE_SOURCE_DIR}/CMakeModules)
@@ -194,14 +196,6 @@ include(CMakeModules/third-party/spdlog.cmake)
 include(CMakeModules/third-party/autodiff.cmake)
 include(CMakeModules/third-party/argparse.cmake)
 
-if(PGO_OPT_USE_KNITRO)
-  include(CMakeModules/third-party/knitro.cmake)
-
-  if(TARGET Knitro::Knitro)
-    add_compile_definitions(PGO_HAS_KNITRO)
-  endif()
-endif()
-
 if(PGO_ENABLE_PYTHON OR PGO_ENABLE_FULL)
   include(CMakeModules/third-party/ceres.cmake)
   include(CMakeModules/third-party/boost.cmake)
@@ -216,8 +210,32 @@ if(PGO_ENABLE_FULL)
   igl_include(copyleft cgal)
 endif()
 
-if(PGO_ENABLE_FULL)
-  # include(CMakeModules/third-party/arpackng.cmake)
+if(PGO_ENABLE_FULL AND NOT WIN32)
+  if(PGO_ENABLE_ALEMBIC)
+    include(CMakeModules/third-party/alembic.cmake)
+  endif()
+  
+  if(PGO_ENABLE_GMSH)
+    include(CMakeModules/third-party/gmsh.cmake)
+  endif()
+  
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU") 
+    find_program(GFORTRAN_EXECUTABLE gfortran)
+    if(GFORTRAN_EXECUTABLE)
+      message(STATUS "gfortran found: ${GFORTRAN_EXECUTABLE}")
+      include(CMakeModules/third-party/arpackng.cmake)
+
+      execute_process(COMMAND gfortran -print-file-name=libgfortran.so OUTPUT_VARIABLE GFORTRAN_PATH)
+      string(REGEX REPLACE "\n$" "" GFORTRAN_PATH "${GFORTRAN_PATH}")
+      set(GFORTRAN_LIBRARY ${GFORTRAN_PATH} CACHE PATH "gfortran library path")
+      message(STATUS "FOUND gfortran library: ${GFORTRAN_LIBRARY}")
+
+      execute_process(COMMAND gfortran -print-file-name=libquadmath.so OUTPUT_VARIABLE QUADMATH_PATH)
+      string(REGEX REPLACE "\n$" "" QUADMATH_PATH "${QUADMATH_PATH}")
+      set(QUADMATH_LIBRARY ${QUADMATH_PATH} CACHE PATH "quadmath library path")
+      message(STATUS "FOUND quadmath library: ${QUADMATH_LIBRARY}")
+    endif()
+  endif()
 endif()
 
 if(PGO_ENABLE_PYTHON)
@@ -234,7 +252,14 @@ endif()
 
 if(TARGET Ceres::ceres)
   add_compile_definitions(PGO_HAS_CERES)
-else()
+endif()
+
+if(PGO_OPT_USE_KNITRO)
+  include(CMakeModules/third-party/knitro.cmake)
+
+  if(TARGET Knitro::Knitro)
+    add_compile_definitions(PGO_HAS_KNITRO)
+  endif()
 endif()
 
 # =================== external ====================

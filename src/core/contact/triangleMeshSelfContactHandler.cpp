@@ -64,7 +64,7 @@ public:
 };
 }  // namespace pgo::Contact
 
-TriangleMeshSelfContactHandler::TriangleMeshSelfContactHandler(const std::vector<Vec3d> &V, const std::vector<Vec3i> &T, int nDOFs,
+TriangleMeshSelfContactHandler::TriangleMeshSelfContactHandler(const std::vector<ES::V3d> &V, const std::vector<ES::V3i> &T, int nDOFs,
   int subdivideTriangle, const std::vector<int> *vertexEmbeddingIndices, const std::vector<double> *vertexEmbeddingWeights):
   vertices(V),
   triangles(T), surfaceMeshRef(vertices, triangles),
@@ -78,7 +78,7 @@ TriangleMeshSelfContactHandler::TriangleMeshSelfContactHandler(const std::vector
   tbb::parallel_for(
     0, (int)triangles.size(), [&](int trii) {
       Vec3i tri = triangles[trii];
-      Vec3d vtx[3] = {
+      ES::V3d vtx[3] = {
         vertices[tri[0]],
         vertices[tri[1]],
         vertices[tri[2]],
@@ -111,15 +111,15 @@ TriangleMeshSelfContactHandler::TriangleMeshSelfContactHandler(const std::vector
   // Sample surface
   tbb::parallel_for(
     0, (int)triangles.size(), [&](int trii) {
-      Vec3i tri = triangles[trii];
-      Vec3d vtx[3] = {
+      ES::V3i tri = triangles[trii];
+      ES::V3d vtx[3] = {
         vertices[tri[0]],
         vertices[tri[1]],
         vertices[tri[2]],
       };
 
       triangleSampler->visitSample(vtx[0], vtx[1], vtx[2], triangleAreas[trii],
-        [&](int i, int j, double area, const Vec3d &baryWeight, const Vec3d &pos) {
+        [&](int i, int j, double area, const ES::V3d &baryWeight, const ES::V3d &pos) {
           SampleInfo sampleInfo;
 
           UTriKey key = triangleSampler->getSampleKey(tri, i, j);
@@ -376,7 +376,7 @@ void TriangleMeshSelfContactHandler::handleContactDCD(double distThreshold, int 
 
         // compute sample position
         // ES::V3d sampleP = vtxB[0] * sinfo.w[0] + vtxB[1] * sinfo.w[1] + vtxB[2] * sinfo.w[2];
-        ES::VXd sampleP = sampleCurP0.segment<3>(sampleID * 3);
+        ES::V3d sampleP = sampleCurP0.segment<3>(sampleID * 3);
 
         // if a point is in contact
         double depth = (sampleP - vtxA[0]).dot(nA);
@@ -385,8 +385,10 @@ void TriangleMeshSelfContactHandler::handleContactDCD(double distThreshold, int 
         //    above surface but with dist < distThreshold
         if (depth < distThreshold) {
           // we find the distance between the point and the triangle
-          Vec3d p(sampleP.data());
-          Vec3d va(vtxA[0].data()), vb(vtxA[1].data()), vc(vtxA[2].data());
+          const ES::V3d &p = sampleP;
+          const ES::V3d &va = vtxA[0];
+          const ES::V3d &vb = vtxA[1];
+          const ES::V3d &vc = vtxA[2];
 
           double dist2 = getSquaredDistanceToTriangle(p, va, vb, vc);
 
@@ -426,8 +428,10 @@ void TriangleMeshSelfContactHandler::handleContactDCD(double distThreshold, int 
         double depth = (sampleP - vtxB[0]).dot(nB);
         if (depth < distThreshold) {
           // we find the distance between the point and the triangle
-          Vec3d va(vtxB[0].data()), vb(vtxB[1].data()), vc(vtxB[2].data());
-          Vec3d p(sampleP.data());
+          const ES::V3d &p = sampleP;
+          const ES::V3d &va = vtxB[0];
+          const ES::V3d &vb = vtxB[1];
+          const ES::V3d &vc = vtxB[2];
 
           double dist2 = getSquaredDistanceToTriangle(p, va, vb, vc);
 
@@ -451,7 +455,7 @@ void TriangleMeshSelfContactHandler::handleContactDCD(double distThreshold, int 
           }
         }  // end if depth < 0
       }
-    });    // end for
+    });  // end for
 
     // gather all samples
     rd->sampleTriDepthActive.clear();
@@ -482,12 +486,14 @@ void TriangleMeshSelfContactHandler::handleContactDCD(double distThreshold, int 
       searchFilter.clear();
 
       // get sample position and triangle positions
-      Vec3d p(sampleCurP0.data() + sampleIdx * 3);
-      Vec3d va(curP0.data() + triangles[triIdx][0] * 3), vb(curP0.data() + triangles[triIdx][1] * 3), vc(curP0.data() + triangles[triIdx][2] * 3);
+      ES::V3d p = sampleCurP0.segment<3>(sampleIdx * 3);
+      ES::V3d va = curP0.segment<3>(triangles[triIdx][0] * 3);
+      ES::V3d vb = curP0.segment<3>(triangles[triIdx][1] * 3);
+      ES::V3d vc = curP0.segment<3>(triangles[triIdx][2] * 3);
 
       int feature;
-      Vec3d w;
-      Vec3d closestPt;
+      ES::V3d w;
+      ES::V3d closestPt;
 
       // double dist2 = getSquaredDistanceToTriangle(p, va, vb, vc, feature, closestPt, w);
       TriangleWithCollisionInfo triInfo(va, vb, vc);
@@ -611,12 +617,12 @@ void TriangleMeshSelfContactHandler::handleContactDCD(double distThreshold, int 
   }
 }
 
-std::vector<std::array<Vec3d, 3>> TriangleMeshSelfContactHandler::getCollidingTriangles(const double *u) const
+std::vector<std::array<ES::V3d, 3>> TriangleMeshSelfContactHandler::getCollidingTriangles(const double *u) const
 {
-  std::vector<std::array<Vec3d, 3>> collidingTriangles;
+  std::vector<std::array<ES::V3d, 3>> collidingTriangles;
 
   for (const auto &info : collidingTrianglePairs) {
-    std::array<Vec3d, 3> tri;
+    std::array<ES::V3d, 3> tri;
     Vec3i triAi = triangles[info.triA];
     Vec3i triBi = triangles[info.triB];
 
@@ -634,13 +640,13 @@ std::vector<std::array<Vec3d, 3>> TriangleMeshSelfContactHandler::getCollidingTr
   return collidingTriangles;
 }
 
-std::vector<Vec3d> TriangleMeshSelfContactHandler::getSamplePoints(const double *u) const
+std::vector<ES::V3d> TriangleMeshSelfContactHandler::getSamplePoints(const double *u) const
 {
   ES::VXd P = restP + Eigen::Map<const ES::VXd>(u, n3);
   ES::VXd SP = sampleRestP;
   computeSamplePosition(P, SP);
 
-  std::vector<Vec3d> pts;
+  std::vector<ES::V3d> pts;
   for (ES::IDX i = 0; i < SP.size() / 3; i++) {
     pts.push_back(asVec3d(SP.data() + i * 3));
   }
@@ -648,13 +654,13 @@ std::vector<Vec3d> TriangleMeshSelfContactHandler::getSamplePoints(const double 
   return pts;
 }
 
-std::vector<Vec3d> TriangleMeshSelfContactHandler::getCollidedSamplePoints(const double *u) const
+std::vector<ES::V3d> TriangleMeshSelfContactHandler::getCollidedSamplePoints(const double *u) const
 {
   ES::VXd P = restP + Eigen::Map<const ES::VXd>(u, n3);
   ES::VXd SP = sampleRestP;
   computeSamplePosition(P, SP);
 
-  std::vector<Vec3d> pts;
+  std::vector<ES::V3d> pts;
 
   for (const auto &quad : contactedTrianglePairs) {
     for (int j = 0; j < 4; j++)
@@ -681,7 +687,7 @@ std::vector<int> TriangleMeshSelfContactHandler::getCollidedSampleAffectedVertic
   return vertexIndices;
 }
 
-void TriangleMeshSelfContactHandler::execute(const std::vector<Vec3d> &p0, const std::vector<Vec3d> &p1)
+void TriangleMeshSelfContactHandler::execute(const std::vector<ES::V3d> &p0, const std::vector<ES::V3d> &p1)
 {
   for (int i = 0; i < static_cast<int>(p0.size()); i++)
     curP0.segment<3>(i * 3) = ES::V3d(p0[i][0], p0[i][1], p0[i][2]);
@@ -706,7 +712,7 @@ void TriangleMeshSelfContactHandler::execute(const double *u0, const double *u1)
   executeCCD();
 }
 
-void TriangleMeshSelfContactHandler::execute(const std::vector<Vec3d> &p0)
+void TriangleMeshSelfContactHandler::execute(const std::vector<ES::V3d> &p0)
 {
   for (int i = 0; i < static_cast<int>(p0.size()); i++)
     curP0.segment<3>(i * 3) = ES::V3d(p0[i][0], p0[i][1], p0[i][2]);

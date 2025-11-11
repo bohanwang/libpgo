@@ -1,6 +1,6 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #pragma once
@@ -14,7 +14,6 @@ namespace pgo
 namespace SolidDeformationModel
 {
 class DeformationModelAssembler;
-class DeformationModelAssemblerCacheData;
 
 class DeformationModelEnergy : public NonlinearOptimization::PotentialEnergy
 {
@@ -29,15 +28,16 @@ public:
   virtual void getDOFs(std::vector<int> &dofs) const override { dofs = this->allDOFs; }
   virtual int getNumDOFs() const override { return (int)allDOFs.size(); }
 
-  void computeVonMisesStresses(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd elementStresses) const;
-  void computeMaxStrains(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd elementStrain) const;
+  void setElasticParams(const EigenSupport::ConstRefVecXd elasticParams) { this->elasticParams = elasticParams; }
+  void setPlasticParams(const EigenSupport::ConstRefVecXd plasticParams) { this->plasticParams = plasticParams; }
 
 protected:
   std::shared_ptr<DeformationModelAssembler> forceModelAssembler;
-  DeformationModelAssemblerCacheData *data;
 
   std::vector<int> allDOFs;
   EigenSupport::VXd restPosition;
+  EigenSupport::VXd elasticParams;
+  EigenSupport::VXd plasticParams;
 };
 }  // namespace SolidDeformationModel
 }  // namespace pgo

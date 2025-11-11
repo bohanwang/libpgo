@@ -61,19 +61,20 @@ static int callbackEvalFC(KN_context_ptr /*kc*/, CB_context_ptr /*cb*/,
   Eigen::Map<const ES::VXd> xmap(evalRequest->x, problem->getn());
 
   if (problem->isDense()) {
-    PotentialEnergyDense_const_p objFunc = problem->getDenseObjectiveFunction();
-    ConstraintFunctionsDense_const_p cnstt = problem->getDenseConstraintFunctions();
+    throw std::runtime_error("Dense version not supported yet");
+    // PotentialEnergyDense_const_p objFunc = problem->getDenseObjectiveFunction();
+    // ConstraintFunctionsDense_const_p cnstt = problem->getDenseConstraintFunctions();
 
-    if (!objFunc->isQuadratic())
-      *evalResult->obj = objFunc->func(xmap);
-    else
-      *evalResult->obj = 0;
+    // if (!objFunc->isQuadratic())
+    //   *evalResult->obj = objFunc->func(xmap);
+    // else
+    //   *evalResult->obj = 0;
 
-    if (cnstt &&
-      !cnstt->isLinear() &&
-      !cnstt->isQuadratic()) {
-      cnstt->func(xmap, Eigen::Map<ES::VXd>(evalResult->c, problem->getm()));
-    }
+    // if (cnstt &&
+    //   !cnstt->isLinear() &&
+    //   !cnstt->isQuadratic()) {
+    //   cnstt->func(xmap, Eigen::Map<ES::VXd>(evalResult->c, problem->getm()));
+    // }
   }
   else {
     PotentialEnergy_const_p objFunc = problem->getObjectiveFunction();
@@ -114,17 +115,18 @@ static int callbackEvalGA(KN_context_ptr /*kc*/, CB_context_ptr /*cb*/,
   Eigen::Map<const ES::VXd> xmap(evalRequest->x, problem->getn());
 
   if (problem->isDense()) {
-    PotentialEnergyDense_const_p objFunc = problem->getDenseObjectiveFunction();
-    ConstraintFunctionsDense_const_p cnstt = problem->getDenseConstraintFunctions();
+    throw std::runtime_error("Dense version not supported yet");
+    // PotentialEnergyDense_const_p objFunc = problem->getDenseObjectiveFunction();
+    // ConstraintFunctionsDense_const_p cnstt = problem->getDenseConstraintFunctions();
 
-    if (!objFunc->isQuadratic())
-      objFunc->gradient(xmap, Eigen::Map<ES::VXd>(evalResult->objGrad, problem->getn()));
-    // else memset(evalResult->objGrad, 0, sizeof(double) * problem->getn());
+    // if (!objFunc->isQuadratic())
+    //   objFunc->gradient(xmap, Eigen::Map<ES::VXd>(evalResult->objGrad, problem->getn()));
+    // // else memset(evalResult->objGrad, 0, sizeof(double) * problem->getn());
 
-    if (cnstt && !cnstt->isLinear() && !cnstt->isQuadratic()) {
-      ES::Mp<ES::MXd> jacMap(evalResult->jac, problem->getm(), problem->getn());
-      cnstt->jacobian(xmap, jacMap);
-    }
+    // if (cnstt && !cnstt->isLinear() && !cnstt->isQuadratic()) {
+    //   ES::Mp<ES::MXd> jacMap(evalResult->jac, problem->getm(), problem->getn());
+    //   cnstt->jacobian(xmap, jacMap);
+    // }
   }
   else {
     PotentialEnergy_const_p objFunc = problem->getObjectiveFunction();
@@ -183,19 +185,21 @@ int callbackEvalH(KN_context_ptr /*kc*/, CB_context_ptr /*cb*/,
   case KN_RC_EVALH: {
     double sigma = *evalRequest->sigma;
     if (problem->isDense()) {
-      if (problem->getDenseObjectiveFunction()->isQuadratic())
-        sigma = 0;
+      throw std::runtime_error("Dense version not supported yet");
 
-      ES::MXd &h = problem->hessianDense(xmap,
-        problem->getm() > 0 ? Eigen::Map<const ES::VXd>(evalRequest->lambda, problem->getm()) : emptyLambda,
-        sigma);
+      // if (problem->getDenseObjectiveFunction()->isQuadratic())
+      //   sigma = 0;
 
-      int inc = 0;
-      for (ES::IDX col = 0; col < h.cols(); col++) {
-        for (ES::IDX row = 0; row <= col; row++) {
-          evalResult->hess[inc++] = h(row, col);
-        }
-      }
+      // ES::MXd &h = problem->hessianDense(xmap,
+      //   problem->getm() > 0 ? Eigen::Map<const ES::VXd>(evalRequest->lambda, problem->getm()) : emptyLambda,
+      //   sigma);
+
+      // int inc = 0;
+      // for (ES::IDX col = 0; col < h.cols(); col++) {
+      //   for (ES::IDX row = 0; row <= col; row++) {
+      //     evalResult->hess[inc++] = h(row, col);
+      //   }
+      // }
     }
     else {
       if (problem->getObjectiveFunction()->isQuadratic())
@@ -220,16 +224,18 @@ int callbackEvalH(KN_context_ptr /*kc*/, CB_context_ptr /*cb*/,
   }
   case KN_RC_EVALH_NO_F: {
     if (problem->isDense()) {
-      ES::MXd &h = problem->hessianDense(xmap,
-        problem->getm() > 0 ? Eigen::Map<const ES::VXd>(evalRequest->lambda, problem->getm()) : emptyLambda,
-        0.0);
+      throw std::runtime_error("Dense version not supported yet");
 
-      int inc = 0;
-      for (ES::IDX col = 0; col < h.cols(); col++) {
-        for (ES::IDX row = 0; row <= col; row++) {
-          evalResult->hess[inc++] = h(row, col);
-        }
-      }
+      // ES::MXd &h = problem->hessianDense(xmap,
+      //   problem->getm() > 0 ? Eigen::Map<const ES::VXd>(evalRequest->lambda, problem->getm()) : emptyLambda,
+      //   0.0);
+
+      // int inc = 0;
+      // for (ES::IDX col = 0; col < h.cols(); col++) {
+      //   for (ES::IDX row = 0; row <= col; row++) {
+      //     evalResult->hess[inc++] = h(row, col);
+      //   }
+      // }
     }
     else {
       ES::SpMatD &h = problem->hessian(xmap,
@@ -302,7 +308,7 @@ static int callbackNewPt(KN_context_ptr /*kc*/,
   KnitroHandles *handles = reinterpret_cast<KnitroHandles *>(userParams);
   KnitroProblem *problem = handles->problem;
 
-  if (problem->getConstraintFunctions() || problem->getDenseConstraintFunctions()) {
+  if (problem->getConstraintFunctions() /*|| problem->getDenseConstraintFunctions()*/) {
     problem->setCurrentSolution(Eigen::Map<const ES::VXd>(x, problem->getn()), Eigen::Map<const ES::VXd>(lambda, problem->getm()));
   }
   else {
@@ -349,8 +355,8 @@ void KnitroOptimizer::setConfigFile(const char *filename)
     KNITRO_ERROR(KN_load_param_file(handles->kc, filename),
       throw std::domain_error("set config file"));
 
-    KNITRO_ERROR(KN_set_int_param(handles->kc, KN_PARAM_PAR_NUMTHREADS, (int)std::thread::hardware_concurrency() / 2),
-      throw std::domain_error("set #threads"));
+    // KNITRO_ERROR(KN_set_int_param(handles->kc, KN_PARAM_NUMTHREADS, (int)std::thread::hardware_concurrency() / 2),
+    //   throw std::domain_error("set #threads"));
   }
   else {
     SPDLOG_LOGGER_WARN(Logging::lgr(), "No config file specified. Use default settings.");
@@ -500,8 +506,8 @@ void KnitroOptimizer::initQuadraticProblem()
 
 void KnitroOptimizer::init()
 {
-  KNITRO_ERROR(KN_set_int_param(handles->kc, KN_PARAM_PAR_NUMTHREADS, (int)std::thread::hardware_concurrency()),
-    throw std::domain_error("set num threads"));
+  // KNITRO_ERROR(KN_set_int_param(handles->kc, KN_PARAM_NUMTHREADS, (int)std::thread::hardware_concurrency()),
+  //   throw std::domain_error("set num threads"));
 
   /** Initialize Knitro with the problem definition. */
   KNITRO_ERROR(KN_add_vars(handles->kc, handles->problem->getn(), nullptr),
@@ -529,153 +535,155 @@ void KnitroOptimizer::init()
       throw std::domain_error("set constraints hi bound"));
 
     if (handles->problem->isDense()) {
-      PotentialEnergyDense_const_p objFunc = handles->problem->getDenseObjectiveFunction();
-      ConstraintFunctionsDense_const_p cnstt = handles->problem->getDenseConstraintFunctions();
-      // get indices of the hessian
-      std::vector<KNINT> constraintsIndices;
+      throw std::runtime_error("Dense version not supported yet");
 
-      // if the constraints are linear,
-      // we directly use their built-in routine
-      if (cnstt->isLinear()) {
-        std::vector<std::tuple<int, int, int, double>> qTerms;
-        std::vector<std::tuple<int, int, double>> lTerms;
-        ES::VXd c(handles->problem->getm());
+      // PotentialEnergyDense_const_p objFunc = handles->problem->getDenseObjectiveFunction();
+      // ConstraintFunctionsDense_const_p cnstt = handles->problem->getDenseConstraintFunctions();
+      // // get indices of the hessian
+      // std::vector<KNINT> constraintsIndices;
 
-        cnstt->getLinearAndQuadraticTerms(qTerms, lTerms, c);
+      // // if the constraints are linear,
+      // // we directly use their built-in routine
+      // if (cnstt->isLinear()) {
+      //   std::vector<std::tuple<int, int, int, double>> qTerms;
+      //   std::vector<std::tuple<int, int, double>> lTerms;
+      //   ES::VXd c(handles->problem->getm());
 
-        std::vector<KNINT> cIndices, lIndices;
-        std::vector<double> coeffs;
+      //   cnstt->getLinearAndQuadraticTerms(qTerms, lTerms, c);
 
-        cIndices.reserve(lTerms.size());
-        lIndices.reserve(lTerms.size());
-        coeffs.reserve(lTerms.size());
-        for (const auto &tp : lTerms) {
-          cIndices.emplace_back(std::get<0>(tp));
-          lIndices.emplace_back(std::get<1>(tp));
-          coeffs.emplace_back(std::get<2>(tp));
-        }
+      //   std::vector<KNINT> cIndices, lIndices;
+      //   std::vector<double> coeffs;
 
-        KNITRO_ERROR(KN_add_con_linear_struct(handles->kc, (KNLONG)lTerms.size(), cIndices.data(), lIndices.data(), coeffs.data()),
-          throw std::domain_error("set linear constraints"));
+      //   cIndices.reserve(lTerms.size());
+      //   lIndices.reserve(lTerms.size());
+      //   coeffs.reserve(lTerms.size());
+      //   for (const auto &tp : lTerms) {
+      //     cIndices.emplace_back(std::get<0>(tp));
+      //     lIndices.emplace_back(std::get<1>(tp));
+      //     coeffs.emplace_back(std::get<2>(tp));
+      //   }
 
-        ES::VXd clow = handles->problem->getCLow() - c;
-        ES::VXd chi = handles->problem->getCHi() - c;
+      //   KNITRO_ERROR(KN_add_con_linear_struct(handles->kc, (KNLONG)lTerms.size(), cIndices.data(), lIndices.data(), coeffs.data()),
+      //     throw std::domain_error("set linear constraints"));
 
-        KNITRO_ERROR(KN_set_con_lobnds_all(handles->kc, clow.data()),
-          throw std::domain_error("set constraints low bound"));
+      //   ES::VXd clow = handles->problem->getCLow() - c;
+      //   ES::VXd chi = handles->problem->getCHi() - c;
 
-        KNITRO_ERROR(KN_set_con_upbnds_all(handles->kc, chi.data()),
-          throw std::domain_error("set constraints hi bound"));
-      }
-      // if the constraints are quadratic,
-      // we directly use their built-in routine
-      // untested
-      else if (cnstt->isQuadratic()) {
-        std::vector<std::tuple<int, int, int, double>> qTerms;
-        std::vector<std::tuple<int, int, double>> lTerms;
-        ES::VXd c(handles->problem->getm());
+      //   KNITRO_ERROR(KN_set_con_lobnds_all(handles->kc, clow.data()),
+      //     throw std::domain_error("set constraints low bound"));
 
-        cnstt->getLinearAndQuadraticTerms(qTerms, lTerms, c);
+      //   KNITRO_ERROR(KN_set_con_upbnds_all(handles->kc, chi.data()),
+      //     throw std::domain_error("set constraints hi bound"));
+      // }
+      // // if the constraints are quadratic,
+      // // we directly use their built-in routine
+      // // untested
+      // else if (cnstt->isQuadratic()) {
+      //   std::vector<std::tuple<int, int, int, double>> qTerms;
+      //   std::vector<std::tuple<int, int, double>> lTerms;
+      //   ES::VXd c(handles->problem->getm());
 
-        std::vector<KNINT> qcIndices, qIndices1, qIndices2;
-        std::vector<KNINT> lcIndices, lIndices;
-        std::vector<double> qcoeffs, lcoeffs;
+      //   cnstt->getLinearAndQuadraticTerms(qTerms, lTerms, c);
 
-        qcIndices.reserve(qTerms.size());
-        qIndices1.reserve(qTerms.size());
-        qIndices2.reserve(qTerms.size());
-        qcoeffs.reserve(qTerms.size());
-        for (const auto &tp : qTerms) {
-          qcIndices.emplace_back(std::get<0>(tp));
-          qIndices1.emplace_back(std::get<1>(tp));
-          qIndices2.emplace_back(std::get<2>(tp));
-          qcoeffs.emplace_back(std::get<3>(tp));
-        }
+      //   std::vector<KNINT> qcIndices, qIndices1, qIndices2;
+      //   std::vector<KNINT> lcIndices, lIndices;
+      //   std::vector<double> qcoeffs, lcoeffs;
 
-        lcIndices.reserve(lTerms.size());
-        lIndices.reserve(lTerms.size());
-        lcoeffs.reserve(lTerms.size());
-        for (const auto &tp : lTerms) {
-          lcIndices.emplace_back(std::get<0>(tp));
-          lIndices.emplace_back(std::get<1>(tp));
-          lcoeffs.emplace_back(std::get<2>(tp));
-        }
+      //   qcIndices.reserve(qTerms.size());
+      //   qIndices1.reserve(qTerms.size());
+      //   qIndices2.reserve(qTerms.size());
+      //   qcoeffs.reserve(qTerms.size());
+      //   for (const auto &tp : qTerms) {
+      //     qcIndices.emplace_back(std::get<0>(tp));
+      //     qIndices1.emplace_back(std::get<1>(tp));
+      //     qIndices2.emplace_back(std::get<2>(tp));
+      //     qcoeffs.emplace_back(std::get<3>(tp));
+      //   }
 
-        KNITRO_ERROR(KN_add_con_quadratic_struct(handles->kc, (KNLONG)qTerms.size(), qcIndices.data(), qIndices1.data(), qIndices2.data(), qcoeffs.data()),
-          throw std::domain_error("set quadratic constraints"));
+      //   lcIndices.reserve(lTerms.size());
+      //   lIndices.reserve(lTerms.size());
+      //   lcoeffs.reserve(lTerms.size());
+      //   for (const auto &tp : lTerms) {
+      //     lcIndices.emplace_back(std::get<0>(tp));
+      //     lIndices.emplace_back(std::get<1>(tp));
+      //     lcoeffs.emplace_back(std::get<2>(tp));
+      //   }
 
-        KNITRO_ERROR(KN_add_con_linear_struct(handles->kc, (KNLONG)lTerms.size(), lcIndices.data(), lIndices.data(), lcoeffs.data()),
-          throw std::domain_error("set linear constraints"));
+      //   KNITRO_ERROR(KN_add_con_quadratic_struct(handles->kc, (KNLONG)qTerms.size(), qcIndices.data(), qIndices1.data(), qIndices2.data(), qcoeffs.data()),
+      //     throw std::domain_error("set quadratic constraints"));
 
-        ES::VXd clow = handles->problem->getCLow() - c;
-        ES::VXd chi = handles->problem->getCHi() - c;
+      //   KNITRO_ERROR(KN_add_con_linear_struct(handles->kc, (KNLONG)lTerms.size(), lcIndices.data(), lIndices.data(), lcoeffs.data()),
+      //     throw std::domain_error("set linear constraints"));
 
-        KNITRO_ERROR(KN_set_con_lobnds_all(handles->kc, clow.data()),
-          throw std::domain_error("set constraints low bound"));
+      //   ES::VXd clow = handles->problem->getCLow() - c;
+      //   ES::VXd chi = handles->problem->getCHi() - c;
 
-        KNITRO_ERROR(KN_set_con_upbnds_all(handles->kc, chi.data()),
-          throw std::domain_error("set constraints hi bound"));
-      }
-      // if the constraints are general
-      else {
-        for (int i = 0; i < handles->problem->getm(); i++) {
-          constraintsIndices.push_back(i);
-        }
-      }
+      //   KNITRO_ERROR(KN_set_con_lobnds_all(handles->kc, clow.data()),
+      //     throw std::domain_error("set constraints low bound"));
 
-      // if it is a general constraints
-      if (constraintsIndices.size()) {
-        // if the objective is quadratic
-        if (objFunc->isQuadratic()) {
-          initQuadraticProblem();
+      //   KNITRO_ERROR(KN_set_con_upbnds_all(handles->kc, chi.data()),
+      //     throw std::domain_error("set constraints hi bound"));
+      // }
+      // // if the constraints are general
+      // else {
+      //   for (int i = 0; i < handles->problem->getm(); i++) {
+      //     constraintsIndices.push_back(i);
+      //   }
+      // }
 
-          KNITRO_ERROR(KN_add_eval_callback(handles->kc, KNFALSE,
-                         (KNINT)constraintsIndices.size(), constraintsIndices.data(),
-                         callbackEvalFC, &handles->cb),
-            throw std::domain_error("set fc callback"));
+      // // if it is a general constraints
+      // if (constraintsIndices.size()) {
+      //   // if the objective is quadratic
+      //   if (objFunc->isQuadratic()) {
+      //     initQuadraticProblem();
 
-          KNITRO_ERROR(KN_set_cb_grad(handles->kc, handles->cb, 0, nullptr,
-                         KN_DENSE_COLMAJOR, nullptr, nullptr,
-                         callbackEvalGA),
-            throw std::domain_error("set ga callback"));
-        }
-        // otherwise we address it in the general way
-        else {
-          KNITRO_ERROR(KN_add_eval_callback(handles->kc, KNTRUE,
-                         (KNINT)constraintsIndices.size(), constraintsIndices.data(),
-                         callbackEvalFC, &handles->cb),
-            throw std::domain_error("set fc callback"));
+      //     KNITRO_ERROR(KN_add_eval_callback(handles->kc, KNFALSE,
+      //                    (KNINT)constraintsIndices.size(), constraintsIndices.data(),
+      //                    callbackEvalFC, &handles->cb),
+      //       throw std::domain_error("set fc callback"));
 
-          KNITRO_ERROR(KN_set_cb_grad(handles->kc, handles->cb, KN_DENSE, nullptr,
-                         KN_DENSE_COLMAJOR, nullptr, nullptr,
-                         callbackEvalGA),
-            throw std::domain_error("set ga callback"));
-        }
-      }
-      // if there is no general constraints
-      else {
-        // if the objective is quadratic
-        if (objFunc->isQuadratic()) {
-          initQuadraticProblem();
+      //     KNITRO_ERROR(KN_set_cb_grad(handles->kc, handles->cb, 0, nullptr,
+      //                    KN_DENSE_COLMAJOR, nullptr, nullptr,
+      //                    callbackEvalGA),
+      //       throw std::domain_error("set ga callback"));
+      //   }
+      //   // otherwise we address it in the general way
+      //   else {
+      //     KNITRO_ERROR(KN_add_eval_callback(handles->kc, KNTRUE,
+      //                    (KNINT)constraintsIndices.size(), constraintsIndices.data(),
+      //                    callbackEvalFC, &handles->cb),
+      //       throw std::domain_error("set fc callback"));
 
-          KNITRO_ERROR(KN_add_eval_callback(handles->kc, KNFALSE, 0, nullptr,
-                         callbackEvalFC, &handles->cb),
-            throw std::domain_error("set fc callback"));
+      //     KNITRO_ERROR(KN_set_cb_grad(handles->kc, handles->cb, KN_DENSE, nullptr,
+      //                    KN_DENSE_COLMAJOR, nullptr, nullptr,
+      //                    callbackEvalGA),
+      //       throw std::domain_error("set ga callback"));
+      //   }
+      // }
+      // // if there is no general constraints
+      // else {
+      //   // if the objective is quadratic
+      //   if (objFunc->isQuadratic()) {
+      //     initQuadraticProblem();
 
-          KNITRO_ERROR(KN_set_cb_grad(handles->kc, handles->cb, 0, nullptr, 0, nullptr, nullptr,
-                         callbackEvalGA),
-            throw std::domain_error("set ga callback"));
-        }
-        else {
-          KNITRO_ERROR(KN_add_eval_callback(handles->kc, KNTRUE, 0, nullptr,
-                         callbackEvalFC, &handles->cb),
-            throw std::domain_error("set fc callback"));
+      //     KNITRO_ERROR(KN_add_eval_callback(handles->kc, KNFALSE, 0, nullptr,
+      //                    callbackEvalFC, &handles->cb),
+      //       throw std::domain_error("set fc callback"));
 
-          KNITRO_ERROR(KN_set_cb_grad(handles->kc, handles->cb, KN_DENSE, nullptr, 0, nullptr, nullptr,
-                         callbackEvalGA),
-            throw std::domain_error("set ga callback"));
-        }
-      }
+      //     KNITRO_ERROR(KN_set_cb_grad(handles->kc, handles->cb, 0, nullptr, 0, nullptr, nullptr,
+      //                    callbackEvalGA),
+      //       throw std::domain_error("set ga callback"));
+      //   }
+      //   else {
+      //     KNITRO_ERROR(KN_add_eval_callback(handles->kc, KNTRUE, 0, nullptr,
+      //                    callbackEvalFC, &handles->cb),
+      //       throw std::domain_error("set fc callback"));
+
+      //     KNITRO_ERROR(KN_set_cb_grad(handles->kc, handles->cb, KN_DENSE, nullptr, 0, nullptr, nullptr,
+      //                    callbackEvalGA),
+      //       throw std::domain_error("set ga callback"));
+      //   }
+      // }
     }
     // if it is a sparse problem
     else {
@@ -819,22 +827,23 @@ void KnitroOptimizer::init()
   }
   else {
     if (handles->problem->isDense()) {
-      if (handles->problem->getDenseObjectiveFunction()->isQuadratic()) {
-        initQuadraticProblem();
+      throw std::runtime_error("Dense version not supported yet");
+      // if (handles->problem->getDenseObjectiveFunction()->isQuadratic()) {
+      //   initQuadraticProblem();
 
-        KNITRO_ERROR(KN_add_eval_callback(handles->kc, KNFALSE, 0, nullptr,
-                       callbackEvalFC, &handles->cb),
-          throw std::domain_error("set fc callback"));
-      }
-      else {
-        KNITRO_ERROR(KN_add_eval_callback(handles->kc, KNTRUE, 0, nullptr,
-                       callbackEvalFC, &handles->cb),
-          throw std::domain_error("set fc callback"));
+      //   KNITRO_ERROR(KN_add_eval_callback(handles->kc, KNFALSE, 0, nullptr,
+      //                  callbackEvalFC, &handles->cb),
+      //     throw std::domain_error("set fc callback"));
+      // }
+      // else {
+      //   KNITRO_ERROR(KN_add_eval_callback(handles->kc, KNTRUE, 0, nullptr,
+      //                  callbackEvalFC, &handles->cb),
+      //     throw std::domain_error("set fc callback"));
 
-        KNITRO_ERROR(KN_set_cb_grad(handles->kc, handles->cb, KN_DENSE, nullptr, 0, nullptr, nullptr,
-                       callbackEvalGA),
-          throw std::domain_error("set ga callback"));
-      }
+      //   KNITRO_ERROR(KN_set_cb_grad(handles->kc, handles->cb, KN_DENSE, nullptr, 0, nullptr, nullptr,
+      //                  callbackEvalGA),
+      //     throw std::domain_error("set ga callback"));
+      // }
     }
     else {
       if (handles->problem->getObjectiveFunction()->isQuadratic()) {
@@ -950,19 +959,21 @@ void KnitroOptimizer::setcRange(const double *lo, const double *hi)
 
   ES::VXd clow, chi;
   if (handles->problem->isDense()) {
-    if (handles->problem->getDenseConstraintFunctions()->isLinear() ||
-      handles->problem->getDenseConstraintFunctions()->isQuadratic()) {
-      ES::VXd zero = ES::VXd::Zero(handles->problem->getn());
-      ES::VXd d = ES::VXd::Zero(handles->problem->getm());
-      handles->problem->getDenseConstraintFunctions()->func(zero, d);
+    throw std::runtime_error("Dense version not supported yet");
 
-      clow = Eigen::Map<const ES::VXd>(lo, d.size()) - d;
-      chi = Eigen::Map<const ES::VXd>(hi, d.size()) - d;
-    }
-    else {
-      clow = Eigen::Map<const ES::VXd>(lo, handles->problem->getm());
-      chi = Eigen::Map<const ES::VXd>(hi, handles->problem->getm());
-    }
+    // if (handles->problem->getDenseConstraintFunctions()->isLinear() ||
+    //   handles->problem->getDenseConstraintFunctions()->isQuadratic()) {
+    //   ES::VXd zero = ES::VXd::Zero(handles->problem->getn());
+    //   ES::VXd d = ES::VXd::Zero(handles->problem->getm());
+    //   handles->problem->getDenseConstraintFunctions()->func(zero, d);
+
+    //   clow = Eigen::Map<const ES::VXd>(lo, d.size()) - d;
+    //   chi = Eigen::Map<const ES::VXd>(hi, d.size()) - d;
+    // }
+    // else {
+    //   clow = Eigen::Map<const ES::VXd>(lo, handles->problem->getm());
+    //   chi = Eigen::Map<const ES::VXd>(hi, handles->problem->getm());
+    // }
   }
   else {
     if (handles->problem->getConstraintFunctions()->isLinear() ||

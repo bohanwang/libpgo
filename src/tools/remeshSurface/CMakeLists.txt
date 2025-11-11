@@ -11,5 +11,10 @@ foreach(lib ${PGO_GLOBAL_LIBRARY_TARGETS})
 endforeach()
 
 add_libpgo_tools(remeshSurface remeshSurface.cpp "${AVAILABLE_LIBS}")
-
 target_link_libraries(remeshSurface PRIVATE argparse::argparse)
+
+add_libpgo_tools(mergeCloseVertices mergeCloseVertices.cpp "${AVAILABLE_LIBS}")
+target_link_libraries(mergeCloseVertices PRIVATE argparse::argparse)
+
+add_libpgo_tools(removeIsolatedVertices removeIsolatedVertices.cpp "${AVAILABLE_LIBS}")
+target_link_libraries(removeIsolatedVertices PRIVATE argparse::argparse)

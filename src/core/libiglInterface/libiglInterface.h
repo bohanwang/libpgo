@@ -26,5 +26,9 @@ void boundaryLoops(const Mesh::TriMeshGeo &meshIn, std::vector<std::vector<int>>
 
 void meanCuravtures(const Mesh::TriMeshGeo &meshIn, EigenSupport::VXd &h);
 
+void computeParameterization(const Mesh::TriMeshGeo &meshIn, Mesh::TriMeshGeo &meshOut, int mode);
+
+void computeMassMatrix(const Mesh::TriMeshGeo &meshIn, EigenSupport::SpMatD &M, int lumped, int expand3);
+
 }  // namespace libiglInterface
 }  // namespace pgo

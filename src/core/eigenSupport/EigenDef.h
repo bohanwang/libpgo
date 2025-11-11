@@ -56,6 +56,8 @@ typedef Eigen::Matrix<int, 12, 1> V12i;
 typedef Eigen::Matrix<double, 18, 1> V18d;
 typedef Eigen::Matrix<int, 18, 1> V18i;
 
+typedef Eigen::Matrix<double, 24, 1> V24d;
+
 typedef Eigen::Matrix2d M2d;
 typedef Eigen::Matrix2i M2i;
 
@@ -86,13 +88,16 @@ typedef Eigen::Matrix<double, 6, 9> M6x9d;
 
 typedef Eigen::Matrix<double, 6, 18> M6x18d;
 typedef Eigen::Matrix<double, 18, 6> M18x6d;
+
 typedef Eigen::Matrix<double, 3, 18> M3x18d;
 
 typedef Eigen::Matrix<double, 2, 3> M2x3d;
 typedef Eigen::Matrix<double, 3, 2> M3x2d;
+
 typedef Eigen::Matrix<double, 9, 12> M9x12d;
 typedef Eigen::Matrix<double, 12, 9> M12x9d;
-typedef Eigen::Matrix<double, 12, 12> M12x12d;
+
+typedef Eigen::Matrix<double, 12, 12> M12d;
 typedef Eigen::Matrix<int, 12, 12> M12i;
 
 typedef Eigen::Matrix<double, 3, 2> M3x2d;
@@ -107,6 +112,14 @@ typedef Eigen::Matrix<double, 9, 6> M9x6d;
 
 typedef Eigen::Matrix<double, 9, 12> M9x12d;
 typedef Eigen::Matrix<double, 12, 9> M12x9d;
+
+typedef Eigen::Matrix<double, 9, 18> M9x18d;
+typedef Eigen::Matrix<double, 18, 9> M18x9d;
+
+typedef Eigen::Matrix<double, 3, 12> M3x12d;
+typedef Eigen::Matrix<double, 12, 3> M12x3d;
+
+
 
 typedef Eigen::VectorXd VXd;
 typedef Eigen::VectorXi VXi;

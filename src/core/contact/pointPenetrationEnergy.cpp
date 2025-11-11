@@ -92,9 +92,10 @@ double PointPenetrationEnergy::frictionPotential(const ES::V3d &x, const ES::V3d
 
   // compute energy
   double d = r.norm();
+  double k = eps * timestep;
 
-  if (d < timestep * eps)
-    return (d * d * d) * (-1.0 / (3.0 * eps * timestep * eps * timestep)) + (d * d) / (eps * timestep) + eps * timestep / 3;
+  if (d < k)
+    return -(d * d * d) / (3.0 * k * k) + (d * d) / k + k / 3;
   // when velmag == timestep * eps
   // the function value is timestep * eps
   // the derivative is 1
@@ -112,12 +113,15 @@ void PointPenetrationEnergy::frictionPotentialGradient(const ES::V3d &x, const E
 
   // compute energy
   double d = r.norm();
+  double k = eps * timestep;
   double c1 = 0;
 
-  if (d < timestep * eps)
-    c1 = (-d / (eps * timestep * eps * timestep) + 2 / (eps * timestep));
-  else
+  if (d < k) {
+    c1 = (-d / (k * k) + 2 / k);
+  }
+  else {
     c1 = 1.0 / d;
+  }
 
   ES::V3d grad_r = c1 * r;
   if (grad_r.norm() > 1.1) {
@@ -132,7 +136,7 @@ void PointPenetrationEnergy::frictionPotentialGradient(const ES::V3d &x, const E
     exit(1);
   }
 
-  grad = grad_r;
+  grad = InnT * grad_r;
 }
 
 void PointPenetrationEnergy::frictionPotentialHessian(const ES::V3d &x, const ES::V3d &xlast,
@@ -143,22 +147,28 @@ void PointPenetrationEnergy::frictionPotentialHessian(const ES::V3d &x, const ES
   ES::V3d r = InnT * xdiff;
 
   double d = r.norm();
+  double k = eps * timestep;
 
   ES::M3d hess_r;
-  if (d < timestep * eps) {
-    if (d < 1e-16) {
-      hess_r.setZero();
-    }
-    else {
-      hess_r = -ES::tensorProduct(r, r) / d / (eps * eps * timestep * timestep);
-    }
+  ES::V3d dddr = r / d;
+  ES::M3d d2ddr2 = ES::M3d::Identity() / d - (1.0 / (d * d * d)) * (r * r.transpose());
+  if (dddr.hasNaN()) {
+    dddr.setZero();
+  }
 
-    hess_r += ES::M3d::Identity() * (2 / (timestep * eps) - d / (eps * eps * timestep * timestep));
+  if (d2ddr2.hasNaN()) {
+    d2ddr2.setZero();
+  }
+
+  if (d < k) {
+    double dEdd = -d * d / (k * k) + 2.0 * d / k;
+    double d2Edd2 = -2.0 * d / (k * k) + 2.0 / k;
+    hess_r = d2Edd2 * (dddr * dddr.transpose()) + dEdd * d2ddr2;
   }
   else {
-    // grad = r (rTr)^-0.5
-    // hess = I (rTr)^-0.5 + r * -(rTr)^-1.5 rT
-    hess_r = ES::M3d::Identity() / d - ES::tensorProduct(r, r) / (d * d * d);
+    double dEdd = 1.0;
+    double d2Edd2 = 0.0;
+    hess_r = d2Edd2 * (dddr * dddr.transpose()) + dEdd * d2ddr2;
   }
 
   if (1) {
@@ -168,7 +178,7 @@ void PointPenetrationEnergy::frictionPotentialHessian(const ES::V3d &x, const ES
     hess_r = eigb * eigv.asDiagonal() * eigb.transpose();
   }
 
-  hess = hess_r;
+  hess = InnT * hess_r * InnT;
 }
 
 // E = (n^T (sum w_i (restp + u) - tgtp))^2 * 0.5
@@ -290,6 +300,11 @@ void PointPenetrationEnergy::gradient(ES::ConstRefVecXd u, ES::RefVecXd grad) co
             ES::V3d gradFric;
             frictionPotentialGradient(p, plast, n, eps, timestep, gradFric);
             gradFric *= frictionContactForceMag * frictionCoeff * f_normal;
+
+            // ES::V3d gradFric2;
+            // double frictionEnergy = frictionPotential(p, plast, n, eps, timestep);
+            // gradFric2 = frictionEnergy * frictionContactForceMag * frictionCoeff * n * constraintCoeffs[ci];
+            // gradSample += gradFric + gradFric2;
             gradSample += gradFric;
 
             if (saveDebugInfo) {
@@ -455,7 +470,14 @@ void PointPenetrationEnergy::hessian(ES::ConstRefVecXd u, ES::SpMatD &hess) cons
           ES::M3d hessFric;
           frictionPotentialHessian(p, plast, n, eps, timestep, hessFric);
           hessFric *= frictionContactForceMag * frictionCoeff * f_normal;
-          nnT += hessFric;
+
+          // ES::V3d gradFric;
+          // frictionPotentialGradient(p, plast, n, eps, timestep, gradFric);
+
+          // ES::M3d hessFric2 = ES::tensorProduct(gradFric, n) * frictionContactForceMag * frictionCoeff* constraintCoeffs[ci];
+          // ES::M3d hessFric3 = ES::tensorProduct(n, gradFric) * frictionContactForceMag * frictionCoeff* constraintCoeffs[ci];
+
+          nnT += hessFric; // + hessFric2 + hessFric3;
         }
 
         for (int vi = 0; vi < (int)barycentricIdx[ci].size(); vi++) {

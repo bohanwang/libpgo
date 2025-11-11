@@ -200,8 +200,10 @@ void TetMesh::exportMeshGeometry(std::vector<Vec3d> &vertices, std::vector<Vec4i
 {
   exportMeshGeometry(vertices);
   tets.resize(getNumElements());
-  for (int i = 0; i < getNumElements(); i++)
-    tets[i] = Vec4i(getVertexIndices(i));
+  for (int i = 0; i < getNumElements(); i++) {
+    const int *ii = getVertexIndices(i);
+    tets[i] = Vec4i(ii[0], ii[1], ii[2], ii[3]);
+  }
 }
 
 void TetMesh::exportMeshGeometry(Mesh::TetMeshGeo &geo) const

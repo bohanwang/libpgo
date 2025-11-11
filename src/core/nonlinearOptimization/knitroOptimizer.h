@@ -33,7 +33,7 @@ public:
 
   void enableMultiEvaluation(int enable);
   void honorBoundary(int enable);
-  void emphasisFeasibility(int opt); // 0: no emphasis, 1: emphasis ineq; 2: emphasis feas; 3; all
+  void emphasisFeasibility(int opt);  // 0: no emphasis, 1: emphasis ineq; 2: emphasis feas; 3; all
 
   void init();
 
@@ -48,6 +48,8 @@ public:
   double getFeasibilityError() const { return feasError; }
   double getOptimizationError() const { return optError; }
 
+ 
+
 protected:
   void initQuadraticProblem();
 
@@ -56,5 +58,5 @@ protected:
   double feasError, optError;
 };
 
-}
-}
+}  // namespace NonlinearOptimization
+}  // namespace pgo

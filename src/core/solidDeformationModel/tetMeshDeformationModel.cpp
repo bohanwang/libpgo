@@ -1,11 +1,11 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #include "tetMeshDeformationModel.h"
-#include "elasticModel.h"
-#include "plasticModel.h"
+#include "elasticModel3DDeformationGradient.h"
+#include "plasticModel3DDeformationGradient.h"
 
 // #define MKL_DIRECT_CALL_SEQ_JIT
 
@@ -16,12 +16,9 @@ copyright to USC,MIT
 #include <mutex>
 
 namespace ES = pgo::EigenSupport;
-
-typedef Eigen::Matrix<double, 3, 4> M3x4d;
-typedef Eigen::Matrix<double, 3, 12> M3x12d;
+using M3x4d = Eigen::Matrix<double, 3, 4>;
 
 namespace pgo
-
 {
 namespace SolidDeformationModel
 {
@@ -30,9 +27,12 @@ class TetMeshDeformationModelInternal
 public:
   ES::V3d restX[4];
   ES::M3d restDmInv;
+
   M3x4d restBm;
   ES::M9x12d rest_dFdx;
   double restVolume;
+  const ElasticModel3DDeformationGradient *elasticModel;
+  const PlasticModel3DDeformationGradient *plasticModel;
 
   // volume related derivatives
   double compute_dV_dai(double ddetA_dai) const;
@@ -94,7 +94,7 @@ using namespace pgo::SolidDeformationModel;
 
 TetMeshDeformationModel::TetMeshDeformationModel(
   const double X0[3], const double X1[3], const double X2[3], const double X3[3],
-  const ElasticModel *elasticModel, const PlasticModel *plasticModel):
+  ElasticModel *elasticModel, PlasticModel *plasticModel):
   DeformationModel(elasticModel, plasticModel)
 {
   ind = new TetMeshDeformationModelInternal;
@@ -107,6 +107,9 @@ TetMeshDeformationModel::TetMeshDeformationModel(
   ind->computeDmInv(ind->restX[0], ind->restX[1], ind->restX[2], ind->restX[3], ind->restDmInv);
   ind->compute_Bm(ind->restDmInv, ind->restVolume, ind->restBm);
   ind->compute_dF_dx(ind->restDmInv, ind->rest_dFdx);
+
+  ind->elasticModel = dynamic_cast<const ElasticModel3DDeformationGradient *>(elasticModel);
+  ind->plasticModel = dynamic_cast<const PlasticModel3DDeformationGradient *>(plasticModel);
 }
 
 TetMeshDeformationModel::~TetMeshDeformationModel()
@@ -143,7 +146,7 @@ void TetMeshDeformationModel::computeP(const CacheData *cacheDataBase, int mater
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
 
   ES::M3d P;
-  em->compute_P(cacheData->materialParam.data(), cacheData->Fe.data(),
+  ind->elasticModel->compute_P(cacheData->materialParam.data(), cacheData->Fe.data(),
     cacheData->U.data(), cacheData->V.data(), cacheData->S.data(), P.data());
 
   (ES::Mp<ES::M3d>(POut)) = P;
@@ -154,7 +157,7 @@ void TetMeshDeformationModel::computedPdF(const CacheData *cacheDataBase, int ma
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
 
   ES::M9d dPdF;
-  em->compute_dPdF(cacheData->materialParam.data(), cacheData->Fe.data(),
+  ind->elasticModel->compute_dPdF(cacheData->materialParam.data(), cacheData->Fe.data(),
     cacheData->U.data(), cacheData->V.data(), cacheData->S.data(), dPdF.data());
 
   (Eigen::Map<ES::M9d>(dPdFOut)) = dPdF;
@@ -182,32 +185,32 @@ void TetMeshDeformationModel::prepareData(const double *x, const double *param, 
 
   ind->computeDs(cacheData->x[0], cacheData->x[1], cacheData->x[2], cacheData->x[3], cacheData->Ds);
 
-  pm->computeA(param, cacheData->Fp.data());
+  ind->plasticModel->computeA(param, cacheData->Fp.data());
   // if (fabs(cacheData->Fp.determinant() - 1) > 1e-8) {
   //   std::cout << cacheData->Fp << std::endl;
   // }
 
-  pm->computeAInv(param, cacheData->FpInv.data());
-  cacheData->detFp = pm->compute_detA(param);
+  ind->plasticModel->computeAInv(param, cacheData->FpInv.data());
+  cacheData->detFp = ind->plasticModel->compute_detA(param);
 
-  for (int i = 0; i < pm->getNumParameters(); i++)
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++)
     cacheData->plasticParam[i] = param[i];
 
-  pm->compute_ddetA_da(cacheData->plasticParam.data(), cacheData->ddetA_da.data(), TetMeshDeformationModelCacheData::maxNumPlasticParam);
-  pm->compute_d2detA_da2(cacheData->plasticParam.data(), cacheData->d2detA_da2.data(), TetMeshDeformationModelCacheData::maxNumPlasticParam);
+  ind->plasticModel->compute_ddetA_da(cacheData->plasticParam.data(), cacheData->ddetA_da.data(), TetMeshDeformationModelCacheData::maxNumPlasticParam);
+  ind->plasticModel->compute_d2detA_da2(cacheData->plasticParam.data(), cacheData->d2detA_da2.data(), TetMeshDeformationModelCacheData::maxNumPlasticParam);
 
-  for (int i = 0; i < pm->getNumParameters(); i++) {
-    pm->compute_dAInv_da(cacheData->plasticParam.data(), i, cacheData->dAInv_dai[i].data());
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
+    ind->plasticModel->compute_dAInv_da(cacheData->plasticParam.data(), i, cacheData->dAInv_dai[i].data());
 
-    for (int j = 0; j < pm->getNumParameters(); j++) {
-      pm->compute_d2AInv_da2(cacheData->plasticParam.data(), i, j, cacheData->d2AInv_dai_daj[i][j].data());
+    for (int j = 0; j < ind->plasticModel->getNumParameters(); j++) {
+      ind->plasticModel->compute_d2AInv_da2(cacheData->plasticParam.data(), i, j, cacheData->d2AInv_dai_daj[i][j].data());
     }
   }
 
   ind->computeF(cacheData->Ds, cacheData->FpInv, cacheData->Fe);
   ind->computeSVD(cacheData->Fe, cacheData->U, cacheData->V, cacheData->S);
 
-  for (int i = 0; em && i < em->getNumParameters(); i++)
+  for (int i = 0; ind->elasticModel && i < ind->elasticModel->getNumParameters(); i++)
     cacheData->materialParam[i] = materialParam[i];
 }
 
@@ -215,7 +218,7 @@ double TetMeshDeformationModel::computeEnergy(const CacheData *cacheDataBase) co
 {
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
 
-  return em->compute_psi(cacheData->materialParam.data(), cacheData->Fe.data(),
+  return ind->elasticModel->compute_psi(cacheData->materialParam.data(), cacheData->Fe.data(),
            cacheData->U.data(), cacheData->V.data(), cacheData->S.data()) *
     ind->restVolume * cacheData->detFp;
 }
@@ -225,7 +228,7 @@ void TetMeshDeformationModel::vonMisesStress(const CacheData *cacheDataBase, int
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
 
   ES::M3d P;
-  em->compute_P(cacheData->materialParam.data(), cacheData->Fe.data(),
+  ind->elasticModel->compute_P(cacheData->materialParam.data(), cacheData->Fe.data(),
     cacheData->U.data(), cacheData->V.data(), cacheData->S.data(), P.data());
 
   double detF = cacheData->Fe.determinant();
@@ -266,7 +269,7 @@ void TetMeshDeformationModel::compute_dE_dx(const CacheData *cacheDataBase, doub
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
 
   ES::M3d P;
-  em->compute_P(cacheData->materialParam.data(), cacheData->Fe.data(),
+  ind->elasticModel->compute_P(cacheData->materialParam.data(), cacheData->Fe.data(),
     cacheData->U.data(), cacheData->V.data(), cacheData->S.data(), P.data());
 
   M3x4d Bm = cacheData->detFp * cacheData->FpInv.transpose() * ind->restBm;
@@ -278,7 +281,7 @@ void TetMeshDeformationModel::compute_d2E_dx2(const CacheData *cacheDataBase, do
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
 
   ES::M9d dPdF;
-  em->compute_dPdF(cacheData->materialParam.data(), cacheData->Fe.data(),
+  ind->elasticModel->compute_dPdF(cacheData->materialParam.data(), cacheData->Fe.data(),
     cacheData->U.data(), cacheData->V.data(), cacheData->S.data(), dPdF.data());
 
   dPdF *= ind->restVolume * cacheData->detFp;
@@ -292,6 +295,7 @@ void TetMeshDeformationModel::compute_d2E_dx2(const CacheData *cacheDataBase, do
   (Eigen::Map<ES::M12d>(hess)) = dFdx.transpose() * dPdF * dFdx;
 }
 
+#if 0
 void TetMeshDeformationModel::compute_d3E_dx3(const CacheData *cacheDataBase, double *tensor) const
 {
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
@@ -302,7 +306,7 @@ void TetMeshDeformationModel::compute_d3E_dx3(const CacheData *cacheDataBase, do
   x0.segment<3>(6) = cacheData->x[2];
   x0.segment<3>(9) = cacheData->x[3];
 
-#if defined(USE_FINITE_DIFF)
+#  if defined(USE_FINITE_DIFF)
   double eps = 1e-7;
   double step[2] = { -eps, eps };
 
@@ -322,7 +326,7 @@ void TetMeshDeformationModel::compute_d3E_dx3(const CacheData *cacheDataBase, do
       ind->computeSVD(Fe, U, V, S);
 
       ES::M9d dPdF;
-      em->compute_dPdF(cacheData->materialParam.data(),
+      ind->elasticModel->compute_dPdF(cacheData->materialParam.data(),
         Fe.data(), U.data(), V.data(), S.data(), dPdF.data());
       dPdF *= ind->restVolume * cacheData->detFp;
 
@@ -335,9 +339,9 @@ void TetMeshDeformationModel::compute_d3E_dx3(const CacheData *cacheDataBase, do
 
     (Eigen::Map<ES::M12d>(tensor + dof * 144)) = (hess[1] - hess[0]) * 0.5 / eps;
   }
-#else
+#  else
   double d3psidF3[729];
-  em->compute_d2PdF2(cacheData->materialParam.data(), cacheData->Fe.data(),
+  ind->elasticModel->compute_d2PdF2(cacheData->materialParam.data(), cacheData->Fe.data(),
     cacheData->U.data(), cacheData->V.data(), cacheData->S.data(), d3psidF3);
 
   double volume = ind->restVolume * cacheData->detFp;
@@ -388,7 +392,7 @@ void TetMeshDeformationModel::compute_d3E_dx3(const CacheData *cacheDataBase, do
     }
   }
 
-#endif
+#  endif
 }
 
 void TetMeshDeformationModel::compute_d3E_dxdadx(const CacheData *cacheDataBase, double *tensor) const
@@ -398,40 +402,41 @@ void TetMeshDeformationModel::compute_d3E_dxdadx(const CacheData *cacheDataBase,
 void TetMeshDeformationModel::compute_d3E_dxdada(const CacheData *cacheDataBase, double *tensor) const
 {
 }
+#endif
 
 void TetMeshDeformationModel::compute_dE_da(const CacheData *cacheDataBase, double *grad) const
 {
-  if (pm->getNumParameters() == 0)
+  if (ind->plasticModel->getNumParameters() == 0)
     return;
 
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
 
   TetMeshDeformationModelCacheData::Vp dvolda;
-  for (int i = 0; i < pm->getNumParameters(); i++) {
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
     dvolda[i] = ind->compute_dV_dai(cacheData->ddetA_da[i]);
   }
 
-  double psi = em->compute_psi(cacheData->materialParam.data(), cacheData->Fe.data(),
+  double psi = ind->elasticModel->compute_psi(cacheData->materialParam.data(), cacheData->Fe.data(),
     cacheData->U.data(), cacheData->V.data(), cacheData->S.data());
   double vol = ind->restVolume * cacheData->detFp;
 
   ES::M3d P;
-  em->compute_P(cacheData->materialParam.data(), cacheData->Fe.data(),
+  ind->elasticModel->compute_P(cacheData->materialParam.data(), cacheData->Fe.data(),
     cacheData->U.data(), cacheData->V.data(), cacheData->S.data(), P.data());
 
   TetMeshDeformationModelCacheData::Vp dpsi_da;
-  for (int i = 0; i < pm->getNumParameters(); i++) {
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
     dpsi_da[i] = ind->compute_dpsi_dai(cacheData->Ds, cacheData->dAInv_dai[i], P);
   }
 
-  for (int i = 0; i < pm->getNumParameters(); i++) {
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
     grad[i] = dvolda[i] * psi + vol * dpsi_da[i];
   }
 }
 
 void TetMeshDeformationModel::compute_d2E_da2(const CacheData *cacheDataBase, double *hess) const
 {
-  if (pm->getNumParameters() == 0)
+  if (ind->plasticModel->getNumParameters() == 0)
     return;
 
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
@@ -441,60 +446,60 @@ void TetMeshDeformationModel::compute_d2E_da2(const CacheData *cacheDataBase, do
 
   // dV da
   TetMeshDeformationModelCacheData::Vp dvolda;
-  for (int i = 0; i < pm->getNumParameters(); i++) {
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
     dvolda[i] = ind->compute_dV_dai(cacheData->ddetA_da[i]);
   }
 
   // d2V / da2
   TetMeshDeformationModelCacheData::Mp d2volda2;
-  for (int i = 0; i < pm->getNumParameters(); i++) {
-    for (int j = i; j < pm->getNumParameters(); j++) {
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
+    for (int j = i; j < ind->plasticModel->getNumParameters(); j++) {
       d2volda2(i, j) = ind->compute_d2V_daidaj(cacheData->d2detA_da2(i, j));
     }
   }
 
-  for (int i = 0; i < pm->getNumParameters(); i++) {
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
     for (int j = 0; j < i; j++) {
       d2volda2(i, j) = d2volda2(j, i);
     }
   }
 
   // psi
-  double psi = em->compute_psi(cacheData->materialParam.data(),
+  double psi = ind->elasticModel->compute_psi(cacheData->materialParam.data(),
     cacheData->Fe.data(), cacheData->U.data(), cacheData->V.data(), cacheData->S.data());
 
   // dpsi / da
   ES::M3d P;
-  em->compute_P(cacheData->materialParam.data(), cacheData->Fe.data(),
+  ind->elasticModel->compute_P(cacheData->materialParam.data(), cacheData->Fe.data(),
     cacheData->U.data(), cacheData->V.data(), cacheData->S.data(), P.data());
 
   TetMeshDeformationModelCacheData::Vp dpsi_da;
-  for (int i = 0; i < pm->getNumParameters(); i++) {
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
     dpsi_da[i] = ind->compute_dpsi_dai(cacheData->Ds, cacheData->dAInv_dai[i], P);
   }
 
   // d2psi / da2
   ES::M9d dPdF;
-  em->compute_dPdF(cacheData->materialParam.data(), cacheData->Fe.data(),
+  ind->elasticModel->compute_dPdF(cacheData->materialParam.data(), cacheData->Fe.data(),
     cacheData->U.data(), cacheData->V.data(), cacheData->S.data(), dPdF.data());
 
   TetMeshDeformationModelCacheData::Mp d2psi_da2;
-  for (int i = 0; i < pm->getNumParameters(); i++) {
-    for (int j = i; j < pm->getNumParameters(); j++) {
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
+    for (int j = i; j < ind->plasticModel->getNumParameters(); j++) {
       d2psi_da2(i, j) = ind->compute_d2psi_dai_daj(cacheData->Ds, cacheData->dAInv_dai[i], cacheData->dAInv_dai[j],
         cacheData->d2AInv_dai_daj[i][j], P, dPdF);
     }
   }
 
-  for (int i = 0; i < pm->getNumParameters(); i++) {
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
     for (int j = 0; j < i; j++) {
       d2psi_da2(i, j) = d2psi_da2(j, i);
     }
   }
 
-  Eigen::Map<ES::MXd> hessMap(hess, pm->getNumParameters(), pm->getNumParameters());
-  for (int i = 0; i < pm->getNumParameters(); i++) {
-    for (int j = 0; j < pm->getNumParameters(); j++) {
+  Eigen::Map<ES::MXd> hessMap(hess, ind->plasticModel->getNumParameters(), ind->plasticModel->getNumParameters());
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
+    for (int j = 0; j < ind->plasticModel->getNumParameters(); j++) {
       hessMap(i, j) = d2volda2(i, j) * psi + dvolda[i] * dpsi_da[j] + dvolda[j] * dpsi_da[i] + vol * d2psi_da2(i, j);
     }
   }
@@ -502,7 +507,7 @@ void TetMeshDeformationModel::compute_d2E_da2(const CacheData *cacheDataBase, do
 
 void TetMeshDeformationModel::compute_d2E_dxda(const CacheData *cacheDataBase, double *hess) const
 {
-  if (pm->getNumParameters() == 0)
+  if (ind->plasticModel->getNumParameters() == 0)
     return;
 
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
@@ -515,7 +520,7 @@ void TetMeshDeformationModel::compute_d2E_dxda(const CacheData *cacheDataBase, d
 
   // P = dpsi/dF
   ES::M3d P;
-  em->compute_P(cacheData->materialParam.data(), cacheData->Fe.data(),
+  ind->elasticModel->compute_P(cacheData->materialParam.data(), cacheData->Fe.data(),
     cacheData->U.data(), cacheData->V.data(), cacheData->S.data(), P.data());
 
   // dpsi/dx = P * dF/dx
@@ -523,13 +528,13 @@ void TetMeshDeformationModel::compute_d2E_dxda(const CacheData *cacheDataBase, d
 
   // dP/dF
   ES::M9d dPdF;
-  em->compute_dPdF(cacheData->materialParam.data(), cacheData->Fe.data(),
+  ind->elasticModel->compute_dPdF(cacheData->materialParam.data(), cacheData->Fe.data(),
     cacheData->U.data(), cacheData->V.data(), cacheData->S.data(), dPdF.data());
 
   // V
   double vol = ind->restVolume * cacheData->detFp;
 
-  for (int i = 0; i < pm->getNumParameters(); i++) {
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
     double dVda = ind->compute_dV_dai(cacheData->ddetA_da[i]);
 
     // dP/da
@@ -545,20 +550,20 @@ void TetMeshDeformationModel::compute_d2E_dxda(const CacheData *cacheDataBase, d
     d2E_duda.col(i) = dVda * dpsi_dx + vol * (temp + d2F_duda.transpose() * Eigen::Map<const ES::V9d>(P.data()));
   }
 
-  (Eigen::Map<ES::MXd>(hess, 12, pm->getNumParameters())) = d2E_duda.block(0, 0, 12, pm->getNumParameters());
+  (Eigen::Map<ES::MXd>(hess, 12, ind->plasticModel->getNumParameters())) = d2E_duda.block(0, 0, 12, ind->plasticModel->getNumParameters());
 }
 
 void TetMeshDeformationModel::compute_dE_db(const CacheData *cacheDataBase, double *grad) const
 {
-  if (em->getNumParameters() == 0)
+  if (ind->elasticModel->getNumParameters() == 0)
     return;
 
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
 
   // V
   double V = ind->restVolume * cacheData->detFp;
-  for (int i = 0; i < em->getNumParameters(); i++) {
-    double val = em->compute_dpsi_dparam(cacheData->materialParam.data(), i,
+  for (int i = 0; i < ind->elasticModel->getNumParameters(); i++) {
+    double val = ind->elasticModel->compute_dpsi_dparam(cacheData->materialParam.data(), i,
       cacheData->Fe.data(), cacheData->U.data(), cacheData->V.data(), cacheData->S.data());
     grad[i] = val * V;
   }
@@ -566,25 +571,25 @@ void TetMeshDeformationModel::compute_dE_db(const CacheData *cacheDataBase, doub
 
 void TetMeshDeformationModel::compute_d2E_db2(const CacheData *cacheDataBase, double *hess) const
 {
-  if (em->getNumParameters() == 0)
+  if (ind->elasticModel->getNumParameters() == 0)
     return;
 
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
 
   // V
   double V = ind->restVolume * cacheData->detFp;
-  for (int i = 0; i < em->getNumParameters(); i++) {
-    for (int j = 0; j < em->getNumParameters(); j++) {
-      double val = em->compute_d2psi_dparam2(cacheData->materialParam.data(), i, j,
+  for (int i = 0; i < ind->elasticModel->getNumParameters(); i++) {
+    for (int j = 0; j < ind->elasticModel->getNumParameters(); j++) {
+      double val = ind->elasticModel->compute_d2psi_dparam2(cacheData->materialParam.data(), i, j,
         cacheData->Fe.data(), cacheData->U.data(), cacheData->V.data(), cacheData->S.data());
-      hess[j * em->getNumParameters() + i] = val * V;
+      hess[j * ind->elasticModel->getNumParameters() + i] = val * V;
     }
   }
 }
 
 void TetMeshDeformationModel::compute_d2E_dxdb(const CacheData *cacheDataBase, double *hess) const
 {
-  if (em->getNumParameters() == 0)
+  if (ind->elasticModel->getNumParameters() == 0)
     return;
 
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
@@ -597,16 +602,16 @@ void TetMeshDeformationModel::compute_d2E_dxdb(const CacheData *cacheDataBase, d
   double V = ind->restVolume * cacheData->detFp;
 
   Eigen::Matrix<double, 12, 100> d2E_dudb;
-  for (int i = 0; i < em->getNumParameters(); i++) {
+  for (int i = 0; i < ind->elasticModel->getNumParameters(); i++) {
     ES::M3d dPdb;
-    em->compute_dP_dparam(cacheData->materialParam.data(), i, cacheData->Fe.data(),
+    ind->elasticModel->compute_dP_dparam(cacheData->materialParam.data(), i, cacheData->Fe.data(),
       cacheData->U.data(), cacheData->V.data(), cacheData->S.data(), dPdb.data());
 
     ES::V12d temp = dFdx.transpose() * Eigen::Map<const ES::V9d>(dPdb.data());
     d2E_dudb.col(i) = V * temp;
   }
 
-  for (int col = 0; col < em->getNumParameters(); col++) {
+  for (int col = 0; col < ind->elasticModel->getNumParameters(); col++) {
     for (int row = 0; row < 12; row++) {
       hess[col * 12 + row] = d2E_dudb(row, col);
     }
@@ -615,44 +620,44 @@ void TetMeshDeformationModel::compute_d2E_dxdb(const CacheData *cacheDataBase, d
 
 void TetMeshDeformationModel::compute_d2E_dadb(const CacheData *cacheDataBase, double *hess) const
 {
-  if (em->getNumParameters() == 0)
+  if (ind->elasticModel->getNumParameters() == 0)
     return;
 
-  if (pm->getNumParameters() == 0)
+  if (ind->plasticModel->getNumParameters() == 0)
     return;
 
   const TetMeshDeformationModelCacheData *cacheData = static_cast<const TetMeshDeformationModelCacheData *>(cacheDataBase);
 
-  Eigen::Map<ES::MXd> d2E_dadb(hess, pm->getNumParameters(), em->getNumParameters());
+  Eigen::Map<ES::MXd> d2E_dadb(hess, ind->plasticModel->getNumParameters(), ind->elasticModel->getNumParameters());
 
   // V
   double V = ind->restVolume * cacheData->detFp;
 
   TetMeshDeformationModelCacheData::Vp dVda;
-  for (int i = 0; i < pm->getNumParameters(); i++) {
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
     dVda[i] = ind->compute_dV_dai(cacheData->ddetA_da[i]);
   }
 
-  for (int i = 0; i < em->getNumParameters(); i++) {
-    double dpsi_dbi = em->compute_dpsi_dparam(cacheData->materialParam.data(), i,
+  for (int i = 0; i < ind->elasticModel->getNumParameters(); i++) {
+    double dpsi_dbi = ind->elasticModel->compute_dpsi_dparam(cacheData->materialParam.data(), i,
       cacheData->Fe.data(), cacheData->U.data(), cacheData->V.data(), cacheData->S.data());
 
-    d2E_dadb.col(i) = dVda.head(pm->getNumParameters()) * dpsi_dbi;
+    d2E_dadb.col(i) = dVda.head(ind->plasticModel->getNumParameters()) * dpsi_dbi;
   }
 
   ES::M3d dPdb[TetMeshDeformationModelCacheData::maxNumElasticParam];
-  for (int i = 0; i < em->getNumParameters(); i++) {
-    em->compute_dP_dparam(cacheData->materialParam.data(), i, cacheData->Fe.data(),
+  for (int i = 0; i < ind->elasticModel->getNumParameters(); i++) {
+    ind->elasticModel->compute_dP_dparam(cacheData->materialParam.data(), i, cacheData->Fe.data(),
       cacheData->U.data(), cacheData->V.data(), cacheData->S.data(), dPdb[i].data());
   }
 
   ES::M3d dFda[TetMeshDeformationModelCacheData::maxNumPlasticParam];
-  for (int i = 0; i < pm->getNumParameters(); i++) {
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
     ind->compute_dFe_dai(cacheData->Ds, cacheData->dAInv_dai[i], dFda[i]);
   }
 
-  for (int i = 0; i < pm->getNumParameters(); i++) {
-    for (int j = 0; j < em->getNumParameters(); j++) {
+  for (int i = 0; i < ind->plasticModel->getNumParameters(); i++) {
+    for (int j = 0; j < ind->elasticModel->getNumParameters(); j++) {
       d2E_dadb(i, j) += Eigen::Map<const ES::V9d>(dPdb[j].data()).dot(Eigen::Map<const ES::V9d>(dFda[i].data())) * V;
     }
   }

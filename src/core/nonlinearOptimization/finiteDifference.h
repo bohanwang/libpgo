@@ -34,6 +34,10 @@ public:
 
   void testConstraints(std::shared_ptr<const ConstraintFunctions> c, double range = -1.0, const double *x = nullptr, const double *lambda = nullptr) const;
 
+  typedef std::function<void(const double *, double *, double *)> EvalVecFunc;
+  void testVecFunc(EvalVecFunc evalFunc, int m, int n, double range = -1.0, const double *x = nullptr,
+  double *err = nullptr) const;
+
   static void randomSeq(double range, double *x, int n);
 
   void gradient(const double *x, double *grad, int n, std::vector<int> *dofs, std::function<double(const double *)> energyFunc);

@@ -1,6 +1,6 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #include "simulationMesh.h"
@@ -31,10 +31,10 @@ public:
     const int *elementMaterialIndices, int numMaterials, const SimulationMeshMaterial *const *materials,
     SimulationMeshType meshType);
 
-  std::vector<Vec3d> vertices;
+  std::vector<ES::V3d> vertices;
   std::vector<std::vector<int>> elements;
-  std::vector<std::vector<Vec2d>> elementUVs;
-  std::vector<int> elementMaterialID;
+  std::vector<std::vector<ES::V2d>> elementUVs;
+  std::vector<std::vector<int>> elementMaterialID;
   std::vector<SimulationMeshMaterial *> materials;
 
   SimulationMeshType meshType;
@@ -99,9 +99,21 @@ SimulationMeshType SimulationMesh::getElementType() const
   return impl->meshType;
 }
 
-const SimulationMeshMaterial *SimulationMesh::getElementMaterial(int ele) const
+const SimulationMeshMaterial *SimulationMesh::getElementMaterial(int ele, int j) const
 {
-  return impl->materials[impl->elementMaterialID[ele]];
+  PGO_ALOG(j >= 0 && j < getElementNumMaterials(ele));
+  return impl->materials[impl->elementMaterialID[ele][j]];
+}
+
+SimulationMeshMaterial *SimulationMesh::getElementMaterial(int ele, int j)
+{
+  PGO_ALOG(j >= 0 && j < getElementNumMaterials(ele));
+  return impl->materials[impl->elementMaterialID[ele][j]];
+}
+
+int SimulationMesh::getElementNumMaterials(int ele) const
+{
+  return (int)impl->elementMaterialID[ele].size();
 }
 
 void SimulationMesh::assignElementUVs(const double *uvs)
@@ -109,7 +121,8 @@ void SimulationMesh::assignElementUVs(const double *uvs)
   impl->elementUVs.assign(impl->elements.size(), std::vector<Vec2d>(getNumElementVertices()));
   for (size_t ei = 0; ei < impl->elements.size(); ei++) {
     for (int j = 0; j < getNumElementVertices(); j++) {
-      impl->elementUVs[ei][j] = Vec2d(uvs + ei * getNumElementVertices() * 2 + j * 2);
+      const double *uv = uvs + ei * getNumElementVertices() * 2 + j * 2;
+      impl->elementUVs[ei][j] = Vec2d(uv[0], uv[1]);
     }
   }
 }
@@ -125,12 +138,26 @@ void SimulationMesh::getElementUV(int ele, int j, double uv[2]) const
   uv[1] = impl->elementUVs[ele][j][1];
 }
 
+void SimulationMesh::setMaterial(int matID, const SimulationMeshMaterial *mat)
+{
+  if (matID >= 0 && matID < (int)impl->materials.size()) {
+    delete impl->materials[matID];
+    impl->materials[matID] = mat->clone();
+  }
+  else {
+    for (int mi = 0; mi < (int)impl->materials.size(); mi++) {
+      delete impl->materials[mi];
+      impl->materials[mi] = mat->clone();
+    }
+  }
+}
+
 SimulationMeshImpl::SimulationMeshImpl(int numVertices, const double *vertexPositions,
   int numElements, int numElementVertices, const int *elementVertexIndices,
   const int *elementMaterialIndices, int numMaterials, const SimulationMeshMaterial *const *mats,
   SimulationMeshType mt)
 {
-  vertices.assign(numVertices, asVec3d(0.0));
+  vertices.assign(numVertices, ES::V3d::Zero());
   for (int vi = 0; vi < numVertices; vi++) {
     vertices[vi] = asVec3d(vertexPositions + vi * 3);
   }
@@ -140,7 +167,10 @@ SimulationMeshImpl::SimulationMeshImpl(int numVertices, const double *vertexPosi
     memcpy(elements[ei].data(), elementVertexIndices + ei * numElementVertices, sizeof(int) * numElementVertices);
   }
 
-  elementMaterialID.assign(elementMaterialIndices, elementMaterialIndices + numElements);
+  elementMaterialID.assign(numElements, std::vector<int>(1, 0));
+  for (int ei = 0; ei < numElements; ei++) {
+    elementMaterialID[ei][0] = elementMaterialIndices[ei];
+  }
 
   materials.assign(numMaterials, nullptr);
   for (int mi = 0; mi < numMaterials; mi++) {
@@ -227,6 +257,50 @@ SimulationMesh *pgo::SolidDeformationModel::loadShellMesh(const Mesh::TriMeshGeo
   SimulationMesh *mesh = new SimulationMesh(triMeshGeo.numVertices(), vertices.data(),
     numElements, 6, elementVertexIndices.data(),
     elementMaterialIndices.data(), 1, &mat, SimulationMeshType::SHELL);
+
+  return mesh;
+}
+
+SimulationMesh *pgo::SolidDeformationModel::loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const int *elementMaterialIndices_, const SimulationMeshMaterial *const *mat)
+{
+  std::vector<double> vertices;
+  for (int i = 0; i < triMeshGeo.numVertices(); i++) {
+    vertices.push_back(triMeshGeo.pos(i)[0]);
+    vertices.push_back(triMeshGeo.pos(i)[1]);
+    vertices.push_back(triMeshGeo.pos(i)[2]);
+  }
+
+  std::vector<int> elementVertexIndices;
+  Mesh::TriMeshNeighbor triNeighbor(triMeshGeo);
+  for (int i = 0; i < triMeshGeo.numTriangles(); i++) {
+    Vec3i triangle = triMeshGeo.tri(i);
+    Vec3i neighborList = triNeighbor.getTriangleNeighbors(i);
+
+    for (int j = 0; j < 3; j++) {
+      elementVertexIndices.emplace_back(triangle[j]);
+    }
+
+    for (int j = 0; j < 3; j++) {
+      int e0 = triangle[j];
+      int e1 = triangle[(j + 1) % 3];
+
+      if (neighborList[j] > 0) {
+        Vec3i neighbor = triMeshGeo.tri(neighborList[j]);
+        int neighborIdx = Mesh::getTriangleVertexOppositeEdge(neighbor, e0, e1);
+        elementVertexIndices.emplace_back(neighborIdx);
+      }
+      else {
+        elementVertexIndices.emplace_back(-1);
+      }
+    }
+  }
+
+  int numElements = (int)elementVertexIndices.size() / 6;
+  std::vector<int> elementMaterialIndices(elementMaterialIndices_, elementMaterialIndices_ + numElements);
+
+  SimulationMesh *mesh = new SimulationMesh(triMeshGeo.numVertices(), vertices.data(),
+    numElements, 6, elementVertexIndices.data(),
+    elementMaterialIndices.data(), numElements, mat, SimulationMeshType::SHELL);
 
   return mesh;
 }

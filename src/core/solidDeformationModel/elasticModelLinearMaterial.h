@@ -1,17 +1,17 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #pragma once
 
-#include "elasticModel.h"
+#include "elasticModel3DDeformationGradient.h"
 
 namespace pgo
 {
 namespace SolidDeformationModel
 {
-class ElasticModelLinearMaterial : public ElasticModel
+class ElasticModelLinearMaterial : public ElasticModel3DDeformationGradient
 {
 public:
   ElasticModelLinearMaterial(double mu_, double lambda_):

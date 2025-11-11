@@ -1,11 +1,11 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #pragma once
 
-#include "elasticModel.h"
+#include "elasticModel3DDeformationGradient.h"
 
 #include <stdexcept>
 #include <utility>
@@ -15,7 +15,7 @@ namespace pgo
 namespace SolidDeformationModel
 {
 template<int count>
-class ElasticModelCombinedMaterial : public ElasticModel
+class ElasticModelCombinedMaterial : public ElasticModel3DDeformationGradient
 {
 public:
   template<typename... T>
@@ -44,10 +44,10 @@ public:
   virtual void compute_d2PdFdparam(const double *param, int i, const double F[9],
     const double U[9], const double V[9], const double S[3], double d2P_dFdparam[81]) const override;
 
-  const ElasticModel *getMaterial(int id) const { return materials[id]; }
+  const ElasticModel3DDeformationGradient *getMaterial(int id) const { return materials[id]; }
 
 protected:
-  const ElasticModel *materials[count];
+  const ElasticModel3DDeformationGradient *materials[count];
   int parameterOffsets[count + 1];
   int numTotalParameters;
 };
@@ -59,13 +59,13 @@ inline ElasticModelCombinedMaterial<count>::ElasticModelCombinedMaterial(const T
   static_assert(count > 0);
   static_assert(
     std::is_same<
-      std::integer_sequence<bool, true, std::is_convertible<std::decay_t<T>, ElasticModel *>::value...>,
-      std::integer_sequence<bool, std::is_convertible<std::decay_t<T>, const ElasticModel *>::value..., true>>::value,
+      std::integer_sequence<bool, true, std::is_convertible<std::decay_t<T>, ElasticModel3DDeformationGradient *>::value...>,
+      std::integer_sequence<bool, std::is_convertible<std::decay_t<T>, const ElasticModel3DDeformationGradient *>::value..., true>>::value,
     "T should be const MuscleElasticModel*");
 
   // std::cout << __PRETTY_FUNCTION__ << std::endl;
 
-  const ElasticModel *mats2[] = { mats... };
+  const ElasticModel3DDeformationGradient *mats2[] = { mats... };
 
   int offset = 0;
   for (int i = 0; i < count; i++) {
@@ -270,10 +270,10 @@ inline void ElasticModelCombinedMaterial<count>::compute_d2PdFdparam(const doubl
 }
 
 template<>
-class ElasticModelCombinedMaterial<-1> : public ElasticModel
+class ElasticModelCombinedMaterial<-1> : public ElasticModel3DDeformationGradient
 {
 public:
-  ElasticModelCombinedMaterial(int numMaterials, const ElasticModel *const *mats);
+  ElasticModelCombinedMaterial(int numMaterials, const ElasticModel3DDeformationGradient *const *mats);
   virtual ~ElasticModelCombinedMaterial() { delete[] materials; }
 
   virtual double compute_psi(const double *param, const double F[9],
@@ -299,17 +299,17 @@ public:
     const double U[9], const double V[9], const double S[3], double d2P_dFdparam[81]) const override;
 
 protected:
-  const ElasticModel **materials;
+  const ElasticModel3DDeformationGradient **materials;
   int count;
 
   int *parameterOffsets;
   int numTotalParameters;
 };
 
-inline ElasticModelCombinedMaterial<-1>::ElasticModelCombinedMaterial(int numMaterials, const ElasticModel *const *mats):
+inline ElasticModelCombinedMaterial<-1>::ElasticModelCombinedMaterial(int numMaterials, const ElasticModel3DDeformationGradient *const *mats):
   count(numMaterials)
 {
-  materials = new const ElasticModel *[numMaterials];
+  materials = new const ElasticModel3DDeformationGradient *[numMaterials];
   parameterOffsets = new int[numMaterials + 1];
 
   int offset = 0;

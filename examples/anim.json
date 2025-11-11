@@ -1,0 +1,25 @@
+{
+  "meshes": [
+    {
+      "name": "temp",
+      "driving-mesh": "ret-box-nonfriction/ret0000.obj",
+      "sequence": "ret-box-nonfriction/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        1000
+      ]
+    }
+    // ,
+    // {
+    //   "name": "torus",
+    //   "driving-mesh": "torus.obj",
+    //   "sequence": "ret-torus/ret{:04d}.obj",
+    //   "sequence-type": "objmesh",
+    //   "sequence-range": [
+    //     0,
+    //     100
+    //   ]
+    // }
+  ]
+}

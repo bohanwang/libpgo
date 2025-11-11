@@ -60,9 +60,9 @@ foreach(lib ${NONLINEAROPTIMIZATION_DEPS})
 endforeach()
 
 if(TARGET Knitro::Knitro)
-  target_link_libraries(nonlinearOptimization PUBLIC Knitro::Knitro)
+  target_link_libraries(nonlinearOptimization PRIVATE Knitro::Knitro)
 endif()
 
 if(TARGET Ipopt::Ipopt)
-  target_link_libraries(nonlinearOptimization PUBLIC Ipopt::Ipopt)
+  target_link_libraries(nonlinearOptimization PRIVATE Ipopt::Ipopt)
 endif()

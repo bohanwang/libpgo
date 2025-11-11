@@ -1,17 +1,17 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #pragma once
 
-#include "elasticModel.h"
+#include "elasticModel3DDeformationGradient.h"
 
 namespace pgo
 {
 namespace SolidDeformationModel
 {
-class ElasticModelHillTypeMaterial : public ElasticModel
+class ElasticModelHillTypeMaterial : public ElasticModel3DDeformationGradient
 {
 public:
   ElasticModelHillTypeMaterial(double shapeParam, double maximalContractionForce, double optimalLengthRatio, const double fiberDirection[3]);

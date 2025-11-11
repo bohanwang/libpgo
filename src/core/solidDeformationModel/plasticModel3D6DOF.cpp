@@ -1,6 +1,6 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #include "plasticModel3D6DOF.h"
@@ -18,7 +18,7 @@ using namespace pgo::SolidDeformationModel;
 using namespace pgo::NonlinearOptimization;
 
 PlasticModel3D6DOF::PlasticModel3D6DOF(const double R_[9]):
-  PlasticModel(6)
+  PlasticModel3DDeformationGradient(6)
 {
   if (R_) {
     std::memcpy(R, R_, sizeof(double) * 9);

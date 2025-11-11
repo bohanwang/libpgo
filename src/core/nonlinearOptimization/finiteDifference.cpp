@@ -415,6 +415,61 @@ void FiniteDifference::testConstraints(std::shared_ptr<const ConstraintFunctions
     << "  abs error: " << sqrt(absErr) << std::endl;
 }
 
+void FiniteDifference::testVecFunc(EvalVecFunc evalFunc, int m, int n, double range, const double *x, double *err) const
+{
+  std::default_random_engine eng;
+
+  ES::VXd xcur(n);
+  if (x == nullptr) {
+    std::uniform_real_distribution<double> distrib(-range, range);
+
+    for (int i = 0; i < n; i++) {
+      xcur[i] = distrib(eng);
+    }
+  }
+  else {
+    xcur = Eigen::Map<const ES::VXd>(x, n);
+  }
+
+  ES::VXd xtemp(n), g(m);
+  ES::MXd jacExact(m, n), jacFD(m, n);
+  evalFunc(xcur.data(), nullptr, jacExact.data());
+
+  for (int dofi = 0; dofi < n; dofi++) {
+    xtemp.noalias() = xcur;
+
+    jacFD.col(dofi).setZero();
+    for (int i = left; i <= right; i++) {
+      double c = coeffs[i - left];
+      xtemp[dofi] = xcur[dofi] + eps * i;
+
+      g.setZero();
+      evalFunc(xtemp.data(), g.data(), nullptr);
+      jacFD.col(dofi) += g * c;
+    }
+    jacFD.col(dofi) /= eps;
+  }
+
+  // std::cout << "Jacobian:\n"
+  //           << "  ||J_fd||=" << jacFD.norm() << "\n"
+  //           << "  ||J||=" << jacExact.norm() << std::endl;
+
+  // std::cout << "Difference in last column:\n";
+  // std::cout << jacFD.rightCols(1) - jacExact.rightCols(1) << std::endl;
+
+  double norm = jacFD.norm();
+  double absErr = (jacExact - jacFD).norm();
+  if (norm < 1e-30)
+    norm = 1.0;
+
+  // std::cout
+  //   << "  rel err: " << absErr / norm << "\n"
+  //   << "  abs error: " << absErr << std::endl;
+
+  if (err)
+    *err = absErr / norm;
+}
+
 void FiniteDifference::randomSeq(double range, double *x, int n)
 {
   std::default_random_engine eng;

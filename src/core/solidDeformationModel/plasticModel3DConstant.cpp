@@ -1,6 +1,6 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #include "plasticModel3DConstant.h"
@@ -13,7 +13,7 @@ namespace ES = pgo::EigenSupport;
 using namespace pgo::SolidDeformationModel;
 
 PlasticModel3DConstant::PlasticModel3DConstant(const double Fp_[9]):
-  PlasticModel(0)
+  PlasticModel3DDeformationGradient(0)
 {
   std::memcpy(Fp, Fp_, sizeof(double) * 9);
   (Eigen::Map<ES::M3d>(FpInv)) = (Eigen::Map<ES::M3d>(Fp)).fullPivLu().inverse();

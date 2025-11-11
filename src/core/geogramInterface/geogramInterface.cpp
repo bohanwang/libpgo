@@ -60,7 +60,7 @@ pgo::Mesh::TriMeshGeo pgo::GeogramInterface::remesh(const std::string &meshFilen
   Mesh::TriMeshGeo meshOut;
   for (GEO::index_t vi = 0; vi < remeshedMesh.vertices.nb(); ++vi) {
     const double *p = remeshedMesh.vertices.point_ptr(vi);
-    Vec3d pos(p);
+    EigenSupport::V3d pos(p[0], p[1], p[2]);
     meshOut.addPos(pos);
   }
 
@@ -118,7 +118,7 @@ pgo::Mesh::TriMeshGeo pgo::GeogramInterface::remesh(const Mesh::TriMeshGeo &inMe
   Mesh::TriMeshGeo meshOut;
   for (GEO::index_t vi = 0; vi < remeshedMesh.vertices.nb(); ++vi) {
     const double *p = remeshedMesh.vertices.point_ptr(vi);
-    Vec3d pos(p);
+    EigenSupport::V3d pos(p[0], p[1], p[2]);
     meshOut.addPos(pos);
   }
 

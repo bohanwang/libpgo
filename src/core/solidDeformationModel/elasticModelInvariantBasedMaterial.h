@@ -1,11 +1,11 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #pragma once
 
-#include "elasticModel.h"
+#include "elasticModel3DDeformationGradient.h"
 
 namespace pgo
 {
@@ -13,7 +13,7 @@ namespace SolidDeformationModel
 {
 class InvariantBasedMaterial;
 
-class ElasticModelInvariantBasedMaterial : public ElasticModel
+class ElasticModelInvariantBasedMaterial : public ElasticModel3DDeformationGradient
 {
 public:
   ElasticModelInvariantBasedMaterial(const InvariantBasedMaterial *invMat):

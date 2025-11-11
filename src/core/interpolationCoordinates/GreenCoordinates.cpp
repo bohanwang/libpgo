@@ -74,7 +74,7 @@ GreenCoordinates::GreenCoordinates(int numLocations, const double *locations, co
   tbb::parallel_for(tbb::blocked_range<int>(0, numLocations), [&](const tbb::blocked_range<int> &rng) {
     for (int i = rng.begin(); i != rng.end(); ++i) {
       int globalFaceCount = 0;
-      Vec3d n(locations + 3 * i);
+      Vec3d n = asVec3d(locations + 3 * i);
 
       for (int fi = 0; fi < cage.numTriangles(); fi++) {
         Vec3d normal = meshNormal.triNormal(fi);
@@ -126,7 +126,7 @@ void GreenCoordinates::deform(const double *verticesDisp, double *locationDisp) 
 
       // add vtx weights
       for (int j = 0; j < numVertices; j++) {
-        Vec3d v(verticesDisp + 3 * j);
+        Vec3d v = asVec3d(verticesDisp + 3 * j);
         newDisp += v * vtxWeights[i * numVertices + j];
       }
 

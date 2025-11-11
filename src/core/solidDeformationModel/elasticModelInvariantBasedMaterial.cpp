@@ -1,6 +1,6 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #include "elasticModelInvariantBasedMaterial.h"
@@ -13,6 +13,7 @@ copyright to USC,MIT
 #include <iostream>
 
 using namespace pgo::SolidDeformationModel;
+namespace ES = pgo::EigenSupport;
 
 double ElasticModelInvariantBasedMaterial::compute_psi(const double * /*param*/, const double *, const double *, const double *, const double S[3]) const
 {
@@ -59,8 +60,8 @@ void ElasticModelInvariantBasedMaterial::compute_P(const double * /*param*/, con
   mat[7] = 2.0 * S[1] * lambda2[0] * lambda2[2];
   mat[8] = 2.0 * S[2] * lambda2[0] * lambda2[1];
 
-  Mat3d matM = asMat3d(mat);
-  Vec3d dPsidIV(dPsidI);
+  ES::M3d matM = asMat3d(mat);
+  ES::V3d dPsidIV(dPsidI[0], dPsidI[1], dPsidI[2]);
   Eigen::Vector3d PDiag = matM.transpose() * dPsidIV;
 
   // This is the 1st equation in p3 section 5 of [Irving 04]
@@ -308,10 +309,10 @@ void ElasticModelInvariantBasedMaterial::compute_dPdF(const double * /*param*/, 
     | dP_22/dF_00  dP_22/dF_01 dP_22/dF_02 dP_22/dF_10 ... dP22/dF_22 |
    */
 
-  Mat3d UT(UIn);  // input is column major
-  Mat3d VT(VIn);  // trans(*V);
-  Mat3d U = UT.transpose();
-  Mat3d V = VT.transpose();
+  ES::M3d U = ES::Mp<const ES::M3d>(UIn);
+  ES::M3d V = ES::Mp<const ES::M3d>(VIn);
+  ES::M3d UT = U.transpose();
+  ES::M3d VT = V.transpose();
 
   /*
     U->print();
@@ -328,8 +329,9 @@ void ElasticModelInvariantBasedMaterial::compute_dPdF(const double * /*param*/, 
 
   for (int column = 0; column < 9; column++) {
     eiejVector[column] = 1.0;
-    Mat3d ei_ej(eiejVector);
-    Mat3d ut_eiej_v = UT * ei_ej * V;
+    ES::M3d ei_ej = asMat3d(eiejVector);
+    ES::M3d ut_eiej_v = UT * ei_ej * V;
+
     double ut_eiej_v_TeranVector[9];  // in Teran order
     ut_eiej_v_TeranVector[rowMajorMatrixToTeran[0]] = ut_eiej_v(0, 0);
     ut_eiej_v_TeranVector[rowMajorMatrixToTeran[1]] = ut_eiej_v(0, 1);
@@ -350,8 +352,8 @@ void ElasticModelInvariantBasedMaterial::compute_dPdF(const double * /*param*/, 
       }
       dPdF_resultVector[teranToRowMajorMatrix[innerRow]] = tempResult;
     }
-    Mat3d dPdF_resultMatrix(dPdF_resultVector);
-    Mat3d u_dpdf_vt = U * dPdF_resultMatrix * VT;
+    ES::M3d dPdF_resultMatrix = asMat3d(dPdF_resultVector);
+    ES::M3d u_dpdf_vt = U * dPdF_resultMatrix * VT;
 
     dPdF[column + 0] = u_dpdf_vt(0, 0);
     dPdF[column + 9] = u_dpdf_vt(0, 1);

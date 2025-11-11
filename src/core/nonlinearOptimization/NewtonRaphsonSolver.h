@@ -40,6 +40,7 @@ public:
     SolverSubiterationType sst = SST_SUBITERATION_LINE_SEARCH;
     LineSearchMethod lsm = LSM_SIMPLE;
     int stopAfterIncrease = 1;
+    int addDamping = 0;
   };
 
   NewtonRaphsonSolver(const double *x, SolverParam sp, PotentialEnergy_const_p energy_,
@@ -50,6 +51,11 @@ public:
 
   using AlphaTestFunc = std::function<double(const EigenSupport::VXd &, const EigenSupport::VXd &)>;
   void setAlphaTestFunc(AlphaTestFunc func) { alphaTestFunc = func; }
+
+  using StepFunc = std::function<void(const EigenSupport::VXd &, int)>;
+  void setStepFunc(StepFunc func) { stepFunc = func; }
+
+  const EigenSupport::VXd &getx() const { return x; }
 
 protected:
   void filterVector(EigenSupport::VXd &v);
@@ -78,6 +84,7 @@ protected:
   double historyGradNormMin;
 
   AlphaTestFunc alphaTestFunc;
+  StepFunc stepFunc;
 };
 }  // namespace NonlinearOptimization
 }  // namespace pgo

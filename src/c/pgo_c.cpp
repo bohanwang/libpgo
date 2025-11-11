@@ -14,9 +14,10 @@
 #include "deformationModelManager.h"
 #include "tetMeshDeformationModel.h"
 #include "basicIO.h"
-#include "deformationModelAssemblerElastic.h"
+#include "deformationModelAssembler.h"
 #include "deformationModelEnergy.h"
 #include "plasticModel.h"
+#include "plasticModel3DDeformationGradient.h"
 #include "multiVertexPullingSoftConstraints.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
 #include "TRBDF2TimeIntegrator.h"
@@ -140,7 +141,6 @@ void pgo_save_tetmesh_to_file(pgoTetMeshStructHandle tetMeshHandle, const char *
   pgo::VolumetricMeshes::TetMesh *mesh = reinterpret_cast<pgo::VolumetricMeshes::TetMesh *>(tetMeshHandle);
   mesh->save(filename);
 }
-
 
 int pgo_tetmesh_get_num_vertices(pgoTetMeshStructHandle m)
 {
@@ -594,17 +594,13 @@ int pgo_run_sim_from_config(const char *configFileName)
   // surface mesh filename
   std::string surfaceMeshFilename = jconfig.getString("surface-mesh", 1);
 
-  // fixed vertices filename
-  std::string fixedVerticesFilename = jconfig.getString("fixed-vertices", 1);
-
-  // external objects filenames
-  std::vector<std::string> kinematicObjectFilenames = jconfig.getVectorString("external-objects", 1);
-
   // external acceleration
   ES::V3d extAcc = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("g", 1).data());
 
   // initial velocity
   ES::V3d initialVel = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("init-vel", 1).data());
+
+  ES::V3d initialDisp = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("init-disp", 1).data());
 
   // scene scale
   double scale = jconfig.getDouble("scale", 1);
@@ -617,8 +613,6 @@ int pgo_run_sim_from_config(const char *configFileName)
   int contactSamples = jconfig.getInt("contact-sample", 1);
   double fricCoeff = jconfig.getDouble("contact-friction-coeff", 1);
   double velEps = jconfig.getDouble("contact-vel-eps", 1);
-
-  double attachmentCoeff = jconfig.getDouble("attachment-stiffness", 1);
 
   // solver param
   double solverEps = jconfig.getDouble("solver-eps", 1);
@@ -679,23 +673,27 @@ int pgo_run_sim_from_config(const char *configFileName)
   std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm = std::make_shared<SolidDeformationModel::DeformationModelManager>();
 
   dmm->setMesh(simMesh.get(), nullptr, nullptr);
-  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6,
-    elasticMat, nullptr);
+  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, elasticMat, 1);
 
   std::vector<double> elementWeights(simMesh->getNumElements(), 1.0);
-  std::shared_ptr<SolidDeformationModel::DeformationModelAssemblerElastic> assembler =
-    std::make_shared<SolidDeformationModel::DeformationModelAssemblerElastic>(dmm.get(), nullptr, 0, elementWeights.data());
+  std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> assembler =
+    std::make_shared<SolidDeformationModel::DeformationModelAssembler>(dmm, elementWeights.data());
 
   int n = simMesh->getNumVertices();
   int n3 = n * 3;
   int nele = simMesh->getNumElements();
+
   ES::VXd plasticity(nele * 6);
   ES::M3d I = ES::M3d::Identity();
   for (int ei = 0; ei < nele; ei++) {
-    dmm->getDeformationModel(ei)->getPlasticModel()->toParam(I.data(), plasticity.data() + ei * dmm->getNumPlasticParameters());
+    const SolidDeformationModel::PlasticModel3DDeformationGradient *pm =
+      dynamic_cast<const SolidDeformationModel::PlasticModel3DDeformationGradient *>(dmm->getDeformationModel(ei)->getPlasticModel());
+    if (!pm) {
+      SPDLOG_LOGGER_ERROR(Logging::lgr(), "Plastic model is not of type PlasticModel3DDeformationGradient.");
+      return 1;
+    }
+    pm->toParam(I.data(), plasticity.data() + ei * dmm->getNumPlasticParameters());
   }
-  assembler->enableFullspaceScale(1);
-  assembler->setFixedParameters(plasticity.data(), (int)plasticity.size());
 
   ES::VXd restPosition(n3);
   for (int vi = 0; vi < n; vi++) {
@@ -704,7 +702,9 @@ int pgo_run_sim_from_config(const char *configFileName)
     restPosition.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
   }
 
-  std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy = std::make_shared<SolidDeformationModel::DeformationModelEnergy>(assembler, &restPosition, 0);
+  std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy =
+    std::make_shared<SolidDeformationModel::DeformationModelEnergy>(assembler, &restPosition, 0);
+  elasticEnergy->setPlasticParams(plasticity);
 
   ES::VXd zero(n3);
   zero.setZero();
@@ -714,30 +714,44 @@ int pgo_run_sim_from_config(const char *configFileName)
   elasticEnergy->hessian(zero, K);
 
   // attachments
-  std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling> pullingEnergy;
+  std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> pullingEnergies;
+  std::vector<ES::VXd> pullingTargets, pullingTargetRests;
+  for (const auto &fv : jconfig.handle()["fixed-vertices"]) {
+    std::string filename = fv["filename"].get<std::string>();
+    std::array<double, 3> movement = fv["movement"].get<std::array<double, 3>>();
+    double attachmentCoeff = fv["coeff"].get<double>();
 
-  if (fixedVerticesFilename.length()) {
     std::vector<int> fixedVertices;
-    if (BasicIO::read1DText(fixedVerticesFilename.c_str(), std::back_inserter(fixedVertices)) != 0) {
+    if (BasicIO::read1DText(filename.c_str(), std::back_inserter(fixedVertices)) != 0) {
       return 1;
     }
     std::sort(fixedVertices.begin(), fixedVertices.end());
 
     ES::VXd tgtVertexPositions(fixedVertices.size() * 3);
+    ES::VXd tgtVertexRests(fixedVertices.size() * 3);
     for (int vi = 0; vi < (int)fixedVertices.size(); vi++) {
-      tgtVertexPositions.segment<3>(vi * 3) = restPosition.segment<3>(fixedVertices[vi] * 3);
+      tgtVertexPositions.segment<3>(vi * 3) = restPosition.segment<3>(fixedVertices[vi] * 3) + ES::Mp<ES::V3d>(movement.data());
+      tgtVertexRests.segment<3>(vi * 3) = restPosition.segment<3>(fixedVertices[vi] * 3);
     }
 
     // initialize fixed constraints
-    pullingEnergy = std::make_shared<ConstraintPotentialEnergies::MultipleVertexPulling>(K, restPosition.data(),
+    auto pullingEnergy = std::make_shared<ConstraintPotentialEnergies::MultipleVertexPulling>(K, restPosition.data(),
       (int)fixedVertices.size(), fixedVertices.data(), tgtVertexPositions.data(), nullptr, 1);
     pullingEnergy->setCoeff(attachmentCoeff);
+    pullingEnergies.push_back(pullingEnergy);
+    pullingTargets.push_back(tgtVertexPositions);
+    pullingTargetRests.push_back(tgtVertexRests);
+  }
 
-    Mesh::TriMeshGeo fv;
-    for (int vi = 0; vi < (int)fixedVertices.size(); vi++) {
-      fv.addPos(restPosition.segment<3>(fixedVertices[vi] * 3));
+  std::vector<std::string> kinematicObjectFilenames;
+  std::vector<ES::V3d> kinematicObjectMovements;
+  if (jconfig.exist("external-objects")) {
+    auto jkinObjects = jconfig.handle()["external-objects"];
+    for (const auto &jko : jkinObjects) {
+      std::string koFilename = jko["filename"].get<std::string>();
+      kinematicObjectFilenames.push_back(koFilename);
+      kinematicObjectMovements.push_back(ES::Mp<ES::V3d>(jko["movement"].get<std::array<double, 3>>().data()));
     }
-    fv.save("fv.obj");
   }
 
   ES::SpMatD M;
@@ -792,7 +806,7 @@ int pgo_run_sim_from_config(const char *configFileName)
     intg->setSolverConfigFile("config.opt");
 #endif
 
-    if (pullingEnergy)
+    for (auto pullingEnergy : pullingEnergies)
       intg->addImplicitForceModel(pullingEnergy, 0, 0);
 
     intg->setExternalForce(fext.data());
@@ -816,6 +830,15 @@ int pgo_run_sim_from_config(const char *configFileName)
 
     for (int framei = 0; framei < numSimSteps; framei++) {
       intg->clearGeneralImplicitForceModel();
+
+      double ratio = (double)framei / (numSimSteps - 1);
+      for (size_t pi = 0; pi < pullingEnergies.size(); pi++) {
+        ES::VXd restTgt = pullingTargetRests[pi];
+        ES::VXd curTgt = restTgt * (1 - ratio) + pullingTargets[pi] * ratio;
+        pullingEnergies[pi]->setTargetPos(curTgt.data());
+
+        std::cout << "Frame " << framei << ", attachment " << pi << " target: " << curTgt.transpose().head(3) << std::endl;
+      }
 
       std::shared_ptr<Contact::PointPenetrationEnergy> extContactEnergy;
       Contact::PointPenetrationEnergyBuffer *extContactBuffer = nullptr;
@@ -883,8 +906,8 @@ int pgo_run_sim_from_config(const char *configFileName)
       intg->doTimestep(1, 2, 1);
 
       intg->getq(u);
-      intg->getq(uvel);
-      intg->getq(uacc);
+      intg->getqvel(uvel);
+      intg->getqacc(uacc);
 
       if (extContactBuffer && extContactEnergy) {
         extContactEnergy->freeBuffer(extContactBuffer);
@@ -912,7 +935,8 @@ int pgo_run_sim_from_config(const char *configFileName)
 
     std::shared_ptr<NonlinearOptimization::PotentialEnergies> energyAll = std::make_shared<NonlinearOptimization::PotentialEnergies>(n3);
     energyAll->addPotentialEnergy(elasticEnergy);
-    energyAll->addPotentialEnergy(pullingEnergy, 1.0);
+    for (auto eng : pullingEnergies)
+      energyAll->addPotentialEnergy(eng, 1.0);
     energyAll->addPotentialEnergy(externalForcesEnergy, -1.0);
     energyAll->init();
 

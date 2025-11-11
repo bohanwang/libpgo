@@ -35,7 +35,7 @@ public:
 
   const EigenSupport::VXd &getXInit() const { return xinit; }
 
- // bool isDense() const { return problemDense != nullptr; }
+  // bool isDense() const { return problemDense != nullptr; }
   int getn() const { return problem->getNumDOFs(); }
   int getm() const { return constraints ? constraints->getNumConstraints() : 0; }
   bool hasConstraints() const { return getm() > 0; }
@@ -51,6 +51,8 @@ public:
   EigenSupport::SpMatD &getLambdaHessianBuffer() { return lambdaHessian; }
   EigenSupport::SpMatD &getEnergyHessianBuffer() { return energyHessian; }
   EigenSupport::SpMatD &getFinalHessianBuffer() { return hessianAll; }
+
+  int isDense() const { return 0; }
 
   // dense routine
   // ConstraintFunctionsDense_const_p getDenseConstraintFunctions() const { return constraintsDense; }

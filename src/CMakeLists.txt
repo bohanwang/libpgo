@@ -1,5 +1,5 @@
 set(PGO_GLOBAL_LIBRARY_TARGETS
-  macros
+  macros  
   basicAlgorithms
   pgoLogging
   basicIO
@@ -19,6 +19,7 @@ set(PGO_GLOBAL_LIBRARY_TARGETS
   geogramInterface
   libiglInterface
   tetgenInterface
+  animationIO
   CACHE INTERNAL ""
 )
 
@@ -27,7 +28,7 @@ foreach(lib ${PGO_GLOBAL_LIBRARY_TARGETS})
 endforeach()
 
 if(PGO_UI)
-  message(FATAL_ERROR "Not supported yet")
+  add_subdirectory(render)
 endif()
 
 add_subdirectory(c)

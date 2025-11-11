@@ -54,10 +54,10 @@ MeanValueCoordinates::MeanValueCoordinates(int numLocations_, const double *loca
     std::vector<double> d(numCageVertices);
     for (int i = rng.begin(); i != rng.end(); ++i) {
       bool lieInTriangle = false;
-      ES::V3d x(locations_ + 3 * i);
+      ES::V3d x = asVec3d(locations_ + 3 * i);
       bool closeToVertex = false;
       for (int j = 0; j < numCageVertices_; j++) {
-        ES::V3d p(cageVertices_ + 3 * j);
+        ES::V3d p = asVec3d(cageVertices_ + 3 * j);
         d[j] = (p - x).norm();
         if (d[j] < epsilon) {
           weights[i * numCageVertices + j] = 1.0;

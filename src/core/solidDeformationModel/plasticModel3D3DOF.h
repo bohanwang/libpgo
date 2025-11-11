@@ -1,16 +1,18 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #pragma once
 
-#include "plasticModel.h"
+#include "plasticModel3DDeformationGradient.h"
+
+
 namespace pgo
 {
 namespace SolidDeformationModel
 {
-class PlasticModel3D3DOF : public PlasticModel
+class PlasticModel3D3DOF : public PlasticModel3DDeformationGradient
 {
 public:
   PlasticModel3D3DOF(const double R[9]);

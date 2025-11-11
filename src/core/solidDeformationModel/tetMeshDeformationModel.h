@@ -1,6 +1,6 @@
 /*
 author: Bohan Wang
-copyright to USC,MIT
+copyright to USC,MIT,NUS
 */
 
 #pragma once
@@ -11,16 +11,14 @@ namespace pgo
 {
 namespace SolidDeformationModel
 {
-class ElasticModel;
-class PlasticModel;
-
 class TetMeshDeformationModelInternal;
 
 class TetMeshDeformationModel : public DeformationModel
 {
 public:
   TetMeshDeformationModel(const double X0[3], const double X1[3], const double X2[3], const double X3[3],
-    const ElasticModel *elasticModel, const PlasticModel *plasticModel);
+    ElasticModel *elasticModel, PlasticModel *plasticModel);
+    
   virtual ~TetMeshDeformationModel();
 
   using DeformationModel::CacheData;
@@ -46,20 +44,20 @@ public:
 
   virtual void compute_d2E_dadb(const CacheData *cacheData, double *hess) const override;
 
-  virtual void compute_d3E_dx3(const CacheData *cacheData, double *tensor) const override;
-  virtual void compute_d3E_dxdadx(const CacheData *cacheData, double *tensor) const override;
-  virtual void compute_d3E_dxdada(const CacheData *cacheData, double *tensor) const override;
+  // virtual void compute_d3E_dx3(const CacheData *cacheData, double *tensor) const override;
+  // virtual void compute_d3E_dxdadx(const CacheData *cacheData, double *tensor) const override;
+  // virtual void compute_d3E_dxdada(const CacheData *cacheData, double *tensor) const override;
 
   virtual int getNumVertices() const override { return 4; }
   virtual int getNumDOFs() const override { return 12; }
 
-  inline static double d3E_dx3_ijk(const double *tensor, int i, int j, int k) { return DeformationModel::d3E_dx3_ijk(tensor, i, j, k, 12); }
-  inline static double &d3E_dx3_ijk(double *tensor, int i, int j, int k) { return DeformationModel::d3E_dx3_ijk(tensor, i, j, k, 12); }
+  // inline static double d3E_dx3_ijk(const double *tensor, int i, int j, int k) { return DeformationModel::d3E_dx3_ijk(tensor, i, j, k, 12); }
+  // inline static double &d3E_dx3_ijk(double *tensor, int i, int j, int k) { return DeformationModel::d3E_dx3_ijk(tensor, i, j, k, 12); }
 
-  virtual void computeF(const double *x, int materialLocationIDs, double F[9]) const override;
-  virtual void computeP(const CacheData *cacheDataBase, int materialLocationIDs, double P[9]) const override;
-  virtual void computedPdF(const CacheData *cacheDataBase, int materialLocationIDs, double dPdF[81]) const override;
-  virtual void computedFdx(const CacheData *cacheDataBase, int materialLocationIDs, double *dFdx) const override;
+  void computeF(const double *x, int materialLocationIDs, double F[9]) const;
+  void computeP(const CacheData *cacheDataBase, int materialLocationIDs, double P[9]) const;
+  void computedPdF(const CacheData *cacheDataBase, int materialLocationIDs, double dPdF[81]) const;
+  void computedFdx(const CacheData *cacheDataBase, int materialLocationIDs, double *dFdx) const;
   void computeForceFromP(const CacheData *cacheDataBase, const double P[9], double f[12]) const;
 
   static void computeDm(const double X[12], double Dm[9]);

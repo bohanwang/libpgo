@@ -44,6 +44,9 @@ public:
   std::vector<EigenSupport::V3d> getCollidedSamplePoints(const double *u) const;
   std::vector<int> getCollidedSampleAffectedVertices() const;
 
+  const EigenSupport::VXd &getLastCollisionPoints() const { return constraintTargetPositions; }
+  const EigenSupport::VXd &getLastCollisionNormals() const { return constraintNormals; }
+
   double getLastCDTime() const { return lastCDTime; }
 
 protected:
