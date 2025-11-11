@@ -167,8 +167,8 @@ We provide three python scripts to test the installation.
             <th style="width: 50%;text-align:center;">Deformed Dragon</th>           
         </tr>
         <tr>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box/box.gif" alt="box"></td>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box-with-sphere/box-with-sphere.gif" alt="box with sphere"></td>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/dragon/dragon-rest.png" alt="dragon rest shape"></td>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/dragon/dragon-deformed.png" alt="dragon deformed shape"></td>
         </tr>
     </table>
 
