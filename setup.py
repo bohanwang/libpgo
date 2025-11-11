@@ -62,7 +62,7 @@ class CMakeBuild(build_ext):
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
         ]
 
-        cmake_args += [f"-DPGO_ENABLE_PYTHON=1", f"-DPGO_BUILD_SUBPROJECTS=1"]
+        cmake_args += [f"-DPGO_ENABLE_PYTHON=1", f"-DPGO_BUILD_SUBPROJECTS=1", "-DPGO_ENABLE_ALEMBIC=1"]
 
         if "macOS" in platform.platform():
             cmake_args += [
@@ -179,7 +179,7 @@ class CMakeBuild(build_ext):
 # logic and declaration, and simpler if you include description/version in a file.
 setup(
     name="pypgo",
-    version="0.0.2",
+    version="0.0.3",
     author="Bohan Wang",
     author_email="wangbh11@gmail.com",
     description="build pypgo",

@@ -210,7 +210,7 @@ if(PGO_ENABLE_FULL)
   igl_include(copyleft cgal)
 endif()
 
-if(PGO_ENABLE_FULL AND NOT WIN32)
+if(PGO_ENABLE_FULL OR PGO_ENABLE_PYTHON)
   if(PGO_ENABLE_ALEMBIC)
     include(CMakeModules/third-party/alembic.cmake)
   endif()

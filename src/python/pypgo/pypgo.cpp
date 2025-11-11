@@ -413,6 +413,11 @@ void pypgo_init(py::module &m)
       return pgo_run_sim_from_config(filename.c_str());
     });
 
+  m.def(
+    "convert_animation_to_abc", [](const std::string &configFilename, const std::string &outputFolder) -> int {
+      return pgo_convert_animation_to_abc(configFilename.c_str(), outputFolder.c_str());
+    });
+
   m.def("debug", []() {
     std::cout << "Test!!!" << std::endl;
   });

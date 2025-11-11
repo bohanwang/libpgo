@@ -76,6 +76,7 @@ LIBPGO_C_EXPORT void pgo_trimesh_closest_distances(pgoTriMeshGeoStructHandle tri
 LIBPGO_C_EXPORT void pgo_tetmesh_barycentric_weights(pgoTetMeshGeoStructHandle tetmesh, int n, double *queryPos, double *queryW, int *queryEle);
 
 LIBPGO_C_EXPORT int pgo_run_sim_from_config(const char *configFileName);
+LIBPGO_C_EXPORT int pgo_convert_animation_to_abc(const char *configFileName, const char *outputFolder);
 
 LIBPGO_EXTERN_C_END
 

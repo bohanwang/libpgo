@@ -31,6 +31,7 @@
 #include "pointTrianglePairCouplingEnergyWithCollision.h"
 #include "linearPotentialEnergy.h"
 #include "NewtonRaphsonSolver.h"
+#include "animationLoader.h"
 
 #if defined(PGO_HAS_MKL)
 #  include "smoothRSEnergy.h"
@@ -963,4 +964,15 @@ int pgo_run_sim_from_config(const char *configFileName)
   }
 
   return 0;
+}
+
+int pgo_convert_animation_to_abc(const char *configFileName, const char *outputFolder)
+{  
+  pgo::Mesh::initPredicates();
+  pgo::AnimationIO::AnimationLoader loader;
+  if (loader.load(configFileName) != 0) {
+    return 1;
+  }
+
+  return loader.saveABC(outputFolder);
 }
