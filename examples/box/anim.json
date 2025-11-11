@@ -1,0 +1,14 @@
+{
+  "meshes": [
+    {
+      "name": "box",
+      "driving-mesh": "box.obj",
+      "sequence": "ret-box/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        1000
+      ]
+    }
+  ]
+}
