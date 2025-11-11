@@ -9,7 +9,7 @@ The source code extends [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) an
 The wheel package of following platform have been provided for ease of use. They are in `./dist` folder:
 - Ubuntu 24.04: `ubuntu24.04/pypgo-0.0.2-cp311-cp311-linux_x86_64.whl`. Note that you still need to install `gmp` and `mpfr` as suggested in the prerequisites. You may `apt install` them if needed.
 - Ubuntu 22.04: `ubuntu22.04/pypgo-0.0.2-cp311-cp311-linux_x86_64.whl`. Note that you still need to install `gmp` and `mpfr` as suggested in the prerequisites. You may `apt install` them if needed. This version depends on a lower version of the libc, so it should be more compatible.
-- Windows: `win11/pypgo-0.0.2-cp311-cp311-win_amd64.whl`. The package is built under Windows 11, Visual Studio 2022. In theory, it supports other windows platforms.
+- Windows: `win11/pypgo-0.0.3-cp311-cp311-win_amd64.whl`. The package is built under Windows 11, Visual Studio 2022. In theory, it supports other windows platforms.
 - MacOS Arm: `macosx15_arm/pypgo-0.0.2-cp311-cp311-macosx_15_0_arm64.whl`. The package is built under Sequoia 15.3.2 on Apple M3.
 
 Do `pip install ./dist/your-chosen.whl` to install the package. Note that the packages are experimental.
@@ -67,6 +67,7 @@ Install prerequisites:
 
 ```bash
     conda install tbb tbb-devel mkl mkl-devel
+    conda install conda-forge::imath
 ```
 
 Install libpgo:
@@ -136,31 +137,47 @@ We provide three python scripts to test the installation.
         0.          0.         -1.4866991   0.          0.        -15.853046 ]]
     ```
 
-2. `pgo_test_02.py`. It runs a quasi-static simulation for a dragon under attachments and gravity.
-
+2. `pgo_run_sim.py`. It reads input config file and run simulation. You can try `box`, `box-with-sphere`, `dragon`, and `dragon-dyn` to test different simulation results. Take the box example for illustration. You can run the box example using the following commands.
+   
     ```bash
-        cd examples
-        python ../src/python/pypgo/pgo_test_02.py
+        cd examples/box
+        python ../../src/python/pypgo/pgo_run_sim.py box.json
     ```
 
-    The expected result will look like the right image.
+    The expected result will look like the first image.
+    <table style="width: 100%; table-layout: fixed; border-collapse: collapse;">
+        <tr>
+            <th style="width: 50%;text-align:center;">Box</th>
+            <th style="width: 50%;text-align:center;">Box with Sphere</th>
+        </tr>
+        <tr>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box/box.gif" alt="box"></td>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box-with-sphere/box-with-sphere.gif" alt="box with sphere"></td>
+        </tr>
+        <tr>
+            <th style="width: 50%;text-align:center;">Box</th>
+            <th style="width: 50%;text-align:center;">Box with Sphere</th>
+        </tr>
+        <tr>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box/box.gif" alt="box"></td>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box-with-sphere/box-with-sphere.gif" alt="box with sphere"></td>
+        </tr>
+        <tr>
+            <th style="width: 50%;text-align:center;">Rest Dragon</th>
+            <th style="width: 50%;text-align:center;">Deformed Dragon</th>           
+        </tr>
+        <tr>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box/box.gif" alt="box"></td>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box-with-sphere/box-with-sphere.gif" alt="box with sphere"></td>
+        </tr>
+    </table>
 
-    | Rest Shape    | Deformed Shape |
-    | ------------- | -------------- |
-    | ![Rest!](/examples/dragon-img/rest.png) | ![Deformed!](/examples/dragon-img/deformed.png) |
-
-3. `pgo_test_03.py`. It runs a dynamic simulation with contact handling.
+3. `pgo_dump_abc.py`. It creates the abc file that can be used for blender/maya from config file `anim.json`. Essentially, it takes the simulation output `.obj` sequences and output a `.abc` file.
 
     ```bash
-        cd examples
-        python ../src/python/pypgo/pgo_test_03.py
+        cd examples/box
+        python ../../src/python/pypgo/pgo_dump_abc.py anim.json ./
     ```
-
-    In this scene, a box is dropped on the curved ground. The running speed of this demo is slow, so you may run it only if you are interested in the results. The result is a sequence of `.obj` files, each of which is the deformed shape of ecah timestep. These files are saved in `ret-box` folder. The result will look like:
-    |   Box    |      |
-    | -------| ---- |
-    | ![box!](/examples/box-img/output.gif) | ![white!](/examples/box-img/white.png) |
-
 ---
 
 ## Setup without Python (Optional)

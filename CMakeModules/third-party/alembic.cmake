@@ -15,7 +15,7 @@ set(USE_STATIC_BOOST OFF CACHE BOOL "Build with static Boost libs" FORCE)
 set(USE_STATIC_HDF5 OFF CACHE BOOL "Build with static HDF5 libs" FORCE)
 set(USE_TESTS OFF CACHE BOOL "Include Alembic tests" FORCE)
 set(ALEMBIC_BUILD_LIBS ON CACHE BOOL "Build library, if off use external alembic libs" FORCE)
-set(ALEMBIC_SHARED_LIBS ON CACHE BOOL "Build shared libraries" FORCE)
+set(ALEMBIC_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
 set(ALEMBIC_DEBUG_WARNINGS_AS_ERRORS ON CACHE BOOL "In debug mode build with warnings as errors" FORCE)
 
 include(FetchContent)
