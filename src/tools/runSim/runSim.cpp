@@ -196,6 +196,7 @@ int main(int argc, char *argv[])
   // attachments
   std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> pullingEnergies;
   std::vector<ES::VXd> pullingTargets, pullingTargetRests;
+  Mesh::TriMeshGeo tempMesh;
   for (const auto &fv : jconfig.handle()["fixed-vertices"]) {
     std::string filename = fv["filename"].get<std::string>();
     std::array<double, 3> movement = fv["movement"].get<std::array<double, 3>>();
@@ -212,6 +213,7 @@ int main(int argc, char *argv[])
     for (int vi = 0; vi < (int)fixedVertices.size(); vi++) {
       tgtVertexPositions.segment<3>(vi * 3) = restPosition.segment<3>(fixedVertices[vi] * 3) + ES::Mp<ES::V3d>(movement.data());
       tgtVertexRests.segment<3>(vi * 3) = restPosition.segment<3>(fixedVertices[vi] * 3);
+      tempMesh.addPos(tgtVertexPositions.segment<3>(vi * 3));
     }
 
     // initialize fixed constraints
@@ -223,6 +225,7 @@ int main(int argc, char *argv[])
     pullingTargetRests.push_back(tgtVertexRests);
   }
 
+  tempMesh.save("fv.obj");
   std::vector<std::string> kinematicObjectFilenames;
   std::vector<ES::V3d> kinematicObjectMovements;
   if (jconfig.exist("external-objects")) {
@@ -277,13 +280,13 @@ int main(int argc, char *argv[])
         surfaceMesh.positions(), surfaceMesh.triangles(), n3, contactSamples, &bc.getEmbeddingVertexIndices(), &bc.getEmbeddingWeights());
     }
 
-    //std::shared_ptr<Simulation::ImplicitBackwardEulerTimeIntegrator> intg =
-    //  std::make_shared<Simulation::ImplicitBackwardEulerTimeIntegrator>(M, elasticEnergy,
-    //    dampingParams[0], dampingParams[1], timestep, solverMaxIter, solverEps);
+    std::shared_ptr<Simulation::ImplicitBackwardEulerTimeIntegrator> intg =
+      std::make_shared<Simulation::ImplicitBackwardEulerTimeIntegrator>(M, elasticEnergy,
+        dampingParams[0], dampingParams[1], timestep, solverMaxIter, solverEps);
 
-     std::shared_ptr<Simulation::TRBDF2TimeIntegrator> intg =
-       std::make_shared<Simulation::TRBDF2TimeIntegrator>(M, elasticEnergy,
-         dampingParams[0], dampingParams[1], 1, timestep, solverMaxIter, solverEps);
+    // std::shared_ptr<Simulation::TRBDF2TimeIntegrator> intg =
+    //   std::make_shared<Simulation::TRBDF2TimeIntegrator>(M, elasticEnergy,
+    //     dampingParams[0], dampingParams[1], 1, timestep, solverMaxIter, solverEps);
 
     // #if defined(PGO_HAS_KNITRO)
     //     intg->setSolverOption(Simulation::TimeIntegratorSolverOption::SO_KNITRO);
@@ -313,7 +316,38 @@ int main(int argc, char *argv[])
       std::filesystem::create_directories(outputFolder);
     }
 
-    for (int framei = 0; framei < numSimSteps; framei++) {
+    int frameStart = 0;
+    for (int framei = numSimSteps - 1; framei >= 0; framei--) {
+      if (!std::filesystem::exists(fmt::format("{}/deform{:04d}.u", outputFolder, framei))) {
+        std::cerr << "Frame " << framei << " not found." << std::endl;
+        continue;
+      }
+
+      ES::MXd uMat(n3, 3);
+      if (ES::readMatrix(fmt::format("{}/deform{:04d}.u", outputFolder, framei).c_str(), uMat) == 0) {
+        frameStart = framei;
+        u.noalias() = uMat.col(0);
+        uvel.noalias() = uMat.col(1);
+        uacc.noalias() = uMat.col(2);
+        std::cout << "Restarting from frame " << framei << std::endl;
+        break;
+      }
+    }
+
+    ES::mv(W, u, usurf);
+
+    std::cout << frameStart << std::endl;
+    std::cin.get();
+
+    for (size_t eobji = 0; eobji < kinematicObjects.size(); eobji++) {
+      ES::V3d movement = kinematicObjectMovements[eobji] / (numSimSteps - 1) * (frameStart + 1);
+      for (int vi = 0; vi < kinematicObjects[eobji].numVertices(); vi++) {
+        kinematicObjects[eobji].pos(vi) += movement;
+      }
+      externalContactHandler->updateExternalSurface(eobji, kinematicObjectsRef[eobji]);
+    }
+
+    for (int framei = frameStart + 1; framei < numSimSteps; framei++) {
       intg->clearGeneralImplicitForceModel();
 
       double ratio = (double)framei / (numSimSteps - 1);
@@ -454,6 +488,13 @@ int main(int argc, char *argv[])
         }
         externalContactHandler->updateExternalSurface(eobji, kinematicObjectsRef[eobji]);
       }
+
+      ES::MXd uMat(n3, 3);
+      uMat.col(0) = u;
+      uMat.col(1) = uvel;
+      uMat.col(2) = uacc;
+
+      ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder, framei).c_str(), uMat);
     }
   }
   else if (simType == "static") {

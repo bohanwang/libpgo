@@ -325,9 +325,10 @@ double PointTrianglePairCouplingEnergyWithCollision::frictionPotential(const ES:
 
   // compute energy
   double d = r.norm();
+  double k = eps * timestep;
 
-  if (d < timestep * eps)
-    return (d * d * d) * (-1.0 / (3.0 * eps * timestep * eps * timestep)) + (d * d) / (eps * timestep) + eps * timestep / 3;
+  if (d < k)
+    return (d * d * d) * (-1.0 / (3.0 * k * k)) + (d * d) / k + k / 3;
   // when velmag == timestep * eps
   // the function value is timestep * eps
   // the derivative is 1
@@ -353,9 +354,10 @@ void PointTrianglePairCouplingEnergyWithCollision::frictionPotentialGradient(con
   // compute energy
   double d = r.norm();
   double c1 = 0;
+  double k = eps * timestep;
 
-  if (d < timestep * eps)
-    c1 = (-d / (eps * timestep * eps * timestep) + 2 / (eps * timestep));
+  if (d < k)
+    c1 = (-d / (k * k) + 2 / k);
   else
     c1 = 1.0 / d;
 
@@ -389,7 +391,31 @@ void PointTrianglePairCouplingEnergyWithCollision::frictionPotentialHessian(cons
   ES::V3d r = W * xdiff;
 
   double d = r.norm();
+  double k = eps * timestep;
 
+  ES::M3d hess_r;
+  ES::V3d dddr = r / d;
+  ES::M3d d2ddr2 = ES::M3d::Identity() / d - (1.0 / (d * d * d)) * (r * r.transpose());
+  if (dddr.hasNaN()) {
+    dddr.setZero();
+  }
+
+  if (d2ddr2.hasNaN()) {
+    d2ddr2.setZero();
+  }
+
+  if (d < k) {
+    double dEdd = -d * d / (k * k) + 2.0 * d / k;
+    double d2Edd2 = -2.0 * d / (k * k) + 2.0 / k;
+    hess_r = d2Edd2 * (dddr * dddr.transpose()) + dEdd * d2ddr2;
+  }
+  else {
+    double dEdd = 1.0;
+    double d2Edd2 = 0.0;
+    hess_r = d2Edd2 * (dddr * dddr.transpose()) + dEdd * d2ddr2;
+  }
+
+  /*
   ES::M3d hess_r;
   if (d < timestep * eps) {
     if (d < 1e-16) {
@@ -406,6 +432,7 @@ void PointTrianglePairCouplingEnergyWithCollision::frictionPotentialHessian(cons
     // hess = I (rTr)^-0.5 + r * -(rTr)^-1.5 rT
     hess_r = ES::M3d::Identity() / d - ES::tensorProduct(r, r) / (d * d * d);
   }
+  */
 
   if (1) {
     Eigen::SelfAdjointEigenSolver<ES::M3d> eig(hess_r);

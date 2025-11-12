@@ -52,7 +52,7 @@ void ImplicitBackwardEulerTimeIntegrator::doTimestep(int updateq, int verbose, i
   updateb();
 
   for (int i = 0; i < n3; i++) {
-    z[i] = qvel[i] * timestep;
+    z[i] = deltauInitial[i];
   }
 
   if (generalForceModelChanged) {
