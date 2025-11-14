@@ -823,6 +823,7 @@ int pgo_run_sim_from_config(const char *configFileName)
 
     for (int i = 0; i < n; i++) {
       uvel.segment<3>(i * 3) = ES::V3d(initialVel[0], initialVel[1], initialVel[2]);
+      u.segment<3>(i * 3) = ES::V3d(initialDisp[0], initialDisp[1], initialDisp[2]);
     }
 
     if (!std::filesystem::exists(outputFolder)) {

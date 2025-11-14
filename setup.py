@@ -13,11 +13,11 @@ import shutil
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
-if "macOS" not in platform.platform():
-    install_requires=["tbb", "tbb-devel", "mkl", "mkl-devel", "mkl-include"]
-else:
-    install_requires=[]
-
+# if "macOS" not in platform.platform():
+#     install_requires=["tbb", "tbb-devel", "mkl", "mkl-devel", "mkl-include"]
+# else:
+#     install_requires=[]
+install_requires = []
 
 # Convert distutils Windows platform specifiers to CMake -A arguments
 PLAT_TO_CMAKE = {
@@ -62,7 +62,7 @@ class CMakeBuild(build_ext):
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
         ]
 
-        cmake_args += [f"-DPGO_ENABLE_PYTHON=1", f"-DPGO_BUILD_SUBPROJECTS=1", "-DPGO_ENABLE_ALEMBIC=1"]
+        cmake_args += [f"-DPGO_ENABLE_PYTHON=1", f"-DPGO_BUILD_SUBPROJECTS=1", "-DPGO_ENABLE_ALEMBIC=1", "-DPGO_CHECK_CONDA=1"]
 
         if "macOS" in platform.platform():
             cmake_args += [
