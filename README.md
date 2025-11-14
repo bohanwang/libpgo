@@ -144,7 +144,7 @@ We provide three python scripts to test the installation.
         python ../../src/python/pypgo/pgo_run_sim.py box.json
     ```
 
-    The expected result will look like the first image. The time integrator is hard-coded as implicit backward Euler (BE). You are free to change it to implicit Newmark (NW) or TR-BDF2 integrator.
+    The expected result will look like the first image. The time integrator is hard-coded as implicit backward Euler (BE). You are free to change it to implicit Newmark (NW) or TR-BDF2 integrator (not support friction).
     <table style="width: 100%; table-layout: fixed; border-collapse: collapse;">
         <tr>
             <th style="width: 50%;text-align:center; border-top: 1px solid #ddd;">Box (NM)</th>
@@ -156,7 +156,7 @@ We provide three python scripts to test the installation.
         </tr>
         <tr>
             <th style="width: 50%;text-align:center;">Dragon (BE)</th>
-            <th style="width: 50%;text-align:center;">Bunny (TR-BDF2)</th>
+            <th style="width: 50%;text-align:center;">Bunny (BE)</th>
         </tr>
         <tr>
             <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/dragon-dyn/dragon-dyn.gif" alt="dragon"></td>
