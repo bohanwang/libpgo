@@ -7,7 +7,7 @@ The source code extends [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) an
 
 ## Prebuilt (Experimental)
 The wheel package of following platform have been provided for ease of use. They are in `./dist` folder:
-- Ubuntu 24.04: `ubuntu24.04/pypgo-0.0.2-cp311-cp311-linux_x86_64.whl`. Note that you still need to install `gmp` and `mpfr` as suggested in the prerequisites. You may `apt install` them if needed.
+- Ubuntu 24.04: `ubuntu24.04/pypgo-0.0.3-cp312-cp312-linux_x86_64.whl`. Note that you still need to install `gmp` and `mpfr` as suggested in the prerequisites. You may `apt install` them if needed.
 - Ubuntu 22.04: `ubuntu22.04/pypgo-0.0.2-cp311-cp311-linux_x86_64.whl`. Note that you still need to install `gmp` and `mpfr` as suggested in the prerequisites. You may `apt install` them if needed. This version depends on a lower version of the libc, so it should be more compatible.
 - Windows: `win11/pypgo-0.0.3-cp312-cp312-win_amd64.whl`. The package is built under Windows 11, Visual Studio 2022. In theory, it supports other windows platforms.
 - MacOS Arm: `pypgo-0.0.3-cp312-cp312-macosx_26_0_arm64.whl`. The package is built under Tahoe 26.0.1 on Apple M3.
@@ -241,7 +241,6 @@ In instances where specific licensing details are not provided within a source f
 ## TODO
 
 - [x] Functional and compilable on three major platforms.
-- [ ] Support cmake of lower version
 - [ ] Documentation
 - [ ] More python interface
 - [ ] Cleanup source code with non-MIT/non-FreeBSD licence.
