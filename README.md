@@ -218,15 +218,16 @@ To enable all functionalities,
     cd libpgo
     mkdir build
     cd build
-    cmake .. -DPGO_ENABLE_FULL=1
+    cmake .. -DPGO_ENABLE_FULL=1 -DDPGO_ENABLE_ALEMBIC=1 -DPGO_ENABLE_GMSH=1
 ```
+The last two flags work only if you have imath and gmesh libs.
 
 ---
 
 ## Third-party libraries
 
 This library use the following third-party libraries:<br>
-autodiff, boost, ceres, cgal, fmt, knitro, mkl, json, pybind11, spdlog, suitesparse, tbb, tinyobj-loader
+alembic, argparse, autodiff, boost, ceres, cgal, fmt, geogram, gmesh, json, knitro, libigl, mkl, pybind11, spdlog, suitesparse, tbb, tinyobj-loader
 
 ---
 
