@@ -1,0 +1,14 @@
+{
+  "meshes": [
+    {
+      "name": "pulled-cubic-box-self-ipc",
+      "driving-mesh": "cubic-box.obj",
+      "sequence": "ret-pulled-cubic-box-self-ipc/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        1,
+        201
+      ]
+    }
+  ]
+}

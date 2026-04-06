@@ -1,0 +1,153 @@
+{
+  "models": {
+    "ipc": {
+      "log_path": "/Users/jinceyang/Desktop/codebase/libpgo_refactor/libpgo/examples/cubic-box-ipc/cubic-box-ipc.log",
+      "curve_csv": "/Users/jinceyang/Desktop/codebase/libpgo_refactor/libpgo/examples/cubic-box-ipc/cubic-box-ipc-core-release-contact-curve.csv",
+      "num_steps_recorded": 1999,
+      "first_step": 0,
+      "last_step": 1998,
+      "first_nonzero_step": 159,
+      "first_nonzero_time_sec": 0.159,
+      "first_nonzero_active_samples": 1,
+      "last_nonzero_step": 1998,
+      "max_active_samples": 494,
+      "max_active_step": 192,
+      "mean_active_nonzero": 96.75511695906432,
+      "median_active_nonzero": 48.0,
+      "num_nonzero_steps": 1368,
+      "contact_intervals": [
+        {
+          "start_step": 159,
+          "end_step": 281,
+          "duration_steps": 123,
+          "peak_active": 494,
+          "peak_step": 192
+        },
+        {
+          "start_step": 519,
+          "end_step": 659,
+          "duration_steps": 141,
+          "peak_active": 434,
+          "peak_step": 564
+        },
+        {
+          "start_step": 830,
+          "end_step": 1369,
+          "duration_steps": 540,
+          "peak_active": 392,
+          "peak_step": 909
+        },
+        {
+          "start_step": 1435,
+          "end_step": 1998,
+          "duration_steps": 564,
+          "peak_active": 264,
+          "peak_step": 1531
+        }
+      ],
+      "num_solver_failures": 0,
+      "max_solver_time_sec": 0.55592,
+      "mean_solver_time_sec": 0.051074346173086545
+    },
+    "ipc-ls": {
+      "log_path": "/Users/jinceyang/Desktop/codebase/libpgo_refactor/libpgo/examples/cubic-box-ipc/cubic-box-ipc-ls.log",
+      "curve_csv": "/Users/jinceyang/Desktop/codebase/libpgo_refactor/libpgo/examples/cubic-box-ipc/cubic-box-ipc-ls-core-release-contact-curve.csv",
+      "num_steps_recorded": 1999,
+      "first_step": 0,
+      "last_step": 1998,
+      "first_nonzero_step": 159,
+      "first_nonzero_time_sec": 0.159,
+      "first_nonzero_active_samples": 1,
+      "last_nonzero_step": 1998,
+      "max_active_samples": 494,
+      "max_active_step": 192,
+      "mean_active_nonzero": 96.75511695906432,
+      "median_active_nonzero": 48.0,
+      "num_nonzero_steps": 1368,
+      "contact_intervals": [
+        {
+          "start_step": 159,
+          "end_step": 281,
+          "duration_steps": 123,
+          "peak_active": 494,
+          "peak_step": 192
+        },
+        {
+          "start_step": 519,
+          "end_step": 659,
+          "duration_steps": 141,
+          "peak_active": 434,
+          "peak_step": 564
+        },
+        {
+          "start_step": 830,
+          "end_step": 1369,
+          "duration_steps": 540,
+          "peak_active": 392,
+          "peak_step": 909
+        },
+        {
+          "start_step": 1435,
+          "end_step": 1998,
+          "duration_steps": 564,
+          "peak_active": 264,
+          "peak_step": 1531
+        }
+      ],
+      "num_solver_failures": 0,
+      "max_solver_time_sec": 0.578858,
+      "mean_solver_time_sec": 0.06474984292146073
+    },
+    "penalty": {
+      "log_path": "/Users/jinceyang/Desktop/codebase/libpgo_refactor/libpgo/examples/cubic-box-ipc/cubic-box-penalty.log",
+      "curve_csv": "/Users/jinceyang/Desktop/codebase/libpgo_refactor/libpgo/examples/cubic-box-ipc/cubic-box-penalty-core-release-contact-curve.csv",
+      "num_steps_recorded": 1999,
+      "first_step": 0,
+      "last_step": 1998,
+      "first_nonzero_step": 166,
+      "first_nonzero_time_sec": 0.166,
+      "first_nonzero_active_samples": 1,
+      "last_nonzero_step": 1998,
+      "max_active_samples": 817,
+      "max_active_step": 252,
+      "mean_active_nonzero": 359.62344720496895,
+      "median_active_nonzero": 287.0,
+      "num_nonzero_steps": 1288,
+      "contact_intervals": [
+        {
+          "start_step": 166,
+          "end_step": 363,
+          "duration_steps": 198,
+          "peak_active": 817,
+          "peak_step": 252
+        },
+        {
+          "start_step": 662,
+          "end_step": 874,
+          "duration_steps": 213,
+          "peak_active": 802,
+          "peak_step": 768
+        },
+        {
+          "start_step": 1122,
+          "end_step": 1998,
+          "duration_steps": 877,
+          "peak_active": 764,
+          "peak_step": 1253
+        }
+      ],
+      "num_solver_failures": 0,
+      "max_solver_time_sec": 0.463355,
+      "mean_solver_time_sec": 0.04754437668834417
+    }
+  },
+  "ratios": {
+    "ipc_vs_ipc_ls_mean_solver_time_ratio": 0.788794904646146,
+    "ipc_vs_penalty_mean_solver_time_ratio": 1.0742457832159942,
+    "ipc_ls_vs_ipc_mean_solver_time_ratio": 1.2677566679371501,
+    "ipc_ls_vs_penalty_mean_solver_time_ratio": 1.361882254675443,
+    "penalty_vs_ipc_mean_solver_time_ratio": 0.9308856647370558,
+    "penalty_vs_ipc_ls_mean_solver_time_ratio": 0.7342778691527302
+  },
+  "comparison_csv": "/Users/jinceyang/Desktop/codebase/libpgo_refactor/libpgo/examples/cubic-box-ipc/cubic-box-contact-model-comparison-3way.csv"
+}

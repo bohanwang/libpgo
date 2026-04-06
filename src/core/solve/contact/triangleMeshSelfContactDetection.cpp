@@ -34,17 +34,30 @@ TriangleMeshSelfContactDetection::TriangleMeshSelfContactDetection(TriMeshRef me
         triangles.push_back(triangleMeshRef.tri(i)[2]);
     }
 
+    lastTriangleAABBs = triangleMeshRef.getTriangleBoundingBoxes();
+    curTriangleAABBs  = lastTriangleAABBs;
+
     travseralFrontier0.reserve(100000);
     travseralFrontier1.reserve(100000);
 }
 
 void TriangleMeshSelfContactDetection::execute(const double* positions0, const double* positions1) {
+    execute(positions0, positions1, 0.0);
+}
+
+void TriangleMeshSelfContactDetection::execute(const double* positions0, double activationDistance) {
+    execute(positions0, nullptr, activationDistance);
+}
+
+void TriangleMeshSelfContactDetection::execute(const double* positions0, const double* positions1,
+                                               double activationDistance) {
     TriMeshRef meshRef0(triangleMeshRef.numVertices(), positions0, triangleMeshRef.numTriangles(), triangles.data());
     bvTree.updateBoundingVolumes(meshRef0);
 
     for (int i = 0; i < bvTree.getNumNodes(); i++) {
         lastAABBs[i] = bvTree.getNodeBoundingBox(i);
     }
+    lastTriangleAABBs = meshRef0.getTriangleBoundingBoxes();
 
     int isCCD = 0;
     if (positions1) {
@@ -55,7 +68,10 @@ void TriangleMeshSelfContactDetection::execute(const double* positions0, const d
         for (int i = 0; i < bvTree.getNumNodes(); i++) {
             curAABBs[i] = bvTree.getNodeBoundingBox(i);
         }
+        curTriangleAABBs = meshRef1.getTriangleBoundingBoxes();
         isCCD = 1;
+    } else {
+        curTriangleAABBs = lastTriangleAABBs;
     }
 
     travseralFrontier0.clear();
@@ -75,7 +91,7 @@ void TriangleMeshSelfContactDetection::execute(const double* positions0, const d
 
         if (lastFrontier->size() < parallel_threshold) {
             for (const auto& node : *lastFrontier) {
-                addressSingleNode(node, isCCD);
+                addressSingleNode(node, isCCD, activationDistance);
             }  // end for each node in last frontier
         }  // end single thread
         else {
@@ -84,7 +100,7 @@ void TriangleMeshSelfContactDetection::execute(const double* positions0, const d
                 size_t start = ci * parallel_threshold;
                 size_t end   = std::min(start + parallel_threshold, lastFrontier->size());
                 for (size_t ni = start; ni < end; ni++)
-                    addressSingleNode(lastFrontier->at(ni), isCCD);
+                    addressSingleNode(lastFrontier->at(ni), isCCD, activationDistance);
             });
         }
 
@@ -99,17 +115,16 @@ void TriangleMeshSelfContactDetection::execute(const double* positions0, const d
         // std::cin.get();
     }
 
-    potentialCollidingTrianglePairs.clear();
+    candidateTrianglePairs.clear();
     for (auto it = trianglePairBufferTLS.begin(); it != trianglePairBufferTLS.end(); ++it) {
-        potentialCollidingTrianglePairs.insert(potentialCollidingTrianglePairs.end(), it->begin(), it->end());
+        candidateTrianglePairs.insert(candidateTrianglePairs.end(), it->begin(), it->end());
     }
 
     // address triangle pair ccd
-    tbb::parallel_for((size_t)0, potentialCollidingTrianglePairs.size(),
+    tbb::parallel_for((size_t)0, candidateTrianglePairs.size(),
                       [&](size_t ti) {
-                          if (potentialCollidingTrianglePairs[ti].first > potentialCollidingTrianglePairs[ti].second)
-                              std::swap(potentialCollidingTrianglePairs[ti].first,
-                                        potentialCollidingTrianglePairs[ti].second);
+                          if (candidateTrianglePairs[ti].first > candidateTrianglePairs[ti].second)
+                              std::swap(candidateTrianglePairs[ti].first, candidateTrianglePairs[ti].second);
                       },
                       tbb::static_partitioner());
 
@@ -121,55 +136,53 @@ void TriangleMeshSelfContactDetection::execute(const double* positions0, const d
         return std::equal_to<std::pair<int, int>>()(pa, pb);
     };
 
-    if (potentialCollidingTrianglePairs.size() > 1e5)
-        tbb::parallel_sort(potentialCollidingTrianglePairs.begin(), potentialCollidingTrianglePairs.end(), cmpFunc);
+    if (candidateTrianglePairs.size() > 1e5)
+        tbb::parallel_sort(candidateTrianglePairs.begin(), candidateTrianglePairs.end(), cmpFunc);
     else
-        std::sort(potentialCollidingTrianglePairs.begin(), potentialCollidingTrianglePairs.end(), cmpFunc);
+        std::sort(candidateTrianglePairs.begin(), candidateTrianglePairs.end(), cmpFunc);
 
-    auto cdTriIt =
-        std::unique(potentialCollidingTrianglePairs.begin(), potentialCollidingTrianglePairs.end(), equalFunc);
-    potentialCollidingTrianglePairs.erase(cdTriIt, potentialCollidingTrianglePairs.end());
+    auto cdTriIt = std::unique(candidateTrianglePairs.begin(), candidateTrianglePairs.end(), equalFunc);
+    candidateTrianglePairs.erase(cdTriIt, candidateTrianglePairs.end());
 
-    // std::cout << potentialCollidingTrianglePairs.size() << std::endl;
+    // std::cout << candidateTrianglePairs.size() << std::endl;
 }
 
-void TriangleMeshSelfContactDetection::addressSingleNode(const BVTTNode& node, int isCCD) {
+void TriangleMeshSelfContactDetection::addressSingleNode(const BVTTNode& node, int isCCD, double activationDistance) {
     BVTTNodeBuffer& nodeBuffer = bvttNodeBufferTLS.local();
     // if they are the same node
     if (node.nodeA == node.nodeB) {
         // if they are not leaves
         if (bvTree.getNumElements(node.nodeA) == 0) {
-            expandBothNodes(node.nodeA, node.nodeB, isCCD, nodeBuffer);
+            expandBothNodes(node.nodeA, node.nodeB, isCCD, activationDistance, nodeBuffer);
         }
         // else if they are leaves
         else {
-            assignTriangles(node.nodeA, node.nodeB, isCCD, trianglePairBufferTLS.local());
+            assignTriangles(node.nodeA, node.nodeB, isCCD, activationDistance, trianglePairBufferTLS.local());
         }
     }
     // else if they are different nodes, we have three different case
     else {
         // if they are not leaves
         if (bvTree.getNumElements(node.nodeA) == 0 && bvTree.getNumElements(node.nodeB) == 0) {
-            expandBothNodes(node.nodeA, node.nodeB, isCCD, nodeBuffer);
+            expandBothNodes(node.nodeA, node.nodeB, isCCD, activationDistance, nodeBuffer);
         }
         // else if A is not leaf but B is leaf
         else if (bvTree.getNumElements(node.nodeA) == 0 && bvTree.getNumElements(node.nodeB) != 0) {
-            expandFirstNodes(node.nodeA, node.nodeB, isCCD, nodeBuffer);
+            expandFirstNodes(node.nodeA, node.nodeB, isCCD, activationDistance, nodeBuffer);
         }
         // else if B is not leaf but A is leaf
         else if (bvTree.getNumElements(node.nodeA) != 0 && bvTree.getNumElements(node.nodeB) == 0) {
-            expandFirstNodes(node.nodeB, node.nodeA, isCCD, nodeBuffer);
+            expandFirstNodes(node.nodeB, node.nodeA, isCCD, activationDistance, nodeBuffer);
         }
         // else both are leaf node
         else {
-            assignTriangles(node.nodeA, node.nodeB, isCCD, trianglePairBufferTLS.local());
+            assignTriangles(node.nodeA, node.nodeB, isCCD, activationDistance, trianglePairBufferTLS.local());
         }
     }  // end else nodeA==nodeB
 }
 
-void TriangleMeshSelfContactDetection::assignTriangles(int nodeA, int nodeB, int isCCD, TrianglePairBuffer& buf) {
-    (void)isCCD;
-
+void TriangleMeshSelfContactDetection::assignTriangles(int nodeA, int nodeB, int isCCD, double activationDistance,
+                                                       TrianglePairBuffer& buf) {
     for (int i = 0; i < bvTree.getNumElements(nodeA); i++) {
         int triIdA = bvTree.getElementID(nodeA, i);
         // Vec3i neighborA = triMeshNeighbor.getTriangleNeighbors(triIdA);
@@ -178,7 +191,8 @@ void TriangleMeshSelfContactDetection::assignTriangles(int nodeA, int nodeB, int
             int triIdB = bvTree.getElementID(nodeB, j);
             // if B is not a neighbor of A
             if (triIdA != triIdB &&            // not same triangle
-                !shareVertex(triIdA, triIdB))  // not vertex/edge neighbor
+                !shareVertex(triIdA, triIdB) &&
+                trianglesWithinQueryBand(triIdA, triIdB, isCCD, activationDistance))  // not vertex/edge neighbor
             {
                 buf.emplace_back(triIdA, triIdB);
             }
@@ -186,7 +200,8 @@ void TriangleMeshSelfContactDetection::assignTriangles(int nodeA, int nodeB, int
     }
 }
 
-void TriangleMeshSelfContactDetection::expandBothNodes(int nodeA, int nodeB, int isCCD, BVTTNodeBuffer& buf) {
+void TriangleMeshSelfContactDetection::expandBothNodes(int nodeA, int nodeB, int isCCD, double activationDistance,
+                                                       BVTTNodeBuffer& buf) {
     // for each pair of children nodes
     for (int i = 0; i < bvTree.getNumChildNodes(nodeA); i++) {
         int childA = bvTree.getChildNodeID(nodeA, i);
@@ -197,29 +212,15 @@ void TriangleMeshSelfContactDetection::expandBothNodes(int nodeA, int nodeB, int
             // if they are the same node, they are considered intersected
             if (childA == childB)
                 buf.emplace_back(childA, childB);
-            else {
-                bool potentialCollision = false;
-                if (isCCD) {
-                    const BoundingBox& bvA0 = lastAABBs[childA];
-                    const BoundingBox& bvB0 = lastAABBs[childB];
-                    const BoundingBox& bvA1 = curAABBs[childA];
-                    const BoundingBox& bvB1 = curAABBs[childB];
-                    potentialCollision      = CCDIntersect(bvA0, bvA1, bvB0, bvB1);
-                } else {
-                    const BoundingBox& bvA0 = lastAABBs[childA];
-                    const BoundingBox& bvB0 = lastAABBs[childB];
-                    potentialCollision      = DCDIntersect(bvA0, bvB0);
-                }
-
-                if (potentialCollision) {
-                    buf.emplace_back(childA, childB);
-                }
+            else if (nodesWithinQueryBand(childA, childB, isCCD, activationDistance)) {
+                buf.emplace_back(childA, childB);
             }
         }
     }
 }
 
-void TriangleMeshSelfContactDetection::expandFirstNodes(int nodeA, int nodeB, int isCCD, BVTTNodeBuffer& buf) {
+void TriangleMeshSelfContactDetection::expandFirstNodes(int nodeA, int nodeB, int isCCD, double activationDistance,
+                                                        BVTTNodeBuffer& buf) {
     // for each pair of children nodes
     for (int i = 0; i < bvTree.getNumChildNodes(nodeA); i++) {
         int childA = bvTree.getChildNodeID(nodeA, i);
@@ -227,25 +228,51 @@ void TriangleMeshSelfContactDetection::expandFirstNodes(int nodeA, int nodeB, in
         // if they are the same node, they are considered intersected
         if (childA == nodeB)
             buf.emplace_back(childA, nodeB);
-        else {
-            bool potentialCollision = false;
-            if (isCCD) {
-                const BoundingBox& bvA0 = lastAABBs[childA];
-                const BoundingBox& bvB0 = lastAABBs[nodeB];
-                const BoundingBox& bvA1 = curAABBs[childA];
-                const BoundingBox& bvB1 = curAABBs[nodeB];
-                potentialCollision      = CCDIntersect(bvA0, bvA1, bvB0, bvB1);
-            } else {
-                const BoundingBox& bvA0 = lastAABBs[childA];
-                const BoundingBox& bvB0 = lastAABBs[nodeB];
-                potentialCollision      = DCDIntersect(bvA0, bvB0);
-            }
-
-            if (potentialCollision) {
-                buf.emplace_back(childA, nodeB);
-            }
+        else if (nodesWithinQueryBand(childA, nodeB, isCCD, activationDistance)) {
+            buf.emplace_back(childA, nodeB);
         }
     }
+}
+
+bool TriangleMeshSelfContactDetection::nodesWithinQueryBand(int nodeA, int nodeB, int isCCD,
+                                                            double activationDistance) const {
+    const double band = std::max(activationDistance, 0.0);
+
+    if (band <= 0.0) {
+        if (isCCD) {
+            return CCDIntersect(lastAABBs[nodeA], curAABBs[nodeA], lastAABBs[nodeB], curAABBs[nodeB]);
+        }
+
+        return DCDIntersect(lastAABBs[nodeA], lastAABBs[nodeB]);
+    }
+
+    if (isCCD) {
+        return AABBWithinBand(SweptAABB(lastAABBs[nodeA], curAABBs[nodeA]),
+                              SweptAABB(lastAABBs[nodeB], curAABBs[nodeB]), band);
+    }
+
+    return AABBWithinBand(lastAABBs[nodeA], lastAABBs[nodeB], band);
+}
+
+bool TriangleMeshSelfContactDetection::trianglesWithinQueryBand(int triA, int triB, int isCCD,
+                                                                double activationDistance) const {
+    const double band = std::max(activationDistance, 0.0);
+
+    if (band <= 0.0) {
+        if (isCCD) {
+            return CCDIntersect(lastTriangleAABBs[triA], curTriangleAABBs[triA], lastTriangleAABBs[triB],
+                                curTriangleAABBs[triB]);
+        }
+
+        return DCDIntersect(lastTriangleAABBs[triA], lastTriangleAABBs[triB]);
+    }
+
+    if (isCCD) {
+        return AABBWithinBand(SweptAABB(lastTriangleAABBs[triA], curTriangleAABBs[triA]),
+                              SweptAABB(lastTriangleAABBs[triB], curTriangleAABBs[triB]), band);
+    }
+
+    return AABBWithinBand(lastTriangleAABBs[triA], lastTriangleAABBs[triB], band);
 }
 
 bool TriangleMeshSelfContactDetection::shareVertex(int triA, int triB) {
@@ -343,4 +370,29 @@ bool TriangleMeshSelfContactDetection::CCDIntersect(const BoundingBox& AABB1Star
 
 bool TriangleMeshSelfContactDetection::DCDIntersect(const BoundingBox& AABB1, const BoundingBox& AABB2) {
     return AABB1.intersect(AABB2);
+}
+
+bool TriangleMeshSelfContactDetection::AABBWithinBand(const BoundingBox& AABB1, const BoundingBox& AABB2, double band) {
+    const double clampedBand = std::max(band, 0.0);
+
+    for (int dim = 0; dim < 3; ++dim) {
+        double separation = 0.0;
+        if (AABB1.bmax()[dim] < AABB2.bmin()[dim]) {
+            separation = AABB2.bmin()[dim] - AABB1.bmax()[dim];
+        } else if (AABB2.bmax()[dim] < AABB1.bmin()[dim]) {
+            separation = AABB1.bmin()[dim] - AABB2.bmax()[dim];
+        }
+
+        if (separation > clampedBand) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+BoundingBox TriangleMeshSelfContactDetection::SweptAABB(const BoundingBox& start, const BoundingBox& end) {
+    BoundingBox swept = start;
+    swept.expand(end);
+    return swept;
 }

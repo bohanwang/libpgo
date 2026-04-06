@@ -1,0 +1,66 @@
+{
+  "cubic-mesh": "soft-cubic-box.veg",
+  "surface-mesh": "cubic-box.obj",
+  "fixed-vertices": [
+    {
+      "filename": "bottom-face.txt",
+      "movement": [
+        0,
+        0,
+        0
+      ],
+      "coeff": 1000000.0
+    },
+    {
+      "filename": "top-face.txt",
+      "movement": [
+        0,
+        -0.9,
+        0
+      ],
+      "coeff": 300000.0
+    }
+  ],
+  "external-objects": [],
+  "g": [
+    0,
+    0,
+    0
+  ],
+  "init-vel": [
+    0,
+    0,
+    0
+  ],
+  "init-disp": [
+    0,
+    0,
+    0
+  ],
+  "scale": 1.0,
+  "timestep": 0.01,
+  "num-timestep": 401,
+  "damping-params": [
+    0,
+    0
+  ],
+  "sim-type": "dynamic",
+  "contact-model": "ipc-barrier",
+  "contact-stiffness": 0,
+  "external-ipc-dhat": 0.25,
+  "self-ipc-dhat": 0.25,
+  "external-ipc-kappa": 40.0,
+  "self-ipc-kappa": 40.0,
+  "ipc-alpha-safety": 0.9,
+  "ipc-enable-feasible-line-search": true,
+  "contact-sample": 1,
+  "enable-self-contact": true,
+  "contact-friction-coeff": 0.0,
+  "contact-vel-eps": 1e-8,
+  "solver-eps": 1e-8,
+  "solver-max-iter": 20,
+  "elastic-material": "stable-neo",
+  "dump-interval": 2,
+  "output": "ret-pulled-cubic-box-self-ipc",
+  "note": "Physically consistent self IPC example tuned for a steadier visual result. The top face is pulled close to the bottom face without driving past it, the loading is spread over more solver steps, and a slightly wider/stronger IPC barrier engages earlier while still dumping 20 frames by default."
+}

@@ -5,6 +5,7 @@ copyright to USC
 
 #include "triangleMeshSelfContactHandler.h"
 #include "triangleMeshSelfContactDetection.h"
+#include "pointTrianglePairBarrierEnergy.h"
 #include "pointTrianglePairCouplingEnergyWithCollision.h"
 
 #include "contactEnergyUtilities.h"
@@ -20,8 +21,9 @@ copyright to USC
 #include <tbb/spin_mutex.h>
 
 #include <atomic>
-#include <tuple>
 #include <queue>
+#include <limits>
+#include <stdexcept>
 #include <unordered_set>
 #include <chrono>
 
@@ -37,16 +39,47 @@ inline double dura(const hclock::time_point& t1, const hclock::time_point& t2) {
     return std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1e6;
 }
 
+namespace {
+
+ES::V3d computeClosestPointFromBarycentric(const ES::V3d& va, const ES::V3d& vb, const ES::V3d& vc,
+                                           const ES::V3d& barycentricWeight) {
+    return va * barycentricWeight[0] + vb * barycentricWeight[1] + vc * barycentricWeight[2];
+}
+
+ES::V3d computeTriangleUnitNormal(const ES::V3d& va, const ES::V3d& vb, const ES::V3d& vc) {
+    ES::V3d n = (vb - va).cross(vc - va);
+    const double nNorm = n.norm();
+    if (nNorm > 1e-12) {
+        n /= nNorm;
+    } else {
+        n.setZero();
+    }
+
+    return n;
+}
+
+}  // namespace
+
 namespace pgo::Contact {
 class TriangleMeshSelfContactHandlerRuntimeData {
 public:
     using CCDD = CCDKernel::TriangleCCD::CCDData;
     tbb::enumerable_thread_specific<std::vector<CCDD, tbb::cache_aligned_allocator<CCDD>>> colliingTrianglePairsTLS;
 
-    std::vector<std::tuple<int, double>> sampleTriDepthAll;
-    std::vector<int>                     sampleVisited;
+    struct SampleSeedRecord {
+        int    seedTriangleID = -1;
+        double bestDist2      = std::numeric_limits<double>::infinity();
+    };
 
-    std::vector<std::tuple<int, int, double>> sampleTriDepthActive;
+    struct ActiveSeedRecord {
+        int    sampleID       = -1;
+        int    seedTriangleID = -1;
+        double bestDist2      = std::numeric_limits<double>::infinity();
+    };
+
+    std::vector<SampleSeedRecord> sampleSeedRecords;
+    std::vector<int>              sampleVisited;
+    std::vector<ActiveSeedRecord> activeSeedRecords;
 
     std::vector<std::array<int, 2>> contactedPointTrianglePairs;
     std::vector<int>                contactedPointTrianglePairsMask;
@@ -305,7 +338,20 @@ TriangleMeshSelfContactHandler::TriangleMeshSelfContactHandler(const std::vector
             }
         });
 
-        interpolationMatrix.resize(sampleInfoAndIDs.size() * 3, vertices.size());
+        interpolationMatrix.resize(sampleInfoAndIDs.size() * 3, nDOFs);
+        interpolationMatrix.setFromTriplets(entries.begin(), entries.end());
+    }
+    else {
+        std::vector<ES::TripletD> entries;
+        entries.reserve(sampleInfoAndIDs.size() * 3);
+
+        for (int si = 0; si < static_cast<int>(sampleInfoAndIDs.size()); ++si) {
+            entries.emplace_back(si * 3, si * 3, 1.0);
+            entries.emplace_back(si * 3 + 1, si * 3 + 1, 1.0);
+            entries.emplace_back(si * 3 + 2, si * 3 + 2, 1.0);
+        }
+
+        interpolationMatrix.resize(sampleInfoAndIDs.size() * 3, nDOFs);
         interpolationMatrix.setFromTriplets(entries.begin(), entries.end());
     }
 
@@ -349,285 +395,282 @@ TriangleMeshSelfContactHandler::TriangleMeshSelfContactHandler(const std::vector
     }
 }
 
-void TriangleMeshSelfContactHandler::handleContactDCD(double distThreshold, int maxSearchingNumTriangles) {
-    if (collidingTrianglePairs.size()) {
-        auto& sampleTriDepth = rd->sampleTriDepthAll;
-        auto& sampleVisited  = rd->sampleVisited;
+void TriangleMeshSelfContactHandler::clearActivePairData() {
+    contactedTrianglePairs.clear();
+    contactedTriangleIDs.clear();
+    activeClosestPoints.resize(0);
+    activeNormals.resize(0);
+    activeDistances.resize(0);
+    activeBarycentricWeights.resize(0);
+    contactEnergyObjIDs.clear();
+}
 
-        if (sampleTriDepth.size() == 0) {
-            sampleTriDepth.resize(sampleInfoAndIDs.size());
+void TriangleMeshSelfContactHandler::finalizeActivePairsFromSeeds(int maxSearchingNumTriangles) {
+    if (rd->activeSeedRecords.empty()) {
+        clearActivePairData();
+        SPDLOG_LOGGER_INFO(Logging::lgr(), "# contacted point-triangle pairs (final): 0");
+        return;
+    }
+
+    rd->contactedPointTrianglePairs.resize(rd->activeSeedRecords.size());
+    rd->contactedPointTrianglePairsMask.assign(rd->activeSeedRecords.size(), 0);
+
+    std::vector<ES::V3d> closestPoints(rd->activeSeedRecords.size(), ES::V3d::Zero());
+    std::vector<ES::V3d> closestNormals(rd->activeSeedRecords.size(), ES::V3d::Zero());
+    std::vector<ES::V3d> closestBarycentricWeights(rd->activeSeedRecords.size(), ES::V3d::Zero());
+    std::vector<double>  closestDistances(rd->activeSeedRecords.size(), 0.0);
+
+    std::atomic<int> counter(0);
+    tbb::parallel_for(0, (int)rd->activeSeedRecords.size(), [&](int activeIdx) {
+        const auto& seedRecord = rd->activeSeedRecords[activeIdx];
+        const int   sampleIdx  = seedRecord.sampleID;
+        const int   triIdx     = seedRecord.seedTriangleID;
+
+        if (sampleIdx < 0 || triIdx < 0) {
+            return;
         }
 
-        if (sampleVisited.size() == 0) {
-            sampleVisited.assign(sampleInfoAndIDs.size(), 0);
+        auto& localSearchBuf    = rd->localSearchBuf.local();
+        localSearchBuf.sampleID = sampleIdx;
+
+        std::priority_queue<std::pair<double, int>>& Q            = localSearchBuf.Q;
+        std::unordered_set<int>&                     searchFilter = localSearchBuf.searchFilter;
+
+        while (!Q.empty()) {
+            Q.pop();
         }
+        searchFilter.clear();
 
-        memset(sampleVisited.data(), 0, sampleVisited.size() * sizeof(int));
+        const ES::V3d p = sampleCurP0.segment<3>(sampleIdx * 3);
 
-        // for (size_t ci = 0; ci < collidingTrianglePairs.size(); ci++) {
-        tbb::parallel_for(0, (int)collidingTrianglePairs.size(), [&](int ci) {
-            int triA = collidingTrianglePairs[ci].triA;
-            int triB = collidingTrianglePairs[ci].triB;
+        auto evaluateTriangle = [&](int candidateTriID, TriMeshBVTree::ClosestTriangleQueryResult& bestRet,
+                                    bool initializeBest) -> double {
+            const ES::V3d va = curP0.segment<3>(triangles[candidateTriID][0] * 3);
+            const ES::V3d vb = curP0.segment<3>(triangles[candidateTriID][1] * 3);
+            const ES::V3d vc = curP0.segment<3>(triangles[candidateTriID][2] * 3);
 
-            ES::V3d vtxA[3] = {curP0.segment<3>(triangles[triA][0] * 3), curP0.segment<3>(triangles[triA][1] * 3),
-                               curP0.segment<3>(triangles[triA][2] * 3)};
-
-            ES::V3d vtxB[3] = {curP0.segment<3>(triangles[triB][0] * 3), curP0.segment<3>(triangles[triB][1] * 3),
-                               curP0.segment<3>(triangles[triB][2] * 3)};
-
-            ES::V3d nA = (vtxA[1] - vtxA[0]).cross(vtxA[2] - vtxA[0]);
-            nA.normalize();
-
-            ES::V3d nB = (vtxB[1] - vtxB[0]).cross(vtxB[2] - vtxB[0]);
-            nB.normalize();
-
-            // for each sample on the triangle B
-            for (int si = 0; si < triangleSamples[triB].size(); si++) {
-                const SampleInfo& sinfo = triangleSamples[triB][si];
-                auto              it    = sampleIDQueryTable.find(sinfo);
-                PGO_ALOG(it != sampleIDQueryTable.end());
-                int sampleID = it->second;
-
-                // compute sample position
-                // ES::V3d sampleP = vtxB[0] * sinfo.w[0] + vtxB[1] * sinfo.w[1] + vtxB[2] * sinfo.w[2];
-                ES::V3d sampleP = sampleCurP0.segment<3>(sampleID * 3);
-
-                // if a point is in contact
-                double depth = (sampleP - vtxA[0]).dot(nA);
-
-                // if the point is under the surface or
-                //    above surface but with dist < distThreshold
-                if (depth < distThreshold) {
-                    // we find the distance between the point and the triangle
-                    const ES::V3d& p  = sampleP;
-                    const ES::V3d& va = vtxA[0];
-                    const ES::V3d& vb = vtxA[1];
-                    const ES::V3d& vc = vtxA[2];
-
-                    double dist2 = getSquaredDistanceToTriangle(p, va, vb, vc);
-
-                    // if we encounter this point before
-                    if (sampleVisited[sampleID]) {
-                        // if the old one has bigger dist
-                        if (std::get<1>(sampleTriDepth[sampleID]) > dist2) {
-                            std::get<0>(sampleTriDepth[sampleID]) = triA;
-                            std::get<1>(sampleTriDepth[sampleID]) = dist2;
-                        }
-
-                        //// if the old one has bigger depth
-                        // if (itt->second.second > fabs(depth)) {
-                        //   itt->second.first = triA;
-                        //   itt->second.second = fabs(depth);
-                        // }
-                    } else {
-                        sampleTriDepth[sampleID] = std::make_tuple(triA, dist2);
-                        sampleVisited[sampleID]  = 1;
-                    }
-                }  // end if depth < 0
-            }
-
-            // for each sample on the triangle A
-            for (int si = 0; si < triangleSamples[triA].size(); si++) {
-                const SampleInfo& sinfo = triangleSamples[triA][si];
-                auto              it    = sampleIDQueryTable.find(sinfo);
-                PGO_ALOG(it != sampleIDQueryTable.end());
-                int sampleID = it->second;
-
-                // compute sample position
-                // ES::V3d sampleP = vtxA[0] * sinfo.w[0] + vtxA[1] * sinfo.w[1] + vtxA[2] * sinfo.w[2];
-                ES::V3d sampleP = sampleCurP0.segment<3>(sampleID * 3);
-
-                // if a point is in contact
-                double depth = (sampleP - vtxB[0]).dot(nB);
-                if (depth < distThreshold) {
-                    // we find the distance between the point and the triangle
-                    const ES::V3d& p  = sampleP;
-                    const ES::V3d& va = vtxB[0];
-                    const ES::V3d& vb = vtxB[1];
-                    const ES::V3d& vc = vtxB[2];
-
-                    double dist2 = getSquaredDistanceToTriangle(p, va, vb, vc);
-
-                    // if we encounter this point before
-                    if (sampleVisited[sampleID]) {
-                        // if the old one has bigger depth
-                        if (std::get<1>(sampleTriDepth[sampleID]) > dist2) {
-                            std::get<0>(sampleTriDepth[sampleID]) = triB;
-                            std::get<1>(sampleTriDepth[sampleID]) = dist2;
-                        }
-
-                        //// if the old one has bigger depth
-                        // if (itt->second.second > fabs(depth)) {
-                        //   itt->second.first = triB;
-                        //   itt->second.second = fabs(depth);
-                        // }
-                    } else {
-                        sampleTriDepth[sampleID] = std::make_tuple(triB, dist2);
-                        sampleVisited[sampleID]  = 1;
-                    }
-                }  // end if depth < 0
-            }
-        });  // end for
-
-        // gather all samples
-        rd->sampleTriDepthActive.clear();
-        for (size_t i = 0; i < sampleVisited.size(); i++) {
-            if (sampleVisited[i]) {
-                rd->sampleTriDepthActive.emplace_back((int)i, std::get<0>(sampleTriDepth[i]),
-                                                      std::get<1>(sampleTriDepth[i]));
-            }
-        }
-
-        rd->contactedPointTrianglePairs.resize(rd->sampleTriDepthActive.size());
-        rd->contactedPointTrianglePairsMask.assign(rd->sampleTriDepthActive.size(), 0);
-
-        std::atomic<int> counter(0);
-        tbb::parallel_for(0, (int)rd->sampleTriDepthActive.size(), [&](int si) {
-            // for (int si = 0; si < (int)rd->sampleTriDepthActive.size(); si++) {
-            int sampleIdx = std::get<0>(rd->sampleTriDepthActive[si]);
-            int triIdx    = std::get<1>(rd->sampleTriDepthActive[si]);
-
-            auto& localSearchBuf    = rd->localSearchBuf.local();
-            localSearchBuf.sampleID = sampleIdx;
-
-            std::priority_queue<std::pair<double, int>>& Q            = localSearchBuf.Q;
-            std::unordered_set<int>&                     searchFilter = localSearchBuf.searchFilter;
-
-            while (!Q.empty())
-                Q.pop();
-
-            searchFilter.clear();
-
-            // get sample position and triangle positions
-            ES::V3d p  = sampleCurP0.segment<3>(sampleIdx * 3);
-            ES::V3d va = curP0.segment<3>(triangles[triIdx][0] * 3);
-            ES::V3d vb = curP0.segment<3>(triangles[triIdx][1] * 3);
-            ES::V3d vc = curP0.segment<3>(triangles[triIdx][2] * 3);
-
-            int     feature;
-            ES::V3d w;
-            ES::V3d closestPt;
-
-            // double dist2 = getSquaredDistanceToTriangle(p, va, vb, vc, feature, closestPt, w);
             TriangleWithCollisionInfo triInfo(va, vb, vc);
 
-            // evaluate the distance
-            double dist2 = triInfo.distanceToPoint2(p, &feature, w.data(), w.data() + 1, w.data() + 2);
+            int     feature = -1;
+            ES::V3d barycentricWeight;
+            const double dist2 =
+                triInfo.distanceToPoint2(p, &feature, barycentricWeight.data(), barycentricWeight.data() + 1,
+                                         barycentricWeight.data() + 2);
+            const ES::V3d closestPt = computeClosestPointFromBarycentric(va, vb, vc, barycentricWeight);
 
-            // calculate the min distance in the deformed shape
-            TriMeshBVTree::ClosestTriangleQueryResult closestSite;
-            closestSite.closestPosition = closestPt;
-            closestSite.dist2           = dist2;
-            closestSite.feature         = feature;
-            closestSite.triBaryWeight   = w;
-            closestSite.triID           = triIdx;
+            if (initializeBest || dist2 < bestRet.dist2) {
+                bestRet.closestPosition = closestPt;
+                bestRet.dist2           = dist2;
+                bestRet.feature         = feature;
+                bestRet.triBaryWeight   = barycentricWeight;
+                bestRet.triID           = candidateTriID;
+            }
 
-            Q.emplace(-closestSite.dist2, closestSite.triID);
-            searchFilter.emplace(closestSite.triID);
+            return dist2;
+        };
 
-            while ((int)searchFilter.size() < maxSearchingNumTriangles && !Q.empty()) {
-                double negDistSq   = Q.top().first;
-                int    curTriangle = Q.top().second;
+        TriMeshBVTree::ClosestTriangleQueryResult closestSite;
+        closestSite.dist2 = std::numeric_limits<double>::infinity();
+        const double seedDist2 = evaluateTriangle(triIdx, closestSite, true);
 
-                Q.pop();
+        Q.emplace(-seedDist2, triIdx);
+        searchFilter.emplace(triIdx);
 
-                // std::cout << "(" << -negDistSq << ',' << curTriangle << ") ";
+        while ((int)searchFilter.size() < maxSearchingNumTriangles && !Q.empty()) {
+            const double negDistSq   = Q.top().first;
+            const int    curTriangle = Q.top().second;
+            Q.pop();
 
-                if (-negDistSq > closestSite.dist2 * 5.0)
-                    break;
+            if (-negDistSq > closestSite.dist2 * 5.0) {
+                break;
+            }
 
-                Vec3i neighbor = selfContactDetection->getTriMeshNeighbor().getTriangleNeighbors(curTriangle);
-                for (int ni = 0; ni < 3; ni++) {
-                    int triId = neighbor[ni];
-
-                    // if no neighbors
-                    if (triId < 0)
-                        continue;
-
-                    // if this triangle is searched
-                    if (searchFilter.find(triId) != searchFilter.end())
-                        continue;
-
-                    // compute distance to the triangle
-                    va = asVec3d(curP0.data() + triangles[triId][0] * 3);
-                    vb = asVec3d(curP0.data() + triangles[triId][1] * 3);
-                    vc = asVec3d(curP0.data() + triangles[triId][2] * 3);
-
-                    TriangleWithCollisionInfo triInfo(va, vb, vc);
-
-                    // evaluate the distance
-                    double dist2 = triInfo.distanceToPoint2(p, &feature, w.data(), w.data() + 1, w.data() + 2);
-                    // dist2 = getSquaredDistanceToTriangle(p, va, vb, vc, feature, closestPt, w);
-
-                    if (dist2 < closestSite.dist2) {
-                        closestSite.closestPosition = closestPt;
-                        closestSite.dist2           = dist2;
-                        closestSite.feature         = feature;
-                        closestSite.triBaryWeight   = w;
-                        closestSite.triID           = triId;
-                    }
-
-                    searchFilter.emplace(triId);
-                    Q.emplace(-dist2, triId);
+            const Vec3i neighbor = selfContactDetection->getTriMeshNeighbor().getTriangleNeighbors(curTriangle);
+            for (int ni = 0; ni < 3; ni++) {
+                const int neighborTriID = neighbor[ni];
+                if (neighborTriID < 0) {
+                    continue;
                 }
-            }
-            // std::cout << std::endl;
-
-            // if the closest triangle is not itself
-            Vec3i selectedTriangleVertices = surfaceMeshRef.tri(closestSite.triID);
-            bool  goodSample               = true;
-
-            for (size_t si = 0; si < triangleSamples[closestSite.triID].size(); si++) {
-                auto it = sampleIDQueryTable.find(triangleSamples[closestSite.triID][si]);
-                PGO_ALOG(it != sampleIDQueryTable.end());
-
-                if (sampleIdx == it->second) {
-                    goodSample = false;
-                    break;
+                if (searchFilter.find(neighborTriID) != searchFilter.end()) {
+                    continue;
                 }
+
+                const double candidateDist2 = evaluateTriangle(neighborTriID, closestSite, false);
+                searchFilter.emplace(neighborTriID);
+                Q.emplace(-candidateDist2, neighborTriID);
             }
-
-            for (int tri : sampleTriangleIDs[sampleIdx])
-                if (excludedTriangles.size() &&
-                    std::binary_search(excludedTriangles.begin(), excludedTriangles.end(), tri) == true)
-                    goodSample = false;
-
-            if (excludedTriangles.size() &&
-                std::binary_search(excludedTriangles.begin(), excludedTriangles.end(), closestSite.triID) == true)
-                goodSample = false;
-
-            if (goodSample) {
-                rd->contactedPointTrianglePairs[si][0]  = sampleIdx;
-                rd->contactedPointTrianglePairs[si][1]  = closestSite.triID;
-                rd->contactedPointTrianglePairsMask[si] = 1;
-
-                counter.fetch_add(1);
-            }
-        });
-
-        contactedTrianglePairs.clear();
-        contactedTrianglePairs.reserve(counter);
-
-        contactedTriangleIDs.clear();
-        contactedTriangleIDs.reserve(counter);
-
-        for (size_t si = 0; si < rd->contactedPointTrianglePairs.size(); si++) {
-            if (rd->contactedPointTrianglePairsMask[si] == 0)
-                continue;
-
-            std::array<int, 4> sids{rd->contactedPointTrianglePairs[si][0],
-                                    vertexID2SampleIDs[triangles[rd->contactedPointTrianglePairs[si][1]][0]],
-                                    vertexID2SampleIDs[triangles[rd->contactedPointTrianglePairs[si][1]][1]],
-                                    vertexID2SampleIDs[triangles[rd->contactedPointTrianglePairs[si][1]][2]]};
-            contactedTrianglePairs.emplace_back(sids);
-            contactedTriangleIDs.emplace_back(rd->contactedPointTrianglePairs[si][1]);
         }
 
-        SPDLOG_LOGGER_INFO(Logging::lgr(), "# contacted point-triangle pairs (final): {}",
-                           contactedTrianglePairs.size());
-    } else {
-        contactedTrianglePairs.clear();
+        if (closestSite.triID < 0) {
+            return;
+        }
+
+        bool goodSample = true;
+        for (const auto& triangleSample : triangleSamples[closestSite.triID]) {
+            auto it = sampleIDQueryTable.find(triangleSample);
+            PGO_ALOG(it != sampleIDQueryTable.end());
+            if (sampleIdx == it->second) {
+                goodSample = false;
+                break;
+            }
+        }
+
+        if (excludedTriangles.size()) {
+            for (int tri : sampleTriangleIDs[sampleIdx]) {
+                if (std::binary_search(excludedTriangles.begin(), excludedTriangles.end(), tri)) {
+                    goodSample = false;
+                    break;
+                }
+            }
+            if (goodSample &&
+                std::binary_search(excludedTriangles.begin(), excludedTriangles.end(), closestSite.triID)) {
+                goodSample = false;
+            }
+        }
+
+        if (!goodSample) {
+            return;
+        }
+
+        rd->contactedPointTrianglePairs[activeIdx][0]  = sampleIdx;
+        rd->contactedPointTrianglePairs[activeIdx][1]  = closestSite.triID;
+        rd->contactedPointTrianglePairsMask[activeIdx] = 1;
+
+        closestPoints[activeIdx] = closestSite.closestPosition;
+        closestBarycentricWeights[activeIdx] = closestSite.triBaryWeight;
+        closestDistances[activeIdx] = std::sqrt(std::max(closestSite.dist2, 0.0));
+
+        ES::V3d normal = p - closestSite.closestPosition;
+        const double normalNorm = normal.norm();
+        if (normalNorm > 1e-12) {
+            normal /= normalNorm;
+        } else {
+            const ES::V3d va = curP0.segment<3>(triangles[closestSite.triID][0] * 3);
+            const ES::V3d vb = curP0.segment<3>(triangles[closestSite.triID][1] * 3);
+            const ES::V3d vc = curP0.segment<3>(triangles[closestSite.triID][2] * 3);
+            normal           = computeTriangleUnitNormal(va, vb, vc);
+        }
+        closestNormals[activeIdx] = normal;
+
+        counter.fetch_add(1);
+    });
+
+    clearActivePairData();
+    const int finalPairCount = counter.load();
+    if (finalPairCount == 0) {
+        SPDLOG_LOGGER_INFO(Logging::lgr(), "# contacted point-triangle pairs (final): 0");
+        return;
     }
+
+    contactedTrianglePairs.reserve(finalPairCount);
+    contactedTriangleIDs.reserve(finalPairCount);
+    activeClosestPoints.resize(finalPairCount * 3);
+    activeNormals.resize(finalPairCount * 3);
+    activeDistances.resize(finalPairCount);
+    activeBarycentricWeights.resize(finalPairCount * 3);
+
+    int outIdx = 0;
+    for (size_t activeIdx = 0; activeIdx < rd->contactedPointTrianglePairs.size(); activeIdx++) {
+        if (rd->contactedPointTrianglePairsMask[activeIdx] == 0) {
+            continue;
+        }
+
+        const int triID = rd->contactedPointTrianglePairs[activeIdx][1];
+        std::array<int, 4> sids{rd->contactedPointTrianglePairs[activeIdx][0],
+                                vertexID2SampleIDsLinear[triangles[triID][0]],
+                                vertexID2SampleIDsLinear[triangles[triID][1]],
+                                vertexID2SampleIDsLinear[triangles[triID][2]]};
+        contactedTrianglePairs.emplace_back(sids);
+        contactedTriangleIDs.emplace_back(triID);
+        activeClosestPoints.segment<3>(outIdx * 3) = closestPoints[activeIdx];
+        activeNormals.segment<3>(outIdx * 3)       = closestNormals[activeIdx];
+        activeDistances[outIdx]                    = closestDistances[activeIdx];
+        activeBarycentricWeights.segment<3>(outIdx * 3) = closestBarycentricWeights[activeIdx];
+        outIdx++;
+    }
+
+    SPDLOG_LOGGER_INFO(Logging::lgr(), "# contacted point-triangle pairs (final): {}", contactedTrianglePairs.size());
+}
+
+void TriangleMeshSelfContactHandler::handleContactDCD(double distThreshold, int maxSearchingNumTriangles) {
+    if (collidingTrianglePairs.empty()) {
+        clearActivePairData();
+        return;
+    }
+
+    auto& sampleSeedRecords = rd->sampleSeedRecords;
+    auto& sampleVisited     = rd->sampleVisited;
+
+    if (sampleSeedRecords.size() != sampleInfoAndIDs.size()) {
+        sampleSeedRecords.resize(sampleInfoAndIDs.size());
+    }
+    std::fill(sampleSeedRecords.begin(), sampleSeedRecords.end(),
+              TriangleMeshSelfContactHandlerRuntimeData::SampleSeedRecord{});
+
+    if (sampleVisited.size() != sampleInfoAndIDs.size()) {
+        sampleVisited.assign(sampleInfoAndIDs.size(), 0);
+    } else {
+        std::fill(sampleVisited.begin(), sampleVisited.end(), 0);
+    }
+
+    std::vector<tbb::spin_mutex> sampleLocks(sampleInfoAndIDs.size());
+
+    auto tryUpdateSeed = [&](int sampleID, int seedTriangleID, const ES::V3d& sampleP, const ES::V3d& va,
+                             const ES::V3d& vb, const ES::V3d& vc, const ES::V3d& normal) {
+        const double depth = (sampleP - va).dot(normal);
+        if (depth >= distThreshold) {
+            return;
+        }
+
+        const double dist2 = getSquaredDistanceToTriangle(sampleP, va, vb, vc);
+        tbb::spin_mutex::scoped_lock lock(sampleLocks[sampleID]);
+        if (sampleVisited[sampleID] == 0 || dist2 < sampleSeedRecords[sampleID].bestDist2) {
+            sampleVisited[sampleID]                = 1;
+            sampleSeedRecords[sampleID].seedTriangleID = seedTriangleID;
+            sampleSeedRecords[sampleID].bestDist2      = dist2;
+        }
+    };
+
+    tbb::parallel_for(0, (int)collidingTrianglePairs.size(), [&](int ci) {
+        const int triA = collidingTrianglePairs[ci].triA;
+        const int triB = collidingTrianglePairs[ci].triB;
+
+        const ES::V3d vtxA[3] = {curP0.segment<3>(triangles[triA][0] * 3), curP0.segment<3>(triangles[triA][1] * 3),
+                                 curP0.segment<3>(triangles[triA][2] * 3)};
+        const ES::V3d vtxB[3] = {curP0.segment<3>(triangles[triB][0] * 3), curP0.segment<3>(triangles[triB][1] * 3),
+                                 curP0.segment<3>(triangles[triB][2] * 3)};
+
+        const ES::V3d nA = computeTriangleUnitNormal(vtxA[0], vtxA[1], vtxA[2]);
+        const ES::V3d nB = computeTriangleUnitNormal(vtxB[0], vtxB[1], vtxB[2]);
+
+        for (const auto& sinfo : triangleSamples[triB]) {
+            auto it = sampleIDQueryTable.find(sinfo);
+            PGO_ALOG(it != sampleIDQueryTable.end());
+            const int sampleID   = it->second;
+            const ES::V3d sampleP = sampleCurP0.segment<3>(sampleID * 3);
+            tryUpdateSeed(sampleID, triA, sampleP, vtxA[0], vtxA[1], vtxA[2], nA);
+        }
+
+        for (const auto& sinfo : triangleSamples[triA]) {
+            auto it = sampleIDQueryTable.find(sinfo);
+            PGO_ALOG(it != sampleIDQueryTable.end());
+            const int sampleID   = it->second;
+            const ES::V3d sampleP = sampleCurP0.segment<3>(sampleID * 3);
+            tryUpdateSeed(sampleID, triB, sampleP, vtxB[0], vtxB[1], vtxB[2], nB);
+        }
+    });
+
+    rd->activeSeedRecords.clear();
+    for (size_t sampleID = 0; sampleID < sampleVisited.size(); sampleID++) {
+        if (sampleVisited[sampleID] == 0) {
+            continue;
+        }
+
+        rd->activeSeedRecords.push_back(
+            {static_cast<int>(sampleID), sampleSeedRecords[sampleID].seedTriangleID, sampleSeedRecords[sampleID].bestDist2});
+    }
+
+    finalizeActivePairsFromSeeds(maxSearchingNumTriangles);
 }
 
 std::vector<std::array<ES::V3d, 3>> TriangleMeshSelfContactHandler::getCollidingTriangles(const double* u) const {
@@ -696,6 +739,79 @@ std::vector<int> TriangleMeshSelfContactHandler::getCollidedSampleAffectedVertic
     return vertexIndices;
 }
 
+double TriangleMeshSelfContactHandler::computeEmbeddedAlphaUpperBound(ES::ConstRefVecXd currentU,
+                                                                      ES::ConstRefVecXd du, double alphaSafety,
+                                                                      double dSafe) const {
+    if (currentU.size() != totaln3 || du.size() != totaln3) {
+        throw std::invalid_argument("computeEmbeddedAlphaUpperBound expects full embedded displacement vectors.");
+    }
+
+    ES::VXd sampleCurrentU = interpolationMatrix * currentU;
+    ES::VXd sampleDu       = interpolationMatrix * du;
+
+    return computeSampleAlphaUpperBound(sampleCurrentU, sampleDu, alphaSafety, dSafe);
+}
+
+double TriangleMeshSelfContactHandler::computeSampleAlphaUpperBound(ES::ConstRefVecXd sampleCurrentU,
+                                                                    ES::ConstRefVecXd sampleDu, double alphaSafety,
+                                                                    double dSafe) const {
+    if (sampleCurrentU.size() != samplen3 || sampleDu.size() != samplen3) {
+        throw std::invalid_argument("computeSampleAlphaUpperBound expects sample-sized displacement vectors.");
+    }
+
+    if (contactedTrianglePairs.empty()) {
+        return 1.0;
+    }
+
+    double alphaUpper         = 1.0;
+    bool   hasClosingDirection = false;
+
+    for (int pi = 0; pi < static_cast<int>(contactedTrianglePairs.size()); ++pi) {
+        const auto& pair = contactedTrianglePairs[pi];
+
+        const ES::V3d n = activeNormals.segment<3>(pi * 3);
+        const ES::V3d w = activeBarycentricWeights.segment<3>(pi * 3);
+
+        const ES::V3d p  = sampleRestP.segment<3>(pair[0] * 3) + sampleCurrentU.segment<3>(pair[0] * 3);
+        const ES::V3d dp = sampleDu.segment<3>(pair[0] * 3);
+
+        const ES::V3d t0  = sampleRestP.segment<3>(pair[1] * 3) + sampleCurrentU.segment<3>(pair[1] * 3);
+        const ES::V3d t1  = sampleRestP.segment<3>(pair[2] * 3) + sampleCurrentU.segment<3>(pair[2] * 3);
+        const ES::V3d t2  = sampleRestP.segment<3>(pair[3] * 3) + sampleCurrentU.segment<3>(pair[3] * 3);
+        const ES::V3d dt0 = sampleDu.segment<3>(pair[1] * 3);
+        const ES::V3d dt1 = sampleDu.segment<3>(pair[2] * 3);
+        const ES::V3d dt2 = sampleDu.segment<3>(pair[3] * 3);
+
+        const ES::V3d closestPoint = t0 * w[0] + t1 * w[1] + t2 * w[2];
+        const ES::V3d closestDelta = dt0 * w[0] + dt1 * w[1] + dt2 * w[2];
+
+        const double d0   = (p - closestPoint).dot(n);
+        const double dDot = (dp - closestDelta).dot(n);
+
+        if (d0 <= dSafe) {
+            if (dDot > 0.0) {
+                continue;
+            }
+
+            return 0.0;
+        }
+
+        if (dDot < 0.0) {
+            hasClosingDirection = true;
+            alphaUpper          = std::min(alphaUpper, (d0 - dSafe) / (-dDot));
+            if (alphaUpper <= 0.0) {
+                return 0.0;
+            }
+        }
+    }
+
+    if (!hasClosingDirection) {
+        return 1.0;
+    }
+
+    return std::clamp(alphaUpper * std::clamp(alphaSafety, 0.0, 1.0), 0.0, 1.0);
+}
+
 void TriangleMeshSelfContactHandler::execute(const std::vector<ES::V3d>& p0, const std::vector<ES::V3d>& p1) {
     for (int i = 0; i < static_cast<int>(p0.size()); i++)
         curP0.segment<3>(i * 3) = ES::V3d(p0[i][0], p0[i][1], p0[i][2]);
@@ -734,6 +850,135 @@ void TriangleMeshSelfContactHandler::execute(const double* u0) {
     computeSamplePosition(curP0, sampleCurP0);
 
     executeDCD();
+}
+
+void TriangleMeshSelfContactHandler::execute(const std::vector<ES::V3d>& p0, double activationDistance) {
+    for (int i = 0; i < static_cast<int>(p0.size()); i++) {
+        curP0.segment<3>(i * 3) = ES::V3d(p0[i][0], p0[i][1], p0[i][2]);
+    }
+
+    computeSamplePosition(curP0, sampleCurP0);
+
+    if (activationDistance <= 0.0) {
+        executeDCD();
+        if (collidingTrianglePairs.empty()) {
+            clearActivePairData();
+            return;
+        }
+
+        handleContactDCD(0.0, 100);
+        return;
+    }
+
+    executeNearContactDCD(activationDistance, 100);
+}
+
+void TriangleMeshSelfContactHandler::execute(const double* u0, double activationDistance) {
+    curP0.noalias() = restP + Eigen::Map<const ES::VXd>(u0, n3);
+
+    computeSamplePosition(curP0, sampleCurP0);
+
+    if (activationDistance <= 0.0) {
+        executeDCD();
+        if (collidingTrianglePairs.empty()) {
+            clearActivePairData();
+            return;
+        }
+
+        handleContactDCD(0.0, 100);
+        return;
+    }
+
+    executeNearContactDCD(activationDistance, 100);
+}
+
+void TriangleMeshSelfContactHandler::executeNearContactDCD(double activationDistance, int maxSearchingNumTriangles) {
+    const hclock::time_point t1 = hclock::now();
+
+    auto& sampleSeedRecords = rd->sampleSeedRecords;
+    auto& sampleVisited     = rd->sampleVisited;
+
+    if (sampleSeedRecords.size() != sampleInfoAndIDs.size()) {
+        sampleSeedRecords.resize(sampleInfoAndIDs.size());
+    }
+    std::fill(sampleSeedRecords.begin(), sampleSeedRecords.end(),
+              TriangleMeshSelfContactHandlerRuntimeData::SampleSeedRecord{});
+
+    if (sampleVisited.size() != sampleInfoAndIDs.size()) {
+        sampleVisited.assign(sampleInfoAndIDs.size(), 0);
+    } else {
+        std::fill(sampleVisited.begin(), sampleVisited.end(), 0);
+    }
+
+    selfContactDetection->execute(curP0.data(), activationDistance);
+    const auto& candidateTrianglePairs = selfContactDetection->getCandidateTrianglePairs();
+
+    collidingTrianglePairs.clear();
+    if (candidateTrianglePairs.empty()) {
+        clearActivePairData();
+        lastCDTime = dura(t1, hclock::now());
+        SPDLOG_LOGGER_INFO(Logging::lgr(), "Self CD time: {}", lastCDTime);
+        return;
+    }
+
+    std::vector<tbb::spin_mutex> sampleLocks(sampleInfoAndIDs.size());
+    const double activationDistance2 = activationDistance * activationDistance;
+
+    auto tryUpdateSeed = [&](int sampleID, int seedTriangleID, const ES::V3d& sampleP, const ES::V3d& va,
+                             const ES::V3d& vb, const ES::V3d& vc) {
+        const double dist2 = getSquaredDistanceToTriangle(sampleP, va, vb, vc);
+        if (dist2 >= activationDistance2) {
+            return;
+        }
+
+        tbb::spin_mutex::scoped_lock lock(sampleLocks[sampleID]);
+        if (sampleVisited[sampleID] == 0 || dist2 < sampleSeedRecords[sampleID].bestDist2) {
+            sampleVisited[sampleID]                = 1;
+            sampleSeedRecords[sampleID].seedTriangleID = seedTriangleID;
+            sampleSeedRecords[sampleID].bestDist2      = dist2;
+        }
+    };
+
+    tbb::parallel_for(0, (int)candidateTrianglePairs.size(), [&](int pairIdx) {
+        const int triA = candidateTrianglePairs[pairIdx].first;
+        const int triB = candidateTrianglePairs[pairIdx].second;
+
+        const ES::V3d vtxA[3] = {curP0.segment<3>(triangles[triA][0] * 3), curP0.segment<3>(triangles[triA][1] * 3),
+                                 curP0.segment<3>(triangles[triA][2] * 3)};
+        const ES::V3d vtxB[3] = {curP0.segment<3>(triangles[triB][0] * 3), curP0.segment<3>(triangles[triB][1] * 3),
+                                 curP0.segment<3>(triangles[triB][2] * 3)};
+
+        for (const auto& sinfo : triangleSamples[triB]) {
+            auto it = sampleIDQueryTable.find(sinfo);
+            PGO_ALOG(it != sampleIDQueryTable.end());
+            const int sampleID   = it->second;
+            const ES::V3d sampleP = sampleCurP0.segment<3>(sampleID * 3);
+            tryUpdateSeed(sampleID, triA, sampleP, vtxA[0], vtxA[1], vtxA[2]);
+        }
+
+        for (const auto& sinfo : triangleSamples[triA]) {
+            auto it = sampleIDQueryTable.find(sinfo);
+            PGO_ALOG(it != sampleIDQueryTable.end());
+            const int sampleID   = it->second;
+            const ES::V3d sampleP = sampleCurP0.segment<3>(sampleID * 3);
+            tryUpdateSeed(sampleID, triB, sampleP, vtxB[0], vtxB[1], vtxB[2]);
+        }
+    });
+
+    rd->activeSeedRecords.clear();
+    for (size_t sampleID = 0; sampleID < sampleVisited.size(); sampleID++) {
+        if (sampleVisited[sampleID] == 0) {
+            continue;
+        }
+
+        rd->activeSeedRecords.push_back(
+            {static_cast<int>(sampleID), sampleSeedRecords[sampleID].seedTriangleID, sampleSeedRecords[sampleID].bestDist2});
+    }
+
+    finalizeActivePairsFromSeeds(maxSearchingNumTriangles);
+
+    lastCDTime = dura(t1, hclock::now());
+    SPDLOG_LOGGER_INFO(Logging::lgr(), "Self CD time: {}", lastCDTime);
 }
 
 void TriangleMeshSelfContactHandler::executeCCD() {
@@ -894,4 +1139,17 @@ std::shared_ptr<PointTrianglePairCouplingEnergyWithCollision> TriangleMeshSelfCo
         (int)contactedTrianglePairs.size(), 1, contactEnergyObjIDs.data(), contactedTrianglePairs.data(),
         contactedTriangleIDs.data(), contactEnergyObjectDOFOffsets.data(), &surfaceMeshRef,
         &selfContactDetection->getTriMeshNeighbor(), &vertexID2SampleIDsLinear, &interpolationMatrix, &sampleWeights);
+}
+
+std::shared_ptr<PointTrianglePairBarrierEnergy> TriangleMeshSelfContactHandler::buildBarrierEnergy(
+    double dhat, double positiveZero) {
+    contactEnergyObjIDs.assign(contactedTrianglePairs.size(), std::array<int, 4>{0, 0, 0, 0});
+
+    contactEnergyObjectDOFOffsets[0] = 0;
+    contactEnergyObjectDOFOffsets[1] = totaln3;
+
+    return std::make_shared<PointTrianglePairBarrierEnergy>(
+        static_cast<int>(contactedTrianglePairs.size()), 1, contactEnergyObjIDs.data(), contactedTrianglePairs.data(),
+        contactEnergyObjectDOFOffsets.data(), &interpolationMatrix, &sampleWeights, activeNormals.data(),
+        activeBarycentricWeights.data(), dhat, positiveZero);
 }

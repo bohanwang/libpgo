@@ -11,6 +11,60 @@ The source code extends [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) an
 
 ---
 
+## IPC Update
+
+The current repo now includes a first end-to-end frictionless IPC-style integration for dynamic simulation.
+
+What was added:
+
+- External `ipc-barrier` contact as barrier-as-energy on the dynamic path
+- Self-contact near-contact active set for `ipc-barrier`
+- Self barrier energy and runtime integration
+- Feasibility-preserving line search for both external and self contact
+- A merged feasible-alpha callback when external and self contact are both active
+- A checked-in physically consistent self-contact example under [`examples/pulled-cubic-box-self-ipc`](examples/pulled-cubic-box-self-ipc)
+
+Current scope:
+
+- Dynamic path first
+- Frictionless IPC only
+- Self-contact is still sample-based, not full primitive PT/EE IPC
+- The current self feasible-alpha filter is linearized, not a full primitive CCD guarantee
+
+Visual result:
+
+![IPC Pull Example](examples/pulled-cubic-box-self-ipc/ipc-pull.gif)
+
+![IPC vs Penalty Comparison](examples/pulled-cubic-box-self-ipc/ipc_penalty_compare.gif)
+
+How to run the self IPC example:
+
+```bash
+cd libpgo
+cmake --preset core-debug
+cmake --build --preset core-debug --target runSim
+./build/core-debug/bin/runSim examples/pulled-cubic-box-self-ipc/pulled-cubic-box-self-ipc.json
+```
+
+How to run the IPC validation tests:
+
+```bash
+cd libpgo
+cmake --preset core-debug
+cmake --build --preset core-debug
+ctest --test-dir build/core-debug -R "core\\.energy\\.(point_penetration_barrier|point_triangle_pair_barrier)|core\\.scene\\.(contact_embedding|self_contact_handler)|api\\.runSim_config\\.parse" --output-on-failure
+```
+
+Useful targeted test runs:
+
+```bash
+cd libpgo/build/core-debug/bin
+./core_scene_self_contact_handler_test
+./api_runSim_config_parse_test --gtest_filter='RunSimConfigParseTest.RunSimFromConfigCubicDynamicIpcNearContactActivatesExternalBarrier:RunSimConfigParseTest.RunSimFromConfigCubicDynamicIpcSelfBarrierSmokeTest:RunSimConfigParseTest.RunSimFromConfigCubicDynamicIpcMergedBarrierSmokeTest:RunSimConfigParseTest.RunSimFromConfigCubicDynamicIpcMergedDeterministicSmokeTest'
+```
+
+---
+
 ## Prerequisites
 
 1. **Conan 2.x**  
@@ -212,7 +266,7 @@ Important notes for native-module iteration:
 
 ```bash
 cd libpgo
-uv pip install -e .
+uv pip install -e . --force-reinstall
 ```
 
 - If you want to run against a manually built CMake tree instead of the `.venv` install, point `PYTHONPATH` at that build output directly:
@@ -343,6 +397,7 @@ We provide three python scripts to test the installation.
     ```bash
     cd libpgo
     uv run python src/api/python/pypgo/pgo_dump_abc.py examples/box/anim.json examples/box
+    uv run python src/api/python/pypgo/pgo_dump_abc.py examples/box/anim.json
     ```
 
 4. `cubicMesher`. It creates a cubic/hexahedral volumetric mesh (`.veg`) from a uniform grid and can optionally export a triangulated surface mesh (`.obj`).
@@ -470,6 +525,7 @@ uv run python src/api/python/pypgo/pgo_run_sim.py examples/cubic-box/cubic-box.j
 
 # 3) Convert OBJ sequence to Alembic animation
 uv run python src/api/python/pypgo/pgo_dump_abc.py examples/cubic-box/anim.json examples/cubic-box
+uv run python src/api/python/pypgo/pgo_dump_abc.py examples/pulled-cubic-box-self-ipc/anim.json
 ```
 
 If you just rebuilt `pypgo` through a manual CMake preset such as `build/full-release`, `uv run`
@@ -485,9 +541,11 @@ Expected outputs:
 - `examples/cubic-box/ret-cubic-box/ret0001.obj` ... `ret0199.obj`
 - `examples/cubic-box/cubic-box.abc`
 
-Preview (first 6 seconds):
+Preview:
 
 ![Cubic-box simulation preview](examples/cubic-box/cubic-box-6s.gif)
+
+![cubic-dragon](examples/dragon-cubic/image.png)
 
 ---
 

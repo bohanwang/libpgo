@@ -3,6 +3,7 @@
 #include "timeIntegratorOptions.h"
 
 #include "EigenSupport.h"
+#include "NewtonRaphsonSolver.h"
 #include "potentialEnergy.h"
 #include "potentialEnergies.h"
 #include "potentialEnergyAligningMeshConnectivity.h"
@@ -85,6 +86,9 @@ public:
     void finiteDifferenceTest(double range);
 
     void setSolverConfigFile(const char* filename) { solverConfigFilename = filename; }
+    using AlphaTestFunc = NonlinearOptimization::NewtonRaphsonSolver::AlphaTestFunc;
+    void setAlphaTestFunc(AlphaTestFunc func) { alphaTestFunc = std::move(func); }
+    void clearAlphaTestFunc() { alphaTestFunc = nullptr; }
 
     void resetTimestepID() { timestepID = 0; }
     void setTimestepID(int id) { timestepID = id; }
@@ -168,6 +172,7 @@ protected:
     int           finiteDifferenceTestFlag = 0;
     std::string   solverConfigFilename;
     static double defaultUnknownBoundary;
+    AlphaTestFunc alphaTestFunc;
 };
 }  // namespace Simulation
 }  // namespace pgo

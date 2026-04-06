@@ -60,14 +60,19 @@ void ImplicitBackwardEulerTimeIntegrator::doTimestep(int updateq, int verbose, i
     bool needRenew = (constraintsChanged || generalForceModelChanged);
     solverRet      = solver->solve(needRenew, z, g, lambda, deltauRangeLow, deltauRangeHi, constraintsRangeLow,
                                    constraintsRangeHi, eulerEnergy, constraints, nIter, eps, verbose,
-                              solverConfigFilename.length() ? solverConfigFilename.c_str() : nullptr, solverOption);
+                                   solverConfigFilename.length() ? solverConfigFilename.c_str() : nullptr,
+                                   solverOption, alphaTestFunc);
 
     if (printResidual) {
         ES::VXd residual(n3), rhs = ES::VXd::Zero(n3 - fixedDOFs.size());
         eulerEnergy->gradient(z, residual);
 
         ES::transferBigToSmall(residual, rhs, rhsb2s);
-        std::cout << "    T" << timestepID << ": ||g||=" << rhs.norm() << "; Solver Ret: " << solverRet << std::endl;
+        std::cout << "    T" << timestepID << ": ||g||=" << rhs.norm() << "; Solver Ret: " << solverRet;
+        if (solverOption == TimeIntegratorSolverOption::SO_NEWTON) {
+            std::cout << " (" << NewtonRaphsonSolver::statusToString(solverRet) << ")";
+        }
+        std::cout << std::endl;
 
         std::cout << "    Energy components:\n";
         eulerEnergy->printImplicitEnergy(z);

@@ -62,8 +62,13 @@ site/
 
 examples/cubic-box/ret-cubic-box/*
 examples/cubic-box/ret-cubic-box0/*
+examples/cubic-box-ipc/ret-cubic-box-penalty/*
 examples/dragon-cubic/ret-dragon-cubic/*
 examples/dragon-cubic/ret-dragon-cubic0/*
+examples/cubic-box-ipc/ret-cubic-box-ipc/*
+examples/cubic-box-ipc/ret-cubic-box-ipc-ls/*
+examples/pulled-cubic-box-self-ipc/ret-pulled-cubic-box-self-ipc/*
+examples/box/ret-box-ipc/*
 
 *.log
 examples/dragon-cubic/dragon-cubic.log

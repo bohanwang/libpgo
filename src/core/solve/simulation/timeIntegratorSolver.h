@@ -3,6 +3,7 @@
 #include "timeIntegratorOptions.h"
 
 #include "EigenSupport.h"
+#include "NewtonRaphsonSolver.h"
 
 #include <memory>
 
@@ -23,7 +24,8 @@ public:
               const EigenSupport::VXd& xlow, const EigenSupport::VXd& xhi, const EigenSupport::VXd& clow,
               const EigenSupport::VXd& chi, std::shared_ptr<const NonlinearOptimization::PotentialEnergy> energy,
               std::shared_ptr<const NonlinearOptimization::ConstraintFunctions> constraints, int niter, double eps,
-              int verbose, const char* solverConfigFilename, TimeIntegratorSolverOption op);
+              int verbose, const char* solverConfigFilename, TimeIntegratorSolverOption op,
+              NonlinearOptimization::NewtonRaphsonSolver::AlphaTestFunc alphaTestFunc = nullptr);
 
     static int solveDirect(EigenSupport::VXd& x, EigenSupport::VXd& g, EigenSupport::VXd& lambda,
                            const EigenSupport::VXd& xlow, const EigenSupport::VXd& xhi, const EigenSupport::VXd& clow,

@@ -1,0 +1,42 @@
+{
+  "log_path": "/Users/jinceyang/Desktop/codebase/libpgo_refactor/libpgo/examples/cubic-box-ipc/cubic-box-penalty.log",
+  "curve_csv": "/Users/jinceyang/Desktop/codebase/libpgo_refactor/libpgo/examples/cubic-box-ipc/cubic-box-penalty-core-release-contact-curve.csv",
+  "num_steps_recorded": 1999,
+  "first_step": 0,
+  "last_step": 1998,
+  "first_nonzero_step": 166,
+  "first_nonzero_time_sec": 0.166,
+  "first_nonzero_active_samples": 1,
+  "last_nonzero_step": 1998,
+  "max_active_samples": 817,
+  "max_active_step": 252,
+  "mean_active_nonzero": 359.62344720496895,
+  "median_active_nonzero": 287.0,
+  "num_nonzero_steps": 1288,
+  "contact_intervals": [
+    {
+      "start_step": 166,
+      "end_step": 363,
+      "duration_steps": 198,
+      "peak_active": 817,
+      "peak_step": 252
+    },
+    {
+      "start_step": 662,
+      "end_step": 874,
+      "duration_steps": 213,
+      "peak_active": 802,
+      "peak_step": 768
+    },
+    {
+      "start_step": 1122,
+      "end_step": 1998,
+      "duration_steps": 877,
+      "peak_active": 764,
+      "peak_step": 1253
+    }
+  ],
+  "num_solver_failures": 0,
+  "max_solver_time_sec": 0.463355,
+  "mean_solver_time_sec": 0.04754437668834417
+}

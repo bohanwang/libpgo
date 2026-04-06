@@ -1,0 +1,14 @@
+{
+  "meshes": [
+    {
+      "name": "box-ipc",
+      "driving-mesh": "box.obj",
+      "sequence": "ret-box-ipc/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        1,
+        200
+      ]
+    }
+  ]
+}

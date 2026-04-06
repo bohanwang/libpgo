@@ -547,7 +547,7 @@ int runSimFromConfigImpl(const char* configFileName, int deterministicOverride) 
     try {
         pgo::api::RunSimConfig config = pgo::api::parseRunSimConfig(jconfig, configPathResolver.filePath());
         if (deterministicOverride >= 0) {
-            config.deterministicMode = (deterministicOverride != 0);
+            config.runtime.deterministicMode = (deterministicOverride != 0);
         }
         return pgo::api::runSimFromConfig(config);
     } catch (const std::exception& err) {

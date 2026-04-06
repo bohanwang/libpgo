@@ -7,6 +7,7 @@
 #include <iostream>
 #include <numeric>
 #include <chrono>
+#include <cmath>
 
 using namespace pgo;
 using namespace pgo::NonlinearOptimization;
@@ -23,6 +24,23 @@ public:
 inline double dura(const hclock::time_point& t1, const hclock::time_point& t2) {
     return std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1e6;
 }
+
+namespace {
+
+constexpr double kSmallAcceptedStepSizeTol = 1e-15;
+constexpr double kTinyDirectionTol         = 1e-12;
+
+bool shouldTreatLineSearchFailureAsStall(double alpha, double deltaxMax, double gradNorm, double epsilon, double eng,
+                                         double eng1) {
+    const double trialStepSize = std::abs(alpha) * deltaxMax;
+    const double energyTol     = std::max(1e-12, std::abs(eng) * 1e-12);
+    const double gradTol       = std::max(1e-12, epsilon * 10.0);
+
+    return trialStepSize < kSmallAcceptedStepSizeTol || deltaxMax < kTinyDirectionTol || gradNorm <= gradTol ||
+           std::abs(eng1 - eng) <= energyTol;
+}
+
+}  // namespace
 
 NewtonRaphsonSolver::NewtonRaphsonSolver(const double* x_, SolverParam sp, PotentialEnergy_const_p energy_,
                                          const std::vector<int>& fixedDOFs_, const double* fixedValues_)
@@ -96,7 +114,33 @@ void NewtonRaphsonSolver::setFixedDOFs(const std::vector<int>& fixedDOFs_, const
 #endif
     }
 
-    fixedValues = ES::Mp<const ES::VXd>(fixedValues_, fixedDOFs_.size());
+    if (fixedDOFs_.empty()) {
+        fixedValues.resize(0);
+    } else {
+        PGO_ALOG(fixedValues_ != nullptr);
+        fixedValues = ES::Mp<const ES::VXd>(fixedValues_, fixedDOFs_.size());
+    }
+}
+
+const char* NewtonRaphsonSolver::statusToString(int status) {
+    switch (status) {
+    case SR_CONVERGED:
+        return "converged";
+    case SR_STALLED_SMALL_STEP:
+        return "stalled_small_step";
+    case SR_MAX_ITER_REACHED:
+        return "max_iter_reached";
+    case SR_FEASIBLE_STEP_ZERO:
+        return "feasible_step_zero";
+    case SR_STOP_AFTER_INCREASE:
+        return "stop_after_increase";
+    case SR_LINE_SEARCH_FAILED:
+        return "line_search_failed";
+    case SR_NUMERICAL_FAILURE:
+        return "numerical_failure";
+    default:
+        return "unknown_status";
+    }
 }
 
 int NewtonRaphsonSolver::solve(double* x_, int numIter, double epsilon, int verbose) {
@@ -108,7 +152,6 @@ int NewtonRaphsonSolver::solve(double* x_, int numIter, double epsilon, int verb
         historyGradNormMin = 1e100;
     }
 
-    double eng0 = energy->func(x);
     for (size_t i = 0; i < fixedDOFs.size(); i++) {
         x[fixedDOFs[i]] = fixedValues[i];
     }
@@ -120,10 +163,10 @@ int NewtonRaphsonSolver::solve(double* x_, int numIter, double epsilon, int verb
         printGap = 1;
     }
 
-    // double error0 = 0;
     int    iter        = 0;
     double lambdaScale = 1.0;
     double lambda0     = 1.0;
+    int    status      = SR_MAX_ITER_REACHED;
     // compute lambda initial
     memset(grad.data(), 0, sizeof(double) * grad.size());
     energy->gradient(x, grad);
@@ -147,24 +190,38 @@ int NewtonRaphsonSolver::solve(double* x_, int numIter, double epsilon, int verb
             std::cout << "        E= " << eng << "; ||grad||_max=" << grad.cwiseAbs().maxCoeff()
                       << "; ||x||=" << x.norm() << "; ||grad||=" << gradNorm << std::endl;
 
+        if (!std::isfinite(eng) || !std::isfinite(gradNorm)) {
+            if (verbose >= 1) {
+                std::cout << "    Iter=" << iter << "; encountered non-finite energy or gradient." << std::endl;
+            }
+
+            status = SR_NUMERICAL_FAILURE;
+            break;
+        }
+
         if (solverParam.sst == SST_SUBITERATION_ONE || solverParam.sst == SST_SUBITERATION_STATIC_DAMPING) {
             if (gradNorm < historyGradNormMin) {
                 historyx.noalias() = x;
                 historyGradNormMin = gradNorm;
             } else {
-                if (solverParam.stopAfterIncrease)
+                if (solverParam.stopAfterIncrease) {
+                    if (verbose >= 1) {
+                        std::cout << "    Iter=" << iter << "; stopping after gradient increase." << std::endl;
+                    }
+
+                    status = SR_STOP_AFTER_INCREASE;
                     break;
+                }
             }
         }
 
-        if (iter) {
-            if (gradNorm < epsilon) {
-                if (verbose >= 1) {
-                    std::cout << "    Iter=" << iter << "; ||grad||=" << gradNorm << " < eps. Done." << std::endl;
-                }
-
-                break;
+        if (gradNorm < epsilon) {
+            if (verbose >= 1) {
+                std::cout << "    Iter=" << iter << "; ||grad||=" << gradNorm << " < eps. Done." << std::endl;
             }
+
+            status = SR_CONVERGED;
+            break;
         }
 
         memset(sysFull.valuePtr(), 0, sizeof(double) * sysFull.nonZeros());
@@ -231,9 +288,13 @@ int NewtonRaphsonSolver::solve(double* x_, int numIter, double epsilon, int verb
         memset(deltax.data(), 0, sizeof(double) * n3);
         ES::transferSmallToBig(deltaxSmall, deltax, rhss2b);
 
-        if (deltax.hasNaN()) {
-            std::cerr << "        Encounter weird number.\n" << std::endl;
-            abort();
+        if (!deltax.allFinite()) {
+            if (verbose >= 1) {
+                std::cout << "    Iter=" << iter << "; Newton direction contains non-finite entries." << std::endl;
+            }
+
+            status = SR_NUMERICAL_FAILURE;
+            break;
         }
 
         // if (iter == 0)
@@ -247,8 +308,18 @@ int NewtonRaphsonSolver::solve(double* x_, int numIter, double epsilon, int verb
         //   }
         // }
 
+        const double deltaxMax = deltax.cwiseAbs().maxCoeff();
+        if (!std::isfinite(deltaxMax)) {
+            if (verbose >= 1) {
+                std::cout << "    Iter=" << iter << "; Newton direction norm is non-finite." << std::endl;
+            }
+
+            status = SR_NUMERICAL_FAILURE;
+            break;
+        }
+
         if (verbose >= 2 && iter % printGap == 0)
-            std::cout << "        ||deltax||_max=" << deltax.cwiseAbs().maxCoeff() << std::endl;
+            std::cout << "        ||deltax||_max=" << deltaxMax << std::endl;
 
         // x += alpha delta x ?
         if (solverParam.sst == SST_SUBITERATION_LINE_SEARCH) {
@@ -257,7 +328,16 @@ int NewtonRaphsonSolver::solve(double* x_, int numIter, double epsilon, int verb
 
             alpha = alphaTestFunc ? alphaTestFunc(x, deltax) : 1.0;
 
-            lineSearchx.noalias() = x + deltax;
+            if (alpha <= 0.0) {
+                if (verbose >= 1) {
+                    std::cout << "    Iter=" << iter << "; feasible step upper bound is zero." << std::endl;
+                }
+
+                status = SR_FEASIBLE_STEP_ZERO;
+                break;
+            }
+
+            lineSearchx.noalias() = x + deltax * alpha;
             double eng1           = energy->func(lineSearchx);
             int    maxIter        = 50;
             if (eng1 < eng) {
@@ -310,9 +390,29 @@ int NewtonRaphsonSolver::solve(double* x_, int numIter, double epsilon, int verb
                 }
             }
 
-            if (eng1 > eng) {
+            if (!std::isfinite(alpha) || !std::isfinite(eng1)) {
                 if (verbose >= 1) {
-                    std::cout << "    Iter=" << iter << "; line search failed." << std::endl;
+                    std::cout << "    Iter=" << iter << "; line search produced non-finite values." << std::endl;
+                }
+
+                status = SR_NUMERICAL_FAILURE;
+                break;
+            }
+
+            if (eng1 > eng) {
+                if (shouldTreatLineSearchFailureAsStall(alpha, deltaxMax, gradNorm, epsilon, eng, eng1)) {
+                    if (verbose >= 1) {
+                        std::cout << "    Iter=" << iter
+                                  << "; line search stalled near a stationary point." << std::endl;
+                    }
+
+                    status = SR_STALLED_SMALL_STEP;
+                } else {
+                    if (verbose >= 1) {
+                        std::cout << "    Iter=" << iter << "; line search failed." << std::endl;
+                    }
+
+                    status = SR_LINE_SEARCH_FAILED;
                 }
 
                 break;
@@ -320,12 +420,13 @@ int NewtonRaphsonSolver::solve(double* x_, int numIter, double epsilon, int verb
 
             x += deltax * alpha;
 
-            stepSize = std::abs(alpha * deltax.cwiseAbs().maxCoeff());
-            if (stepSize < 1e-15) {
+            stepSize = std::abs(alpha * deltaxMax);
+            if (stepSize < kSmallAcceptedStepSizeTol) {
                 if (verbose >= 1) {
                     std::cout << "    Iter=" << iter << "; dx = " << stepSize << "; dx too small." << std::endl;
                 }
 
+                status = SR_STALLED_SMALL_STEP;
                 break;
             }
         } else if (solverParam.sst == SST_SUBITERATION_ONE) {
@@ -353,6 +454,10 @@ int NewtonRaphsonSolver::solve(double* x_, int numIter, double epsilon, int verb
         }
     }
 
+    if (iter == numIter && status == SR_MAX_ITER_REACHED && verbose >= 1) {
+        std::cout << "    Reached max iterations (" << numIter << ")." << std::endl;
+    }
+
     if (solverParam.sst == SST_SUBITERATION_ONE || solverParam.sst == SST_SUBITERATION_STATIC_DAMPING) {
         if (verbose >= 1)
             std::cout << "        Final ||grad||=" << historyGradNormMin << std::endl;
@@ -365,8 +470,10 @@ int NewtonRaphsonSolver::solve(double* x_, int numIter, double epsilon, int verb
 
     double timeCost = dura(t1, t2);
 
-    SPDLOG_LOGGER_INFO(Logging::lgr(), "Newton solve time: {}", timeCost);
-    return 0;
+    if (auto logger = Logging::lgr()) {
+        SPDLOG_LOGGER_INFO(logger, "Newton solve time: {}", timeCost);
+    }
+    return status;
 }
 
 void NewtonRaphsonSolver::filterVector(ES::VXd& v) {

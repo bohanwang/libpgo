@@ -18,6 +18,17 @@ class NewtonRaphsonSolver {
 public:
     enum SolverSubiterationType { SST_SUBITERATION_LINE_SEARCH, SST_SUBITERATION_STATIC_DAMPING, SST_SUBITERATION_ONE };
 
+    enum SolveStatus {
+        SR_CONVERGED = 0,
+        SR_STALLED_SMALL_STEP = 1,
+        SR_MAX_ITER_REACHED = 2,
+        SR_FEASIBLE_STEP_ZERO = 3,
+        SR_STOP_AFTER_INCREASE = 4,
+
+        SR_LINE_SEARCH_FAILED = -1,
+        SR_NUMERICAL_FAILURE = -2,
+    };
+
     enum LineSearchMethod {
         LSM_GOLDEN,
         LSM_BRENTS,
@@ -41,11 +52,15 @@ public:
 
     using AlphaTestFunc = std::function<double(const EigenSupport::VXd&, const EigenSupport::VXd&)>;
     void setAlphaTestFunc(AlphaTestFunc func) { alphaTestFunc = func; }
+    void clearAlphaTestFunc() { alphaTestFunc = nullptr; }
 
     using StepFunc = std::function<void(const EigenSupport::VXd&, int)>;
     void setStepFunc(StepFunc func) { stepFunc = func; }
 
     const EigenSupport::VXd& getx() const { return x; }
+    static bool              isHardFailure(int status) { return status < 0; }
+    static bool              isSoftTermination(int status) { return status > 0; }
+    static const char*       statusToString(int status);
 
 protected:
     void filterVector(EigenSupport::VXd& v);

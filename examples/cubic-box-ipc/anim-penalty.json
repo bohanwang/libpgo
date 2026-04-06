@@ -1,0 +1,14 @@
+{
+  "meshes": [
+    {
+      "name": "cubic-box-penalty",
+      "driving-mesh": "cubic-box.obj",
+      "sequence": "ret-cubic-box-penalty/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        1,
+        199
+      ]
+    }
+  ]
+}

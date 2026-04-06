@@ -1,7 +1,9 @@
 set(CONTACT_HEADERS
   CCDKernel.h
   contactEnergyUtilities.h
+  pointPenetrationBarrierEnergy.h
   pointPenetrationEnergy.h
+  pointTrianglePairBarrierEnergy.h
   pointTrianglePairCouplingEnergyWithCollision.h
   triangleMeshExternalContactHandler.h
   triangleMeshSelfContactDetection.h
@@ -11,7 +13,9 @@ set(CONTACT_HEADERS
 set(CONTACT_SOURCES
   CCDKernel.cpp
   contactEnergyUtilities.cpp
+  pointPenetrationBarrierEnergy.cpp
   pointPenetrationEnergy.cpp
+  pointTrianglePairBarrierEnergy.cpp
   pointTrianglePairCouplingEnergyWithCollision.cpp
   triangleMeshExternalContactHandler.cpp
   triangleMeshSelfContactDetection.cpp

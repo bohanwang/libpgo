@@ -48,7 +48,7 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd& x, [[maybe_unused]] ES:
                                 std::shared_ptr<const PotentialEnergy>                      energy,
                                 [[maybe_unused]] std::shared_ptr<const ConstraintFunctions> constraints, int nIter,
                                 double eps, int verbose, [[maybe_unused]] const char* solverConfigFilename,
-                                TimeIntegratorSolverOption op) {
+                                TimeIntegratorSolverOption op, NewtonRaphsonSolver::AlphaTestFunc alphaTestFunc) {
     if (op == TimeIntegratorSolverOption::SO_KNITRO) {
 #if defined(PGO_HAS_KNITRO)
         if (needRenew || !da->problem) {
@@ -221,6 +221,12 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd& x, [[maybe_unused]] ES:
                     std::make_shared<NewtonRaphsonSolver>(x.data(), sp, energy, da->fixedDOFs, da->fixedValues.data());
             } else {
                 da->newtonSolver->setFixedDOFs(da->fixedDOFs, da->fixedValues.data());
+            }
+
+            if (alphaTestFunc) {
+                da->newtonSolver->setAlphaTestFunc(std::move(alphaTestFunc));
+            } else {
+                da->newtonSolver->clearAlphaTestFunc();
             }
 
             int ret = da->newtonSolver->solve(x.data(), nIter, eps, verbose);

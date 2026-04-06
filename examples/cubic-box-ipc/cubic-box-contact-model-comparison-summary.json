@@ -1,0 +1,101 @@
+{
+  "barrier": {
+    "log_path": "examples/cubic-box-ipc/cubic-box-ipc.log",
+    "curve_csv": "examples/cubic-box-ipc/cubic-box-ipc-core-release-contact-curve.csv",
+    "num_steps_recorded": 1999,
+    "first_step": 0,
+    "last_step": 1998,
+    "first_nonzero_step": 159,
+    "first_nonzero_time_sec": 0.159,
+    "first_nonzero_active_samples": 1,
+    "last_nonzero_step": 1998,
+    "max_active_samples": 494,
+    "max_active_step": 192,
+    "mean_active_nonzero": 96.75511695906432,
+    "median_active_nonzero": 48.0,
+    "num_nonzero_steps": 1368,
+    "contact_intervals": [
+      {
+        "start_step": 159,
+        "end_step": 281,
+        "duration_steps": 123,
+        "peak_active": 494,
+        "peak_step": 192
+      },
+      {
+        "start_step": 519,
+        "end_step": 659,
+        "duration_steps": 141,
+        "peak_active": 434,
+        "peak_step": 564
+      },
+      {
+        "start_step": 830,
+        "end_step": 1369,
+        "duration_steps": 540,
+        "peak_active": 392,
+        "peak_step": 909
+      },
+      {
+        "start_step": 1435,
+        "end_step": 1998,
+        "duration_steps": 564,
+        "peak_active": 264,
+        "peak_step": 1531
+      }
+    ],
+    "num_solver_failures": 0,
+    "max_solver_time_sec": 0.313278,
+    "mean_solver_time_sec": 0.03393835967983992
+  },
+  "penalty": {
+    "log_path": "examples/cubic-box-ipc/cubic-box-penalty.log",
+    "curve_csv": "examples/cubic-box-ipc/cubic-box-penalty-core-release-contact-curve.csv",
+    "num_steps_recorded": 1999,
+    "first_step": 0,
+    "last_step": 1998,
+    "first_nonzero_step": 166,
+    "first_nonzero_time_sec": 0.166,
+    "first_nonzero_active_samples": 1,
+    "last_nonzero_step": 1998,
+    "max_active_samples": 817,
+    "max_active_step": 252,
+    "mean_active_nonzero": 359.62422360248445,
+    "median_active_nonzero": 287.0,
+    "num_nonzero_steps": 1288,
+    "contact_intervals": [
+      {
+        "start_step": 166,
+        "end_step": 363,
+        "duration_steps": 198,
+        "peak_active": 817,
+        "peak_step": 252
+      },
+      {
+        "start_step": 662,
+        "end_step": 874,
+        "duration_steps": 213,
+        "peak_active": 802,
+        "peak_step": 768
+      },
+      {
+        "start_step": 1122,
+        "end_step": 1998,
+        "duration_steps": 877,
+        "peak_active": 764,
+        "peak_step": 1253
+      }
+    ],
+    "num_solver_failures": 0,
+    "max_solver_time_sec": 3.925829,
+    "mean_solver_time_sec": 0.09098484792396198
+  },
+  "delta": {
+    "first_contact_step_penalty_minus_barrier": 7,
+    "peak_active_penalty_minus_barrier": 323,
+    "mean_active_nonzero_penalty_minus_barrier": 262.86910664342014,
+    "mean_solver_time_penalty_over_barrier": 2.680885251446281,
+    "max_solver_time_penalty_over_barrier": 12.531454490899456
+  },
+  "comparison_csv": "examples/cubic-box-ipc/cubic-box-contact-model-comparison.csv"
+}

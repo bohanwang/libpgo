@@ -49,7 +49,7 @@ bool redirectStdStreamsToLog(const std::filesystem::path& logPath) {
 
 int main(int argc, char* argv[]) {
     argparse::ArgumentParser program("Run Simulation");
-    program.add_argument("config").help("Config File").default_value(std::string("examples/cubic-box/cubic-box.json"));
+    program.add_argument("config").help("Config File").default_value(std::string("examples/box/box-ipc.json"));
     program.add_argument("--deterministic")
         .help("Force deterministic mode by running the simulation single-threaded")
         .default_value(false)
@@ -93,11 +93,11 @@ int main(int argc, char* argv[]) {
     }
 
     if (program.get<bool>("--deterministic")) {
-        config.deterministicMode = true;
+        config.runtime.deterministicMode = true;
     }
 
-    // config.restartEnabled = true;
-    // config.restartPause = true;
+    // config.runtime.restartEnabled = true;
+    // config.runtime.restartPause = true;
 
     try {
         return pgo::api::runSimFromConfig(config);
