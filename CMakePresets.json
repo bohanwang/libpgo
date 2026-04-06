@@ -96,11 +96,22 @@
             }
         },
         {
-            "name": "base_cuda",
+            "name": "base_cuda_debug",
+            "inherits": [
+                "base",
+                "cuda",
+                "debug"
+            ]
+        },
+        {
+            "name": "base_cuda_release",
             "inherits": [
                 "base",
                 "cuda"
-            ]
+            ],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
         },
         {
             "name": "base_cuda_win",
@@ -130,6 +141,18 @@
         {
             "name": "all_release",
             "configurePreset": "all_release",
+            "hidden": false,
+            "jobs": 32
+        },
+        {
+            "name": "base_cuda_debug",
+            "configurePreset": "base_cuda_debug",
+            "hidden": false,
+            "jobs": 32
+        },
+        {
+            "name": "base_cuda_release",
+            "configurePreset": "base_cuda_release",
             "hidden": false,
             "jobs": 32
         }
