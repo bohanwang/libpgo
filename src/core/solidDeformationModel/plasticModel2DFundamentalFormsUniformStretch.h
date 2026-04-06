@@ -19,9 +19,11 @@ public:
 
   void compute_abar(const double *params, double *a) const override;
   void compute_bbar(const double *params, double *b) const override;
-  
+
   void compute_tbar(const double *params, double *t) const override;
   double computeArea(const double *params) const override;
+
+  void compute_Fp(const double *params, double *Fp) const override;
 
   void compute_dtbar_inv_dparam(const double *params, int j, double *dtbar_da) const override;
   void compute_dqbar_dparam(const double *params, int j, double *dqbar_da) const override;
@@ -32,8 +34,8 @@ public:
   void compute_dbbar_dparam(const double *params, double *dbbar_dparam) const override;
 
   int getNumParameters() const override { return 1; }
+
 protected:
-  
 };
 
 }  // namespace SolidDeformationModel

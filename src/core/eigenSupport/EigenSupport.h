@@ -173,6 +173,12 @@ template<typename Derived>
 int readMatrix(const char *filename, Eigen::PlainObjectBase<Derived> &mat, int overwrite = 1);
 template<typename Derived>
 int writeMatrix(const char *filename, const Eigen::PlainObjectBase<Derived> &mat);
+
+template<typename Derived>
+int readNPY(const char *filename, Eigen::PlainObjectBase<Derived> &mat);
+
+template<typename Derived>
+int writeNPY(const char *filename, const Eigen::PlainObjectBase<Derived> &mat, int transpose = 0);
 }  // namespace EigenSupport
 
 template<typename Derived>
@@ -461,6 +467,344 @@ int EigenSupport::writeMatrix(const char *filename, const Eigen::PlainObjectBase
   if (!outfile.write((char *)mat.data(), sizeof(typename Eigen::PlainObjectBase<Derived>::Scalar) * mat.size())) {
     return 1;
   }
+
+  return 0;
+}
+
+namespace EigenSupport
+{
+
+struct NpyArrayInfo
+{
+  size_t rows;
+  size_t cols;
+  bool fortran_order;
+  std::string dtype;
+};
+
+// Simple parser to extract shape and fortran_order from the header
+inline NpyArrayInfo parse_npy_header(const std::string &header)
+{
+  NpyArrayInfo info{ 0, 0, false, "" };
+
+  std::string key_dtype = "descr";
+  auto pos_d = header.find(key_dtype);
+  if (pos_d == std::string::npos) {
+    throw std::runtime_error("Could not find descr in header");
+  }
+  auto pos_d_colon = header.find(':', pos_d);
+  if (pos_d_colon == std::string::npos || pos_d_colon - pos_d - 5 > 5) {
+    throw std::runtime_error("Could not parse descr entry");
+  }
+
+  // parse dtype
+  auto pos_d_val = header.find('\'', pos_d_colon);
+  if (pos_d_val == std::string::npos) {
+    throw std::runtime_error("Could not parse descr value");
+  }
+  auto pos_d_val_end = header.find('\'', pos_d_val + 1);
+  if (pos_d_val_end == std::string::npos) {
+    throw std::runtime_error("Could not parse descr value");
+  }
+  std::string dtype_str = header.substr(pos_d_val + 1, pos_d_val_end - pos_d_val - 1);
+  info.dtype = dtype_str;
+
+  // Find "fortran_order"
+  std::string key_fortran = "fortran_order";
+  auto pos_f = header.find(key_fortran);
+  if (pos_f == std::string::npos) {
+    throw std::runtime_error("Could not find fortran_order in header");
+  }
+
+  auto pos_f_val = header.find_first_of("TrueFals", pos_f);
+  if (pos_f_val == std::string::npos) {
+    throw std::runtime_error("Could not parse fortran_order value");
+  }
+  info.fortran_order = (header.compare(pos_f_val, 4, "True") == 0);
+
+  // Find "shape"
+  std::string key_shape = "shape";
+  auto pos_s = header.find(key_shape);
+  if (pos_s == std::string::npos) {
+    throw std::runtime_error("Could not find shape in header");
+  }
+  auto pos_par_open = header.find('(', pos_s);
+  auto pos_par_close = header.find(')', pos_par_open);
+  if (pos_par_open == std::string::npos || pos_par_close == std::string::npos) {
+    throw std::runtime_error("Could not parse shape tuple");
+  }
+
+  std::string shape_str = header.substr(pos_par_open + 1,
+    pos_par_close - pos_par_open - 1);
+  // Expect something like "100, 200" or "100,"
+  // We'll parse up to 2 dimensions
+  size_t comma_pos = shape_str.find(',');
+  if (comma_pos == std::string::npos) {
+    // 1D array - treat as (N, 1)
+    info.rows = static_cast<size_t>(std::stoul(shape_str));
+    info.cols = 1;
+  }
+  else {
+    // 2D: "rows, cols"
+    std::string first = shape_str.substr(0, comma_pos);
+    std::string second = shape_str.substr(comma_pos + 1);
+    // trim spaces
+    auto trim = [](std::string &s) {
+      size_t start = s.find_first_not_of(" \t");
+      size_t end = s.find_last_not_of(" \t");
+      if (start == std::string::npos) {
+        s = "";
+        return;
+      }
+      s = s.substr(start, end - start + 1);
+    };
+    trim(first);
+    trim(second);
+
+    info.rows = static_cast<size_t>(std::stoul(first));
+    // second might still end with a comma or be empty if 1D
+    if (!second.empty() && second != ",") {
+      // remove trailing comma if present
+      if (second.back() == ',')
+        second.pop_back();
+      trim(second);
+      if (!second.empty())
+        info.cols = static_cast<size_t>(std::stoul(second));
+      else
+        info.cols = 1;
+    }
+    else {
+      info.cols = 1;
+    }
+  }
+  return info;
+}
+}  // namespace EigenSupport
+
+template<typename Derived>
+int EigenSupport::readNPY(const char *filename, Eigen::PlainObjectBase<Derived> &mat)
+{
+  std::ifstream fs(filename, std::ios::binary);
+  if (!fs) {
+    std::cerr << "Cannot open file: " << filename << std::endl;
+    return 1;
+  }
+
+  // Check magic string
+  char magic[6];
+  fs.read(magic, 6);
+  if (std::string(magic, 6) != "\x93NUMPY") {
+    std::cerr << "File is not a valid .npy (bad magic)" << std::endl;
+    return 1;
+  }
+
+  // Read version
+  uint8_t major, minor;
+  fs.read(reinterpret_cast<char *>(&major), 1);
+  fs.read(reinterpret_cast<char *>(&minor), 1);
+
+  // Read header length (little endian unsigned short for v1.0/2.0)
+  uint16_t header_len_le;
+  fs.read(reinterpret_cast<char *>(&header_len_le), 2);
+  uint16_t header_len = header_len_le;  // little-endian on common platforms
+
+  // Read header
+  std::string header(header_len, ' ');
+  fs.read(&header[0], header_len);
+
+  // Parse header to get shape and fortran_order
+  NpyArrayInfo info;
+  try {
+    info = parse_npy_header(header);
+  }
+  catch (const std::exception &e) {
+    std::cerr << "Error parsing .npy header: " << e.what() << std::endl;
+    return 1;
+  }
+
+  // We assume dtype is '<f8' (little-endian float64). You can add checks if needed.
+  const size_t rows = info.rows;
+  const size_t cols = info.cols;
+  const size_t total_elems = rows * cols;
+
+  if (info.fortran_order) {
+    std::cerr << "Fortran-order arrays not supported in this simple loader";
+  }
+
+  if constexpr (std::is_same<typename Derived::Scalar, float>::value) {
+    if (info.dtype == "<f4") {
+      // double
+    }
+    else {
+      std::cerr << "Type mismatched" << std::endl;
+      return 1;
+    }
+  }
+  else if constexpr (std::is_same<typename Derived::Scalar, double>::value) {
+    if (info.dtype == "<f8") {
+      // double
+    }
+    else {
+      std::cerr << "Type mismatched" << std::endl;
+      return 1;
+    }
+  }
+  else if constexpr (std::is_same<typename Derived::Scalar, int>::value) {
+    if (info.dtype == "<i4") {
+      // int
+    }
+    else {
+      std::cerr << "Type mismatched" << std::endl;
+      return 1;
+    }
+  }
+  else if constexpr (std::is_same<typename Derived::Scalar, int64_t>::value) {
+    if (info.dtype == "<i8") {
+      // int64
+    }
+    else {
+      std::cerr << "Type mismatched" << std::endl;
+      return 1;
+    }
+  }
+  else {
+    std::cerr << "Unsupported matrix scalar type" << std::endl;
+    return 1;
+  }
+
+  // Read data
+  std::vector<typename Derived::Scalar> data(total_elems);
+  fs.read(reinterpret_cast<char *>(data.data()), total_elems * sizeof(typename Derived::Scalar));
+  if (!fs) {
+    std::cerr << "Failed to read array data" << std::endl;
+    return 1;
+  }
+
+  mat.resize(rows, cols);
+  for (int ri = 0; ri < (int)rows; ri++) {
+    for (int ci = 0; ci < (int)cols; ci++) {
+      mat(ri, ci) = data[ri * cols + ci];
+    }
+  }
+
+  return 0;
+}
+
+template<typename Derived>
+int EigenSupport::writeNPY(const char *filename, const Eigen::PlainObjectBase<Derived> &mat, int transpose)
+{
+  typedef typename Derived::Scalar Scalar;
+
+  std::ofstream file(filename, std::ios::binary);
+  if (!file.is_open()) {
+    std::cerr << "Failed to open file for writing: " << filename << std::endl;
+    return 1;
+  }
+
+  // NumPy header magic
+  file.write("\x93NUMPY", 6);
+
+  // Version
+  uint8_t major = 1, minor = 0;
+  file.write(reinterpret_cast<const char *>(&major), 1);
+  if (!file) {
+    std::cerr << "Failed to write major version" << std::endl;
+    return 1;
+  }
+
+  file.write(reinterpret_cast<const char *>(&minor), 1);
+  if (!file) {
+    std::cerr << "Failed to write minor version" << std::endl;
+    return 1;
+  }
+
+  // Determine data type
+  std::string dtype;
+  if (std::is_same<Scalar, float>::value)
+    dtype = "'<f4'";
+  else if (std::is_same<Scalar, double>::value)
+    dtype = "'<f8'";
+  else if (std::is_same<Scalar, int>::value)
+    dtype = "'<i4'";
+  else if (std::is_same<Scalar, int64_t>::value)
+    dtype = "'<i8'";
+  else
+    dtype = "'<f8'";  // default to double
+
+  // Create header dictionary
+  std::ostringstream header;
+  int rows = mat.rows();
+  int cols = mat.cols();
+  if (transpose) {
+    rows = mat.cols();
+    cols = mat.rows();
+  }
+
+  if (cols == 1) {
+    // Vector
+    header << "{'descr': " << dtype << ", 'fortran_order': False, 'shape': ("
+           << rows << ",), }";
+  }
+  else {
+    // Matrix
+    header << "{'descr': " << dtype << ", 'fortran_order': False, 'shape': ("
+           << rows << ", " << cols << "), }";
+  }
+
+  // Pad header to multiple of 64 bytes
+  std::string header_str = header.str();
+  size_t pad_len = 64 - ((10 + header_str.size()) % 64);
+  header_str += std::string(pad_len, ' ');
+  header_str[header_str.size() - 1] = '\n';
+
+  // Write header length
+  uint16_t header_len = static_cast<uint16_t>(header_str.size());
+  file.write(reinterpret_cast<const char *>(&header_len), 2);
+  if (!file) {
+    std::cerr << "Failed to write header length" << std::endl;
+    return 1;
+  }
+
+  // Write header
+  file.write(header_str.c_str(), header_str.size());
+  if (!file) {
+    std::cerr << "Failed to write header" << std::endl;
+    return 1;
+  }
+
+  if (transpose) {
+    // Write data
+    // if (rows * cols * sizeof(Scalar) > (1 << 30)) {
+    //   int chunkSize = 1 << 20;  // 1M entries per chunk
+    //   int totalEntries = rows * cols;
+    //   int offset = 0;
+    //   while (offset < totalEntries) {
+    //     int currentChunkSize = std::min(chunkSize, totalEntries - offset);
+    //     // Write current chunk
+    //     file.write(reinterpret_cast<const char *>(mat.data() + offset), currentChunkSize * sizeof(Scalar));
+    //     if (!file) {
+    //       std::cerr << "Failed to write array data in chunks" << std::endl;
+    //       return 1;
+    //     }
+    //     offset += currentChunkSize;
+    //   }
+    // }
+    // else {
+    file.write(reinterpret_cast<const char *>(mat.data()), size_t(rows) * size_t(cols) * sizeof(Scalar));
+    // }
+  }
+  else {
+    Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> matRowMajor = mat.derived();
+    // Write data
+    file.write(reinterpret_cast<const char *>(matRowMajor.data()),
+      rows * cols * sizeof(Scalar));
+  }
+  if (!file) {
+    std::cerr << "Failed to write array data" << std::endl;
+    return 1;
+  }
+
+  file.close();
 
   return 0;
 }

@@ -2,8 +2,10 @@
 
 #include "potentialEnergy.h"
 
-#if defined(PGO_HAS_MKL)
+#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
 #  include "EigenMKLPardisoSupport.h"
+#elif defined(PGO_HAS_ORIG_PARDISO)
+#  include "EigenOrigPardisoSupport.h"
 #endif
 
 #include <cfloat>
@@ -68,8 +70,10 @@ protected:
   EigenSupport::SpMatD sysFull, A11, A12;
   EigenSupport::SpMatI A11Mapping, A12Mapping;
 
-#if defined(PGO_HAS_MKL)
+#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
   std::shared_ptr<EigenSupport::EigenMKLPardisoSupport> solver;
+#elif defined(PGO_HAS_ORIG_PARDISO)
+  std::shared_ptr<EigenSupport::EigenOrigPardisoSupport> solver;
 #else
   std::shared_ptr<EigenSupport::SymSolver> solver;
 #endif

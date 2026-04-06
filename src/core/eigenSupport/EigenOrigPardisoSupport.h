@@ -1,25 +1,21 @@
 #pragma once
 
-#include "EigenDef.h"
-
-#include <mkl_pardiso.h>
+#include "EigenSupport.h"
 
 #include <array>
 #include <map>
 #include <string>
 
-#if !defined(PGO_HAS_ORIG_PARDISO)
-
 namespace pgo
 {
 namespace EigenSupport
 {
-class EigenMKLPardisoSupport
+class EigenOrigPardisoSupport
 {
 public:
-  // The constructor computes the permutation to re-order A, and performs symbolic factorization.
+  // The constructor initializes the PARDISO handle and performs symbolic factorization.
   // Only the topology of A matters for the constructor. A is not modified.
-  // Note: after calling the constructor, you must call "FactorMatrix" to perform numerical factorization.
+  // Note: after calling the constructor, you must call "factorize" to perform numerical factorization.
   //  "mtype" gives the matrix type:
   //  = 1   structurally symmetric matrix
   //  = 2   symmetric positive-definite matrix
@@ -36,26 +32,28 @@ public:
   // Matrix re-ordering is specified as follows:
   // = 0   minimum degree ordering
   // = 2   nested dissection algorithm from the METIS package
-  // = 3   parallel (OpenMP) version of nested dissection; it can decrease the computation time on multi-core computers, especially when the constructor takes a long time
+  // = 3   parallel (OpenMP) version of nested dissection
   enum class ReorderingType : int
   {
     MINIMUM_DEGREE_ORDERING = 0,
-    NESTED_DISSECTION = 2,
-    PARALLEL_NESTED_DISSECTION = 3
+    NESTED_DISSECTION_4 = 2,
+    NESTED_DISSECTION_5 = 3,
+    AMD = 4
   };
 
   // must have: numThreads >= 1
-  // "directIterative" specifies whether a direct-iterative procedure is used (see Intel MKL's documentation)
-  EigenMKLPardisoSupport(const SpMatD &A, MatrixType mtype = MatrixType::REAL_SYM_INDEFINITE,
-    ReorderingType rtype = ReorderingType::NESTED_DISSECTION, int directIterative = 0, int msgLevel = 0, int maxNumRefinement = 0,
+  // "directIterative" specifies whether the multi-recursive iterative solver is used (solver=1)
+  EigenOrigPardisoSupport(const SpMatD &A, MatrixType mtype = MatrixType::REAL_SYM_INDEFINITE,
+    ReorderingType rtype = ReorderingType::NESTED_DISSECTION_4, 
+    int directIterative = 0, int msgLevel = 0, int maxNumRefinement = 0,
     int transposeMatrix = 0, int solverMode = 0, int inputMatrixIsUpper = 0);
-  EigenMKLPardisoSupport(const EigenMKLPardisoSupport &other) = delete;
-  EigenMKLPardisoSupport(EigenMKLPardisoSupport &&other) = delete;
+  EigenOrigPardisoSupport(const EigenOrigPardisoSupport &other) = delete;
+  EigenOrigPardisoSupport(EigenOrigPardisoSupport &&other) = delete;
 
-  ~EigenMKLPardisoSupport();
+  ~EigenOrigPardisoSupport();
 
-  void setMessageLevel(int lvl) { msgLvl = static_cast<MKL_INT>(lvl); }
-  std::array<MKL_INT, 64> &getiparam() { return iparm; }
+  void setMessageLevel(int lvl) { msgLvl = lvl; }
+  std::array<int, 64> &getiparam() { return iparm; }
 
   int analyze(const SpMatD &A);
   int factorize(const SpMatD &A);
@@ -71,25 +69,31 @@ public:
 protected:
   void setParam();
   void mapAMatrix(const SpMatD &inA);
+  void buildCSR(const SpMatD &inA);
+  void updateCSRValues(const SpMatD &inA);
   std::string getErrorMessage(int errorCode) const;
 
-  std::array<MKL_INT, 64> iparm;
-  std::array<void *, 64> pointers;
-
-  std::vector<MKL_INT> perm;
+  std::array<int, 64> iparm;
+  std::array<double, 64> dparm;
+  std::array<void *, 64> pt;
 
   MatrixType mtype;
   ReorderingType rtype;
-  MKL_INT directIterative;
-  MKL_INT msgLvl;
-  MKL_INT maxNumRefinementSteps;
-  MKL_INT transposeMatrix;
-  MKL_INT solverMode;
+  int directIterative;
+  int msgLvl;
+  int maxNumRefinementSteps;
+  int transposeMatrix;
+  int solverMode;
 
-  MKL_INT maxfct = 1;
-  MKL_INT mnum = 1;
-  MKL_INT n;
+  int maxfct = 1;
+  int mnum = 1;
+  int n;
 
+  // Internal 1-based CSR storage (original PARDISO uses Fortran 1-based indexing)
+  std::vector<int> ia, ja;
+  std::vector<double> entries;
+
+  // Mapping from full matrix to upper-triangular stored matrix
   SpMatD A;
   SpMatI AMapping;
 
@@ -97,4 +101,3 @@ protected:
 };
 }  // namespace EigenSupport
 }  // namespace pgo
-#endif  // !defined(PGO_HAS_ORIG_PARDISO)

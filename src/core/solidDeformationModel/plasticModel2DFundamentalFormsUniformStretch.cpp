@@ -15,6 +15,14 @@ void pgo::SolidDeformationModel::PlasticModel2DFundamentalFormsUniformStretch::c
   (EigenSupport::Mp<EigenSupport::M2d>(a)) = S * abar * S;
 }
 
+void pgo::SolidDeformationModel::PlasticModel2DFundamentalFormsUniformStretch::compute_Fp(const double *params, double *Fp) const
+{
+  Fp[0] = params[0];
+  Fp[1] = 0.0;
+  Fp[2] = 0.0;
+  Fp[3] = params[0];
+}
+
 void pgo::SolidDeformationModel::PlasticModel2DFundamentalFormsUniformStretch::compute_bbar(const double *params, double *b) const
 {
   (EigenSupport::Mp<EigenSupport::M2d>(b)) = bbar;

@@ -20,6 +20,8 @@ public:
 
   virtual ~KoiterDeformationModel();
 
+  void enableSPD(int enable) override;
+
   CacheData *allocateCacheData() const override;
   void freeCacheData(CacheData *data) const override;
   void prepareData(const double *x, const double *param, const double *materialParam, CacheData *cacheData) const override;
@@ -28,14 +30,14 @@ public:
   void compute_dE_dx(const CacheData *cacheData, double *grad) const override;
   void compute_d2E_dx2(const CacheData *cacheData, double *hess) const override;
 
+  virtual void compute_d2E_dxda(const CacheData *cacheData, double *hess) const override;
+  virtual void compute_d2E_dxdb(const CacheData *cacheData, double *hess) const override;
+
   virtual void compute_dE_da(const CacheData *cacheData, double *grad) const {}
   virtual void compute_d2E_da2(const CacheData *cacheData, double *hess) const {}
-  virtual void compute_d2E_dxda(const CacheData *cacheData, double *hess) const override;
 
   virtual void compute_dE_db(const CacheData *cacheData, double *grad) const {}
   virtual void compute_d2E_db2(const CacheData *cacheData, double *hess) const {}
-  virtual void compute_d2E_dxdb(const CacheData *cacheData, double *hess) const override;
-
   virtual void compute_d2E_dadb(const CacheData *cacheData, double *hess) const {}
 
   virtual void compute_d3E_dx3(const CacheData *cacheData, double *tensor) const {}

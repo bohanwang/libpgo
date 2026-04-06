@@ -15,6 +15,9 @@ namespace BasicAlgorithms
 class TimeTable
 {
 public:
+  TimeTable() {}
+  virtual ~TimeTable() {}
+
   // Start timing for a named statistic
   void start(const std::string &name)
   {
@@ -75,6 +78,32 @@ public:
     }
 
     std::cout << "Total Sum: " << totalSum << " seconds" << std::endl;
+  }
+
+  std::vector<std::tuple<std::string, double>> exportStatistics() const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<std::tuple<std::string, double>> result;
+    double totalSum = 0.0;
+
+    std::vector<std::tuple<std::string, int, std::shared_ptr<AveragingBuffer>>> temp;
+    for (const auto &entry : statistics) {
+      temp.emplace_back(std::make_tuple(entry.first, std::get<0>(entry.second), std::get<1>(entry.second)));
+    }
+
+    std::sort(temp.begin(), temp.end(), [](const auto &v1, const auto &v2) {
+      return std::get<1>(v1) < std::get<1>(v2);
+    });
+
+    for (const auto &entry : temp) {
+      double average = std::get<2>(entry)->getAverage();
+      result.emplace_back(std::make_tuple(std::get<0>(entry), average));
+      totalSum += average;
+    }
+
+    result.emplace_back(std::make_tuple("Total", totalSum));
+    
+    return result;
   }
 
 private:

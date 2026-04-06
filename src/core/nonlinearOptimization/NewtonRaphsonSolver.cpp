@@ -90,9 +90,13 @@ void NewtonRaphsonSolver::setFixedDOFs(const std::vector<int> &fixedDOFs_, const
     // ES::SelectRowsCols(sysFull, flexibleDOFs, fixedDOFs, A12);
     // ES::Big2Small(sysFull, A12, flexibleDOFs, fixedDOFs, A12Mapping, 0);
 
-#if defined(PGO_HAS_MKL)
+#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
     solver = std::make_shared<ES::EigenMKLPardisoSupport>(A11, ES::EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
-      ES::EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 2, 0, 0, 0);
+      ES::EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
+    solver->analyze(A11);
+#elif defined(PGO_HAS_ORIG_PARDISO)
+    solver = std::make_shared<ES::EigenOrigPardisoSupport>(A11, ES::EigenOrigPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
+      ES::EigenOrigPardisoSupport::ReorderingType::NESTED_DISSECTION_4, 0, 0, 0, 0, 0, 0);
     solver->analyze(A11);
 #else
     solver = std::make_shared<EigenSupport::SymSolver>();
@@ -130,6 +134,7 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
   int iter = 0;
   double lambdaScale = 1.0;
   double lambda0 = 1.0;
+  int lineSearchFailedTimes = 0;
   // compute lambda initial
   memset(grad.data(), 0, sizeof(double) * grad.size());
   energy->gradient(x, grad);
@@ -226,7 +231,10 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
     // rhs = -grad - A12 * fixedvalue
     // ES::mv(A12, fixedValues, rhs, -1.0, -1.0, 0);
     rhs *= -1.0;
-#if defined(PGO_HAS_MKL)
+#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
+    solver->factorize(A11);
+    solver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
+#elif defined(PGO_HAS_ORIG_PARDISO)
     solver->factorize(A11);
     solver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
 #else
@@ -324,10 +332,30 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
 
       if (eng1 > eng) {
         if (verbose >= 1) {
-          std::cout << "    Iter=" << iter << "; line search failed." << std::endl;
+          std::cout << "    Iter=" << iter << "; line search failed. Times: " << lineSearchFailedTimes << std::endl;
+          break;
+          // std::cout << "          Adding damping." << std::endl;
         }
 
-        break;
+        // solverParam.addDamping = 1;
+        // if (lineSearchFailedTimes == 0) {
+        //   lambdaScale = 1.0;
+        //   lambda0 = grad.cwiseAbs().maxCoeff();
+        // }
+        // else {
+        //   lambdaScale *= 2.0;
+        // }
+
+        // if (lineSearchFailedTimes++ >= 3) {
+        //   if (verbose >= 1) {
+        //     std::cout << "    Iter=" << iter << "; line search failed too many times. Stop." << std::endl;
+        //   }
+
+        //   break;
+        // }
+        // else {
+        //   continue;
+        // }
       }
 
       x += deltax * alpha;
@@ -335,10 +363,30 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
       stepSize = std::abs(alpha * deltax.cwiseAbs().maxCoeff());
       if (stepSize < 1e-15) {
         if (verbose >= 1) {
-          std::cout << "    Iter=" << iter << "; dx = " << stepSize << "; dx too small." << std::endl;
+          std::cout << "    Iter=" << iter << "; dx = " << stepSize << "; dx too small. Times: " << lineSearchFailedTimes << std::endl;
+          break;
+          // std::cout << "          Adding damping." << std::endl;
         }
 
-        break;
+        // solverParam.addDamping = 1;
+        // if (lineSearchFailedTimes == 0) {
+        //   lambda0 = grad.cwiseAbs().maxCoeff();
+        //   lambdaScale = 1.0;
+        // }
+        // else {
+        //   lambdaScale *= 2.0;
+        // }
+
+        // if (lineSearchFailedTimes++ >= 3) {
+        //   if (verbose >= 1) {
+        //     std::cout << "    Iter=" << iter << "; line search failed too many times. Stop." << std::endl;
+        //   }
+
+        //   break;
+        // }
+        // else {
+        //   continue;
+        // }
       }
     }
     else if (solverParam.sst == SST_SUBITERATION_ONE) {

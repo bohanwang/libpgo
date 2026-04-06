@@ -31,6 +31,7 @@ void pgo::GeogramInterface::initGEO()
     GEO::CmdLine::import_arg_group("standard");
     GEO::CmdLine::import_arg_group("remesh");
     GEO::CmdLine::import_arg_group("algo");
+    GEO::Process::set_max_threads(16);
   });
 }
 

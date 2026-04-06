@@ -49,6 +49,8 @@ public:
 
   virtual void compute_d2E_dadb(const CacheData *cacheData, double *hess) const = 0;
 
+  virtual void enableSPD(int enable) = 0;
+
   // virtual void compute_d3E_dx3(const CacheData *cacheData, double *tensor) const = 0;
   // virtual void compute_d3E_dxdadx(const CacheData *cacheData, double *tensor) const = 0;
   // virtual void compute_d3E_dxdada(const CacheData *cacheData, double *tensor) const = 0;

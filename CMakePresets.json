@@ -1,0 +1,137 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 29,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": false,
+            "cacheVariables": {
+                "PGO_USE_MKL": "ON",
+                "PGO_ENABLE_FULL": "ON",
+                "PGO_BUILD_SUBPROJECTS": "ON",
+                "PGO_ENABLE_ALEMBIC": "ON",
+                "PGO_ENABLE_GMSH": "ON"
+            }
+        },
+        {
+            "name": "base_win",
+            "hidden": false,
+            "cacheVariables": {
+                "PGO_USE_MKL": "ON",
+                "PGO_ENABLE_FULL": "ON",
+                "PGO_BUILD_SUBPROJECTS": "ON",
+                "PGO_ENABLE_ALEMBIC": "OFF",
+                "PGO_ENABLE_GMSH": "OFF"
+            }
+        },
+        {
+            "name": "debug",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "knitro",
+            "inherits": [],
+            "cacheVariables": {
+                "PGO_OPT_USE_KNITRO": "ON",
+                "KNITRO_LIBRARY_HINT": "/opt/artelys/knitro-15.0.1-Linux64"
+            }
+        },
+        {
+            "name": "pardiso",
+            "inherits": [],
+            "cacheVariables": {
+                "PGO_HAS_ORIG_PARDISO": "ON",
+                "PARDISO_LIBRARY_HINT": "/opt/panua-pardiso-20240229-linux"
+            }
+        },
+        {
+            "name": "cuda",
+            "inherits": [],
+            "cacheVariables": {
+                "PGO_ENABLE_CUDA": "ON"
+            }
+        },
+        {
+            "name": "base_knitro",
+            "inherits": [
+                "base",
+                "knitro"
+            ]
+        },
+        {
+            "name": "base_knitro_cuda",
+            "inherits": [
+                "base",
+                "knitro",
+                "cuda"
+            ]
+        },
+        {
+            "name": "all_debug",
+            "inherits": [
+                "base",
+                "knitro",
+                "pardiso",
+                "cuda",
+                "debug"
+            ]
+        },
+        {
+            "name": "all_release",
+            "inherits": [
+                "base",
+                "knitro",
+                "pardiso",
+                "cuda"
+            ],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "base_cuda",
+            "inherits": [
+                "base",
+                "cuda"
+            ]
+        },
+        {
+            "name": "base_cuda_win",
+            "inherits": [
+                "base_win",
+                "cuda"
+            ],
+            "cacheVariables": {
+                "cudss_DIR" : "C:/Program Files/NVIDIA cuDSS/v0.7/lib/13/cmake/cudss"
+            }
+        }
+    
+    ],
+    "buildPresets": [
+        {
+            "name": "base",
+            "configurePreset": "base",
+            "hidden": false,
+            "jobs": 32
+        },
+        {
+            "name": "all_debug",
+            "configurePreset": "all_debug",
+            "hidden": false,
+            "jobs": 32
+        },
+        {
+            "name": "all_release",
+            "configurePreset": "all_release",
+            "hidden": false,
+            "jobs": 32
+        }
+    ]
+}

@@ -92,6 +92,10 @@ public:
 
 using namespace pgo::SolidDeformationModel;
 
+void TetMeshDeformationModel::enableSPD(int enable)
+{
+}
+
 TetMeshDeformationModel::TetMeshDeformationModel(
   const double X0[3], const double X1[3], const double X2[3], const double X3[3],
   ElasticModel *elasticModel, PlasticModel *plasticModel):

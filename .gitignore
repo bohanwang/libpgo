@@ -48,3 +48,5 @@ build-test
 
 *.obj
 *.png
+
+*.u

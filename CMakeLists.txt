@@ -1,17 +1,16 @@
 cmake_minimum_required(VERSION 3.28.0 FATAL_ERROR)
 
-project(libpgo LANGUAGES CXX C)
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(PGO_USE_MKL "Use MKL" OFF)
 option(PGO_ENABLE_PYTHON "Build python module" OFF)
 option(PGO_ENABLE_FULL "Enable all functionalities" OFF)
+option(PGO_ENABLE_CUDA "Enable CUDA" OFF)
 option(PGO_BUILD_SUBPROJECTS "Include subprojects" OFF)
 option(PGO_CHECK_CONDA "Check conda" OFF)
 
@@ -20,11 +19,19 @@ option(PGO_RENDER_USE_ASSIMP "Use Assimp" OFF)
 option(PGO_RELEASE_MODE_DEBUG "Enable debug in release mode" OFF)
 option(PGO_IGNORE_DEBUG_FLAG "Ignore debug flag" OFF)
 option(PGO_CREATE_MISSING_FILE "Create file when it is missing" OFF)
+option(PGO_HAS_ORIG_PARDISO "Use original pardiso" OFF)
 option(PGO_OPT_USE_IPOPT "Use IPOPT" OFF)
 option(PGO_OPT_USE_KNITRO "Use KNITRO" OFF)
 option(PGO_MKL_LINK_DYNAMIC "MKL Link" ON)
 option(PGO_ENABLE_ALEMBIC "Enable Alembic support" OFF)
 option(PGO_ENABLE_GMSH "Enable GMSH support" OFF)
+
+project(libpgo LANGUAGES CXX C)
+
+if (PGO_ENABLE_CUDA)
+  enable_language(CUDA)
+  set(CMAKE_CUDA_ARCHITECTURES native)
+endif()
 
 # message(STATUS "CMake module path: ${CMAKE_MODULE_PATH}")
 set(PGO_CMAKE_MODULES ${CMAKE_SOURCE_DIR}/CMakeModules)
@@ -154,6 +161,10 @@ add_def(compilation_flag MSVC All INTERFACE _CRT_SECURE_NO_WARNINGS)
 add_def(compilation_flag MSVC All INTERFACE HAVE_STRUCT_TIMESPEC)
 add_def(compilation_flag MSVC All INTERFACE GLOG_NO_ABBREVIATED_SEVERITIES)
 
+if(PGO_ENABLE_CUDA)
+  find_package(CUDAToolkit REQUIRED)
+endif()
+
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   message(STATUS "Debug Mode..")
 
@@ -164,6 +175,8 @@ else()
   message(STATUS "Release Mode..")
 
   add_flag_poxis(compilation_flag INTERFACE -O3)
+  add_flag_poxis(compilation_flag INTERFACE -ggdb3)
+  add_link_flag_poxis(compilation_flag -ggdb3)
 endif()
 
 # ================== third party ==========================
@@ -184,6 +197,7 @@ add_subdirectory(third-party)
 
 include(CMakeModules/third-party/tbb.cmake)
 include(CMakeModules/third-party/mkl.cmake)
+include(CMakeModules/third-party/backward.cmake)
 
 if(PGO_ENABLE_PYTHON OR PGO_ENABLE_FULL)
   include(CMakeModules/third-party/suitesparse.cmake)
@@ -204,37 +218,20 @@ endif()
 
 if(PGO_ENABLE_FULL)
   include(CMakeModules/third-party/geogram.cmake)
+endif()
+
+if(PGO_ENABLE_FULL OR PGO_ENABLE_PYTHON)
   include(CMakeModules/third-party/libigl.cmake)
 
   igl_include(copyleft core)
   igl_include(copyleft cgal)
-endif()
-
-if(PGO_ENABLE_FULL OR PGO_ENABLE_PYTHON)
+  
   if(PGO_ENABLE_ALEMBIC)
     include(CMakeModules/third-party/alembic.cmake)
   endif()
   
   if(PGO_ENABLE_GMSH)
     include(CMakeModules/third-party/gmsh.cmake)
-  endif()
-  
-  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU") 
-    find_program(GFORTRAN_EXECUTABLE gfortran)
-    if(GFORTRAN_EXECUTABLE)
-      message(STATUS "gfortran found: ${GFORTRAN_EXECUTABLE}")
-      include(CMakeModules/third-party/arpackng.cmake)
-
-      execute_process(COMMAND gfortran -print-file-name=libgfortran.so OUTPUT_VARIABLE GFORTRAN_PATH)
-      string(REGEX REPLACE "\n$" "" GFORTRAN_PATH "${GFORTRAN_PATH}")
-      set(GFORTRAN_LIBRARY ${GFORTRAN_PATH} CACHE PATH "gfortran library path")
-      message(STATUS "FOUND gfortran library: ${GFORTRAN_LIBRARY}")
-
-      execute_process(COMMAND gfortran -print-file-name=libquadmath.so OUTPUT_VARIABLE QUADMATH_PATH)
-      string(REGEX REPLACE "\n$" "" QUADMATH_PATH "${QUADMATH_PATH}")
-      set(QUADMATH_LIBRARY ${QUADMATH_PATH} CACHE PATH "quadmath library path")
-      message(STATUS "FOUND quadmath library: ${QUADMATH_LIBRARY}")
-    endif()
   endif()
 endif()
 
@@ -259,6 +256,14 @@ if(PGO_OPT_USE_KNITRO)
 
   if(TARGET Knitro::Knitro)
     add_compile_definitions(PGO_HAS_KNITRO)
+  endif()
+endif()
+
+if(PGO_HAS_ORIG_PARDISO)
+  include(CMakeModules/third-party/pardiso.cmake)
+
+  if(TARGET Pardiso::Pardiso)
+    add_compile_definitions(PGO_HAS_ORIG_PARDISO)
   endif()
 endif()
 

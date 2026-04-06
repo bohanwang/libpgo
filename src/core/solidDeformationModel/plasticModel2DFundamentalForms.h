@@ -27,6 +27,14 @@ public:
   virtual void compute_tbar(const double *params, double *t) const { (Eigen::Map<EigenSupport::M3d>(t)) = tbar; }
   virtual void compute_qbar(const double *params, double *q) const { (Eigen::Map<EigenSupport::M3d>(q)) = qbar; }
 
+  virtual void compute_Fp(const double *params, double *Fp) const
+  {
+    Fp[0] = 1.0;
+    Fp[1] = 0.0;
+    Fp[2] = 0.0;
+    Fp[3] = 1.0;
+  }
+
   virtual double computeArea(const double *params) const { return areaRest; }
 
   virtual void compute_dtbar_inv_dparam(const double *params, int j, double *dtbar_da) const {}

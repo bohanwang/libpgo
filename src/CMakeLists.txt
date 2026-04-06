@@ -20,6 +20,7 @@ set(PGO_GLOBAL_LIBRARY_TARGETS
   libiglInterface
   tetgenInterface
   animationIO
+  cudaUtilities
   CACHE INTERNAL ""
 )
 

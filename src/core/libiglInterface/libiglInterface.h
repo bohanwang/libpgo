@@ -29,6 +29,7 @@ void meanCuravtures(const Mesh::TriMeshGeo &meshIn, EigenSupport::VXd &h);
 void computeParameterization(const Mesh::TriMeshGeo &meshIn, Mesh::TriMeshGeo &meshOut, int mode);
 
 void computeMassMatrix(const Mesh::TriMeshGeo &meshIn, EigenSupport::SpMatD &M, int lumped, int expand3);
+void computeCotangentLaplacianMatrix(const Mesh::TriMeshGeo &meshIn, EigenSupport::SpMatD &L, int expand3);
 
 }  // namespace libiglInterface
 }  // namespace pgo

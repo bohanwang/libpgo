@@ -8,7 +8,7 @@ copyright to USC
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 
-#if defined(PGO_HAS_MKL)
+#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
 #  include <Eigen/PardisoSupport>
 #endif
 
@@ -119,8 +119,6 @@ typedef Eigen::Matrix<double, 18, 9> M18x9d;
 typedef Eigen::Matrix<double, 3, 12> M3x12d;
 typedef Eigen::Matrix<double, 12, 3> M12x3d;
 
-
-
 typedef Eigen::VectorXd VXd;
 typedef Eigen::VectorXi VXi;
 
@@ -149,7 +147,7 @@ using EigenArray = std::vector<T, typename Eigen::aligned_allocator<T>>;
 template<typename T, int MapOptions = Eigen::Unaligned, typename StrideType = Eigen::Stride<0, 0>>
 using Mp = Eigen::Map<T, MapOptions, StrideType>;
 
-#if defined(PGO_HAS_MKL)
+#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
 typedef Eigen::PardisoLLT<SpMatD> SPDSolver;
 typedef Eigen::PardisoLDLT<SpMatD> SymSolver;
 typedef Eigen::PardisoLU<SpMatD> LUSolver;

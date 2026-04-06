@@ -21,7 +21,7 @@ public:
   int oppVtx[3] = { 4, 5, 3 };
 
   ES::M2d restI, restII;
-  int enforceSPD;
+  int enableSPD;
 
   ElasticModel2DFundamentalForms *elasticModel;
   PlasticModel2DFundamentalForms *plasticModel;
@@ -78,14 +78,19 @@ public:
 using namespace pgo;
 using namespace pgo::SolidDeformationModel;
 
+void KoiterDeformationModel::enableSPD(int enable)
+{
+  ind->enableSPD = enable;
+}
+
 KoiterDeformationModel::KoiterDeformationModel(const double X0[3], const double X1[3], const double X2[3],
   const double X3[3], const double X4[3], const double X5[3],
-  ElasticModel *elasticModel, PlasticModel *plasticModel, int enforceSPD):
+  ElasticModel *elasticModel, PlasticModel *plasticModel, int enableSPD):
   SolidDeformationModel::DeformationModel(elasticModel, plasticModel)
 {
   ind = new KoiterDeformationModelInternal;
 
-  ind->enforceSPD = enforceSPD;
+  ind->enableSPD = enableSPD;
 
   ind->restX[0] = ES::V3d(X0[0], X0[1], X0[2]);
   ind->restX[1] = ES::V3d(X1[0], X1[1], X1[2]);
@@ -235,6 +240,16 @@ void KoiterDeformationModel::compute_d2E_dx2(const CacheData *cacheDataBase, dou
   hessMap += dbdx.transpose() * d2Edb2 * dbdx * cacheData->area;
   for (int j = 0; j < 4; j++) {
     hessMap += dEdb.data()[j] * d2bdx2[j] * cacheData->area;
+  }
+
+  if (ind->enableSPD) {
+    Eigen::SelfAdjointEigenSolver<ES::M18d> eigenSolver(hessMap, Eigen::ComputeEigenvectors);
+    ES::V18d eigenvalues = eigenSolver.eigenvalues();
+    ES::M18d eigenvectors = eigenSolver.eigenvectors();
+
+    eigenvalues = eigenvalues.cwiseMax(0);
+    ES::M18d hessSPD = eigenvectors * eigenvalues.asDiagonal() * eigenvectors.transpose();
+    hessMap = hessSPD;
   }
 }
 

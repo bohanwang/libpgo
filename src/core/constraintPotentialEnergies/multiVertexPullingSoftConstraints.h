@@ -22,6 +22,7 @@ public:
 
   void setCoeff(double v) { coeffAll = v; }
   void setCoeff(const double *v);
+  void setMasks(const double *v);
   void setTargetPos(const double *tgt);
 
   void printErrorInfo(EigenSupport::ConstRefVecXd u) const;
@@ -31,8 +32,9 @@ protected:
   std::vector<M3i, Eigen::aligned_allocator<M3i>> KIndices;
 
   EigenSupport::VXd tgtp, restpAll;
+
   double coeffAll = 1.0;
-  std::vector<double> coeffs;
+  EigenSupport::VXd coeffs, masks;
   std::vector<int> vertexIndices;
 
   int isDisp;

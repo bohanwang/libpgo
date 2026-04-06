@@ -27,6 +27,8 @@ public:
   virtual void freeCacheData(CacheData *data) const override;
   virtual void prepareData(const double *x, const double *param, const double *materialParam, CacheData *cacheData) const override;
 
+  void enableSPD(int enable) override;
+
   void vonMisesStress(const CacheData *cacheDataBase, int &nPt, double *stresses) const override;
   virtual void maxStrain(const CacheData *cacheDataBase, int &nPt, double *stresses) const override;
 

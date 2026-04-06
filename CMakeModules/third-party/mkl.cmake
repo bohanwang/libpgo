@@ -4,7 +4,7 @@ endif()
 
 if(PGO_USE_MKL)
   message(STATUS "Searching for MKL")
-  
+
   set(MKL_THREADING tbb_thread)
   set(MKL_INTERFACE lp64)
 
@@ -13,7 +13,35 @@ if(PGO_USE_MKL)
   else()
     set(MKL_LINK static)
   endif()
-  
+
+  if(PGO_CHECK_CONDA AND NOT "$ENV{CONDA_PREFIX}" STREQUAL "")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+      set(CANDIDATE_PATH "$ENV{CONDA_PREFIX}/lib/cmake/mkl")
+      message(STATUS "MKL_CMAKE:${CANDIDATE_PATH}")
+
+      if(EXISTS ${CANDIDATE_PATH})
+        set(MKL_DIR ${CANDIDATE_PATH})
+      endif()
+    elseif(WIN32)
+      set(CANDIDATE_PATH "$ENV{CONDA_PREFIX}/Library/lib/cmake/mkl")
+
+      if(EXISTS ${CANDIDATE_PATH})
+        set(MKL_DIR ${CANDIDATE_PATH})
+      endif()
+    endif()
+  else()
+    message(STATUS "MKL Not using conda")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+      if(EXISTS /opt/intel/oneapi/mkl/latest/lib/cmake/mkl)
+        set(MKL_DIR /opt/intel/oneapi/mkl/latest/lib/cmake/mkl)
+      endif()
+    elseif(WIN32)
+      if(EXISTS "C:/Program Files (x86)/Intel/oneAPI/mkl/latest/lib/cmake/mkl")
+        set(MKL_DIR "C:/Program Files (x86)/Intel/oneAPI/mkl/latest/lib/cmake/mkl")
+      endif()
+    endif()
+  endif()
+
   find_package(MKL CONFIG)
 
   if(TARGET MKL::MKL)
