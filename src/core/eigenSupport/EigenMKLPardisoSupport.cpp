@@ -1,5 +1,7 @@
 #include "EigenMKLPardisoSupport.h"
 
+#include "EigenSupport.h"
+
 #include <iostream>
 #include <chrono>
 

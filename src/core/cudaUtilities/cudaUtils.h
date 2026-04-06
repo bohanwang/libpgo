@@ -5,12 +5,12 @@
 #include <array>
 #include <cstring>
 
-#define IF_CUDA_ERR(err, jump)                                                                                   \
-  do {                                                                                                           \
-    if (err != cudaSuccess) {                                                                                    \
+#define IF_CUDA_ERR(err, jump)                                                                                        \
+  do {                                                                                                                \
+    if (err != cudaSuccess) {                                                                                         \
       spdlog::error("CUDA error at {}:{}: code: {}; msg: {}", __FILE__, __LINE__, int(err), cudaGetErrorString(err)); \
-      jump;                                                                                                      \
-    }                                                                                                            \
+      jump;                                                                                                           \
+    }                                                                                                                 \
   } while (0)
 
 #define CUBLAS_CHECK(func, jump)                                                                                     \
@@ -31,14 +31,13 @@
     }                                                                                                          \
   } while (0)
 
-
-#define CUSOLVER_CHECK(func, jump)                                                                             \
-  do {                                                                                                         \
-    cusolverStatus_t err = (func);                                                                             \
-    if (err != CUSOLVER_STATUS_SUCCESS) {                                                                      \
+#define CUSOLVER_CHECK(func, jump)                                                          \
+  do {                                                                                      \
+    cusolverStatus_t err = (func);                                                          \
+    if (err != CUSOLVER_STATUS_SUCCESS) {                                                   \
       spdlog::error("cuSPARSE error at {}:{} with error {}", __FILE__, __LINE__, int(err)); \
-      jump;                                                                                                    \
-    }                                                                                                          \
+      jump;                                                                                 \
+    }                                                                                       \
   } while (0)
 
 #define CUDSS_CHECK(func, jump)                                                          \
