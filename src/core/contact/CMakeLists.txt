@@ -6,6 +6,9 @@ set(CONTACT_HEADERS
   triangleMeshExternalContactHandler.h
   triangleMeshSelfContactDetection.h
   triangleMeshSelfContactHandler.h
+  CIPC.h
+  CIPC_autogen.h
+  CIPC_autogen_ll.h
 )
 
 set(CONTACT_SOURCES
@@ -16,6 +19,7 @@ set(CONTACT_SOURCES
   triangleMeshExternalContactHandler.cpp
   triangleMeshSelfContactDetection.cpp
   triangleMeshSelfContactHandler.cpp
+  CIPC.cpp
 )
 
 set(CONTACT_DEPS mesh nonlinearOptimization CCD::SafeCCD CCD::Exact)

@@ -259,7 +259,7 @@ TriangleMeshExternalContactHandler::TriangleMeshExternalContactHandler(const std
       }
     });
 
-    interpolationMatrix.resize(sampleInfoAndIDs.size() * 3, vertices.size());
+    interpolationMatrix.resize(sampleInfoAndIDs.size() * 3, vertices.size() * 3);
     interpolationMatrix.setFromTriplets(entries.begin(), entries.end());
   }
 

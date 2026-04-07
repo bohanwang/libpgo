@@ -19,6 +19,9 @@
 #include "NewtonRaphsonSolver.h"
 #include "createTriMesh.h"
 #include "libiglInterface.h"
+#include "CIPC.h"
+#include "triangleMeshExternalContactHandler.h"
+#include "pointPenetrationEnergy.h"
 
 #include <argparse/argparse.hpp>
 
@@ -65,6 +68,13 @@ int main(int argc, char *argv[])
 
   // timestep
   double timestep = jconfig.getDouble("timestep", 1);
+  double scale = jconfig.getDouble("scale", 1);
+  PGO_ALOG(std::abs(scale - 1) < 1e-6);
+
+  double contactK = jconfig.getDouble("contact-stiffness", 1);
+  int contactSamples = jconfig.getInt("contact-samples", 1);
+  double fricCoeff = jconfig.getDouble("contact-friction-coeff", 1);
+  double velEps = jconfig.getDouble("contact-vel-eps", 1);
 
   // solver param
   double solverEps = jconfig.getDouble("solver-eps", 1);
@@ -75,19 +85,10 @@ int main(int argc, char *argv[])
 
   // material
   std::string material = jconfig.getString("elastic-material");
-  SolidDeformationModel::DeformationModelElasticMaterial elasticMat;
-  SolidDeformationModel::SimulationMeshENuhMaterial matParam(1000000, 0.4, 0.01);
+  PGO_ALOG(material == "koiter-stvk");
 
-  if (material == "kl-stvk") {
-    elasticMat = pgo::SolidDeformationModel::DeformationModelElasticMaterial::STVK;
-  }
-  else if (material == "kl-linear") {
-    elasticMat = pgo::SolidDeformationModel::DeformationModelElasticMaterial::LINEAR;
-  }
-  else {
-    SPDLOG_LOGGER_ERROR(Logging::lgr(), "Unsupported elastic material: {}", material);
-    return 1;
-  }
+  SolidDeformationModel::DeformationModelElasticMaterial elasticMat = SolidDeformationModel::DeformationModelElasticMaterial::KOITER_STVK;
+  SolidDeformationModel::SimulationMeshENuhMaterial matParam(10000, 0.4, 0.001);
 
   int numSimSteps = jconfig.getInt("num-timestep", 1);
   int frameGap = jconfig.getInt("dump-interval", 1);
@@ -124,6 +125,20 @@ int main(int argc, char *argv[])
   int n3 = n * 3;
   int nele = simMesh->getNumElements();
 
+  ES::VXd elasticParams(5 * nele);
+  for (int ei = 0; ei < nele; ei++) {
+    double E = 1000000;
+    double E_bend = E;
+    double h = 1e-3;
+    double nu = 0.4;
+
+    elasticParams[ei * 5 + 0] = E;
+    elasticParams[ei * 5 + 1] = nu;
+    elasticParams[ei * 5 + 2] = E_bend;
+    elasticParams[ei * 5 + 3] = nu;
+    elasticParams[ei * 5 + 4] = h;
+  }
+
   ES::VXd restPosition(n3);
   for (int vi = 0; vi < n; vi++) {
     double p[3];
@@ -132,6 +147,7 @@ int main(int argc, char *argv[])
   }
 
   std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy = std::make_shared<SolidDeformationModel::DeformationModelEnergy>(assembler, &restPosition, 0);
+  elasticEnergy->setElasticParams(elasticParams);
 
   ES::VXd zero(n3);
   zero.setZero();
@@ -172,6 +188,7 @@ int main(int argc, char *argv[])
 
   ES::SpMatD M;
   libiglInterface::computeMassMatrix(surfaceMesh, M, 1, 1);
+  M *= 100;
 
   // initialize gravity
   ES::VXd g(n3);
@@ -182,7 +199,48 @@ int main(int argc, char *argv[])
   ES::VXd fext(n3);
   ES::mv(M, g, fext);
 
+  std::vector<std::string> kinematicObjectFilenames;
+  std::vector<ES::V3d> kinematicObjectMovements;
+  if (jconfig.exist("external-objects")) {
+    auto jkinObjects = jconfig.handle()["external-objects"];
+    for (const auto &jko : jkinObjects) {
+      std::string koFilename = jko["filename"].get<std::string>();
+      kinematicObjectFilenames.push_back(koFilename);
+      kinematicObjectMovements.push_back(ES::Mp<ES::V3d>(jko["movement"].get<std::array<double, 3>>().data()));
+    }
+  }
+
   if (simType == "dynamic") {
+    std::shared_ptr<Contact::CIPC::CIPCSolver> collisionHandler = std::make_shared<Contact::CIPC::CIPCSolver>();
+    ES::MXd V;
+    ES::MXi F;
+    Mesh::triMeshGeoToMatrices(surfaceMesh, V, F);
+    collisionHandler->setMesh(V, F);
+
+    // initialize contact
+    std::vector<Mesh::TriMeshGeo> kinematicObjects;
+    for (const auto &filename : kinematicObjectFilenames) {
+      kinematicObjects.emplace_back();
+      if (kinematicObjects.back().load(filename) != true) {
+        return 1;
+      }
+
+      for (int vi = 0; vi < kinematicObjects.back().numVertices(); vi++) {
+        kinematicObjects.back().pos(vi) *= scale;
+      }
+    }
+
+    std::vector<Mesh::TriMeshRef> kinematicObjectsRef;
+    for (int i = 0; i < (int)kinematicObjects.size(); i++) {
+      kinematicObjectsRef.emplace_back(kinematicObjects[i]);
+    }
+
+    std::shared_ptr<Contact::TriangleMeshExternalContactHandler> externalContactHandler;
+    if (kinematicObjectsRef.size() && contactK > 0) {
+      externalContactHandler = std::make_shared<Contact::TriangleMeshExternalContactHandler>(surfaceMesh.positions(), surfaceMesh.triangles(), n3,
+        kinematicObjectsRef, contactSamples, nullptr, nullptr);
+    }
+
     // initialize contact
     std::shared_ptr<Simulation::ImplicitBackwardEulerTimeIntegrator> intg =
       std::make_shared<Simulation::ImplicitBackwardEulerTimeIntegrator>(M, elasticEnergy,
@@ -218,21 +276,95 @@ int main(int argc, char *argv[])
     for (int framei = 0; framei < numSimSteps; framei++) {
       intg->clearGeneralImplicitForceModel();
 
+      if (framei > numSimSteps / 2) {
+        intg->clearImplicitForceModel();
+      }
+
+      double ratio = (double)framei / (numSimSteps - 1);
+      for (size_t pi = 0; pi < pullingEnergies.size(); pi++) {
+        ES::VXd restTgt = pullingTargetRests[pi];
+        ES::VXd curTgt = restTgt * (1 - ratio) + pullingTargets[pi] * ratio;
+        pullingEnergies[pi]->setTargetPos(curTgt.data());
+
+        std::cout << "Frame " << framei << ", attachment " << pi << " target: " << curTgt.transpose().head(3) << std::endl;
+      }
+
+      std::shared_ptr<Contact::PointPenetrationEnergy> extContactEnergy;
+      Contact::PointPenetrationEnergyBuffer *extContactBuffer = nullptr;
+      if (externalContactHandler) {
+        externalContactHandler->execute(usurf.data());
+
+        if (externalContactHandler->getNumCollidingSamples()) {
+          extContactEnergy = externalContactHandler->buildContactEnergy();
+          extContactBuffer = extContactEnergy->allocateBuffer();
+
+          auto posFunc = [&restPosition](const EigenSupport::V3d &u, EigenSupport::V3d &p, int dofStart) {
+            p = u + restPosition.segment<3>(dofStart);
+          };
+
+          auto lastPosFunc = [&restPosition, &u](const EigenSupport::V3d &x, EigenSupport::V3d &p, int dofStart) {
+            p = u.segment<3>(dofStart) + restPosition.segment<3>(dofStart);
+          };
+
+          extContactEnergy->setComputePosFunction(posFunc);
+          extContactEnergy->setBuffer(extContactBuffer);
+          extContactEnergy->setCoeff(contactK);
+
+          extContactEnergy->setFrictionCoeff(fricCoeff);
+          extContactEnergy->setComputeLastPosFunction(lastPosFunc);
+          extContactEnergy->setVelEps(velEps);
+          extContactEnergy->setTimestep(timestep);
+
+          // if (externalContactHandler->getNumCollidingSamples() > 500) {
+          //   NonlinearOptimization::FiniteDifference fd(NonlinearOptimization::FiniteDifference::M_FIVE_POINT, 1e-6);
+          //   double err[2];
+
+          //  fd.testEnergy(extContactEnergy, true, true, -1, u.data(), 500, err, err + 1);
+
+          //  std::cout << "External contact energy FD test, max rel error: grad " << err[0] << ", hess " << err[1] << std::endl;
+          //  exit(1);
+          //}
+
+          intg->addGeneralImplicitForceModel(extContactEnergy, 0, 0);
+        }
+      }
+
       intg->setqState(u, uvel, uacc);
+
       intg->doTimestep(1, 2, 1);
 
       intg->getq(u);
-      intg->getq(uvel);
-      intg->getq(uacc);
+      intg->getqvel(uvel);
+      intg->getqacc(uacc);
+
+      // double Ec = extContactEnergy ? extContactEnergy->func(u) : 0;
+      // double Eelastic = elasticEnergy->func(u);
+      // double Emass = 0.5 * uvel.transpose() * M * uvel;
+      // double Etotal = Ec + Eelastic + Emass;
+      // std::cout << "Frame " << framei << ": Eelastic = " << Eelastic << ", Ec = " << Ec << ", Emass = " << Emass << ", Etotal = " << Etotal << std::endl;
+
+      if (extContactBuffer && extContactEnergy) {
+        extContactEnergy->freeBuffer(extContactBuffer);
+      }
+
+      usurf = u;
 
       if (framei % frameGap == 0) {
-        ES::VXd psurf = surfaceRestPositions + u;
+        ES::VXd psurf = surfaceRestPositions + usurf;
 
         Mesh::TriMeshGeo mesh = surfaceMesh;
         for (int vi = 0; vi < mesh.numVertices(); vi++) {
-          mesh.pos(vi) = psurf.segment<3>(vi * 3);
+          mesh.pos(vi) = psurf.segment<3>(vi * 3) / scale;
         }
         mesh.save(fmt::format("{}/ret{:04d}.obj", outputFolder, framei / frameGap));
+      }
+
+      for (size_t eobji = 0; eobji < kinematicObjects.size(); eobji++) {
+        ES::V3d movement = kinematicObjectMovements[eobji] / (numSimSteps - 1);
+        for (int vi = 0; vi < kinematicObjects[eobji].numVertices(); vi++) {
+          kinematicObjects[eobji].pos(vi) += movement;
+        }
+        externalContactHandler->updateExternalSurface(eobji, kinematicObjectsRef[eobji]);
       }
     }
   }
@@ -243,7 +375,7 @@ int main(int argc, char *argv[])
     energyAll->addPotentialEnergy(elasticEnergy);
     for (auto eng : pullingEnergies)
       energyAll->addPotentialEnergy(eng, 1.0);
-    
+
     energyAll->addPotentialEnergy(externalForcesEnergy, -1.0);
     energyAll->init();
 
