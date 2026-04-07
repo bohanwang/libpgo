@@ -2,6 +2,8 @@
 
 #include "pgoLogging.h"
 
+#include <cuda_runtime.h>
+
 #include <array>
 #include <cstring>
 
