@@ -21,11 +21,12 @@ src/
 
 ## Build System
 
-The build uses **CMake** with **Conan 2.x** for C++ dependencies and **scikit-build-core** for Python packaging.
+libpgo uses **CMake** with **Conan 2.x** for native dependency resolution and
+**scikit-build-core** for Python packaging.
 
-- `CMakePresets.json` defines presets for core, geometry, animation, full, and Python builds
-- `cmake/BootstrapConan.cmake` automatically exports local Conan recipes and runs `conan install` during configure
-- Private Conan recipes live under `conan/recipes/`
+See the [Build System Documentation](../build-system.md) for the canonical
+explanation of presets, feature normalization, Conan bootstrap, generated
+toolchain files, and Python packaging flow.
 
 ## Feature Model
 

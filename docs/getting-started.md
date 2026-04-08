@@ -35,7 +35,10 @@ uv sync
 uv run python -c "import pypgo; print(pypgo.__version__)"
 ```
 
-See the [C++ Library Guide](guide/cpp-library.md) and [Python Bindings Guide](guide/python-bindings.md) for full build instructions.
+See the [Build System Documentation](build-system.md) for the full toolchain
+overview, preset-to-feature mapping, and Conan bootstrap flow.
+
+See the [C++ Library Guide](guide/cpp-library.md) and [Python Bindings Guide](guide/python-bindings.md) for task-oriented build instructions.
 
 ## Building the Docs Locally
 
