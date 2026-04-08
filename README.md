@@ -11,7 +11,7 @@ The source code extends [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) an
 
 ---
 
-## IPC Update
+## Update: IPC-style Contact Integration for Dynamic Simulation
 
 The current repo now includes a first end-to-end frictionless IPC-style integration for dynamic simulation.
 
@@ -62,6 +62,49 @@ cd libpgo/build/core-debug/bin
 ./core_scene_self_contact_handler_test
 ./api_runSim_config_parse_test --gtest_filter='RunSimConfigParseTest.RunSimFromConfigCubicDynamicIpcNearContactActivatesExternalBarrier:RunSimConfigParseTest.RunSimFromConfigCubicDynamicIpcSelfBarrierSmokeTest:RunSimConfigParseTest.RunSimFromConfigCubicDynamicIpcMergedBarrierSmokeTest:RunSimConfigParseTest.RunSimFromConfigCubicDynamicIpcMergedDeterministicSmokeTest'
 ```
+
+---
+
+## Update: Run with cubic mesh
+
+libpgo now supports simulation configs driven by cubic/hexahedral volumetric meshes.
+You can use the built-in example at `examples/cubic-box/cubic-box.json`, which uses
+the `"cubic-mesh"` field as the simulation mesh input.
+
+Command-line workflow for the cubic example:
+
+```bash
+cd libpgo
+
+# 1) Ensure Python extension is built and importable
+uv sync
+
+# 2) Run cubic-mesh simulation (writes OBJ sequence to ret-cubic-box/)
+uv run python src/api/python/pypgo/pgo_run_sim.py examples/cubic-box/cubic-box.json
+
+# 3) Convert OBJ sequence to Alembic animation
+uv run python src/api/python/pypgo/pgo_dump_abc.py examples/cubic-box/anim.json examples/cubic-box
+uv run python src/api/python/pypgo/pgo_dump_abc.py examples/pulled-cubic-box-self-ipc/anim.json
+```
+
+If you just rebuilt `pypgo` through a manual CMake preset such as `build/full-release`, `uv run`
+still uses the `.venv` copy of `pypgo`. Refresh it with `uv pip install -e .`, or run the
+manually built module explicitly via:
+
+```bash
+PYTHONPATH=build/full-release/src/api/python/pypgo \
+python src/api/python/pypgo/pgo_run_sim.py examples/cubic-box/cubic-box.json
+```
+
+Expected outputs:
+- `examples/cubic-box/ret-cubic-box/ret0001.obj` ... `ret0199.obj`
+- `examples/cubic-box/cubic-box.abc`
+
+Preview:
+
+![Cubic-box simulation preview](examples/cubic-box/cubic-box-6s.gif)
+
+![cubic-dragon](examples/dragon-cubic/image.png)
 
 ---
 
@@ -505,49 +548,6 @@ We provide three python scripts to test the installation.
     - `triangle-mesh` keeps the mesh in world coordinates by voxelizing in a regularized cube and mapping the cubic mesh back after generation.
     - `--classify-mode conservative` keeps voxels whose centers are inside the mesh or whose boxes intersect the input surface.
     - `triangle-mesh --scale/--offset` is applied after the world-space cubic mesh has been reconstructed.
-
-## Update: Run with cubic mesh
-
-libpgo now supports simulation configs driven by cubic/hexahedral volumetric meshes.
-You can use the built-in example at `examples/cubic-box/cubic-box.json`, which uses
-the `"cubic-mesh"` field as the simulation mesh input.
-
-Command-line workflow for the cubic example:
-
-```bash
-cd libpgo
-
-# 1) Ensure Python extension is built and importable
-uv sync
-
-# 2) Run cubic-mesh simulation (writes OBJ sequence to ret-cubic-box/)
-uv run python src/api/python/pypgo/pgo_run_sim.py examples/cubic-box/cubic-box.json
-
-# 3) Convert OBJ sequence to Alembic animation
-uv run python src/api/python/pypgo/pgo_dump_abc.py examples/cubic-box/anim.json examples/cubic-box
-uv run python src/api/python/pypgo/pgo_dump_abc.py examples/pulled-cubic-box-self-ipc/anim.json
-```
-
-If you just rebuilt `pypgo` through a manual CMake preset such as `build/full-release`, `uv run`
-still uses the `.venv` copy of `pypgo`. Refresh it with `uv pip install -e .`, or run the
-manually built module explicitly via:
-
-```bash
-PYTHONPATH=build/full-release/src/api/python/pypgo \
-python src/api/python/pypgo/pgo_run_sim.py examples/cubic-box/cubic-box.json
-```
-
-Expected outputs:
-- `examples/cubic-box/ret-cubic-box/ret0001.obj` ... `ret0199.obj`
-- `examples/cubic-box/cubic-box.abc`
-
-Preview:
-
-![Cubic-box simulation preview](examples/cubic-box/cubic-box-6s.gif)
-
-![cubic-dragon](examples/dragon-cubic/image.png)
-
----
 
 ## Third-party libraries
 
