@@ -72,7 +72,7 @@ if(PGO_ENABLE_TESTS)
   enable_testing()
 endif()
 
-set(PGO_CMAKE_MODULES ${CMAKE_SOURCE_DIR}/CMakeModules)
+set(PGO_CMAKE_MODULES ${CMAKE_SOURCE_DIR}/cmake)
 list(APPEND CMAKE_MODULE_PATH "${PGO_CMAKE_MODULES}")
 message(STATUS "CMake Module Path: ${CMAKE_MODULE_PATH}")
 
@@ -249,7 +249,7 @@ endif()
 
 
 # MKL uses system detection (not managed by Conan).
-include(CMakeModules/third-party/mkl.cmake)
+include(cmake/third-party/mkl.cmake)
 
 if(TARGET MKL::MKL)
   add_compile_definitions(PGO_HAS_MKL)
@@ -264,7 +264,7 @@ if(TARGET Ceres::ceres)
 endif()
 
 if(PGO_OPT_USE_KNITRO)
-  include(CMakeModules/third-party/knitro.cmake)
+  include(cmake/third-party/knitro.cmake)
 
   if(TARGET Knitro::Knitro)
     add_compile_definitions(PGO_HAS_KNITRO)
@@ -413,8 +413,8 @@ if(PGO_BUILD_SUBPROJECTS)
 endif()
 
 if(PGO_FEATURE_PYTHON)
-  include(CMakeModules/python_list.cmake)
-  message(STATUS "Python bindings enabled, added CMakeModules/python_list.cmake")
+  include(cmake/python_list.cmake)
+  message(STATUS "Python bindings enabled, added cmake/python_list.cmake")
 endif()
 
 if(NOT SKBUILD)
@@ -422,7 +422,7 @@ if(NOT SKBUILD)
   message(STATUS "Generating libpgoConfig.cmake in build directory for use in common build tree")
   include(CMakePackageConfigHelpers)
   configure_package_config_file(
-    CMakeModules/pgoConfig.cmake.in
+    cmake/pgoConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/pgoConfig.cmake
     INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/pgo/"
   )
