@@ -29,11 +29,11 @@ constexpr double kQuadratureWeight = 0.125;
 class CubicMeshDeformationModelInternal {
 public:
     struct QuadratureData {
-        M3x8d  dN_dabc;
-        ES::M3d DmInv;
-        M3x8d  restBm;
-        M9x24d rest_dFdx;
-        double weightDetJ;
+        M3x8d  dN_dabc;  // transpose of the jacobian of shape functions w.r.t. reference coordinates
+        ES::M3d DmInv; // Dm = dX/dabc = X * dN_dabc^T, where X is the 3x8 matrix of vertex positions. DmInv is the inverse of Dm.
+        M3x8d  restBm; // rest configuration Bm matrix = weightDetJ * DmInv^T * dN_dabc = weightDetJ * J_N(X)^T
+        M9x24d rest_dFdx; 
+        double weightDetJ; // w * det(Dm)
     };
 
     ES::V3d restX[kNumVertices];
@@ -43,8 +43,9 @@ public:
     const PlasticModel3DDeformationGradient* plasticModel;
 
     void fillShapeGradients(double alpha, double beta, double gamma, M3x8d& dN_dabc) const;
-    void computeDeformationGradient(const M3x8d& x, const M3x8d& dN_dabc, const ES::M3d& A, ES::M3d& F) const;
-    void compute_dF_dx(const M3x8d& dN_dabc, const ES::M3d& A, M9x24d& dFdx) const;
+    void computeDm(const M3x8d& X, const M3x8d& dN_dabc, ES::M3d& Dm) const;
+    void computeF(const M3x8d& x, const M3x8d& dN_dabc, const ES::M3d& DmInv, ES::M3d& F) const;
+    void compute_dF_dx(const M3x8d& dN_dabc, const ES::M3d& DmInv, M9x24d& dFdx) const;
     void computeSVD(const ES::M3d& Fe, ES::M3d& U, ES::M3d& V, ES::V3d& S) const;
 
     inline double compute_dV_dai(double weightDetJ, double ddetA_dai) const { return weightDetJ * ddetA_dai; }
@@ -119,11 +120,13 @@ CubicMeshDeformationModel::CubicMeshDeformationModel(const double restPositions[
         for (int ib = 0; ib < 2; ib++) {
             for (int ig = 0; ig < 2; ig++) {
                 auto& quad = ind->quad[qid++];
+                // get the transpose of the jacobian of shape functions w.r.t. reference coordinates
                 ind->fillShapeGradients(quadratureCoord[ia], quadratureCoord[ib], quadratureCoord[ig], quad.dN_dabc);
 
                 ES::M3d Dm;
-                ind->computeDeformationGradient(restX, quad.dN_dabc, ES::M3d::Identity(), Dm);
-
+                ind->computeDm(restX, quad.dN_dabc, Dm);
+                
+                // compute the rest configuration Bm matrix and the deformation gradient jacobian
                 quad.DmInv      = Dm.fullPivLu().inverse();
                 quad.weightDetJ = kQuadratureWeight * std::abs(Dm.determinant());
                 quad.restBm     = quad.weightDetJ * quad.DmInv.transpose() * quad.dN_dabc;
@@ -184,7 +187,7 @@ void CubicMeshDeformationModel::prepareData(const double* x, const double* param
     for (int qi = 0; qi < kNumQuadraturePoints; qi++) {
         const auto& quad = ind->quad[qi];
 
-        ind->computeDeformationGradient(xMat, quad.dN_dabc, quad.DmInv, cacheData->Fref[qi]);
+        ind->computeF(xMat, quad.dN_dabc, quad.DmInv, cacheData->Fref[qi]);
         cacheData->Fe[qi] = cacheData->Fref[qi] * cacheData->FpInv;
         ind->computeSVD(cacheData->Fe[qi], cacheData->U[qi], cacheData->V[qi], cacheData->S[qi]);
 
@@ -516,15 +519,19 @@ void CubicMeshDeformationModelInternal::fillShapeGradients(double alpha, double 
         a0 * beta;
 }
 
-void CubicMeshDeformationModelInternal::computeDeformationGradient(const M3x8d& x, const M3x8d& dN_dabc,
-                                                                   const ES::M3d& A, ES::M3d& F) const {
-    F.noalias() = x * dN_dabc.transpose() * A;
+void CubicMeshDeformationModelInternal::computeDm(const M3x8d& X, const M3x8d& dN_dabc, ES::M3d& Dm) const {
+    Dm.noalias() = X * dN_dabc.transpose();
 }
 
-void CubicMeshDeformationModelInternal::compute_dF_dx(const M3x8d& dN_dabc, const ES::M3d& A, M9x24d& dFdx) const {
+void CubicMeshDeformationModelInternal::computeF(const M3x8d& x, const M3x8d& dN_dabc, const ES::M3d& DmInv,
+                                                 ES::M3d& F) const {
+    F.noalias() = x * dN_dabc.transpose() * DmInv;
+}
+
+void CubicMeshDeformationModelInternal::compute_dF_dx(const M3x8d& dN_dabc, const ES::M3d& Dm_inverse, M9x24d& dFdx) const {
     dFdx.setZero();
 
-    const Eigen::Matrix<double, 8, 3> G = dN_dabc.transpose() * A;
+    const Eigen::Matrix<double, 8, 3> G = dN_dabc.transpose() * Dm_inverse;
     for (int vi = 0; vi < kNumVertices; vi++) {
         for (int dim = 0; dim < 3; dim++) {
             ES::M3d dF = ES::M3d::Zero();

@@ -4,6 +4,10 @@ This page describes how libpgo's build toolchain works end to end. It is the
 canonical reference for how presets, feature flags, Conan bootstrap, generated
 toolchain files, target organization, and Python packaging fit together.
 
+For a Chinese, control-flow-oriented companion series that walks through the
+current implementation file by file, see the
+[Build System Walkthrough](walkthrough/build_system/index.md).
+
 ## Toolchain Layers
 
 | Layer | Files / entry points | Responsibility |

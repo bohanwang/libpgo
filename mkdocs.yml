@@ -49,6 +49,31 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Build System Documentation: build-system.md
+  - Walkthrough:
+      - Overview: walkthrough/index.md
+      - Simulation Pre-Tick Setup: walkthrough/simulation-tick-pre-tick.md
+      - Build System:
+          - Overview: walkthrough/build_system/index.md
+          - "Phase 01: Stack and Entrypoints": walkthrough/build_system/phase01_stack_and_entrypoints.md
+          - "Phase 02: Conan Bootstrap": walkthrough/build_system/phase02_conan_bootstrap.md
+          - "Phase 03: Root CMake Graph": walkthrough/build_system/phase03_root_cmake_graph.md
+          - "Phase 04: Recipes, Python, and CI": walkthrough/build_system/phase04_recipes_python_ci.md
+      - Cubic Mesh:
+          - Overview: walkthrough/cubic_mesh/index.md
+          - "Phase 01: Mesh Assets": walkthrough/cubic_mesh/phase01_mesh_assets.md
+          - "Phase 02: Config and Runtime Entry": walkthrough/cubic_mesh/phase02_config_runtime_entry.md
+          - "Phase 03: Simulation Mesh": walkthrough/cubic_mesh/phase03_simulation_mesh.md
+          - "Phase 04: Element Model": walkthrough/cubic_mesh/phase04_element_model.md
+          - "Phase 05: Energy Assembly": walkthrough/cubic_mesh/phase05_energy_assembly.md
+          - "Phase 06: Full Runtime and Examples": walkthrough/cubic_mesh/phase06_full_runtime_examples.md
+      - IPC:
+          - Overview: walkthrough/ipc/index.md
+          - "Phase 1: Config and Dispatch": walkthrough/ipc/phase-1-config-and-dispatch.md
+          - "Phase 2: External Barrier Energy": walkthrough/ipc/phase-2-external-barrier-energy.md
+          - "Phase 3: Dynamic Incremental Potential": walkthrough/ipc/phase-3-dynamic-incremental-potential.md
+          - "Phase 4: Feasible Line Search": walkthrough/ipc/phase-4-feasible-line-search.md
+          - "Phase 5: Self Near-Contact Active Set": walkthrough/ipc/phase-5-self-near-contact-active-set.md
+          - "Phase 6: Tests and Validation": walkthrough/ipc/phase-6-tests-and-validation.md
   - Architecture:
       - Overview: architecture/overview.md
       - Core Modules: architecture/core-modules.md
