@@ -1,334 +1,259 @@
-# Phase 2：external contact 的 barrier energy
+# Phase 2：External Barrier Energy
 
-## 1. 这阶段要回答什么
+External IPC 的完整 vertical slice：
 
-这一阶段专门回答下面四个问题：
+```text
+sampled surface point → near-contact detection → active sample snapshot → barrier energy → feasible alpha upper bound
+```
 
-1. external IPC 为什么在当前 repo 里不是“穿透以后再补一个力”，而是“近接触 sample 提前激活”。
-2. `TriangleMeshExternalContactHandler` 当前到底缓存了哪些 active sample 数据。
-3. `PointPenetrationBarrierEnergy` 怎样把这批 sample 数据变成能量、梯度和 Hessian。
-4. external feasible alpha upper bound 现在建立在什么几何近似上。
+## Active Sample 检测
 
-如果只看到 `buildBarrierEnergy(...)` 这个接口，会误以为这是一个纯数学 energy 类。  
-但当前 external IPC 真正完成的是一条完整 vertical slice：
+### 基础几何单位
 
-> sampled surface point -> near-contact active sample -> fixed plane snapshot -> barrier energy -> feasible alpha upper bound
+External handler 建立在 **sampled surface** 上。构造阶段完成 surface triangle sampling、去重、插值矩阵 `interpolationMatrix`。Runtime 每帧变化的是 surface 顶点位置和最近外部目标快照，而不是 sample 集合本身。
 
-## 2. 这阶段在整条 IPC 主线里解决什么
+Handler 同时持有外部障碍物侧的 BVH、pseudo normal 和 runtime mesh snapshot，`execute(...)` 时直接做最近三角形查询。
 
-Phase 1 只是把 `ipc-barrier` 作为 contact model 接进 runtime。  
-真正让 external IPC “开始工作” 的，是当前这一阶段：
+### `execute(usurf, externalIpcDhat)` 流程
 
-- external handler 不再只关心 penetration
-- active set 的判据从 `d <= 0` 扩展到 `d < dhat`
-- barrier energy 不再依赖 penalty energy 的二次型
-- solver 侧可行步长过滤开始有 external 几何依据
+1. `restP + u` → 当前 surface 顶点 `curP`
+2. `computeSamplePosition(...)` → 当前 `sampleCurP`
+3. 对每个 sample，遍历所有 external surface：
+     - `closestTriangleQuery(...)` 找最近三角形
+     - 法向朝向过滤：`tgtNormal · srcNormal > 0` 的候选被排除
+     - 计算 `signedDistance = (srcPos - tgtPos) · tgtNormal`
+     - 保留 `signedDistance < activationDistance` 的候选
+     - 多候选中选 signed distance 最小的
+4. 结果：**每个 sample 至多一个最近 external target snapshot**
 
-所以 Phase 2 的本质不是“再讲一遍接触检测”，而是：
+### Active sample 快照内容
 
-> 把 external contact 从 penetration-only 的 penalty runtime，推进成 near-contact barrier runtime。
+- `constraintCoeffs`、`constraintNormals`、`constraintTargetPositions`、`constraintSignedDistances`
+- `barycentricIdx`、`barycentricWeights`、`contactedSamples`、`contactedTriangles`
 
-## 3. 当前 repo 已经完成了什么
+Barrier energy 和 feasible alpha 都**直接消费这份快照**，不会重新做最近点查询。
 
-当前仓库里，external 路径已经具备下面这些落地能力：
+这些字段是在 `TriangleMeshExternalContactHandler::execute(...)` 末尾一次性写好的。可以把它理解成：
 
-- `TriangleMeshExternalContactHandler::execute(..., activationDistance)` 已经存在
-- active set 的筛选语义已经是“保留所有 `signedDistance < activationDistance` 的 sample”
-- handler 已经缓存 `constraintNormals`、`constraintTargetPositions`、`constraintSignedDistances`
-- handler 已经保存 `barycentricIdx`、`barycentricWeights` 和 `contactedSamples`
-- `buildBarrierEnergy(...)` 已经能构造 `PointPenetrationBarrierEnergy`
-- external handler 已经能直接给出：
-  - `computeSurfaceAlphaUpperBound(...)`
-  - `computeEmbeddedAlphaUpperBound(...)`
+```text
+active contact #ci
+  ↕
+sample id = contactedSamples[ci]
+  ↕
+当前样本点由 barycentricIdx[ci] / barycentricWeights[ci] 从真实 DOF 恢复
+  ↕
+距离平面由 constraintTargetPositions[ci] / constraintNormals[ci] 定义
+  ↕
+该条约束的权重是 constraintCoeffs[ci]
+```
 
-这说明 external IPC 在当前 repo 里已经不只是“检测近接触”，而是完整的 runtime 接口层。
+### 每个字段具体含义
 
-## 4. `TriangleMeshExternalContactHandler` 当前是什么形状
+- `constraintCoeffs[ci]`
+  这条 active sample 约束的标量权重。当前实现里它来自 `sampleWeights[sId]`，本质上是 sample 在表面采样中的面积权重，随后会乘到 barrier energy / gradient / Hessian 上。
 
-### 4.1 external path 仍然建立在 sampled surface 上
+- `constraintNormals.segment<3>(ci * 3)`
+  这条约束对应的目标法向 `n`。它不是 source sample 自己的法向，而是最近 external triangle 在最近特征处的 pseudo normal。后续距离都按
+  $$
+  d = (p - p_0)\cdot n
+  $$
+  里的 `n` 来算。
 
-handler 构造阶段已经完成：
+- `constraintTargetPositions.segment<3>(ci * 3)`
+  这条约束冻结下来的目标点 `p_0`，也就是当前帧最近点查询返回的 `closestPosition`。后面的 barrier energy 不会重新查最近点，而是把它当成固定 target snapshot。
 
-- surface triangle sampling
-- sample 去重
-- `sampleInfoAndIDs`
-- `sampleTriangleIDs`
-- sample 到真实 DOF 的插值矩阵 `interpolationMatrix`
-- `sampleWeights`
+- `constraintSignedDistances[ci]`
+  `execute(...)` 当下测得的有符号距离
+  $$
+  d_{\text{snapshot}} = (p_{\text{sample}} - p_0)\cdot n
+  $$
+  它主要用于调试、日志、测试和检查 active set 内容；真正求能量时会重新用当前迭代位置计算距离，而不是直接复用这个标量。
 
-因此 runtime 每帧真正变化的是：
+- `barycentricIdx[ci]`
+  一个整数列表，表示“这条 sample 约束会影响哪些真实顶点 / DOF 块”。它来自 `interpolationMatrix` 对应该 sample 行的非零列索引，代码里是把列号除以 3 得到顶点号。
+  如果 sample 就是表面顶点，它通常只含一个顶点；如果 sample 在三角形内部，通常会含 3 个顶点；如果 surface 又嵌到更大的 embedded DOF 中，这里还可能展开成 embedding 后的一组顶点。
 
-- surface 顶点位置
-- sample 当前位置
-- 最近的外部目标快照
+- `barycentricWeights[ci]`
+  与 `barycentricIdx[ci]` 一一对应的插值权重。后续恢复 sample 位置时，用
+  $$
+  p = \sum_j w_j\,p_j
+  $$
+  把真实 DOF 上的位置插值回 sample 点；gradient / Hessian 也沿同一组权重散回全局系统。
 
-而不是 sample 集合本身。
+- `contactedSamples[ci]`
+  这条 active contact 对应的是哪个 sample ID。它把“约束编号 `ci`”连回 handler 内部的 sample 空间，用于 feasible alpha upper bound 阶段重新取该 sample 的当前位移和搜索方向。
 
-这也解释了当前 repo 的建模选择：
+- `contactedTriangles[ci]`
+  这条 active sample 最初来自哪个 source surface triangle。它主要是追踪信息，便于调试、可视化和定位是哪片三角形激活了外部接触；barrier 核心计算本身更直接依赖的是 `contactedSamples` 和 barycentric 映射。
 
-> external 接触基元是 sampled surface point，而不是 primitive-level point/edge/face 对。
+### 它们如何一起定义一条外部 barrier 约束
 
-### 4.2 handler 还维护了 external target 侧的加速结构
+对第 `ci` 条 active sample：
 
-除了 sample 数据，构造函数还会建立：
+1. 用 `barycentricIdx[ci]` 和 `barycentricWeights[ci]` 从当前 DOF 恢复 sample 点位置 `p`
+2. 用 `constraintTargetPositions[ci]` 取冻结目标点 `p_0`
+3. 用 `constraintNormals[ci]` 取冻结法向 `n`
+4. 计算当前距离 `d = (p - p_0) · n`
+5. 用 `constraintCoeffs[ci]` 作为该条 barrier 项的权重
 
-- `surfaceMeshRuntime`
-- `surfaceMeshNormals`
-- `externalSurfaceBVTrees`
-- `externalSurfaceNormals`
+所以这组快照本质上定义的是：
 
-这意味着 external handler 当前不仅持有源 surface 的采样数据，也持有外部障碍物侧的：
+```text
+一个“当前可动 sample 点” vs 一个“本帧冻结的外部目标平面”
+```
 
-- BVH
-- pseudo normal
-- runtime mesh snapshot
+而不是“每次评估都重新做 closest point query”的动态接触模型。
 
-因此 `execute(...)` 时可以直接做最近三角形查询，而不需要重新初始化外部几何结构。
+## `PointPenetrationBarrierEnergy`
 
-## 5. active sample 当前怎样被生成
+### 距离模型
 
-### 5.1 runtime 先把 surface 位移映回 sample 位移
+每个 active sample 的局部距离：
 
-当前 external path 在 dynamic loop 中会调用：
+$$d = (p - p_0) \cdot n$$
+
+- $p$：由 `setComputePosFunction(...)` + barycentric weights 从当前 DOF 恢复
+- $p_0$：handler 缓存的 `constraintTargetPositions`
+- $n$：handler 缓存的 `constraintNormals`
+
+典型的 **sampled point vs frozen target plane snapshot** 语义。
+
+### Barrier 函数
+
+使用 `BarrierFunctions::logBarrierEnergy`（定义在 `barrierFunction.{h,cpp}`）：
+
+$$b(d, \hat{d}) = -(d - \hat{d})^2 \ln\!\left(\frac{d}{\hat{d}}\right)$$
+
+- $d \geq \hat{d}$：返回零（支撑区间外）
+- $d < \hat{d}$：barrier 激活
+- $d \leq 0$：被 clamp 到 `positiveZero` 避免 NaN
+
+总 external barrier energy = $\sum_i w_i \cdot \kappa \cdot b(d_i, \hat{d})$
+
+其中 $w_i$ 是 sample weight，$\kappa$ 是 `externalIpcKappa`。
+
+### `normalizePositiveZero(dhat, positiveZero)`
+
+把 `positiveZero` 约束在安全上界内（`min(positiveZero, dhat * 0.5)`），未显式给值时用 `max(1e-10, 1e-6 * dhat)` 作为推荐值。
+
+它的角色是一个**数值安全阈值**，不是额外的物理接触参数。
+
+原因是 barrier 函数内部要计算 `log(d / dhat)`。当 sample 已经明显穿透、导致 `d <= 0` 时，直接取对数会产生 `NaN` 或 `-inf`。因此实现不会把非正距离原样送进 barrier，而是先把它钳到一个很小的正数上；这个“很小的正数”就是 `positiveZero`。
+
+可以把它理解成：
+
+- `dhat`：决定 barrier 从哪里开始激活的几何阈值
+- `kappa`：决定 barrier 罚得多重
+- `positiveZero`：当距离已经坏到 `d <= 0` 时，保证 barrier 仍然可计算的**数值保险丝**
+
+### Gradient 装配
+
+对第 $i$ 条 active sample，barrier energy 对距离 $d$ 的标量导数是：
+
+$$g_i = w_i \cdot \kappa \cdot b'(d_i, \hat{d})$$
+
+其中 $b'$ 是 `logBarrierGradient`：
+
+$$b'(d, \hat{d}) = -2(d - \hat{d})\ln\!\left(\frac{d}{\hat{d}}\right) - \frac{(d - \hat{d})^2}{d}$$
+
+由于 $d = (p - p_0) \cdot n$，距离对 sample 点位置 $p$ 的梯度就是法向本身：
+
+$$\frac{\partial d}{\partial p} = n$$
+
+所以 barrier 对 sample 点的 3D 梯度为：
+
+$$\nabla_p E_i = g_i \cdot n$$
+
+但 sample 点不是自由度 — 它由真实 DOF 通过 barycentric 插值恢复：$p = \sum_j w_j \, p_j$。因此需要把梯度散回每个参与顶点：
+
+$$\nabla_{p_j} E_i = w_j \cdot g_i \cdot n$$
+
+代码中对应的逻辑（`gradient()` 方法）：
 
 ```cpp
-externalContactHandler->execute(usurf.data(), externalIpcDhat);
+// 对每个 active sample ci
+const double barrierGradient = constraintCoeffs[ci] * BF::logBarrierGradient(distance, dhat, positiveZero);
+const ES::V3d gradSample = n * barrierGradient;  // 3D sample-space gradient
+
+for (int vi = 0; vi < barycentricIdx[ci].size(); vi++) {
+    const int vid = barycentricIdx[ci][vi];
+    const double w = barycentricWeights[ci][vi];
+    grad.segment<3>(vid * 3) += gradSample * w;   // scatter 到全局 DOF
+}
 ```
 
-handler 内部的顺序是：
+最后整个 `grad` 再乘以全局系数 `coeffAll`（即 $\kappa$）。并行通过 per-vertex `spin_mutex` 保护写入。
 
-1. 用 `restP + u` 得到当前 surface 顶点位置 `curP`
-2. 更新 `surfaceMeshRuntime`
-3. 用 `computeSamplePosition(...)` 把顶点位置映到 `sampleCurP`
-4. 再进入真正的 external 查询
+### Hessian 装配
 
-所以 external near-contact 检测发生的真正空间是：
+Barrier 对距离的标量二阶导是：
 
-- 当前 sampled surface
+$$h_i = w_i \cdot \kappa \cdot b''(d_i, \hat{d})$$
 
-而不是原始 surface 顶点数组本身。
+其中 $b''$ 是 `logBarrierHessian`：
 
-### 5.2 每个 sample 只保留一个 best external candidate
+$$b''(d, \hat{d}) = -2\ln\!\left(\frac{d}{\hat{d}}\right) - \frac{4(d - \hat{d})}{d} + \frac{(d - \hat{d})^2}{d^2}$$
 
-当前 `execute(double activationDistance)` 对每个 sample 的逻辑可以概括成：
+由于距离模型是 $d = (p - p_0) \cdot n$（对 $p$ 是线性的），Hessian 不含二阶几何项，直接是：
 
-1. 遍历所有 external surface
-2. 对每个 object 做 `closestTriangleQuery(...)`
-3. 根据 closest triangle feature 取 pseudo normal
-4. 做法向朝向过滤：`tgtNormal.dot(srcNormal) > 0` 的候选被排除
-5. 计算有符号距离 `signedDistance = (srcPos - tgtPos) · tgtNormal`
-6. 只保留 `signedDistance < activationDistance` 的候选
-7. 在这些候选中选 `signedDistance` 最小的那个
+$$\frac{\partial^2 E_i}{\partial p \,\partial p} = h_i \cdot n n^T$$
 
-这里的选择标准很明确：
+这是一个 $3 \times 3$ 秩 1 矩阵。散回真实 DOF 后，顶点 $j$ 和顶点 $k$ 之间的 $3 \times 3$ 块为：
 
-- 已穿透时，选更负的 signed distance
-- 近接触但未穿透时，选更小的正距离
+$$H_{jk}^{(i)} = w_j \cdot w_k \cdot h_i \cdot n n^T$$
 
-因此当前 external active set 的单位不是 “一个 sample 对多个候选面”，而是：
-
-```text
-一个 sample -> 一个最近 external target snapshot
-```
-
-### 5.3 `# external active samples` 日志就是当前 active set 规模
-
-`execute(...)` 完成后，handler 会打印：
-
-```text
-# external active samples: N
-```
-
-这条日志并不是调试残留，而是 API smoke 会直接依赖的可观测行为。  
-当前 repo 把 external active set 是否真正建立起来，显式暴露成了 runtime 日志。
-
-## 6. 当前 active sample 快照里到底保存了什么
-
-当一个 sample 被保留下来后，handler 会把下面这些量写入 frame-local 缓存：
-
-- `constraintCoeffs[count] = sampleWeights[info.sId]`
-- `constraintNormals`
-- `constraintTargetPositions`
-- `constraintSignedDistances`
-- `contactedSamples`
-- `contactedTriangles`
-- `barycentricIdx`
-- `barycentricWeights`
-
-这组缓存有两个重要含义：
-
-### 6.1 barrier energy 不需要重新做最近点查询
-
-`PointPenetrationBarrierEnergy` 直接消费：
-
-- 当前 sample 与真实 DOF 的插值关系
-- 当前 sample 对应的 target point
-- 当前 sample 对应的 pseudo normal
-
-因此 energy 层不需要再去 external BVH 查询 closest point。
-
-### 6.2 feasible alpha 也复用同一份快照
-
-`computeSurfaceAlphaUpperBound(...)` / `computeEmbeddedAlphaUpperBound(...)` 读取的也是这组 active sample 快照。  
-这意味着当前 repo 的 external barrier 与 external alpha upper bound 使用的是同一帧检测结果，而不是两套彼此独立的几何查询。
-
-## 7. `PointPenetrationBarrierEnergy` 当前怎样工作
-
-### 7.1 energy 的局部距离模型是什么
-
-对每个 active sample，当前 external barrier 使用的局部距离就是：
-
-```text
-d = (p - p0) · n
-```
-
-其中：
-
-- `p`
-  由 `setComputePosFunction(...)` 和 `barycentricWeights` 从当前 DOF 恢复出来
-- `p0`
-  来自 handler 在当前帧缓存的 `constraintTargetPositions`
-- `n`
-  来自 handler 在当前帧缓存的 `constraintNormals`
-
-因此 external barrier 当前是典型的 sampled point vs frozen target plane snapshot 语义。
-
-### 7.2 energy 的支撑区间已经是 barrier 语义
-
-`PointPenetrationBarrierEnergy` 当前行为明确分成两段：
-
-- `distance >= dhat`
-  返回零能量、零梯度、零 Hessian
-- `distance < dhat`
-  使用 `BarrierFunctions::logBarrierEnergy / Gradient / Hessian`
-
-这让 external barrier 在当前 repo 里成为真正的支撑区间 barrier，而不是简单把 penalty 系数调大。
-
-### 7.3 数值安全域通过 `normalizePositiveZero(...)` 固定下来
-
-external barrier 当前提供：
+代码中对应的逻辑（`hessian()` 方法）：
 
 ```cpp
-PointPenetrationBarrierEnergy::normalizePositiveZero(dhat, positiveZero)
+// 对每个 active sample ci
+const double barrierHessian = constraintCoeffs[ci] * BF::logBarrierHessian(distance, dhat, positiveZero);
+const ES::M3d nnT = ES::tensorProduct(n, n) * barrierHessian;  // h_i * n n^T
+
+for (int vi = 0; vi < barycentricIdx[ci].size(); vi++) {
+    const double wi = barycentricWeights[ci][vi];
+    for (int vj = 0; vj < barycentricIdx[ci].size(); vj++) {
+        const double wj = barycentricWeights[ci][vj];
+        const ES::M3d hLocal = nnT * wi * wj;  // 3x3 block for (vi, vj)
+
+        // scatter 9 个标量到全局稀疏 Hessian
+        for (int dofi = 0; dofi < 3; dofi++)
+            for (int dofj = 0; dofj < 3; dofj++)
+                hess(vi*3+dofi, vj*3+dofj) += hLocal(dofi, dofj);
+    }
+}
 ```
 
-其实现会把 `positiveZero` 约束在一个安全上界以内，并在未显式给值时使用相对 `dhat` 的推荐值。  
-这一步的作用不是改几何语义，而是避免 `logBarrier*` 在非正距离附近出现 NaN 或不稳定值。
+### Hessian 稀疏模板
 
-### 7.4 Hessian 模板仍然沿用 sample-to-DOF 插值关系
+构造时预建稀疏模板：遍历所有 active sample 的 `barycentricIdx`，为每对 $(v_i, v_j)$ 的 $3 \times 3$ 块预分配 triplet。这样运行时只需要按 `hessianEntryMap` 直接写入 `valuePtr()`，不需要动态插入。
 
-energy 构造时会根据每个 active sample 的 `barycentricIdx` 建立 Hessian 模板。  
-在真正求 Hessian 时，再把：
+## External Feasible Alpha Upper Bound
 
-- `n n^T`
-- barrier 二阶导
-- sample 权重
-- barycentric 权重
+Handler 提供 `computeSurfaceAlphaUpperBound(...)` 和 `computeEmbeddedAlphaUpperBound(...)`，两者都映到 sample 空间调用 `computeSampleAlphaUpperBound(...)`。
 
-共同装配回真实 DOF。
+对每个 active sample，计算：
 
-因此当前 external barrier 的数学结构已经和 runtime 的 sample embedding 严格对齐。
+- 当前距离 $d_0$、法向闭合速度 $\dot{d}$
+- 安全距离 $d_{\text{safe}}$ = `normalizePositiveZero(dhat, -1.0)`
 
-## 8. external feasible alpha upper bound 当前怎样计算
+分支逻辑：
 
-### 8.1 两个 public 入口只是输入空间不同
+| 条件 | 行为 |
+| --- | --- |
+| $d_0 \leq d_{\text{safe}}$ 且 $\dot{d} < 0$（继续 inward） | 返回 $\alpha = 0$ |
+| $d_0 \leq d_{\text{safe}}$ 且 $\dot{d} \geq 0$（outward） | 允许 recovery |
+| $\dot{d} < 0$ | 收缩 $\alpha$ 使距离不低于 $d_{\text{safe}}$ |
+| $\dot{d} \geq 0$ | 不收缩 |
 
-当前 handler 提供：
+最终结果乘以 `ipcAlphaSafety`（solver-side margin）。
 
-- `computeSurfaceAlphaUpperBound(...)`
-- `computeEmbeddedAlphaUpperBound(...)`
+## 验证
 
-两者最终都会转到：
+- 数学：`pointPenetrationBarrierEnergy_test.cpp` — 支撑区间、有限差分、NaN clamp
+- Handler：`contact_embedding_test.cpp` — near-contact 激活、alpha 上界的解析验证、safe-band 行为
+- Runtime：`runSimConfig_parse_test.cpp` — API smoke 检查日志 `# external active samples: ...`
 
-- `computeSampleAlphaUpperBound(...)`
+---
 
-差别只在于：
-
-- 一个输入的是 surface-sized displacement
-- 一个输入的是 full embedded displacement
-
-但最终都会映到 sample 空间再计算。
-
-### 8.2 upper bound 使用的是同一份 active plane snapshot
-
-对每个 active sample，当前上界计算会使用：
-
-- `sampleID`
-- `constraintNormals`
-- `constraintTargetPositions`
-- `sampleRestP`
-- 当前 sample displacement
-- 当前 sample 方向 `sampleDu`
-
-然后计算：
-
-- 当前距离 `d0`
-- 法向闭合速度 `dDot`
-
-并基于 `dSafe` 构造 conservative `alphaUpper`。
-
-### 8.3 safe band 语义当前已经被显式编码
-
-当前实现有两条关键分支：
-
-- `d0 <= dSafe`
-  如果方向继续 inward，则直接返回 `0`
-  如果方向 outward，则允许继续恢复
-- `dDot < 0`
-  才会真正收缩 `alphaUpper`
-
-这意味着当前 external feasible alpha 不是“只要在 safe band 内就冻结”，而是：
-
-> 阻止继续 inward，但允许 outward recovery
-
-### 8.4 `ipc-alpha-safety` 当前只作用于 upper bound
-
-当前 external handler 会在最终结果上乘：
-
-- `std::clamp(alphaSafety, 0.0, 1.0)`
-
-因此 `ipc-alpha-safety` 当前影响的是 solver-side feasible step margin，而不是 barrier energy 本身。
-
-## 9. 当前 repo 的验证证据
-
-`tests/core/energy/pointPenetrationBarrierEnergy_test.cpp` 已经固定了 external barrier 的数学语义：
-
-- `InactiveRegionReturnsZero`
-- `ActiveRegionMatchesFormulaAndFiniteDifference`
-- `ClampAvoidsNaNForNonPositiveDistances`
-
-`tests/core/scene/contact_embedding_test.cpp` 则固定了 handler 和 alpha 上界的几何语义：
-
-- `ExternalBarrierActivationIncludesNearContactSamples`
-- `FeasibleStepUpperBoundMatchesAnalyticPlaneBound`
-- `FeasibleStepUpperBoundScalesWithAlphaSafety`
-- `FeasibleStepUpperBoundIsOneForMotionAwayFromContact`
-- `FeasibleStepUpperBoundReturnsOneWithNoActiveSamples`
-- `FeasibleStepUpperBoundReturnsZeroWhenAlreadyInsideSafeMargin`
-- `FeasibleStepUpperBoundAllowsRecoveryWhenInsideSafeMarginButMovingAway`
-
-再往上，`tests/api/runSimConfig_parse_test.cpp` 中的：
-
-- `RunSimFromConfigCubicDynamicIpcNearContactActivatesExternalBarrier`
-
-会直接验证 runtime 日志里存在：
-
-- `# external active samples: ...`
-- `IPC feasible alpha callback active.`
-
-因此 Phase 2 的 external path 已经有数学、handler 和 API 三层证据。
-
-## 10. 这一阶段不展开什么
-
-这一阶段还不展开下面这些内容：
-
-- self near-contact active set
-- barrier 怎样进入 timestep 的总势能
-- merged feasible alpha callback 的 runtime 组装
-- static path
-- primitive-level exact IPC
-
-当前 external IPC 仍然是 repo-aligned 的 sample-based 路线，而且 barrier energy 内部不会重新做 closest-point 查询。
-
-上一阶段： [Phase 1](phase-1-config-and-dispatch.md)  
-下一阶段： [Phase 3](phase-3-self-near-contact-active-set.md)
+上一阶段：[Phase 1](phase-1-config-and-dispatch.md)
+下一阶段：[Phase 3](phase-3-self-near-contact-active-set.md)

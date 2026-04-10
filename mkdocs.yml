@@ -55,9 +55,8 @@ nav:
       - Build System:
           - Overview: walkthrough/build_system/index.md
           - "Phase 01: Stack and Entrypoints": walkthrough/build_system/phase01_stack_and_entrypoints.md
-          - "Phase 02: Conan Bootstrap": walkthrough/build_system/phase02_conan_bootstrap.md
-          - "Phase 03: Root CMake Graph": walkthrough/build_system/phase03_root_cmake_graph.md
-          - "Phase 04: Recipes, Python, and CI": walkthrough/build_system/phase04_recipes_python_ci.md
+          - "Phase 02: Core CMake Files": walkthrough/build_system/phase02_cmake_files.md
+          - "Phase 03: Recipes, Python, and CI": walkthrough/build_system/phase03_recipes_and_ci.md
       - Cubic Mesh:
           - Overview: walkthrough/cubic_mesh/index.md
           - "Phase 01: Mesh Assets": walkthrough/cubic_mesh/phase01_mesh_assets.md

@@ -1,111 +1,37 @@
-# Phase 01: 技术栈与构建入口
+# Phase 01: 技术栈
 
-这一篇先回答两个最基础的问题：
+## Conan
 
-1. 为什么 `libpgo` 的构建系统不是“只有一个 CMakeLists.txt”那么简单。
-2. 为什么这个仓库把 `Conan`、`CMakePresets`、`scikit-build-core`、`uv` 叠在了一起。
+### 是什么
 
-## 整体分层
+Conan 是 C/C++ 的去中心化包管理器 — 可以类比为 C++ 的 uv / pip。它解决的核心问题是：给定一组依赖声明和目标平台的 ABI 约束（OS、compiler、C++ standard、build type），自动获取匹配的预编译二进制或在本地从源码构建。
 
-先看最粗粒度的构建分层：
+### 不用 Conan 会怎样
 
-| 层 | 入口文件 / 工具 | 责任 |
-| --- | --- | --- |
-| 用户入口 | `cmake --preset ...`、`uv sync`、`uv build` | 选择“原生 C++”还是“Python 打包”入口 |
-| 入口配置 | `CMakePresets.json`、`pyproject.toml` | 提供常见 feature 组合和 Python 构建参数 |
-| 依赖 bootstrap | `cmake/BootstrapConan.cmake` | 规范化 feature，运行 `conan install`，接入 Conan 生成结果 |
-| 依赖图定义 | `conanfile.py`、`conan/recipes/` | 声明包依赖、本地 recipe、`CMakeToolchain`、`CMakeDeps` |
-| 主构建图 | `CMakeLists.txt`、`src/`、`tests/` | 编译静态库、工具、C API、Python module |
-| Python 构建后端 | `scikit-build-core` | 把 Python 打包流程接回 CMake |
+**`find_package()` + 系统包管理器（apt/brew）：**
 
-所以真正的心智模型不是“有一个大 CMake 项目”，而是：
+- 版本固定在发行版，不同机器上版本不一致
+- ABI 不可控（libstdc++ 版本、C++ standard 不匹配会导致链接期 crash）
+- `find_package()` 经常找不到库，需要手动设 `CMAKE_PREFIX_PATH`
 
-- CMake 负责主构建图。
-- Conan 负责 C++ 依赖解析与 ABI 对齐。
-- `CMakePresets.json` 负责原生构建入口。
-- `scikit-build-core` 负责 Python 打包入口。
-- `uv` 负责 Python 环境与打包命令。
+**git submodule / FetchContent：**
 
-## Conan 在这个仓库里负责什么
+- build 目录体积膨胀（每个项目重新编译所有依赖）
+- 无法跨项目复用已编译的 package
+- `add_subdirectory()` 机制容易污染主 CMake 的变量设置（反之亦然）
 
-### 它是什么
+### 有什么好处
 
-`Conan` 是 C++ 包管理器。放在这个仓库的语境里，可以把它近似理解为：
+- **跨平台**：同一份 `conanfile.py` 在 Linux/macOS/Windows 上都能工作
+- **构建系统无关**：Conan 本身不绑定 CMake，通过 generator 适配不同构建系统
+- **ABI 兼容**：通过 profile 精确描述目标环境，自动匹配或构建 ABI 兼容的二进制
+- **下载方便**：[ConanCenter](https://conan.io/center) 提供大量公共包；项目也可以自带 recipe 补齐缺失的包
 
-- `pip` / `uv` 在 Python 世界里负责“解析依赖、下载包、处理环境”
-- `Conan` 在 C++ 世界里负责“解析依赖、选择 ABI、生成给构建系统消费的依赖元数据”
+### 核心概念
 
-但这个类比只能帮助入门，不能把它当成完全等价关系。`Conan` 额外要管一件 Python 包管理器通常不用显式处理的事：ABI。
+**Recipe**：描述一个包"怎么构建、怎么消费"的 Python 脚本（`conanfile.py`）。包含依赖声明、构建步骤、导出的 target 信息。ConanCenter 是公共 recipe 仓库，项目也可以自带 recipe（见 [Phase 03](phase03_recipes_and_ci.md)）。
 
-### 为什么这里不用“纯系统包管理器 + find_package”
-
-如果只依赖系统包管理器，常见问题是：
-
-- 版本在不同平台上不一致
-- `find_package()` 找到的是系统目录下的任意一个安装版本，结果不稳定
-- 开发者本机、CI、发布环境之间容易出现“头文件找到了，但链接的是另一套二进制”的问题
-- 对 Windows/MSVC、Linux/GCC、macOS/Apple Clang 这几种 ABI 组合，不容易做统一管理
-
-`libpgo` 现在的实现选择把这些问题前置到 Conan：
-
-- 依赖版本在 `conanfile.py` 里统一声明
-- 平台/编译器/`cppstd`/runtime 通过 Conan profile 约束
-- `find_package()` 最终尽量从 Conan 生成目录里找包，而不是优先去系统目录碰运气
-
-### 为什么这里不用 submodule / FetchContent 当主方案
-
-它们当然能工作，但这里不是主线，原因主要有三类：
-
-1. 依赖复用差
-
-- `FetchContent` / `add_subdirectory()` 更适合把第三方源码直接编进当前工程。
-- 同一个依赖很难在多个工程之间共享一份缓存好的二进制结果。
-
-2. 主工程和子工程的 CMake 容易互相污染
-
-- `add_subdirectory()` 把第三方项目直接并进当前 CMake 作用域。
-- 第三方 CMake 的全局变量、编译选项、policy、option 名称可能和主工程互相干扰。
-
-3. 构建目录和配置复杂度容易失控
-
-- 源码级依赖意味着每个新 build tree 都可能重新配置和编译一遍第三方。
-- 对大型依赖组合，构建目录和 configure/build 时间会明显放大。
-
-这也是为什么 `libpgo` 现在把第三方依赖的“构建”和“消费”分离开：
-
-- 依赖解析交给 Conan
-- 主构建图仍然保留在 CMake
-
-### Conan 在这个仓库里的实际工作方式
-
-这里不是“在 `CMakeLists.txt` 里直接调用一堆 `find_package` 看系统装了什么”，而是：
-
-1. 在 `conanfile.py` 里声明依赖和 feature 对应关系。
-2. 在 `BootstrapConan.cmake` 里把当前 CMake feature 规范化。
-3. 调用 `conan install`。
-4. 由 Conan 生成：
-   - `conan_toolchain.cmake`
-   - 一组 `*-config.cmake`
-   - runtime activation script
-5. 根 `CMakeLists.txt` 再通过 `LibpgoConanDeps.cmake` 把这些包找出来并做 target 别名兼容。
-
-也就是说，`find_package()` 仍然在用，但它找的不是 `/usr/local/lib/cmake` 下的随机安装，而是 Conan 刚刚生成、并指向 Conan cache 的那一套配置文件。
-
-### profile 为什么重要
-
-在这个仓库里，profile 不是可有可无的附属品，而是 ABI 契约。
-
-一个 Conan profile 至少会描述：
-
-- 操作系统
-- 架构
-- 编译器
-- 编译器版本
-- `compiler.cppstd`
-- C++ 标准库 ABI，例如 `libstdc++11`
-- `build_type`
-
-例如仓库里的 Linux profile `conan/profiles/linux-gcc-release` 明确写了：
+**Profile**：描述目标平台的 ABI 契约。例如 `conan/profiles/linux-gcc-release`：
 
 ```ini
 [settings]
@@ -118,155 +44,249 @@ compiler.libcxx=libstdc++11
 build_type=Release
 ```
 
-这意味着 Conan 不只是“帮你下载包”，还会用 profile 决定：
+Conan 用 profile 做三件事：
 
-- 当前环境应该匹配哪个二进制包
-- 拉取不到预编译包时，本地要按什么 ABI 重新编译
+1. `conan profile detect --force` — 自动检测当前编译器环境生成 profile
+2. 根据 profile 匹配或构建 ABI 兼容的二进制包
+3. 通过 generator 把 ABI 信息注入构建系统
 
-本地开发通常至少要先运行：
+**Package binary**：一个 recipe 在特定 profile 下的编译产物。Conan 用 package ID（recipe + settings + options 的 hash）做精确匹配。
 
-```bash
-conan profile detect --force
+**Local cache**：`~/.conan2/` 下的本地仓库，存放已下载/已编译的 package binary。多个项目共享同一份 cache，避免重复编译。
+
+**Generator**：Conan 安装完依赖后，需要告诉构建系统"依赖在哪里、怎么链接"。本项目使用两个 CMake generator：
+
+| Generator | 产物 | 作用 |
+| --- | --- | --- |
+| `CMakeToolchain` | `conan_toolchain.cmake` | 注入 ABI 信息：C++ standard、libstdc++ 版本、build type、compiler 路径、`CMAKE_PREFIX_PATH` |
+| `CMakeDeps` | `*-config.cmake`（在 `build/<preset>/generators/`） | 供 `find_package()` 消费，内部硬编码绝对路径指向 `~/.conan2/p/` 中的头文件和库文件 |
+
+### 如何工作
+
+#### 1. 在 `conanfile.py` 中声明依赖
+
+```python
+class MyPkg(ConanFile):
+    settings = "os", "compiler", "build_type", "arch"
+    options  = {"with_feature": [True, False]}
+
+    def build_requirements(self):     # 构建工具依赖
+        self.tool_requires("cmake/[>=3.28]")
+
+    def requirements(self):           # 运行时依赖
+        self.requires("eigen/3.4.0")
+        if self.options.with_feature:
+            self.requires("boost/1.83.0")
+
+    def generate(self):               # 配置 generator
+        tc = CMakeToolchain(self)     # → conan_toolchain.cmake
+        deps = CMakeDeps(self)        # → *-config.cmake
+        tc.generate()
+        deps.generate()
+
+    def layout(self):
+        cmake_layout(self)            # 设定目录布局
 ```
 
-而 CI 不靠自动探测，而是显式选择仓库里的 profile 文件。
+`requirements()` 声明"需要什么"，`generate()` 决定"怎么告诉 CMake"，两者分离。
 
-## scikit-build-core 在这个仓库里负责什么
+#### 2. 安装依赖
 
-### 它是什么
+```bash
+conan install . --build=missing
+```
 
-`scikit-build-core` 是现代 Python 构建后端，用来把 Python 打包流程和 CMake 对接起来。
+这条命令的内部流程：
 
-在 `libpgo` 里，它的角色不是替代 CMake，而是让 Python 构建不要绕开 CMake。
+1. 解析 `conanfile.py` 的依赖树，处理不同库之间的版本冲突
+2. 检查本地缓存中是否已有符合当前 profile 的二进制包
+3. 如果没有，去远程仓库（ConanCenter）下载
+4. 如果远程只有源码没有对应的二进制包（`--build=missing` 触发），在本地自动编译并缓存
+5. 运行 generator，在 build 目录下生成 CMake 消费文件
 
-### 为什么这里不用传统 `setup.py` 扩展编译逻辑
+#### 3. 告诉构建系统依赖在哪里
 
-如果 Python 扩展直接靠 `setup.py` 手写编译参数，通常会慢慢演变成：
+传统 `find_package()` 去 `/usr/local/lib/cmake` 找依赖 — 这依赖系统安装，不可靠。
 
-- 大量平台分支
-- 大量硬编码 `extra_compile_args`
+Conan 的 `CMakeDeps` generator 在 `build/Release/generators/` 下生成 `*-config.cmake`，里面硬编码绝对路径指向 Conan 全局缓存（`~/.conan2/p/`）中的头文件和库文件。`CMakeToolchain` 同时把 generators 目录注入 `CMAKE_PREFIX_PATH`，这样 `find_package()` 就能找到。
+
+#### 4. 告诉构建系统 ABI 信息
+
+`CMakeToolchain` 生成的 `conan_toolchain.cmake` 注入：
+
+- C++ standard（`CMAKE_CXX_STANDARD`）
+- libstdc++ 版本选择
+- Build type（Release/Debug）
+- Compiler 路径
+- `CMAKE_PREFIX_PATH`（指向 generators 目录）
+
+#### 5. 使用生成的 toolchain 配置 CMake
+
+```bash
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake
+cmake --build build
+```
+
+### 如何创建 Recipe
+
+Recipe 有两种典型模式：
+
+**编译本地源码：**
+
+```python
+class MyLib(ConanFile):
+    exports_sources = "src/*", "CMakeLists.txt"
+
+    def layout(self):
+        cmake_layout(self)
+
+    def generate(self):
+        tc = CMakeToolchain(self)
+        tc.generate()
+
+    def build(self):
+        cmake = CMake(self)
+        cmake.configure()
+        cmake.build()
+
+    def package(self):
+        cmake = CMake(self)
+        cmake.install()
+
+    def package_info(self):
+        self.cpp_info.libs = ["mylib"]      # 库文件名
+        # 自动导出 target 名供下游 find_package 消费
+```
+
+**下载远程源码：**
+
+```yaml
+# conandata.yml
+sources:
+  "1.0":
+    url: "https://github.com/foo/bar/archive/v1.0.tar.gz"
+    sha256: "abc123..."
+```
+
+```python
+class RemoteLib(ConanFile):
+    def source(self):
+        get(self, **self.conan_data["sources"][self.version])
+
+    def build(self):
+        cmake = CMake(self)
+        cmake.configure()
+        cmake.build()
+    # ...
+```
+
+**安装到 cache：**
+
+- `conan export .` — 只把 recipe 写入 cache，不触发构建
+- `conan install .` — 写入 recipe + 解析依赖 + 构建 + 打包
+
+## scikit-build-core
+
+### 是什么
+
+scikit-build-core 是现代的 Python C++ 构建后端（PEP 517），把 Python 打包流程接回 CMake。
+
+### 不用 scikit-build-core 会怎样
+
+传统方式是 `setup.py` + `setuptools`：
+
+- 硬编码大量 `extra_compile_args`（`-std=c++17`, `/O2`, `-fPIC`）
+- `if sys.platform == "win32"` 到处散落
 - 手写 `include_dirs` / `library_dirs`
-- 头文件、Python ABI、编译器、依赖库路径之间耦合越来越重
+- 改一处 C++ 代码要全量重编译（没有增量编译）
 
-而 `libpgo` 已经有一套非平凡的 C++ 构建系统：
+### 有什么好处
 
-- 顶层 feature 开关
-- Conan 依赖 bootstrap
-- 原生工具和静态库
-- Python module 依赖同一批内部 target
+- **关注点分离**：C++ 编译交给 CMake，Python 打包配置放在 `pyproject.toml`
+- **跨平台**：自动检测 Python 环境（路径、头文件、ABI 版本如 `cp310-cp310`），静默注入给 CMake
+- **增量编译**：底层是 CMake + Ninja，改一个文件只重编译受影响的 target
+- **静态配置**：所有配置在 `pyproject.toml` 中声明，不需要可执行的 `setup.py`
 
-因此更合理的做法是：
+### 如何工作
 
-- Python 层只描述“我要构建一个包”
-- 真正的 C++ 构建继续交给 CMake
+当 `uv` 或 `pip` 启动构建时，scikit-build-core 接管并调用 CMake：
 
-### 这里它是怎么接到 CMake 的
+```text
+uv sync / uv build / pip install
+  → 读取 pyproject.toml
+  → 发现 build-backend = scikit_build_core.build
+  → scikit-build-core 接管：
+      → cmake configure（传入 cmake.args）
+      → cmake build
+      → 把 CMake install 的产物打进 wheel
+```
 
-`pyproject.toml` 里把 `scikit-build-core` 声明为 build backend：
+`pyproject.toml` 中的配置：
 
 ```toml
 [build-system]
+requires = ["scikit-build-core"]
 build-backend = "scikit_build_core.build"
-```
 
-同时在 `tool.scikit-build` 下传入了核心 CMake 参数：
-
-```toml
-cmake.args = [
+[tool.scikit-build]
+build-dir = "build/scikit-build"          # 独立 build tree
+cmake.args = [                            # 传给 cmake configure 的参数
     "-DCMAKE_TOOLCHAIN_FILE=../../cmake/BootstrapConan.cmake",
     "-DPGO_ENABLE_TESTS=OFF",
     "-DPGO_FEATURE_PYTHON=ON",
     "-DPGO_FEATURE_ANIMATION_IO=ON",
     "-DPGO_FEATURE_GEOMETRY_STACK=ON",
-    "-DPYPGO_VERSION_INFO=0.0.3",
 ]
 ```
 
-这几行非常关键，因为它说明 Python 构建并没有走“另一套依赖管理逻辑”，而是又回到了：
+关键点：
 
-- `BootstrapConan.cmake`
-- `conanfile.py`
-- 根 `CMakeLists.txt`
+- **同一个 CMake 后端**：Python 构建回到同一个 `BootstrapConan.cmake` + `conanfile.py` + 根 `CMakeLists.txt`，不是另一套编译系统
+- **独立 build tree**：`build-dir` 与 preset 的 build 目录分开，互不干扰
+- **SKBUILD 变量**：CMake 端通过 `if(SKBUILD)` 区分 Python 打包 vs 原生 C++ 安装，两条路共享源码构建图但安装目标不同
 
-## 三条用户入口的真实落点
+### 与 uv 的关系
 
-### 1. 原生 C++ 开发
+`uv` 是 Python 环境和包管理工具（类似 pip + venv 的组合）。`uv sync` 读取 `pyproject.toml`，发现 build-backend 是 scikit-build-core，就调用它执行 CMake 构建并安装 Python module。`uv build` 做同样的事但产出 wheel 分发包。
 
-最典型的入口是：
+## 三条构建入口
+
+### 1. 原生 C++
 
 ```bash
 cmake --preset core-release
 cmake --build --preset core-release
 ```
 
-控制流是：
+`CMakePresets.json` → `CMAKE_TOOLCHAIN_FILE=BootstrapConan.cmake` → Conan install → 根 `CMakeLists.txt` → Ninja 编译。
 
-1. `CMakePresets.json` 选择 `generator=Ninja`、`binaryDir`、`CMAKE_BUILD_TYPE`
-2. preset 把 `CMAKE_TOOLCHAIN_FILE` 指到 `cmake/BootstrapConan.cmake`
-3. `BootstrapConan.cmake` 运行 Conan，并注入生成结果
-4. 根 `CMakeLists.txt` 生成主构建图
-5. `Ninja` 负责编译
+常用 preset：
 
-### 2. Python 开发环境
+| Preset | 内容 |
+| --- | --- |
+| `core-release` | 核心构建 |
+| `geometry-release` | 开启几何栈 |
+| `python-release` | Python + animation I/O + geometry stack |
+| `full-release` | `PGO_PROFILE_FULL=ON`，完整特性 |
 
-典型入口是：
+Preset 可以通过 CMake 的 feature 开关（`PGO_FEATURE_*`）灵活组合构建内容。
+
+### 2. Python 开发
 
 ```bash
 uv sync
 ```
 
-控制流是：
-
-1. `uv` 解析 Python 环境
-2. `pyproject.toml` 指定 `scikit-build-core`
-3. `scikit-build-core` 调 CMake
-4. CMake 仍然从 `BootstrapConan.cmake` 开始
-5. 生成并编译 `pypgo` module
+`pyproject.toml` → `scikit-build-core` → CMake → `BootstrapConan.cmake` → 同一套后端 → `pypgo` module。
 
 ### 3. Python 发包
-
-典型入口是：
 
 ```bash
 uv build
 ```
 
-这条链和 `uv sync` 使用同一个 Python build backend，只是目标从“本地开发安装”变成了“构建分发产物”。
+与 `uv sync` 同一个 build backend，目标从本地开发安装变成分发产物。
 
-## preset 在这个仓库里是什么角色
+---
 
-`CMakePresets.json` 不是第二套构建系统，而是原生 C++ 入口的参数模板。
-
-例如：
-
-- `core-release` 代表核心原生构建
-- `geometry-release` 开启几何栈
-- `python-release` 开启 Python + animation I/O + geometry stack
-- `full-release` 通过 `PGO_PROFILE_FULL=ON` 打开完整特性组合
-
-这让开发者不必每次手写一串 `-D...=ON`：
-
-```bash
-cmake --preset full-release
-```
-
-而不是：
-
-```bash
-cmake -S . -B build/full-release \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_TOOLCHAIN_FILE=cmake/BootstrapConan.cmake \
-  -DPGO_PROFILE_FULL=ON
-```
-
-## 这一层的最终心智模型
-
-把这一层压缩成一句话：
-
-> `libpgo` 不是“CMake + 一点点 Python”，而是“一套 Conan + CMake 的 C++ 后端，再加两个入口壳：CMake presets 和 Python packaging”。
-
-后面三篇就是沿着这条主线继续往下拆：
-
-- [Phase 02: Conan Bootstrap 控制流](phase02_conan_bootstrap.md)
-- [Phase 03: 根 CMakeLists.txt 构建图](phase03_root_cmake_graph.md)
-- [Phase 04: Recipes、Python 打包与 CI/CD](phase04_recipes_python_ci.md)
+下一阶段：[Phase 02: 核心 CMake 文件](phase02_cmake_files.md)

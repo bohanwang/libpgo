@@ -1,294 +1,362 @@
 # Phase 04：`CubicMeshDeformationModel` 单元模型
 
-## 1. 这阶段要回答什么
+## 在系统中的位置
 
-这一阶段专门回答下面四个问题：
-
-1. cubic/hexa 单元在 solver 里到底使用哪个局部 deformation model？
-2. 这个模型怎样把 hexa 理论真正翻译成 repo 当前的代码？
-3. 为什么实现里使用 `[0, 1]^3` 参数域，而教材里常写 `[-1, 1]^3`？
-4. 当前 repo 到底只实现了 energy，还是 gradient、Hessian、参数导数也已经在位？
-
-这一步如果不展开，后面很容易出现两种误判：
-
-- 以为 cubic 只是把 tet 的单元模型硬扩成 8 个点
-- 以为 repo 里只有 element energy 能算，global assembly 还没有真正可用
-
-## 2. 这阶段在整条主线里解决什么
-
-Phase 03 解决的是 `CubicMesh -> SimulationMesh` 的 solver-side handoff。  
-Phase 04 要解决的是：
-
-> 在 solver 看见一个 `SimulationMeshType::CUBIC` element 之后，究竟由哪个局部 FEM 对象负责计算它的能量、力和切线刚度。
-
-当前 repo 给出的答案已经很明确：
-
-- cubic/hexa 单元的局部 deformation model 是 `CubicMeshDeformationModel`
-
-## 3. 当前 repo 已经完成了什么
-
-当前实现已经完成的不只是“新增了一个类文件”，而是：
-
-- `CubicMeshDeformationModel` 类已存在
-- 它遵守 `DeformationModel` 抽象接口
-- 它针对 8 节点 cubic 单元工作
-- 它使用 `2 x 2 x 2 = 8` 个 Gauss 点
-- 它已经实现：
-  - `prepareData(...)`
-  - `computeEnergy(...)`
-  - `compute_dE_dx(...)`
-  - `compute_d2E_dx2(...)`
-  - 参数导数相关接口
-- 它复用了现有的：
-  - `ElasticModel3DDeformationGradient`
-  - `PlasticModel3DDeformationGradient`
-
-因此当前 repo 的真实状态不是“有一个待接线的 hexa 单元草稿”，而是：
-
-> 已经有一个可供 manager / assembler / energy 直接消费的 cubic element model。
-
-## 4. 这个类的固定 contract 是什么
-
-当前 `CubicMeshDeformationModel` 的 element contract 可以概括成：
-
-- 顶点数：`8`
-- 位移自由度：`24`
-- 积分点数：`8`
-- 单元类型：三线性 8 节点 cubic / hexa
-- 材料接口：deformation gradient 形式
-- plastic 接口：deformation gradient 的 plastic split
-
-这组 contract 非常重要，因为后面至少三层逻辑会依赖它：
-
-- `DeformationModelManager` 创建对象时要喂 `restPositions[24]`
-- `DeformationModelAssembler` 需要知道局部自由度规模是 24
-- 测试会直接断言 `getNumVertices()`、`getNumDOFs()`、`getNumMaterialLocations()`
-
-## 5. 构造函数在预计算什么
-
-构造函数接收的是单元 rest positions `restPositions[24]`。之后它会为 8 个积分点预计算：
-
-- `dN_dabc`
-- `DmInv`
-- `weightDetJ`
-- `restBm`
-- `rest_dFdx`
-
-### 5.1 `dN_dabc`
-
-这是 8 个形函数对 `(alpha, beta, gamma)` 的梯度组织结果。它对应三线性 hexa 单元的形函数梯度矩阵，只不过参数域已经换成了 `[0, 1]^3`。
-
-### 5.2 `DmInv`
-
-`Dm` 是材料空间 Jacobian，`DmInv` 是它的逆。  
-它把 rest 构型几何编码成一个局部线性映射，是后续恢复 `F` 的关键。
-
-### 5.3 `weightDetJ`
-
-这是：
+`CubicMeshDeformationModel` 是**单个六面体单元**的局部有限元模型，组合几何（8 顶点参考/当前位置）、弹性本构（`ElasticModel3DDeformationGradient`）和塑性本构（`PlasticModel3DDeformationGradient`），提供局部能量、梯度、Hessian 和参数导数：
 
 ```text
-Gauss 权重 * |det(Dm)|
+SimulationMesh (8 顶点 + 材料)
+  → ElasticModel (能密度 ψ, 应力 P, 切线 dP/dF)
+  → PlasticModel (Fp, Fp⁻¹, detFp 及对参数 a 的导数)
+  → CubicMeshDeformationModel (积分 + 求导)
+  → DeformationModelAssembler (全局装配)
 ```
 
-也就是把参考域积分转到材料空间后，当前积分点对单元总能量的几何权重。
+## Element Contract
 
-### 5.4 `restBm`
+| 属性 | 值 |
+| --- | --- |
+| 顶点数 | 8 |
+| 位移自由度 | 24 |
+| 积分点数 | 8（$2 \times 2 \times 2$ Gauss） |
+| 单元类型 | 三线性 8 节点 cubic/hexa |
+| 材料接口 | deformation gradient (`ElasticModel3DDeformationGradient`) |
+| Plastic 接口 | deformation gradient 的 plastic split (`PlasticModel3DDeformationGradient`) |
 
-`restBm` 是后续局部力积分反复使用的缓存项。把它预计算出来的意义在于：
+## 1. 参考单元与三线性形函数
 
-- 单元 rest 几何对所有后续状态都相同
-- 没必要在每次 `prepareData(...)` 时重复构造
+### 参考参数域
 
-### 5.5 `rest_dFdx`
-
-这表示形变梯度对节点自由度的 Jacobian 在 rest 几何下的基础形式。  
-它是后面 Hessian 计算的关键缓存。
-
-因此构造函数真正做的事情可以概括成：
-
-> 把“与当前状态无关、只依赖单元 rest 构型”的几何量全部提前编译进对象。
-
-## 6. `prepareData(...)` 到底在恢复什么
-
-runtime 中，`prepareData(...)` 会读取：
-
-- 当前 8 个节点位置 `x`
-- plastic 参数 `param`
-- material 参数 `materialParam`
-
-然后对每个积分点依次计算：
-
-1. `Fp`
-2. `FpInv`
-3. `detFp`
-4. `Fref`
-5. `Fe = Fref * FpInv`
-6. `SVD(Fe)`
-7. `dFdx`
-8. `Bm`
-
-这一步最重要的不是变量名，而是它把 hexa 几何主链和 repo 现有的 plastic split 统一了起来。
-
-### 6.1 如果只看 hexa 几何部分
-
-三线性 hexa 单元最核心的几何公式可以写成：
+使用单位立方体 $(\alpha,\beta,\gamma) \in [0,1]^3$（非教材常见的 $[-1,1]^3$），与 `CubicMesh::computeBarycentricWeights(...)` 一致。8 个角点按 `CubicMesh` 的局部顶点顺序：
 
 $$
-F_q = D_s H_q (D_m H_q)^{-1}
+(0,0,0),\ (1,0,0),\ (1,1,0),\ (0,1,0),\ (0,0,1),\ (1,0,1),\ (1,1,1),\ (0,1,1)
 $$
 
-当前实现里，对应的是：
+### 形函数
 
-- `xMat` 代表当前顶点矩阵 `D_s`
-- `quad.dN_dabc` 对应形函数梯度
-- `quad.DmInv` 对应 `(D_m H_q)^{-1}`
+8 个 shape function 统一写成：
 
-### 6.2 为什么还要分 `Fref` 和 `Fe`
+$$
+N_{abc}(\alpha,\beta,\gamma) = \alpha^a(1-\alpha)^{1-a} \cdot \beta^b(1-\beta)^{1-b} \cdot \gamma^c(1-\gamma)^{1-c}, \quad a,b,c \in \{0,1\}
+$$
 
-repo 当前的 volumetric 材料接口并不直接吃几何意义上的总形变梯度，而是延续了 tet 主线已有的 deformation-gradient + plastic split 抽象。
+例如：$N_{000} = (1-\alpha)(1-\beta)(1-\gamma)$，$N_{110} = \alpha\beta(1-\gamma)$，$N_{111} = \alpha\beta\gamma$。
 
-因此实现里先计算：
+### 形函数梯度 `dN_dabc`
 
-- `Fref`
+实现不存 $N_i$ 本身，而是直接存梯度。定义 $a_0 = 1-\alpha$，$b_0 = 1-\beta$，$g_0 = 1-\gamma$，把 8 个 shape function 组成列向量 $N(\boldsymbol{\xi}) \in \mathbb{R}^8$，其对局部坐标的 Jacobian 为：
 
-然后再得到：
+$$
+J_N(\boldsymbol{\xi}) = \frac{\partial N}{\partial \boldsymbol{\xi}} \in \mathbb{R}^{8 \times 3}
+$$
 
-- `Fe = Fref * FpInv`
+代码中存的是它的转置：
 
-真正送给材料模型的是 `Fe`。  
-所以更准确的表述应当是：
+$$
+\texttt{dN\_dabc} = J_N^T \in \mathbb{R}^{3 \times 8}
+$$
 
-- hexa 几何主链首先落成 `Fref`
-- 再通过 plastic split 落成材料层消费的 `Fe`
+其中：
 
-## 7. 形函数、顶点顺序和参数域怎样对齐
+- `dN_dabc.row(0)` = $(\partial N / \partial \alpha)^T$
+- `dN_dabc.row(1)` = $(\partial N / \partial \beta)^T$
+- `dN_dabc.row(2)` = $(\partial N / \partial \gamma)^T$
 
-### 7.1 顶点顺序仍然严格沿用 `CubicMesh`
+对应代码 `fillShapeGradients(...)`：
 
-当前实现没有再发明另一套 hexa 局部编号，而是继续使用：
-
-```text
-000, 100, 110, 010, 001, 101, 111, 011
+```cpp
+dN_dabc.row(0) << -b0*g0, b0*g0, beta*g0, -beta*g0, -b0*gamma, b0*gamma, beta*gamma, -beta*gamma;
+dN_dabc.row(1) << -a0*g0, -alpha*g0, alpha*g0, a0*g0, -a0*gamma, -alpha*gamma, alpha*gamma, a0*gamma;
+dN_dabc.row(2) << -a0*b0, -alpha*b0, -alpha*beta, -a0*beta, a0*b0, alpha*b0, alpha*beta, a0*beta;
 ```
 
-这使得：
+存 $J_N^T$ 而非 $J_N$ 的原因：后续几何映射 $D_m = X \cdot J_N$ 写成代码时正好是 `X * dN_dabc.transpose()`。
 
-- `CubicMesh` 的局部顶点顺序
-- `SimulationMesh::createFromCubicMesh(...)` 的 element 顺序
-- `CubicMeshDeformationModel` 的形函数顺序
+## 2. 参考几何与形变梯度
 
-三者完全一致。
+### 参考 Jacobian $D_m$
 
-### 7.2 为什么用 `[0, 1]^3`
-
-标准 hexa 推导常使用参考域 `[-1, 1]^3`。当前实现改用 `[0, 1]^3`，不是因为理论变了，而是为了和现有 `CubicMesh::computeBarycentricWeights(...)` 一致。
-
-二者通过仿射换元联系：
+把 8 个顶点参考坐标按列排成 $X = [X_0, \ldots, X_7] \in \mathbb{R}^{3 \times 8}$，参考映射 Jacobian：
 
 $$
-\xi_1 = 2\alpha - 1,\quad
-\xi_2 = 2\beta - 1,\quad
-\xi_3 = 2\gamma - 1
+D_m = \frac{\partial X}{\partial \boldsymbol{\xi}} = X \cdot J_N(\boldsymbol{\xi}) = X \cdot \texttt{dN\_dabc}^T
 $$
 
-因此：
+对应代码：
 
-```text
-标准参考域表达
-  <=> repo 中的 alpha / beta / gamma 参数化
+```cpp
+void computeDm(const M3x8d& X, const M3x8d& dN_dabc, ES::M3d& Dm) const {
+    Dm.noalias() = X * dN_dabc.transpose();
+}
 ```
 
-是完全等价的。
+### 总形变梯度 $F_{\text{ref}}$
 
-## 8. `computeEnergy(...)`、`compute_dE_dx(...)`、`compute_d2E_dx2(...)` 分别在做什么
-
-### 8.1 `computeEnergy(...)`
-
-这一层做的是 8 点积分求和：
+当前构型下 $x = [x_0, \ldots, x_7] \in \mathbb{R}^{3 \times 8}$，通过链式法则：
 
 $$
-E_e = \sum_{q=1}^{8} \Psi(F_q^e)\, w_q \lvert \det(D_m H_q) \rvert \det(F_p)
+F_{\text{ref}} = \frac{\partial x}{\partial X} = \frac{\partial x}{\partial \boldsymbol{\xi}} \cdot D_m^{-1} = x \cdot \texttt{dN\_dabc}^T \cdot D_m^{-1}
 $$
 
-因此 element total energy 不是某个单点近似，而是完整地在 8 个积分点上累计。
+推导：$x$ 和 $X$ 都通过 $\boldsymbol{\xi}$ 参数化，$\partial x / \partial \boldsymbol{\xi} = F_{\text{ref}} \cdot D_m$，因此 $F_{\text{ref}} = (\partial x / \partial \boldsymbol{\xi}) D_m^{-1}$。
 
-### 8.2 `compute_dE_dx(...)`
+对应代码：
 
-这一层逐积分点计算一阶 Piola 应力 `P`，再与 `Bm` 相乘累加局部梯度：
+```cpp
+void computeF(const M3x8d& x, const M3x8d& dN_dabc, const ES::M3d& DmInv, ES::M3d& F) const {
+    F.noalias() = x * dN_dabc.transpose() * DmInv;
+}
+```
 
-$$
-f^e = \sum_q P_q B_{m,q}
-$$
+## 3. $2 \times 2 \times 2$ 高斯积分
 
-这意味着当前实现并不是“先有 energy，gradient 以后再补”，而是：
+### 积分点坐标
 
-- energy
-- force / gradient
-
-都已经在同一个 element contract 内闭合。
-
-### 8.3 `compute_d2E_dx2(...)`
-
-这一层逐积分点计算 `dPdF`，再通过 `dFdx` 累积局部切线刚度：
+标准 $[-1,1]$ 上的二点 Gauss-Legendre 节点是 $\pm 1/\sqrt{3}$。映射到 $[0,1]$：$\xi = (\hat{\xi}+1)/2$，得到：
 
 $$
-K_e = \sum_q \left(\frac{\partial F_q}{\partial x}\right)^T
-\frac{\partial P_q}{\partial F_q}
-\left(\frac{\partial F_q}{\partial x}\right)
+\xi_{1,2} = 0.5 \mp \frac{0.5}{\sqrt{3}}
 $$
 
-这一步的意义非常大，因为后面 assembler 和 implicit runtime 都依赖它。
+三维张量积 $2 \times 2 \times 2 = 8$ 个积分点。
 
-## 9. 当前 repo 到底实现到了什么深度
+### 积分权重
 
-这里有必要明确一下，不然后面很容易低估现状。
+$[-1,1]$ 上每点权重 $\hat{w} = 1$，映射到 $[0,1]$ 后乘 Jacobian $1/2$，三维张量积：
 
-当前 `CubicMeshDeformationModel` 已经不只实现了：
+$$
+w_q = \frac{1}{2} \cdot \frac{1}{2} \cdot \frac{1}{2} = \frac{1}{8}
+$$
 
-- `computeEnergy`
+对应代码：
 
-它实际上还已经实现了：
+```cpp
+constexpr double kQuadratureWeight = 0.125;
+```
 
-- `compute_dE_dx`
-- `compute_d2E_dx2`
-- `compute_dE_da`
-- `compute_d2E_da2`
-- `compute_d2E_dxda`
-- `compute_dE_db`
-- `compute_d2E_db2`
-- `compute_d2E_dxdb`
-- `compute_d2E_dadb`
+二点 Gauss-Legendre 可精确积分到三次多项式，对三线性六面体足够。
 
-也就是说，当前 repo 中 cubic element model 的 contract 深度已经和主线 deformation model 抽象对齐，而不是一个只够最小静态示例的半成品。
+## 4. 每个积分点的预计算：`QuadratureData`
 
-## 10. 当前 repo 的验证证据
+构造函数中，对 8 个积分点各预计算一份：
 
-`tests/core/energy/cubicMeshDeformationModel_test.cpp` 已经覆盖了两类最核心的 element-level 行为：
+```cpp
+struct QuadratureData {
+    M3x8d   dN_dabc;     // 该点的形函数梯度
+    ES::M3d DmInv;       // 参考 Jacobian 的逆
+    M3x8d   restBm;      // 应力→节点力的装配模板
+    M9x24d  rest_dFdx;   // vec(Fref) 对 24 DOF 的导数模板
+    double  weightDetJ;  // 积分权重 × |det Dm|
+};
+```
 
-- `AffineDeformationMatchesMaterialEnergyDensityTimesVolume`
-  - 检查仿射形变下的能量是否与材料能量密度乘体积一致
-- `FiniteDifferenceMatchesGradientAndHessian`
-  - 用有限差分同时对照一阶和二阶导数
+构造代码：
 
-这些测试的重要性在于：
+```cpp
+fillShapeGradients(quadratureCoord[ia], quadratureCoord[ib], quadratureCoord[ig], quad.dN_dabc);
+computeDm(restX, quad.dN_dabc, Dm);
 
-- 它们验证的不是 manager 或 runtime glue
-- 而是 cubic element model 自身的局部数学 contract
+quad.DmInv      = Dm.fullPivLu().inverse();
+quad.weightDetJ = kQuadratureWeight * std::abs(Dm.determinant());
+quad.restBm     = quad.weightDetJ * quad.DmInv.transpose() * quad.dN_dabc;
+compute_dF_dx(quad.dN_dabc, quad.DmInv, quad.rest_dFdx);
+```
 
-因此当前 repo 最稳妥的表述是：
+### `restBm` 的含义
 
-> `CubicMeshDeformationModel` 已经具备 committed 的 element-level 数值一致性证据。
+$$
+\texttt{restBm} = w_q |\det D_m| \cdot D_m^{-T} \cdot \texttt{dN\_dabc}
+$$
 
-## 11. 这一阶段的边界
+其中 $D_m^{-T} \texttt{dN\_dabc}$ 就是形函数在参考物理坐标下的梯度（链式法则 $\nabla_X N_i = D_m^{-T} \nabla_{\boldsymbol{\xi}} N_i$），再乘积分体积权重。它是纯参考几何量，运行时乘上塑性因子得到当前 `Bm`。
 
-这一阶段仍然不展开：
+### `rest_dFdx` 的含义
 
-- `DeformationModelManager` 怎样为 cubic 创建对象
-- assembler 怎样把局部量装配回全局
-- `runSimCore` 怎样构造 `W`、`M` 和 runtime integrator
+$$
+\texttt{rest\_dFdx} = \frac{\partial \operatorname{vec}(F_{\text{ref}})}{\partial x} \in \mathbb{R}^{9 \times 24}
+$$
 
-它解决的是单元级 deformation model 本身，而不是之后的全局装配和 runtime。
+只依赖 `dN_dabc` 和 $D_m^{-1}$。运行时乘上 $F_p^{-1}$ 得到弹性形变梯度的导数。
 
-上一阶段： [Phase 03](phase03_simulation_mesh.md)  
-下一阶段： [Phase 05](phase05_energy_assembly.md)
+## 5. `dF/dx` 的推导
+
+定义 $G = \texttt{dN\_dabc}^T \cdot A \in \mathbb{R}^{8 \times 3}$（$A$ 是 $D_m^{-1}$ 或 $D_m^{-1} F_p^{-1}$），则 $F = x \cdot G$。
+
+$F$ 对 $x$ 是线性的。扰动单个自由度 $x_{vi,dim}$：
+
+$$
+\frac{\partial F}{\partial x_{vi,dim}} = E_{dim,vi} \cdot G
+$$
+
+其中 $E_{dim,vi} \in \mathbb{R}^{3 \times 8}$ 是只在 $(dim, vi)$ 位置为 1 的基矩阵。效果：结果矩阵只有第 $dim$ 行非零，等于 $G$ 的第 $vi$ 行。
+
+对应代码：
+
+```cpp
+const Eigen::Matrix<double, 8, 3> G = dN_dabc.transpose() * A;
+for (int vi = 0; vi < 8; vi++) {
+    for (int dim = 0; dim < 3; dim++) {
+        ES::M3d dF = ES::M3d::Zero();
+        dF.row(dim) = G.row(vi);
+        dFdx.col(vi * 3 + dim) = Eigen::Map<const ES::V9d>(dF.data());
+    }
+}
+```
+
+把每个 $3 \times 3$ 的 $\partial F / \partial x_{vi,dim}$ 向量化为 $9 \times 1$，存入 `dFdx` 的一列，构成完整的 $9 \times 24$ 矩阵。
+
+## 6. 弹塑性分解
+
+标准乘法分解：
+
+$$
+F = F_e F_p, \quad F_e = F_{\text{ref}} F_p^{-1}
+$$
+
+`prepareData(...)` 中从塑性参数 $a$ 恢复：
+
+```cpp
+plasticModel->computeA(param, Fp.data());        // Fp
+plasticModel->computeAInv(param, FpInv.data());   // Fp⁻¹
+cacheData->detFp = plasticModel->compute_detA(param);  // det(Fp)
+```
+
+## 7. `prepareData(...)`：运行时缓存
+
+输入当前 8 节点位置 $x[24]$、塑性参数 $a$、材料参数 $b$。
+
+### 缓存字段
+
+```cpp
+ES::M3d Fp, FpInv;    double detFp;
+ES::M3d Fref[8];      // 每个积分点的总形变梯度
+ES::M3d Fe[8];        // 弹性形变梯度
+ES::M3d U[8], V[8];   ES::V3d S[8];  // Fe 的 SVD
+M9x24d  dFdx[8];      // Fe 对 24 DOF 的导数
+M3x8d   Bm[8];        // 应力→节点力装配矩阵
+```
+
+### 逐积分点计算
+
+```cpp
+computeF(xMat, quad.dN_dabc, quad.DmInv, cacheData->Fref[qi]);
+cacheData->Fe[qi] = cacheData->Fref[qi] * cacheData->FpInv;
+computeSVD(cacheData->Fe[qi], cacheData->U[qi], cacheData->V[qi], cacheData->S[qi]);
+
+compute_dF_dx(quad.dN_dabc, quad.DmInv * cacheData->FpInv, cacheData->dFdx[qi]);
+cacheData->Bm[qi] = cacheData->detFp * cacheData->FpInv.transpose() * quad.restBm;
+```
+
+关键点：
+
+- `dFdx[qi]`：取 $A = D_m^{-1} F_p^{-1}$，得到的是 $\partial \operatorname{vec}(F_e) / \partial x$
+- `Bm[qi]`：$\det(F_p) \cdot F_p^{-T} \cdot \texttt{restBm}$，把参考几何模板更新到当前弹塑性构型
+
+### 为什么做 SVD
+
+```cpp
+Eigen::JacobiSVD<ES::M3d, Eigen::NoQRPreconditioner> svd(Fe, ComputeFullU | ComputeFullV);
+```
+
+Stable Neo-Hookean 等本构模型在奇异值空间中计算更稳健。SVD 预缓存避免能量/梯度/Hessian 重复分解。代码还做符号修正（`det(U) < 0` 或 `det(V) < 0` 时翻转），保证朝向一致性。
+
+## 8. 能量
+
+$$
+E_e = \sum_{q=1}^{8} \psi(F_{e,q};\, b) \cdot w_q |\det D_{m,q}| \cdot \det F_p
+$$
+
+对应代码：
+
+```cpp
+for (int qi = 0; qi < 8; qi++) {
+    energy += elasticModel->compute_psi(materialParam, Fe[qi], U[qi], V[qi], S[qi])
+              * quad[qi].weightDetJ * cacheData->detFp;
+}
+```
+
+- `compute_psi`：弹性能密度 $\psi(F_e)$，由 `ElasticModel` 提供
+- `weightDetJ`：$w_q |\det D_m|$
+- `detFp`：塑性映射的体积因子
+
+## 9. 对几何自由度 $x$ 的一阶导（节点力）
+
+$$
+\frac{\partial E_e}{\partial x} = \sum_q P_q \cdot B_{m,q}
+$$
+
+其中 $P_q = \partial \psi / \partial F_e$ 是第一类 Piola 应力。
+
+对应代码：
+
+```cpp
+ES::M3d P;
+elasticModel->compute_P(materialParam, Fe[qi], U[qi], V[qi], S[qi], P.data());
+gradMap.noalias() += P * cacheData->Bm[qi];
+```
+
+这就是标准非线性有限元中"应力积分得到内力"的形式。`Bm` 负责把应力从积分点映射回 24 个节点自由度。
+
+## 10. 对几何自由度 $x$ 的二阶导（切线刚度矩阵）
+
+$$
+\frac{\partial^2 E_e}{\partial x^2} = \sum_q \left(\frac{\partial \operatorname{vec}(F_{e,q})}{\partial x}\right)^T \frac{\partial P_q}{\partial F_{e,q}} \left(\frac{\partial \operatorname{vec}(F_{e,q})}{\partial x}\right)
+$$
+
+对应代码：
+
+```cpp
+ES::M9d dPdF;
+elasticModel->compute_dPdF(materialParam, Fe[qi], U[qi], V[qi], S[qi], dPdF.data());
+dPdF *= quad[qi].weightDetJ * cacheData->detFp;
+hessMap.noalias() += cacheData->dFdx[qi].transpose() * dPdF * cacheData->dFdx[qi];
+```
+
+- `dPdF`：$9 \times 9$ 材料切线矩阵 $\partial \operatorname{vec}(P) / \partial \operatorname{vec}(F_e)$
+- `dFdx`：$9 \times 24$ 几何 Jacobian
+- 结果：$24 \times 24$ 局部切线刚度矩阵
+
+## 11. 对塑性参数 $a$ 的导数
+
+这是 `CubicMeshDeformationModel` 与纯弹性六面体最大的区别。
+
+### 链式法则
+
+$$
+\frac{\partial F_e}{\partial a_i} = F_{\text{ref}} \cdot \frac{\partial F_p^{-1}}{\partial a_i}
+$$
+
+### 一阶导 `compute_dE_da`
+
+$$
+\frac{\partial E_e}{\partial a_i} = \sum_q \left( \frac{\partial V_q}{\partial a_i} \psi_q + V_q \cdot P_q : \frac{\partial F_e}{\partial a_i} \right)
+$$
+
+其中 $V_q = w_q |\det D_m| \det F_p$，$\partial V_q / \partial a_i$ 来自 $\partial \det F_p / \partial a_i$。
+
+### 已实现的全部参数导数
+
+| 方法 | 含义 |
+| --- | --- |
+| `compute_dE_da` | $\partial E / \partial a$ |
+| `compute_d2E_da2` | $\partial^2 E / \partial a^2$ |
+| `compute_d2E_dxda` | $\partial^2 E / \partial x \partial a$ |
+| `compute_dE_db` | $\partial E / \partial b$（材料参数） |
+| `compute_d2E_db2` | $\partial^2 E / \partial b^2$ |
+| `compute_d2E_dxdb` | $\partial^2 E / \partial x \partial b$ |
+| `compute_d2E_dadb` | $\partial^2 E / \partial a \partial b$ |
+
+Contract 深度与 `DeformationModel` 抽象完全对齐。
+
+## 验证
+
+`cubicMeshDeformationModel_test.cpp` 覆盖：
+
+- `AffineDeformationMatchesMaterialEnergyDensityTimesVolume` — 仿射形变下 energy = 能密度 × 体积（验证积分正确性）
+- `FiniteDifferenceMatchesGradientAndHessian` — 有限差分对照一阶/二阶导数（验证解析求导正确性）
+
+---
+
+上一阶段：[Phase 03](phase03_simulation_mesh.md)
+下一阶段：[Phase 05](phase05_energy_assembly.md)
