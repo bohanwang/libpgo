@@ -91,7 +91,7 @@
 
 也就是说，`find_package()` 仍然在用，但它找的不是 `/usr/local/lib/cmake` 下的随机安装，而是 Conan 刚刚生成、并指向 Conan cache 的那一套配置文件。
 
-## profile 为什么重要
+### profile 为什么重要
 
 在这个仓库里，profile 不是可有可无的附属品，而是 ABI 契约。
 

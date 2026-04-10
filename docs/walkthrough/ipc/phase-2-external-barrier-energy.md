@@ -331,4 +331,4 @@ energy 构造时会根据每个 active sample 的 `barycentricIdx` 建立 Hessia
 当前 external IPC 仍然是 repo-aligned 的 sample-based 路线，而且 barrier energy 内部不会重新做 closest-point 查询。
 
 上一阶段： [Phase 1](phase-1-config-and-dispatch.md)  
-下一阶段： [Phase 3](phase-3-dynamic-incremental-potential.md)
+下一阶段： [Phase 3](phase-3-self-near-contact-active-set.md)

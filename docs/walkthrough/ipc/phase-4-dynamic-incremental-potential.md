@@ -1,4 +1,4 @@
-# Phase 3：把 barrier 接进 dynamic incremental potential
+# Phase 4：把 barrier 接进 dynamic incremental potential
 
 ## 1. 这阶段要回答什么
 
@@ -9,8 +9,8 @@
 3. `TimeIntegrator` 当前怎样把这些 general model 装配进 `ImplicitBackwardEuler`。
 4. 当前 frame-local barrier 对象的生命周期怎样管理。
 
-前两个 phase 讲的是 “检测到什么” 和 “barrier 数学长什么样”。  
-Phase 3 讲的则是：
+前面几篇已经把 external / self 两条 active-set 与 barrier 前提讲清楚。  
+Phase 4 讲的则是：
 
 > 这些 barrier 怎样从 contact 子模块里的对象，变成每一帧 dynamic solve 真的会消费的总势能组成项。
 
@@ -25,7 +25,7 @@ Phase 3 讲的则是：
 - 把 barrier 作为 general `PotentialEnergy` 加进 integrator
 - 再执行一步 `ImplicitBackwardEuler` 求解
 
-因此 Phase 3 的本质不是再设计 barrier 公式，而是：
+因此 Phase 4 的本质不是再设计 barrier 公式，而是：
 
 > 把 barrier 变成 current time step incremental potential 的正式组成项。
 
@@ -264,15 +264,14 @@ external/self barrier 走的都是第三类 `IMT_GENERAL`。
 这一阶段还不展开下面这些问题：
 
 - alpha upper bound 怎样进入 Newton
-- self active pair 是怎样从 candidate triangle pair 细化出来的
 - static path
 - constraints solver 路径
 - persistent contact state
 
-这些分别留给：
+这些问题里：
 
-- [Phase 4](phase-4-feasible-line-search.md)
-- [Phase 5](phase-5-self-near-contact-active-set.md)
+- solver-side feasible alpha callback 留给 [Phase 5](phase-5-feasible-line-search.md)
+- 其余 static / constraints / persistent-state 相关内容不在当前 IPC walkthrough 展开
 
-上一阶段： [Phase 2](phase-2-external-barrier-energy.md)  
-下一阶段： [Phase 4](phase-4-feasible-line-search.md)
+上一阶段： [Phase 3](phase-3-self-near-contact-active-set.md)  
+下一阶段： [Phase 5](phase-5-feasible-line-search.md)

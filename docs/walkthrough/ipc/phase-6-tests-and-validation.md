@@ -225,5 +225,5 @@ ctest --test-dir ../ -R "core\\.energy\\.(point_penetration_barrier|point_triang
 
 这两组命令基本覆盖了 walkthrough 中最关键的数学、handler 和 runtime 断言。
 
-上一阶段： [Phase 5](phase-5-self-near-contact-active-set.md)  
+上一阶段： [Phase 5](phase-5-feasible-line-search.md)  
 返回总览： [IPC Overview](index.md)

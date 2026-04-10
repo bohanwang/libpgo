@@ -1,4 +1,4 @@
-# Phase 4：feasibility-preserving line search
+# Phase 5：feasibility-preserving line search
 
 ## 1. 这阶段要回答什么
 
@@ -14,10 +14,10 @@
 
 ## 2. 这阶段在整条 IPC 主线里解决什么
 
-Phase 3 已经让 barrier 进入了总势能。  
+Phase 4 已经让 barrier 进入了总势能。  
 但仅有 barrier 还不够，因为 solver 仍然可能沿着一个让接触距离继续恶化的方向走 full step。
 
-Phase 4 当前真正解决的是：
+Phase 5 当前真正解决的是：
 
 > 在现有 Newton 框架不重写的前提下，给每一步搜索方向加上一个 contact-aware feasible step upper bound。
 
@@ -297,5 +297,5 @@ LineSearchMethod lsm = LSM_SIMPLE;
 - 默认 `LSM_SIMPLE`
 - contact-aware alpha upper bound callback
 
-上一阶段： [Phase 3](phase-3-dynamic-incremental-potential.md)  
-下一阶段： [Phase 5](phase-5-self-near-contact-active-set.md)
+上一阶段： [Phase 4](phase-4-dynamic-incremental-potential.md)  
+下一阶段： [Phase 6](phase-6-tests-and-validation.md)

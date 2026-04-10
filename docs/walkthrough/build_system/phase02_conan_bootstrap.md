@@ -48,22 +48,19 @@
 
 它最终会准备出三类结果：
 
-1. Conan 输出根目录
+Conan 输出根目录
+   - 原生 preset 常见位置：
+    `build/<preset>/.conan-build/<BuildType>/`
+   - Python 路径常见位置：
+     `build/scikit-build/.conan-build/<BuildType>/`
 
-- 原生 preset 常见位置：
-  `build/<preset>/.conan-build/<BuildType>/`
-- Python 路径常见位置：
-  `build/scikit-build/.conan-build/<BuildType>/`
+Conan 生成器目录
+   - `.../build/<BuildType>/generators/`
 
-2. Conan 生成器目录
-
-- `.../build/<BuildType>/generators/`
-
-3. CMake 侧的可消费对象
-
-- `conan_toolchain.cmake`
-- 各个依赖包的 `*-config.cmake`
-- runtime activation script，例如 `conanrun.sh` / `conanrun.bat`
+CMake 侧的可消费对象
+   - `conan_toolchain.cmake`
+   - 各个依赖包的 `*-config.cmake`
+   - runtime activation script，例如 `conanrun.sh` / `conanrun.bat`
 
 ## 控制流总览
 

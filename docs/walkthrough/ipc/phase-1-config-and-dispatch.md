@@ -18,8 +18,9 @@ Phase 1 真正完成的是：
 
 后面几个 phase 会分别讲：
 
-- active set 怎样构造
-- barrier energy 怎样求值
+- external active sample 怎样构造、怎样变成 barrier energy
+- self active pair 怎样从 BVH query band 细化出来
+- external/self barrier 怎样进入 timestep 总势能
 - feasible alpha 怎样进入 Newton
 
 但这些阶段共享同一套入口前提。  
@@ -257,7 +258,7 @@ intg->clearAlphaTestFunc();
 - self path 用 `selfIpcDhat` / `selfIpcKappa`
 - solver callback 用 `ipcAlphaSafety` / `ipcEnableFeasibleLineSearch`
 
-也就是说，后面的 active-set、energy、line-search 三个 phase 虽然会分开讲，但它们的 runtime 开关都已经在这里固定。
+也就是说，后面的 active-set、energy、dynamic-assembly 和 line-search 几篇虽然会分开讲，但它们的 runtime 开关都已经在这里固定。
 
 ## 7. example 侧当前怎样使用这些配置
 
@@ -311,7 +312,8 @@ intg->clearAlphaTestFunc();
 
 这一阶段还不展开下面这些内容：
 
-- active sample / active pair 怎样生成
+- external active sample 怎样生成
+- self active pair 怎样生成
 - barrier energy 的 `func / gradient / hessian`
 - feasible alpha upper bound 的几何计算
 - `ImplicitBackwardEuler` 内部怎样消费 general `PotentialEnergy`
@@ -319,8 +321,9 @@ intg->clearAlphaTestFunc();
 这些分别留给：
 
 - [Phase 2](phase-2-external-barrier-energy.md)
-- [Phase 3](phase-3-dynamic-incremental-potential.md)
-- [Phase 4](phase-4-feasible-line-search.md)
+- [Phase 3](phase-3-self-near-contact-active-set.md)
+- [Phase 4](phase-4-dynamic-incremental-potential.md)
+- [Phase 5](phase-5-feasible-line-search.md)
 
 上一阶段： [IPC Overview](index.md)  
 下一阶段： [Phase 2](phase-2-external-barrier-energy.md)

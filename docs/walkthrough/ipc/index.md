@@ -49,9 +49,9 @@
 | --- | --- | --- | --- |
 | Phase 1 | 解析 IPC 配置、校验参数、决定 runtime 分发 | `parseRunSimConfig(...)`、`isDynamicContactEnabled(...)` | `RunSimConfigParseTest` 的 parser 用例 |
 | Phase 2 | external near-contact sample 检测、external barrier、external alpha 上界 | `TriangleMeshExternalContactHandler`、`PointPenetrationBarrierEnergy` | `contact_embedding_test`、`pointPenetrationBarrierEnergy_test` |
-| Phase 3 | 把 external/self barrier 按帧挂进 dynamic incremental potential | `runSimCore.cpp`、`TimeIntegrator::addGeneralImplicitForceModel(...)` | API smoke |
-| Phase 4 | 把 feasible alpha callback 透传到 Newton | `setAlphaTestFunc(...)`、`TimeIntegratorSolver`、`NewtonRaphsonSolver` | `contact_embedding_test`、`self_contact_handler_test`、API smoke |
-| Phase 5 | self near-contact active pair、self barrier、self alpha 上界 | `TriangleMeshSelfContactDetection`、`TriangleMeshSelfContactHandler`、`PointTrianglePairBarrierEnergy` | `self_contact_handler_test` |
+| Phase 3 | self near-contact active pair、self barrier、self alpha 上界 | `TriangleMeshSelfContactDetection`、`TriangleMeshSelfContactHandler`、`PointTrianglePairBarrierEnergy` | `self_contact_handler_test` |
+| Phase 4 | 把 external/self barrier 按帧挂进 dynamic incremental potential | `runSimCore.cpp`、`TimeIntegrator::addGeneralImplicitForceModel(...)` | API smoke |
+| Phase 5 | 把 feasible alpha callback 透传到 Newton | `setAlphaTestFunc(...)`、`TimeIntegratorSolver`、`NewtonRaphsonSolver` | `contact_embedding_test`、`self_contact_handler_test`、API smoke |
 | Phase 6 | 把数学单测、handler 行为回归、runtime smoke 和 example README 组织成验证闭环 | `tests/*`、`examples/pulled-cubic-box-self-ipc` | `ctest` / focused smoke |
 
 这张表有两个关键信息：
@@ -135,11 +135,11 @@
   先看 `ipc-barrier` 怎样作为 contact model 进入 runtime。
 - [Phase 2: External Barrier Energy](phase-2-external-barrier-energy.md)
   再看 external near-contact sample 怎样变成 barrier energy 和 external feasible alpha。
-- [Phase 3: Dynamic Incremental Potential](phase-3-dynamic-incremental-potential.md)
-  然后看 barrier 怎样真正进入 timestep 的 general `PotentialEnergy` 组装。
-- [Phase 4: Feasible Line Search](phase-4-feasible-line-search.md)
+- [Phase 3: Self Near-Contact Active Set](phase-3-self-near-contact-active-set.md)
+  先把 self path 怎样从 BVH query band 细化到 sampled point-triangle active pair 讲清楚。
+- [Phase 4: Dynamic Incremental Potential](phase-4-dynamic-incremental-potential.md)
+  然后看 external/self 两条 barrier 怎样真正进入 timestep 的 general `PotentialEnergy` 组装。
+- [Phase 5: Feasible Line Search](phase-5-feasible-line-search.md)
   再看 merged alpha callback 怎样接到 Newton。
-- [Phase 5: Self Near-Contact Active Set](phase-5-self-near-contact-active-set.md)
-  最后看 self path 怎样从 BVH query band 细化到 sampled point-triangle active pair。
 - [Phase 6: Tests and Validation](phase-6-tests-and-validation.md)
   收尾时看哪些测试、smoke 和 example 已经把这条链路钉住。

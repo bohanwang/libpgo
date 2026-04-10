@@ -1,4 +1,4 @@
-# Phase 5：self-contact 的 near-contact active set
+# Phase 3：self-contact 的 near-contact active set
 
 ## 1. 这阶段要回答什么
 
@@ -10,7 +10,7 @@
 4. self barrier energy 和 self feasible alpha upper bound 共享的是哪一批缓存。
 
 如果只说“self 也有 barrier 了”，会掩盖当前 self 路径真正复杂的地方。  
-Phase 5 的核心不在 barrier 标量公式，而在：
+Phase 3 的核心不在 barrier 标量公式，而在：
 
 > broad phase 候选、sample seed refine、局部搜索和最终 point-triangle active pair 怎样被组织成一条稳定 runtime 链。
 
@@ -33,7 +33,7 @@ self 路径更难的地方在于：
    与 `computeEmbeddedAlphaUpperBound(...)`
    共同消费这份 active pair 快照
 
-所以 Phase 5 实际上是 self IPC 的 geometry-and-runtime composition phase。
+所以 Phase 3 实际上是 self IPC 的 geometry-and-runtime composition phase。
 
 ## 3. 当前 repo 已经完成了什么
 
@@ -88,6 +88,196 @@ self 路径更难的地方在于：
   负责 sample seed refine、局部目标选择、barrier 构造和 alpha upper bound
 
 这让 broad phase 与 active-set 细化职责保持清晰分开。
+
+### 4.3 BVH 在当前 self IPC 路径里到底改了什么
+
+如果只看 `TriangleMeshSelfContactDetection` 这个类名，再看到文档里频繁出现 “BVH query band”，很容易形成一个过强的印象：
+
+> 为了接 self IPC，repo 重新实现了一棵新的 BVH tree。
+
+这其实不是当前代码的真实形状。  
+当前 self IPC 对 BVH 的改动，更准确的说法是：
+
+> repo 复用了现有 `Mesh::TriMeshBVTree`，但把它在 self-contact broad phase 中回答的问题，从 collision-only 扩展成了 near-contact candidate generation。
+
+也就是说，这里的核心变化不在 “树怎么建”，而在 “树怎样被查询、查询结果怎样被组织并继续往下游传”。
+
+### 4.4 当前复用的仍然是已有 `TriMeshBVTree`
+
+在 `TriangleMeshSelfContactDetection` 的构造阶段，当前实现做的仍然是：
+
+- 持有一个 `Mesh::TriMeshBVTree bvTree`
+- 对 rest mesh 调 `buildByInertiaPartition(triangleMeshRef)`
+- 初始化 node AABB 缓存
+- 初始化 triangle AABB 缓存
+
+这说明当前 self IPC 并没有引入一个新的、IPC 专属的树类型。  
+tree 本体仍然是 repo 现有几何层里的通用 BVH；IPC 相关的逻辑并没有被塞回 `boundingVolumeTree.*` 去污染通用数据结构。
+
+这点很重要，因为它决定了当前设计的职责边界：
+
+- `boundingVolumeTree`
+  继续负责通用 mesh hierarchy 与 bounding volume 更新
+- `TriangleMeshSelfContactDetection`
+  在 contact 层决定怎样消费这棵树、怎样解释 “命中”
+
+因此如果要描述当前仓库中的改动，最准确的表述不是：
+
+```text
+我们把 BVH tree 重写成了 IPC 版本
+```
+
+而是：
+
+```text
+我们在现有 BVH traversal 之上，增加了 IPC self near-contact 需要的查询语义和候选组织方式
+```
+
+### 4.5 当前新增的是 query semantics，而不是建树算法
+
+在 legacy self-contact 语义里，broad phase 主要回答的是：
+
+```text
+哪些 triangle pair 已经发生碰撞，或者可能在 CCD 中发生碰撞
+```
+
+这对 penalty / collision fallback 足够，但对 IPC self barrier 不够。  
+因为 self barrier 需要的是：
+
+```text
+哪些 triangle pair 虽然还没有真正相交，但已经进入了 selfIpcDhat 的近接触带宽
+```
+
+所以当前 repo 里真正新增的不是另一套树构建策略，而是下面这些 query-side 语义：
+
+- `execute(..., activationDistance)` 这一组 overload
+- `nodesWithinQueryBand(...)`
+- `trianglesWithinQueryBand(...)`
+- `AABBWithinBand(...)`
+- `SweptAABB(...)`
+
+这几个接口共同表达的意思是：
+
+- 当 `activationDistance <= 0` 时
+  broad phase 仍然保持旧的 collision-only 判据
+- 当 `activationDistance > 0` 时
+  broad phase 开始回答 near-contact band 查询
+
+因此当前 self IPC 对 BVH 的关键升级，不是让 tree “更复杂”，而是让同一棵 tree 能服务两种不同的问题：
+
+1. 旧的 collision detection 问题
+2. 新的 near-contact candidate generation 问题
+
+### 4.6 IPC 语义为什么放在 detection 层，而不是放回 tree 层
+
+当前实现把 IPC 语义保留在 `TriangleMeshSelfContactDetection`，而没有去改通用 `boundingVolumeTree` 接口，本质上是一个很清楚的分层决定。
+
+原因是这里的 “band” 不是 BVH 的普适概念，而是当前 self IPC runtime 的 contact 语义。  
+它依赖的是：
+
+- `activationDistance`
+- DCD 还是 CCD
+- self-contact 当前帧的 `positions0 / positions1`
+- broad phase 最终要输出的是 candidate triangle pair，而不是 generic query hit
+
+这些都属于 contact runtime，而不是通用几何容器的职责。
+
+把这层语义放在 detection 层，有两个直接结果：
+
+1. `TriMeshBVTree` 仍然保持通用性  
+   其他模块不需要知道什么是 `selfIpcDhat`。
+2. self IPC 可以在不改 tree 本体的情况下演化自己的查询语义  
+   例如当前的 near-contact band、零带宽 fallback、CCD swept band，都可以只在 detection 层收敛。
+
+这也是为什么当前 repo 的 self IPC 看起来像是在 “改 BVH”，但实际上改动集中在 contact detection 代码，而不是 mesh hierarchy 代码。
+
+### 4.7 当前 detection 对这棵树外挂了哪些 runtime 组织
+
+虽然 tree 本体没有被 IPC 重写，但 `TriangleMeshSelfContactDetection` 的 runtime 组织已经明显是为 self IPC broad phase 服务的。  
+当前类内部除了 `bvTree` 本身，还额外管理了：
+
+- `lastAABBs` / `curAABBs`
+  node 层 AABB 快照
+- `lastTriangleAABBs` / `curTriangleAABBs`
+  triangle 层 AABB 快照
+- `travseralFrontier0` / `travseralFrontier1`
+  BVTT frontier
+- `trianglePairBufferTLS`
+  线程本地 triangle pair 收集缓冲
+- `bvttNodeBufferTLS`
+  线程本地下一层 frontier 缓冲
+- `parallel_threshold`
+  控制串行 / 并行 traversal 的切换点
+
+这意味着当前 repo 的改动不是简单地 “多加一个 band 判据” 就结束了。  
+它同时把 broad phase 的运行形态整理成了一个稳定的 runtime pipeline：
+
+```text
+updateBoundingVolumes
+-> refresh node/triangle AABB snapshots
+-> traverse BVTT frontier
+-> emit candidate triangle pairs into TLS buffers
+-> merge / normalize / sort / unique
+```
+
+因此你可以把当前 self IPC 对 BVH 的改进理解成两层：
+
+1. 语义层  
+   从 collision-only 查询变成 near-contact 查询
+2. 运行层  
+   把这类查询组织成一个可并行、可去重、可供 handler 消费的稳定候选生成器
+
+### 4.8 broad phase 的输出也被改成了更适合 IPC 下游的形状
+
+旧的 self collision 视角更关心的是：
+
+- 有没有碰撞
+- 哪些 pair 需要进入 CCD test
+
+但当前 self IPC broad phase 对下游真正有价值的不是 “碰撞是否成立” 本身，而是：
+
+- 哪些 triangle pair 值得继续做 sample seed refine
+
+所以 detection 当前返回的是：
+
+- `candidateTrianglePairs`
+
+它已经不再强调 “colliding” 这个命名，而是强调：
+
+```text
+这是一份 broad-phase 候选
+```
+
+这和后面的 handler 角色正好对应起来：
+
+- detection
+  负责把 BVH 输出压成可管理的 triangle-pair 候选集
+- handler
+  负责把这份候选集继续细化成真正的 sampled point-triangle active pair
+
+换句话说，BVH 在当前 self IPC 链路里的改进，不只是 “查得更宽一点”，而是：
+
+> 它的输出语义被重新定义成了 active-set pipeline 的第一层中间表示。
+
+### 4.9 这一层改造为什么值得单独讲清楚
+
+如果不把这一段单独讲清楚，读者很容易在两种误解之间来回摇摆：
+
+- 误解一：
+  以为 repo 只是给旧 self collision 检测多加了一个阈值
+- 误解二：
+  以为 repo 为 IPC 另起炉灶写了一套新的 BVH library
+
+当前代码真实处在这两者之间：
+
+- 不是只多了一个阈值，因为 query 语义、缓存组织、输出形状都变了
+- 也不是重写 BVH library，因为建树与 bounding volume 更新仍然复用现有 `TriMeshBVTree`
+
+因此这一阶段里更准确的总结应该是：
+
+> 当前 self IPC 对 BVH 的改进，本质上是把现有 `TriMeshBVTree` 从 collision-only broad phase，提升成了一个 near-contact-aware 的候选生成层。
+
+有了这个心智模型，下面第 5 节再去看 `nodesWithinQueryBand(...)`、`trianglesWithinQueryBand(...)` 和 `candidateTrianglePairs` 的具体行为时，就不会把代码读成 “重写一棵树”，也不会把它误读成 “只是旧逻辑上加了个 if”。
 
 ## 5. broad phase 当前怎样生成 candidate triangle pairs
 
@@ -427,5 +617,5 @@ example 侧则有：
 
 而不是 full primitive self IPC。
 
-上一阶段： [Phase 4](phase-4-feasible-line-search.md)  
-下一阶段： [Phase 6](phase-6-tests-and-validation.md)
+上一阶段： [Phase 2](phase-2-external-barrier-energy.md)  
+下一阶段： [Phase 4](phase-4-dynamic-incremental-potential.md)
