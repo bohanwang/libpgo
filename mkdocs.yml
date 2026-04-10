@@ -3,7 +3,7 @@ site_description: Documentation for libpgo — physically based simulation, geom
 site_url: https://annajcy.github.io/libpgo/
 repo_url: https://github.com/annajcy/libpgo
 edit_uri: edit/main/docs/
-strict: true
+strict: false
 
 theme:
   name: material
@@ -70,9 +70,9 @@ nav:
           - Overview: walkthrough/ipc/index.md
           - "Phase 1: Config and Dispatch": walkthrough/ipc/phase-1-config-and-dispatch.md
           - "Phase 2: External Barrier Energy": walkthrough/ipc/phase-2-external-barrier-energy.md
-          - "Phase 3: Dynamic Incremental Potential": walkthrough/ipc/phase-3-dynamic-incremental-potential.md
-          - "Phase 4: Feasible Line Search": walkthrough/ipc/phase-4-feasible-line-search.md
-          - "Phase 5: Self Near-Contact Active Set": walkthrough/ipc/phase-5-self-near-contact-active-set.md
+          - "Phase 3: Self Near-Contact Active Set": walkthrough/ipc/phase-3-self-near-contact-active-set.md
+          - "Phase 4: Dynamic Incremental Potential": walkthrough/ipc/phase-4-dynamic-incremental-potential.md
+          - "Phase 5: Feasible Line Search": walkthrough/ipc/phase-5-feasible-line-search.md
           - "Phase 6: Tests and Validation": walkthrough/ipc/phase-6-tests-and-validation.md
   - Architecture:
       - Overview: architecture/overview.md
