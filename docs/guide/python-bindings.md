@@ -2,6 +2,9 @@
 
 Python packaging uses **uv + pyproject.toml + scikit-build-core + CMake**.
 
+For how the Python path reuses the same CMake + Conan backend as native
+presets, see the [Build System Documentation](../build-system.md).
+
 ## Editable Build
 
 ```bash
@@ -56,3 +59,6 @@ uv run pytest
 ```
 
 scikit-build-core reuses the build tree under `build/scikit-build`, so repeated `uv sync` benefits from Ninja and CMake incremental rebuilds.
+
+See the [Build System Documentation](../build-system.md) for the end-to-end
+toolchain flow behind this packaging path.

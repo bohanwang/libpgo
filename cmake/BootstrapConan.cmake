@@ -8,6 +8,7 @@ if(NOT DEFINED CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
+# The variables in _LIBPGO_TRY_COMPILE_VARS are used in CMake try_compile calls during configure, so they must be added to CMAKE_TRY_COMPILE_PLATFORM_VARIABLES to be visible in that context.
 set(_LIBPGO_TRY_COMPILE_VARS
   CMAKE_BUILD_TYPE
   PGO_CONAN_OUTPUT_DIR
@@ -32,6 +33,7 @@ foreach(_LIBPGO_VAR IN LISTS _LIBPGO_TRY_COMPILE_VARS)
   endif()
 endforeach()
 
+# Convert a boolean CMake variable to "True"/"False" string for Conan command line
 function(_libpgo_bool_to_conan out_var value)
   if(${value})
     set(${out_var} "True" PARENT_SCOPE)
@@ -40,6 +42,7 @@ function(_libpgo_bool_to_conan out_var value)
   endif()
 endfunction()
 
+# Finds the host Python interpreter
 function(_libpgo_find_host_python out_var)
   if(DEFINED ENV{UV_PYTHON} AND EXISTS "$ENV{UV_PYTHON}")
     set(${out_var} "$ENV{UV_PYTHON}" PARENT_SCOPE)
@@ -50,6 +53,8 @@ function(_libpgo_find_host_python out_var)
   set(${out_var} "${_LIBPGO_HOST_PYTHON}" PARENT_SCOPE)
 endfunction()
 
+# Computes the effective feature set based on the full profile and inter-feature dependencies, then updates the PGO_FEATURE_* variables accordingly. 
+# This ensures that the Conan install command is always invoked with a consistent and complete set of features.
 function(_libpgo_compute_effective_features)
   set(_LIBPGO_EFFECTIVE_PROFILE_FULL ${PGO_PROFILE_FULL})
   set(_LIBPGO_EFFECTIVE_PYTHON ${PGO_FEATURE_PYTHON})
@@ -138,6 +143,7 @@ _libpgo_bool_to_conan(_LIBPGO_WITH_MKL PGO_FEATURE_MKL)
 _libpgo_bool_to_conan(_LIBPGO_WITH_ARPACK PGO_FEATURE_ARPACK)
 _libpgo_bool_to_conan(_LIBPGO_PROFILE_FULL PGO_PROFILE_FULL)
 
+# Create a signature string based on the current configuration to determine if Conan install needs to be re-run. This avoids unnecessary Conan calls if the relevant configuration hasn't changed since the last install.
 string(CONCAT _LIBPGO_SIGNATURE_CONTENT
   "build_type=${CMAKE_BUILD_TYPE}\n"
   "cppstd=${PGO_CONAN_CPPSTD}\n"
@@ -154,18 +160,25 @@ string(CONCAT _LIBPGO_SIGNATURE_CONTENT
   "with_arpack=${_LIBPGO_WITH_ARPACK}\n"
 )
 
+message(STATUS "libpgo Conan configuration signature:\n${_LIBPGO_SIGNATURE_CONTENT}")
+
 set(_LIBPGO_SHOULD_INSTALL TRUE)
 if(EXISTS "${_LIBPGO_TOOLCHAIN_FILE}" AND EXISTS "${_LIBPGO_SIGNATURE_FILE}")
   file(READ "${_LIBPGO_SIGNATURE_FILE}" _LIBPGO_EXISTING_SIGNATURE)
   if(_LIBPGO_EXISTING_SIGNATURE STREQUAL _LIBPGO_SIGNATURE_CONTENT)
     set(_LIBPGO_SHOULD_INSTALL FALSE)
+    message(STATUS "libpgo Conan configuration matches existing signature, skipping Conan install.")
+  else()
+    message(STATUS "libpgo Conan configuration differs from existing signature, will run Conan install to update dependencies.")
   endif()
 endif()
 
+# If the signature file doesn't exist or doesn't match the current configuration, we need to run Conan install to ensure dependencies are up to date. Otherwise, we can skip directly to including the toolchain and generators.
 if(_LIBPGO_SHOULD_INSTALL)
   find_program(_LIBPGO_CONAN_COMMAND NAMES conan REQUIRED)
   _libpgo_find_host_python(_LIBPGO_HOST_PYTHON)
 
+  # Before running Conan install, we need to ensure that the local Conan recipes are exported so that the install command can find them. This is done by running a Python script provided in the repository. If this step fails, we cannot proceed with Conan install, so we treat it as a fatal error.
   execute_process(
     COMMAND "${_LIBPGO_HOST_PYTHON}" "${_LIBPGO_SOURCE_DIR}/conan/recipes/export_recipes.py"
     WORKING_DIRECTORY "${_LIBPGO_SOURCE_DIR}"
@@ -178,6 +191,7 @@ if(_LIBPGO_SHOULD_INSTALL)
 
   file(MAKE_DIRECTORY "${_LIBPGO_CONAN_ROOT}")
 
+  # Construct the Conan install command with all necessary arguments and options based on the current configuration. This includes settings for build type, C++ standard, feature options, and any specified profiles. The command is built as a list to handle arguments with spaces correctly.
   set(_LIBPGO_CONAN_INSTALL_COMMAND
     "${_LIBPGO_CONAN_COMMAND}" install "${_LIBPGO_SOURCE_DIR}"
     --output-folder "${_LIBPGO_CONAN_ROOT}"
@@ -222,11 +236,15 @@ if(_LIBPGO_SHOULD_INSTALL)
   file(WRITE "${_LIBPGO_SIGNATURE_FILE}" "${_LIBPGO_SIGNATURE_CONTENT}")
 endif()
 
+# After ensuring Conan dependencies are up to date, include the generated toolchain file and add the generators directory to CMake paths if they exist. This allows the rest of the CMake configuration to use the resolved dependencies and any custom CMake modules provided by the generators.
 if(EXISTS "${_LIBPGO_TOOLCHAIN_FILE}")
   include("${_LIBPGO_TOOLCHAIN_FILE}")
+  message(STATUS "Included Conan toolchain file: ${_LIBPGO_TOOLCHAIN_FILE}")
 endif()
 
+# If the generators directory exists, prepend it to CMAKE_PREFIX_PATH and CMAKE_MODULE_PATH so that any find_package calls or module includes can locate the Conan-generated files.
 if(EXISTS "${_LIBPGO_GENERATORS_DIR}")
+message(STATUS "Adding Conan generators directory to CMake paths: ${_LIBPGO_GENERATORS_DIR}")
   list(PREPEND CMAKE_PREFIX_PATH "${_LIBPGO_GENERATORS_DIR}")
   list(PREPEND CMAKE_MODULE_PATH "${_LIBPGO_GENERATORS_DIR}")
 endif()

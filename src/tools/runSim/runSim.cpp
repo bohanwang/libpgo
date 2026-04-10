@@ -49,7 +49,7 @@ bool redirectStdStreamsToLog(const std::filesystem::path& logPath) {
 
 int main(int argc, char* argv[]) {
     argparse::ArgumentParser program("Run Simulation");
-    program.add_argument("config").help("Config File").default_value(std::string("examples/box/box-ipc.json"));
+    program.add_argument("config").help("Config File").default_value(std::string("examples/pulled-cubic-box-self-ipc/pulled-cubic-box-self-ipc.json"));
     program.add_argument("--deterministic")
         .help("Force deterministic mode by running the simulation single-threaded")
         .default_value(false)
@@ -81,7 +81,8 @@ int main(int argc, char* argv[]) {
 
     pgo::ConfigFileJSON jconfig;
     if (jconfig.open(configPathResolver.filePath().c_str()) != true) {
-        return 0;
+        std::cerr << "Cannot open config file: " << configPathResolver.filePath() << std::endl;
+        return 1;
     }
 
     pgo::api::RunSimConfig config;

@@ -1,5 +1,7 @@
 # C++ Library Guide
 
+For the full build internals, see the [Build System Documentation](../build-system.md).
+
 ## Feature Options
 
 | Option | Default | Description |
@@ -61,6 +63,9 @@ The build uses `cmake/BootstrapConan.cmake` which automatically:
 3. Tracks a feature signature to re-run Conan only when options change
 
 Conan options mirror the CMake feature model: `with_python`, `with_animation_io`, `with_geometry_stack`, etc.
+
+See the [Build System Documentation](../build-system.md) for the configure-time
+control flow, preset mapping, and generated Conan metadata layout.
 
 ## MKL Support
 

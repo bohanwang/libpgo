@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# ================= options ==========================
 option(PGO_PROFILE_FULL "Enable the full libpgo feature profile" OFF)
 option(PGO_FEATURE_PYTHON "Build Python bindings" OFF)
 option(PGO_FEATURE_ANIMATION_IO "Enable Alembic/Imath animation I/O" OFF)
@@ -31,6 +32,8 @@ option(PGO_CREATE_MISSING_FILE "Create file when it is missing" OFF)
 option(PGO_OPT_USE_IPOPT "Use IPOPT" OFF)
 option(PGO_OPT_USE_KNITRO "Use KNITRO" OFF)
 option(PGO_MKL_LINK_DYNAMIC "MKL Link" ON)
+
+# resolve effective feature options based on profile and dependencies
 
 set(_LIBPGO_EFFECTIVE_PROFILE_FULL ${PGO_PROFILE_FULL})
 set(_LIBPGO_EFFECTIVE_PYTHON ${PGO_FEATURE_PYTHON})
@@ -69,11 +72,11 @@ if(PGO_ENABLE_TESTS)
   enable_testing()
 endif()
 
-# message(STATUS "CMake module path: ${CMAKE_MODULE_PATH}")
-set(PGO_CMAKE_MODULES ${CMAKE_SOURCE_DIR}/CMakeModules)
+set(PGO_CMAKE_MODULES ${CMAKE_SOURCE_DIR}/cmake)
 list(APPEND CMAKE_MODULE_PATH "${PGO_CMAKE_MODULES}")
 message(STATUS "CMake Module Path: ${CMAKE_MODULE_PATH}")
 
+# copy compile command to build directory for tools like clang-tidy and clangd
 include(CompilationUtils)
 copy_compile_command()
 
@@ -233,6 +236,7 @@ if(DEFINED PGO_CONAN_GENERATORS_DIR AND EXISTS "${PGO_CONAN_GENERATORS_DIR}")
   list(PREPEND CMAKE_MODULE_PATH "${PGO_CONAN_GENERATORS_DIR}")
 endif()
 
+# use conan to manage dependencies. The conan configuration will be bootstrapped if not found, which may take a while on the first run.
 include(${CMAKE_SOURCE_DIR}/cmake/LibpgoConanDeps.cmake)
 
 # Older libigl integration used igl_include() to add copyleft modules. The
@@ -245,7 +249,7 @@ endif()
 
 
 # MKL uses system detection (not managed by Conan).
-include(CMakeModules/third-party/mkl.cmake)
+include(cmake/third-party/mkl.cmake)
 
 if(TARGET MKL::MKL)
   add_compile_definitions(PGO_HAS_MKL)
@@ -260,7 +264,7 @@ if(TARGET Ceres::ceres)
 endif()
 
 if(PGO_OPT_USE_KNITRO)
-  include(CMakeModules/third-party/knitro.cmake)
+  include(cmake/third-party/knitro.cmake)
 
   if(TARGET Knitro::Knitro)
     add_compile_definitions(PGO_HAS_KNITRO)
@@ -394,39 +398,39 @@ function(add_libpgo_tools tgt sources deps)
       -OutVariable out
     )
   endif()
-
-  # if(PGO_COMPILER STREQUAL "GNU")
-  # install(TARGETS ${tgt} RUNTIME DESTINATION bin)
-  # elseif(PGO_COMPILER STREQUAL "MSVC")
-  # install(TARGETS ${tgt} RUNTIME DESTINATION bin/$<CONFIG>)
-  # endif()
 endfunction()
 
 add_subdirectory(src)
 
 if(PGO_ENABLE_TESTS)
   add_subdirectory(tests)
+  message(STATUS "Tests enabled, added tests subdirectory")
 endif()
 
 if(PGO_BUILD_SUBPROJECTS)
   add_subdirectory(projects)
+  message(STATUS "Subprojects enabled, added projects subdirectory")
 endif()
 
 if(PGO_FEATURE_PYTHON)
-  include(CMakeModules/python_list.cmake)
+  include(cmake/python_list.cmake)
+  message(STATUS "Python bindings enabled, added cmake/python_list.cmake")
 endif()
 
 if(NOT SKBUILD)
   # generate config file to be used in common build tree
+  message(STATUS "Generating libpgoConfig.cmake in build directory for use in common build tree")
   include(CMakePackageConfigHelpers)
   configure_package_config_file(
-    CMakeModules/pgoConfig.cmake.in
+    cmake/pgoConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/pgoConfig.cmake
     INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/pgo/"
   )
-
+  message(STATUS "Installing libpgoConfig.cmake to ${CMAKE_INSTALL_LIBDIR}/cmake/pgo/")
   install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/pgoConfig.cmake
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/pgo/"
   )
+else()
+  message(STATUS "SKBUILD detected, skipping generation of libpgoConfig.cmake")
 endif()

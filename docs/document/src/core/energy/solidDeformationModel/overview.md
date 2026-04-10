@@ -17,6 +17,7 @@ TODO: summarize what this directory is responsible for.
 - [Deformationmodelfdtest](deformationModelFDTest.md)
 - [Deformationmodelmanager](deformationModelManager.md)
 - [Deformationmodelmanager](deformationModelManager.md)
+- [Cubicmeshdeformationmodel](cubicMeshDeformationModel.zh.md)
 - [Elasticmodel](elasticModel.md)
 - [Elasticmodel1dcubicspline](elasticModel1DCubicSpline.md)
 - [Elasticmodel1dcubicspline](elasticModel1DCubicSpline.md)
