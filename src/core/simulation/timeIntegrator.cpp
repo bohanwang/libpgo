@@ -126,9 +126,12 @@ void TimeIntegrator::clearImplicitForceModel()
 void TimeIntegrator::addGeneralImplicitForceModel(std::shared_ptr<PotentialEnergy> fm, double kd, double md)
 {
   generalAdditionalForceModels.push_back(fm);
+  generalAdditionalForceModels_K.emplace_back();
 
-  generalAdditionalForceModels_K.push_back(ES::SpMatD());
-  fm->createHessian(generalAdditionalForceModels_K.back());
+  if (fm->isHessianTopologyFixed()) {
+    fm->createHessian(generalAdditionalForceModels_K.back());
+  }
+  
   generalAdditionalForceModels_K1.push_back(generalAdditionalForceModels_K.back());
   generalAdditionalForceModels_M.push_back(generalAdditionalForceModels_K.back());
 
@@ -250,13 +253,16 @@ void TimeIntegrator::assembleImplicitModels()
         }
       }
 
+      // Only include fixed-topology general models in hessianAll
       for (size_t i = 0; i < generalAdditionalForceModels.size(); i++) {
-        for (Eigen::Index outeri = 0; outeri < generalAdditionalForceModels_K[i].outerSize(); outeri++) {
-          for (ES::SpMatD::InnerIterator it(generalAdditionalForceModels_K[i], outeri); it; ++it) {
-            entries.emplace_back(
-              (ES::SpMatD::StorageIndex)it.row(),
-              (ES::SpMatD::StorageIndex)it.col(),
-              1.0);
+        if (generalAdditionalForceModels[i]->isHessianTopologyFixed()) {
+          for (Eigen::Index outeri = 0; outeri < generalAdditionalForceModels_K[i].outerSize(); outeri++) {
+            for (ES::SpMatD::InnerIterator it(generalAdditionalForceModels_K[i], outeri); it; ++it) {
+              entries.emplace_back(
+                (ES::SpMatD::StorageIndex)it.row(),
+                (ES::SpMatD::StorageIndex)it.col(),
+                1.0);
+            }
           }
         }
       }
@@ -265,7 +271,9 @@ void TimeIntegrator::assembleImplicitModels()
       hessianAll.setFromTriplets(entries.begin(), entries.end());
 
       for (size_t i = 0; i < generalAdditionalForceModels.size(); i++) {
-        ES::small2Big(generalAdditionalForceModels_K[i], hessianAll, allDOFs, generalAdditionalForceModels_Kmapping[i]);
+        if (generalAdditionalForceModels[i]->isHessianTopologyFixed()) {
+          ES::small2Big(generalAdditionalForceModels_K[i], hessianAll, allDOFs, generalAdditionalForceModels_Kmapping[i]);
+        }
       }
     }
     else {

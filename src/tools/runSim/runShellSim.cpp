@@ -214,7 +214,7 @@ int main(int argc, char *argv[])
 
   if (simType == "dynamic") {
     std::shared_ptr<Contact::CIPC::CIPCPotentialEnergy> collisionHandler =
-      std::make_shared<Contact::CIPC::CIPCPotentialEnergy>(surfaceBox.sides().norm() * 1e-3, E * h);
+      std::make_shared<Contact::CIPC::CIPCPotentialEnergy>(surfaceBox.sides().norm() * 1e-3, E * h, true);
     ES::MXd V;
     ES::MXi F;
     Mesh::triMeshGeoToMatrices(surfaceMesh, V, F);
@@ -365,11 +365,8 @@ int main(int argc, char *argv[])
       }
 
       if (collisionHandler) {
-        psurf.noalias() = surfaceRestPositions + usurf;
-        collisionHandler->findCollisionPairs(psurf);
-        if (collisionHandler->getPTPairs().size() + collisionHandler->getEEPairs().size() > 0) {
-          intg->addGeneralImplicitForceModel(collisionHandler, 0, 0);
-        }
+        // psurf.noalias() = surfaceRestPositions + usurf;
+        intg->addGeneralImplicitForceModel(collisionHandler, 0, 0);
       }
 
       intg->setqState(u, uvel, uacc);

@@ -132,19 +132,24 @@ void ImplicitBackwardEulerTimeIntegrator::updateD()
   // D = 0;
   memset(D.valuePtr(), 0, sizeof(double) * D.nonZeros());
 
+  // Damping is only supported for energies with fixed hessian topology.
+  // Non-fixed-topology energies (e.g. CIPC contact) are skipped here.
   for (size_t i = 0; i < implicitModelsAll.size(); i++) {
+    if (!implicitModelsAll[i]->isHessianTopologyFixed())
+      continue;
+
     const ES::SpMatD &M = *implicitModelsAll_M[i];
     const ES::SpMatI &mapping = *implicitModelsAll_Kmaping[i];
-
-    // std::cout << massDampingParamsAll[i] << ',';
 
     // D += dM * massM
     if (massDampingParamsAll[i] > 0)
       ES::addSmallToBig(massDampingParamsAll[i], M, D, 1.0, mapping, 1);
   }
-  // std::cout << D.norm() << ',';
 
   for (size_t i = 0; i < implicitModelsAll.size(); i++) {
+    if (!implicitModelsAll[i]->isHessianTopologyFixed())
+      continue;
+
     ES::SpMatD &curK = *implicitModelsAll_K[i];
     const ES::SpMatI &mapping = *implicitModelsAll_Kmaping[i];
 

@@ -27,6 +27,8 @@ public:
   virtual double func_grad(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad) const { gradient(x, grad); return func(x); }
   virtual double func_grad_hessian(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad, EigenSupport::SpMatD &hess) const { gradient(x, grad), hessian(x, hess); return func(x); }
 
+  virtual void hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const;
+
   virtual void createHessian(EigenSupport::SpMatD &hess) const = 0;
 
   virtual void getDOFs(std::vector<int> &dofs) const = 0;
@@ -35,6 +37,7 @@ public:
   virtual int isQuadratic() const { return 0; }
   virtual int hasHessianVector() const { return 0; }
   virtual int hasHessian() const { return 1; }
+  virtual int isHessianTopologyFixed() const { return 1; }
 
   virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const = 0;
 };
@@ -44,6 +47,12 @@ typedef std::shared_ptr<const PotentialEnergy> PotentialEnergy_const_p;
 
 inline void PotentialEnergy::hessianVector(EigenSupport::ConstRefVecXd, EigenSupport::ConstRefVecXd, EigenSupport::RefVecXd) const
 {
+}
+
+inline void PotentialEnergy::hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const
+{
+  createHessian(hess);
+  hessian(x, hess);
 }
 
 }  // namespace NonlinearOptimization

@@ -187,10 +187,12 @@ M12d projectToPSD(const M12d &H);
 class CIPCPotentialEnergy : public NonlinearOptimization::PotentialEnergy
 {
 public:
-  CIPCPotentialEnergy(double dhat_, double kappa_, double eps_ee_ = 0.0,
+  CIPCPotentialEnergy(double dhat_, double kappa_, bool isInputDisp_,
+    double eps_ee_ = 0.0,
     bool useFloor_ = false, double floorHeight_ = -1e-4, double floorKappa_ = 0.1):
     dhat(dhat_), kappa(kappa_), eps_ee(eps_ee_),
-    useFloor(useFloor_), floorHeight(floorHeight_), floorKappa(floorKappa_) {}
+    useFloor(useFloor_), floorHeight(floorHeight_), floorKappa(floorKappa_),
+    isInputDisp(isInputDisp_) {}
 
   // --- parameters -------------------------------------------------------
   double dhat = 1e-1;   // barrier activation distance (gap)
@@ -203,16 +205,12 @@ public:
   double floorHeight = -1e-4;
   double floorKappa = 0.1;  // floor penalty stiffness (independent of kappa)
 
+  double slackness = 0.99;
+
   // --- mesh setup -------------------------------------------------------
   //  V : #V x 3   vertex positions (only topology is stored here)
   //  F : #F x 3   triangle indices
   void setMesh(const MXd &V, const MXi &F);
-
-  //  Alternatively: give raw arrays
-  //   numVerts: total vertex count
-  //   triangles: list of (v0, v1, v2) index triples
-  void setMesh(int numVerts,
-    const std::vector<std::array<int, 3>> &triangles);
 
   // --- PotentialEnergy interface ----------------------------------------
   virtual double func(EigenSupport::ConstRefVecXd x) const override;
@@ -223,34 +221,14 @@ public:
   virtual int getNumDOFs() const override { return 3 * numVerts_; }
   virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override;
 
-  // --- 1) max step size along direction dx ------------------------------
-  //  x  : 3*#V  stacked positions  [x0 y0 z0  x1 y1 z1 ...]
-  //  dx : 3*#V  displacement vector
-  //  Returns alpha in (0, 1] such that x + alpha*dx is collision-free.
-  double computeMaxStepSize(const VXd &x, const VXd &dx,
-    double slackness) const;
-
-  // --- 2) collision energy, gradient, sparse hessian --------------------
-  //  x  : 3*#V  stacked positions
-
-  /// Computes barrier energy only
-  double computeEnergy(const VXd &x) const;
-
-  /// Computes barrier gradient (additive)
-  void computeGradient(const VXd &x, VXd &grad) const;
-
-  /// Computes barrier sparse Hessian (additive, PSD-projected per pair)
-  void computeHessian(const VXd &x, SpMatD &hess) const;
-
-  /// Computes all three at once (most efficient – one broad-phase pass)
-  void computeAll(const VXd &x,
-    double &energy, VXd &grad, SpMatD &hess) const;
+  virtual int isHessianTopologyFixed() const override { return 0; }
+  virtual void hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const override;
 
   // --- collision pair access (after any compute* call) ------------------
   const std::vector<PTPair> &getPTPairs() const { return ptPairs_; }
   const std::vector<EEPair> &getEEPairs() const { return eePairs_; }
 
-  void findCollisionPairs(const VXd &x) const;
+  void findCollisionPairs(const VXd &positions) const;
 
 private:
   // topology
@@ -258,6 +236,9 @@ private:
   std::vector<std::array<int, 3>> triangles_;
   std::vector<std::array<int, 2>> edges_;
   std::vector<int> allDOFs_;
+
+  bool isInputDisp;
+  VXd restPosition;  // 3*#V stacked rest positions
 
   // adjacency (for culling self-adjacent pairs)
   std::unordered_set<long long> vertexTriAdj_;  // encodes (v, tri) adjacency
@@ -271,6 +252,12 @@ private:
   // active collision sets (recomputed every call)
   mutable std::vector<PTPair> ptPairs_;
   mutable std::vector<EEPair> eePairs_;
+
+  // internal compute (all operate on positions, not displacements)
+  double computeEnergy(const VXd &pos) const;
+  void computeGradient(const VXd &pos, EigenSupport::RefVecXd &grad) const;
+  void computeHessian(const VXd &pos, SpMatD &hess) const;
+  void computeAll(const VXd &pos, double &energy, VXd &grad, SpMatD &hess) const;
 
   // helpers
   void buildEdges();

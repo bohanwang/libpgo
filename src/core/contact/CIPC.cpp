@@ -9,12 +9,15 @@ copyright to Bohan Wang
 #include "CIPC_autogen.h"
 #include "CIPC_autogen_ll.h"
 
+#include "pgoLogging.h"
+
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
 #include <tbb/blocked_range.h>
 #include <tbb/enumerable_thread_specific.h>
 
 #include <iostream>
+#include <stdexcept>
 #include <cassert>
 #include <limits>
 #include <numeric>
@@ -1069,7 +1072,7 @@ double edgeEdgeCCD(const V3d &ea0, const V3d &ea1,
 //  PSD projection of 12x12 symmetric matrix
 // =========================================================================
 M12d projectToPSD(const M12d &H)
-{  
+{
   Eigen::SelfAdjointEigenSolver<M12d> es(H);
   const auto &evals = es.eigenvalues();
 
@@ -1104,26 +1107,13 @@ void CIPCPotentialEnergy::setMesh(const MXd &V, const MXi &F)
   allDOFs_.resize(3 * numVerts_);
   std::iota(allDOFs_.begin(), allDOFs_.end(), 0);
 
+  restPosition.resize(3 * numVerts_);
+  for (int i = 0; i < numVerts_; ++i)
+    restPosition.segment<3>(3 * i) = V.row(i).transpose();
+
   buildEdges();
   buildAdjacency();
   buildAreaWeights(V);
-}
-
-void CIPCPotentialEnergy::setMesh(int numVerts,
-  const std::vector<std::array<int, 3>> &triangles)
-{
-  numVerts_ = numVerts;
-  triangles_ = triangles;
-
-  allDOFs_.resize(3 * numVerts_);
-  std::iota(allDOFs_.begin(), allDOFs_.end(), 0);
-
-  buildEdges();
-  buildAdjacency();
-  // Area weights not computed — caller must provide positions via the other overload
-  vertexArea_.assign(numVerts_, 1.0);
-  triArea_.assign(triangles_.size(), 1.0);
-  edgeLength_.assign(edges_.size(), 1.0);
 }
 
 void CIPCPotentialEnergy::buildEdges()
@@ -1298,7 +1288,7 @@ struct SpatialHash
 //  Broad phase: find candidate PT and EE pairs using spatial hashing
 //  Uses insert-then-query: insert one type, query with the other.
 // =========================================================================
-void CIPCPotentialEnergy::findCollisionPairs(const VXd &x) const
+void CIPCPotentialEnergy::findCollisionPairs(const VXd &positions) const
 {
   ptPairs_.clear();
   eePairs_.clear();
@@ -1306,7 +1296,7 @@ void CIPCPotentialEnergy::findCollisionPairs(const VXd &x) const
   const double inflate = dhat;
 
   auto getV = [&](int i) -> V3d {
-    return x.segment<3>(3 * i);
+    return positions.segment<3>(3 * i);
   };
 
   int nTri = (int)triangles_.size();
@@ -1446,11 +1436,12 @@ void CIPCPotentialEnergy::findCollisionPairs(const VXd &x) const
 // =========================================================================
 //  1)  Maximum step size  (CCD-based line search with spatial hashing)
 // =========================================================================
-double CIPCPotentialEnergy::computeMaxStepSize(const VXd &x, const VXd &dx,
-  double slackness) const
+double CIPCPotentialEnergy::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
 {
+  const VXd pos = isInputDisp ? VXd(restPosition + x) : VXd(x);
+
   auto getV = [&](int i) -> V3d {
-    return x.segment<3>(3 * i);
+    return pos.segment<3>(3 * i);
   };
   auto getdV = [&](int i) -> V3d {
     return dx.segment<3>(3 * i);
@@ -1691,10 +1682,9 @@ double CIPCPotentialEnergy::computeMaxStepSize(const VXd &x, const VXd &dx,
 // =========================================================================
 //  2)  Energy
 // =========================================================================
-double CIPCPotentialEnergy::computeEnergy(const VXd &x) const
+double CIPCPotentialEnergy::computeEnergy(const VXd &pos) const
 {
   double ee_eps = eps_ee;
-
   double dhat2 = dhat * dhat;
 
   // PT pairs
@@ -1703,10 +1693,10 @@ double CIPCPotentialEnergy::computeEnergy(const VXd &x) const
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = ptPairs_[i];
-        V3d p = vtx(x, pair.p);
-        V3d t0 = vtx(x, pair.t0);
-        V3d t1 = vtx(x, pair.t1);
-        V3d t2 = vtx(x, pair.t2);
+        V3d p = vtx(pos, pair.p);
+        V3d t0 = vtx(pos, pair.t0);
+        V3d t1 = vtx(pos, pair.t1);
+        V3d t2 = vtx(pos, pair.t2);
         double d2 = distance::computePTSqDist(p, t0, t1, t2);
         if (d2 < dhat2 && d2 > 0.0)
           localE += pair.weight * kappa * barrier::b(d2, dhat2);
@@ -1721,10 +1711,10 @@ double CIPCPotentialEnergy::computeEnergy(const VXd &x) const
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = eePairs_[i];
-        V3d ea0 = vtx(x, pair.ea0);
-        V3d ea1 = vtx(x, pair.ea1);
-        V3d eb0 = vtx(x, pair.eb0);
-        V3d eb1 = vtx(x, pair.eb1);
+        V3d ea0 = vtx(pos, pair.ea0);
+        V3d ea1 = vtx(pos, pair.ea1);
+        V3d eb0 = vtx(pos, pair.eb0);
+        V3d eb1 = vtx(pos, pair.eb1);
         double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
         if (d2 < dhat2 && d2 > 0.0) {
           double m = 1.0;
@@ -1744,7 +1734,7 @@ double CIPCPotentialEnergy::computeEnergy(const VXd &x) const
       tbb::blocked_range<int>(0, numVerts_), 0.0,
       [&](const tbb::blocked_range<int> &range, double localE) {
         for (int vi = range.begin(); vi < range.end(); ++vi) {
-          double dz = x[3 * vi + 2] - floorHeight;
+          double dz = pos[3 * vi + 2] - floorHeight;
           if (dz < 0.0)
             localE += 0.5 * floorKappa * dz * dz;
         }
@@ -1759,11 +1749,11 @@ double CIPCPotentialEnergy::computeEnergy(const VXd &x) const
 // =========================================================================
 //  2)  Gradient
 // =========================================================================
-void CIPCPotentialEnergy::computeGradient(const VXd &x, VXd &grad) const
+void CIPCPotentialEnergy::computeGradient(const VXd &pos, EigenSupport::RefVecXd &grad) const
 {
   int n = 3 * numVerts_;
   if (grad.size() != n)
-    grad.setZero(n);
+    throw std::runtime_error("Gradient vector has wrong size");
 
   // Atomic scatter: accumulate a 12-vector into global gradient
   auto scatter = [&](const V12d &local, const int idx[4]) {
@@ -1783,10 +1773,10 @@ void CIPCPotentialEnergy::computeGradient(const VXd &x, VXd &grad) const
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = ptPairs_[i];
-        V3d p = vtx(x, pair.p);
-        V3d t0 = vtx(x, pair.t0);
-        V3d t1 = vtx(x, pair.t1);
-        V3d t2 = vtx(x, pair.t2);
+        V3d p = vtx(pos, pair.p);
+        V3d t0 = vtx(pos, pair.t0);
+        V3d t1 = vtx(pos, pair.t1);
+        V3d t2 = vtx(pos, pair.t2);
 
         double d2 = distance::computePTSqDist(p, t0, t1, t2);
         if (d2 >= dhat2 || d2 <= 0.0)
@@ -1808,10 +1798,10 @@ void CIPCPotentialEnergy::computeGradient(const VXd &x, VXd &grad) const
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = eePairs_[i];
-        V3d ea0 = vtx(x, pair.ea0);
-        V3d ea1 = vtx(x, pair.ea1);
-        V3d eb0 = vtx(x, pair.eb0);
-        V3d eb1 = vtx(x, pair.eb1);
+        V3d ea0 = vtx(pos, pair.ea0);
+        V3d ea1 = vtx(pos, pair.ea1);
+        V3d eb0 = vtx(pos, pair.eb0);
+        V3d eb1 = vtx(pos, pair.eb1);
 
         double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
         if (d2 >= dhat2 || d2 <= 0.0)
@@ -1844,7 +1834,7 @@ void CIPCPotentialEnergy::computeGradient(const VXd &x, VXd &grad) const
       [&](const tbb::blocked_range<int> &range) {
         double *gdata = grad.data();
         for (int vi = range.begin(); vi < range.end(); ++vi) {
-          double dz = x[3 * vi + 2] - floorHeight;
+          double dz = pos[3 * vi + 2] - floorHeight;
           if (dz < 0.0)
             gdata[3 * vi + 2] += floorKappa * dz;
         }
@@ -1855,7 +1845,7 @@ void CIPCPotentialEnergy::computeGradient(const VXd &x, VXd &grad) const
 // =========================================================================
 //  2)  Sparse Hessian
 // =========================================================================
-void CIPCPotentialEnergy::computeHessian(const VXd &x, SpMatD &hess) const
+void CIPCPotentialEnergy::computeHessian(const VXd &pos, SpMatD &hess) const
 {
   int n = 3 * numVerts_;
   int nPT = (int)ptPairs_.size();
@@ -1876,10 +1866,13 @@ void CIPCPotentialEnergy::computeHessian(const VXd &x, SpMatD &hess) const
       for (int j = 0; j < 4; ++j) {
         int cj = (idx[j] >= 0) ? 3 * idx[j] : 0;
         bool valid = vi && (idx[j] >= 0);
-        for (int di = 0; di < 3; ++di)
-          for (int dj = 0; dj < 3; ++dj, ++k)
+
+        for (int di = 0; di < 3; ++di) {
+          for (int dj = 0; dj < 3; ++dj, ++k) {
             base[k] = TripletD(ri + di, cj + dj,
               valid ? localH(3 * i + di, 3 * j + dj) : 0.0);
+          }
+        }
       }
     }
   };
@@ -1892,10 +1885,10 @@ void CIPCPotentialEnergy::computeHessian(const VXd &x, SpMatD &hess) const
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = ptPairs_[i];
-        V3d p = vtx(x, pair.p);
-        V3d t0 = vtx(x, pair.t0);
-        V3d t1 = vtx(x, pair.t1);
-        V3d t2 = vtx(x, pair.t2);
+        V3d p = vtx(pos, pair.p);
+        V3d t0 = vtx(pos, pair.t0);
+        V3d t1 = vtx(pos, pair.t1);
+        V3d t2 = vtx(pos, pair.t2);
 
         double d2 = distance::computePTSqDist(p, t0, t1, t2);
         if (d2 >= dhat2 || d2 <= 0.0)
@@ -1921,10 +1914,10 @@ void CIPCPotentialEnergy::computeHessian(const VXd &x, SpMatD &hess) const
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = eePairs_[i];
-        V3d ea0 = vtx(x, pair.ea0);
-        V3d ea1 = vtx(x, pair.ea1);
-        V3d eb0 = vtx(x, pair.eb0);
-        V3d eb1 = vtx(x, pair.eb1);
+        V3d ea0 = vtx(pos, pair.ea0);
+        V3d ea1 = vtx(pos, pair.ea1);
+        V3d eb0 = vtx(pos, pair.eb0);
+        V3d eb1 = vtx(pos, pair.eb1);
 
         double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
         if (d2 >= dhat2 || d2 <= 0.0)
@@ -1964,7 +1957,7 @@ void CIPCPotentialEnergy::computeHessian(const VXd &x, SpMatD &hess) const
       [&](const tbb::blocked_range<int> &range) {
         auto &local = tls_floorTrip.local();
         for (int vi = range.begin(); vi < range.end(); ++vi) {
-          double dz = x[3 * vi + 2] - floorHeight;
+          double dz = pos[3 * vi + 2] - floorHeight;
           if (dz < 0.0) {
             int row = 3 * vi + 2;
             local.emplace_back(row, row, floorKappa);
@@ -2163,44 +2156,39 @@ void CIPCPotentialEnergy::computeAll(const VXd &x,
   hess.setFromTriplets(triplets.begin(), triplets.end());
 }
 
-
 // =========================================================================
 //  PotentialEnergy interface
 // =========================================================================
 double CIPCPotentialEnergy::func(EigenSupport::ConstRefVecXd x) const
 {
-  findCollisionPairs(x);
-  return computeEnergy(x);
+  const VXd pos = isInputDisp ? VXd(restPosition + x) : VXd(x);
+  findCollisionPairs(pos);
+  return computeEnergy(pos);
 }
 
 void CIPCPotentialEnergy::gradient(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad) const
 {
-  findCollisionPairs(x);
-  grad.setZero();
-  VXd g = grad;
-  computeGradient(x, g);
-  grad = g;
+  const VXd pos = isInputDisp ? VXd(restPosition + x) : VXd(x);
+  findCollisionPairs(pos);
+  computeGradient(pos, grad);
 }
 
-void CIPCPotentialEnergy::hessian(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const
+void CIPCPotentialEnergy::hessian(EigenSupport::ConstRefVecXd, EigenSupport::SpMatD &) const
 {
-  findCollisionPairs(x);
-  computeHessian(x, hess);
+  throw std::runtime_error("CIPCPotentialEnergy::hessian() should not be called directly. Use hessianDirect() instead.");
 }
 
 void CIPCPotentialEnergy::createHessian(EigenSupport::SpMatD &hess) const
 {
-  // assume  find collision pairs is called
-  VXd x(3 * numVerts_);
-  x.setZero();
-  hess.setZero();
-  
-  computeHessian(x, hess);
+  throw std::runtime_error("CIPCPotentialEnergy::createHessian() should not be called directly. Use hessianDirect() instead.");
 }
 
-double CIPCPotentialEnergy::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
+void CIPCPotentialEnergy::hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const
 {
-  return computeMaxStepSize(x, dx, 0.8);
+  const VXd pos = isInputDisp ? VXd(restPosition + x) : VXd(x);
+  findCollisionPairs(pos);
+  SPDLOG_LOGGER_INFO(Logging::lgr(), "Computing Hessian with {} PT pairs and {} EE pairs", ptPairs_.size(), eePairs_.size());
+  computeHessian(pos, hess);
 }
 
 }  // namespace CIPC

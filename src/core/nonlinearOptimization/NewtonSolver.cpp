@@ -78,30 +78,27 @@ void NewtonSolver::setFixedDOFs(const std::vector<int> &fixedDOFs_, const double
     rhs.resize(n3 - (int)fixedDOFs.size());
     deltaxSmall.resize(n3 - (int)fixedDOFs.size());
 
-    // sparse matrix
-    energy->createHessian(sysFull);
-    energy->hessian(x, sysFull);
+    if (energy->isHessianTopologyFixed()) {
+      // sparse matrix
+      energy->createHessian(sysFull);
+      energy->hessian(x, sysFull);
 
-    ES::removeRowsCols(sysFull, fixedDOFs, A11);
-    ES::removeRowsCols(sysFull, A11, fixedDOFs, A11Mapping);
-
-    // std::vector<int> flexibleDOFs;
-    // std::set_difference(allDOFs.begin(), allDOFs.end(), fixedDOFs.begin(), fixedDOFs.end(), std::back_inserter(flexibleDOFs));
-    // ES::SelectRowsCols(sysFull, flexibleDOFs, fixedDOFs, A12);
-    // ES::Big2Small(sysFull, A12, flexibleDOFs, fixedDOFs, A12Mapping, 0);
+      ES::removeRowsCols(sysFull, fixedDOFs, A11);
+      ES::removeRowsCols(sysFull, A11, fixedDOFs, A11Mapping);
 
 #if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
-    solver = std::make_shared<ES::EigenMKLPardisoSupport>(A11, ES::EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
-      ES::EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
-    solver->analyze(A11);
+      solver = std::make_shared<ES::EigenMKLPardisoSupport>(A11, ES::EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
+        ES::EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
+      solver->analyze(A11);
 #elif defined(PGO_HAS_ORIG_PARDISO)
-    solver = std::make_shared<ES::EigenOrigPardisoSupport>(A11, ES::EigenOrigPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
-      ES::EigenOrigPardisoSupport::ReorderingType::NESTED_DISSECTION_4, 0, 0, 0, 0, 0, 0);
-    solver->analyze(A11);
+      solver = std::make_shared<ES::EigenOrigPardisoSupport>(A11, ES::EigenOrigPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
+        ES::EigenOrigPardisoSupport::ReorderingType::NESTED_DISSECTION_4, 0, 0, 0, 0, 0, 0);
+      solver->analyze(A11);
 #else
-    solver = std::make_shared<EigenSupport::SymSolver>();
-    solver->analyzePattern(A11);
+      solver = std::make_shared<EigenSupport::SymSolver>();
+      solver->analyzePattern(A11);
 #endif
+    }
   }
 
   fixedValues = ES::Mp<const ES::VXd>(fixedValues_, fixedDOFs_.size());
@@ -178,8 +175,14 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
       }
     }
 
-    memset(sysFull.valuePtr(), 0, sizeof(double) * sysFull.nonZeros());
-    energy->hessian(x, sysFull);
+    if (energy->isHessianTopologyFixed()) {
+      memset(sysFull.valuePtr(), 0, sizeof(double) * sysFull.nonZeros());
+      energy->hessian(x, sysFull);
+    }
+    else {
+      energy->hessianDirect(x, sysFull);
+      sysFull.makeCompressed();
+    }
 
     // grad too small, we don't need damping
     if (gradNorm < 1e-4) {
@@ -208,7 +211,12 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     // std::cout << "        Damping lambda=" << lambda << std::endl;
 
     // remove column rows
-    ES::transferBigToSmall(sysFull, A11, A11Mapping, 1);
+    if (energy->isHessianTopologyFixed()) {
+      ES::transferBigToSmall(sysFull, A11, A11Mapping, 1);
+    }
+    else {
+      ES::removeRowsCols(sysFull, fixedDOFs, A11);
+    }
 
     if (solverParam.addDamping) {
       for (int i = 0; i < A11.rows(); i++) {
@@ -216,21 +224,25 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
       }
     }
 
-    // ES::transferBigToSmall(sysFull, A12, A12Mapping, 1);
     ES::transferBigToSmall(grad, rhs, rhsb2s, 1);
 
-    // std::cout << "@@:\n"
-    //   << x.norm() << '\n'
-    //   << sysFull.coeff(0, 0) << '\n'
-    //   << sysFull.coeff(1, 0) << '\n'
-    //   << sysFull.coeff(1, 1) << '\n'
-    //   << sysFull.coeff(2, 0) << '\n'
-    //   << sysFull.coeff(2, 1) << '\n'
-    //   << sysFull.coeff(2, 2) << std::endl;
-
-    // rhs = -grad - A12 * fixedvalue
-    // ES::mv(A12, fixedValues, rhs, -1.0, -1.0, 0);
     rhs *= -1.0;
+
+    if (!energy->isHessianTopologyFixed() || solver == nullptr) {
+#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
+      solver = std::make_shared<ES::EigenMKLPardisoSupport>(A11, ES::EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
+        ES::EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
+      solver->analyze(A11);
+#elif defined(PGO_HAS_ORIG_PARDISO)
+      solver = std::make_shared<ES::EigenOrigPardisoSupport>(A11, ES::EigenOrigPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
+        ES::EigenOrigPardisoSupport::ReorderingType::NESTED_DISSECTION_4, 0, 0, 0, 0, 0, 0);
+      solver->analyze(A11);
+#else
+      solver = std::make_shared<EigenSupport::SymSolver>();
+      solver->analyzePattern(A11);
+#endif
+    }
+
 #if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
     solver->factorize(A11);
     solver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
@@ -241,6 +253,10 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     solver->factorize(A11);
     deltaxSmall.noalias() = solver->solve(rhs);
 #endif
+
+    if (energy->isHessianTopologyFixed()) {
+      solver.reset();  // free symbolic factorization memory since we won't reuse it anymore
+    }
 
     if (verbose >= 3 && iter % printGap == 0)
       std::cout << (A11 * deltaxSmall - rhs).norm() << ' ' << rhs.norm() << std::endl;

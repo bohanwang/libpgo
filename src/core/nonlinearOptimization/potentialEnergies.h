@@ -48,6 +48,8 @@ public:
 
   virtual int isQuadratic() const override { return isQuadraticEnergy; }
   virtual int hasHessianVector() const override { return hasHessianVectorProduct; }
+  virtual int isHessianTopologyFixed() const override;
+  virtual void hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const override;
 
   virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override;
 

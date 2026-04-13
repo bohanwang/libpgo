@@ -112,6 +112,50 @@ void ImplicitBackwardEulerEnergy::printImplicitEnergy(ES::ConstRefVecXd x) const
   }
 }
 
+int ImplicitBackwardEulerEnergy::isHessianTopologyFixed() const
+{
+  for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
+    if (!intg->implicitModelsAll[i]->isHessianTopologyFixed())
+      return 0;
+  }
+  return 1;
+}
+
+void ImplicitBackwardEulerEnergy::hessianDirect(ES::ConstRefVecXd x, ES::SpMatD &hess) const
+{
+  // Start with hessianAll pattern (covers A + all fixed-topology models)
+  hess = intg->hessianAll;
+  memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
+
+  // Add A (mass/damping/timestep contribution)
+  (ES::Mp<ES::VXd>(hess.valuePtr(), hess.nonZeros())) += ES::Mp<const ES::VXd>(intg->A.valuePtr(), intg->A.nonZeros());
+
+  // Add fixed-topology models using efficient mapping
+  for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
+    if (intg->implicitModelsAll[i]->isHessianTopologyFixed()) {
+      ES::SpMatD &K = *intg->implicitModelsAll_K[i];
+      if (K.nonZeros() == 0)
+        continue;
+
+      const ES::SpMatI &mapping = *intg->implicitModelsAll_Kmaping[i];
+      intg->implicitModelsAll[i]->hessian(x, K);
+      ES::addSmallToBig(1.0, K, hess, 1.0, mapping, 1);
+    }
+  }
+
+  // Add non-fixed-topology models
+  for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
+    if (!intg->implicitModelsAll[i]->isHessianTopologyFixed()) {
+      ES::SpMatD Ki;
+      intg->implicitModelsAll[i]->hessianDirect(x, Ki);
+      if (Ki.nonZeros() == 0)
+        continue;
+
+      hess = hess + Ki;
+    }
+  }
+}
+
 double ImplicitBackwardEulerEnergy::computeMaxStepSize(ES::ConstRefVecXd x, ES::ConstRefVecXd dx) const
 {
   double maxStepSize = 1.0;

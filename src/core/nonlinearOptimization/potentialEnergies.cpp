@@ -69,14 +69,17 @@ void PotentialEnergies::init()
     }
     */
 
-    tbb::parallel_for((ES::IDX)0, h.outerSize(), [&](ES::IDX outeri) {
-      for (ES::SpMatD::InnerIterator it(h, outeri); it; ++it) {
-        entries.emplace_back(
-          (ES::SpMatD::StorageIndex)dofs[it.row()],
-          (ES::SpMatD::StorageIndex)dofs[it.col()],
-          1.0);
-      }
-    });
+    // Only include fixed-topology energies in hessianAll
+    if (energy->isHessianTopologyFixed()) {
+      tbb::parallel_for((ES::IDX)0, h.outerSize(), [&](ES::IDX outeri) {
+        for (ES::SpMatD::InnerIterator it(h, outeri); it; ++it) {
+          entries.emplace_back(
+            (ES::SpMatD::StorageIndex)dofs[it.row()],
+            (ES::SpMatD::StorageIndex)dofs[it.col()],
+            1.0);
+        }
+      });
+    }
 
     buffer->hessianMatrices.push_back(h);
   }
@@ -89,7 +92,7 @@ void PotentialEnergies::init()
     potentialEnergies[i]->getDOFs(dofs);
 
     ES::SpMatI mapping;
-    if (buffer->hessianMatrices[i].nonZeros()) {
+    if (potentialEnergies[i]->isHessianTopologyFixed() && buffer->hessianMatrices[i].nonZeros()) {
       ES::small2Big(buffer->hessianMatrices[i], hessianAll, dofs, mapping);
     }
 
@@ -213,6 +216,66 @@ void PotentialEnergies::hessianVector(EigenSupport::ConstRefVecXd x, EigenSuppor
 
       for (Eigen::Index j = 0; j < buffer->hessianVectors[i].size(); j++)
         hessVec[energyDOFs[i][j]] += buffer->hessianVectors[i][j] * energyCoeffs[i];
+    }
+  }
+}
+
+int PotentialEnergies::isHessianTopologyFixed() const
+{
+  for (size_t i = 0; i < potentialEnergies.size(); i++) {
+    if (!potentialEnergies[i]->isHessianTopologyFixed())
+      return 0;
+  }
+  return 1;
+}
+
+void PotentialEnergies::hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const
+{
+  // Start with hessianAll pattern (covers all fixed-topology energies)
+  hess = hessianAll;
+  std::memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
+
+  // Add fixed-topology energies using efficient mapping
+  for (size_t i = 0; i < potentialEnergies.size(); i++) {
+    if (energyCoeffs[i] == 0)
+      continue;
+
+    if (buffer->hessianMatrices[i].nonZeros() == 0)
+      continue;
+
+    if (potentialEnergies[i]->isHessianTopologyFixed()) {
+      mapx(x, energyDOFs[i], buffer->xlocals[i]);
+      potentialEnergies[i]->hessian(buffer->xlocals[i], buffer->hessianMatrices[i]);
+      ES::addSmallToBig(energyCoeffs[i], buffer->hessianMatrices[i], hess, 1.0, hessianMatrixMappings[i]);
+    }
+  }
+
+  // Add non-fixed-topology energies
+  for (size_t i = 0; i < potentialEnergies.size(); i++) {
+    if (energyCoeffs[i] == 0)
+      continue;
+
+    if (!potentialEnergies[i]->isHessianTopologyFixed()) {
+      mapx(x, energyDOFs[i], buffer->xlocals[i]);
+      ES::SpMatD Ki;
+      potentialEnergies[i]->hessianDirect(buffer->xlocals[i], Ki);
+      if (Ki.nonZeros() == 0)
+        continue;
+
+      // Scatter Ki from local DOFs to global
+      ES::SpMatD KiGlobal(nAll, nAll);
+      std::vector<ES::TripletD> entries;
+      entries.reserve(Ki.nonZeros());
+      for (Eigen::Index outeri = 0; outeri < Ki.outerSize(); outeri++) {
+        for (ES::SpMatD::InnerIterator it(Ki, outeri); it; ++it) {
+          entries.emplace_back(
+            (ES::SpMatD::StorageIndex)energyDOFs[i][it.row()],
+            (ES::SpMatD::StorageIndex)energyDOFs[i][it.col()],
+            it.value() * energyCoeffs[i]);
+        }
+      }
+      KiGlobal.setFromTriplets(entries.begin(), entries.end());
+      hess = hess + KiGlobal;
     }
   }
 }
