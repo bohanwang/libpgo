@@ -16,7 +16,7 @@
 #include "generateMassMatrix.h"
 #include "generateSurfaceMesh.h"
 #include "linearPotentialEnergy.h"
-#include "NewtonRaphsonSolver.h"
+#include "NewtonSolver.h"
 #include "createTriMesh.h"
 #include "libiglInterface.h"
 #include "CIPC.h"
@@ -110,6 +110,10 @@ int main(int argc, char *argv[])
     surfaceRestPositions.segment<3>(vi * 3) = surfaceMesh.pos(vi);
   }
 
+  Mesh::BoundingBox surfaceBox(surfaceMesh.positions());
+  double E = 1000000;
+  double h = 1e-3;
+
   // initialize fem
   std::shared_ptr<SolidDeformationModel::SimulationMesh> simMesh(SolidDeformationModel::loadShellMesh(surfaceMesh, &matParam));
   std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm = std::make_shared<SolidDeformationModel::DeformationModelManager>();
@@ -127,9 +131,7 @@ int main(int argc, char *argv[])
 
   ES::VXd elasticParams(5 * nele);
   for (int ei = 0; ei < nele; ei++) {
-    double E = 1000000;
     double E_bend = E;
-    double h = 1e-3;
     double nu = 0.4;
 
     elasticParams[ei * 5 + 0] = E;
@@ -211,7 +213,8 @@ int main(int argc, char *argv[])
   }
 
   if (simType == "dynamic") {
-    std::shared_ptr<Contact::CIPC::CIPCSolver> collisionHandler = std::make_shared<Contact::CIPC::CIPCSolver>();
+    std::shared_ptr<Contact::CIPC::CIPCPotentialEnergy> collisionHandler =
+      std::make_shared<Contact::CIPC::CIPCPotentialEnergy>(surfaceBox.sides().norm() * 1e-3, E * h);
     ES::MXd V;
     ES::MXi F;
     Mesh::triMeshGeoToMatrices(surfaceMesh, V, F);
@@ -273,7 +276,39 @@ int main(int argc, char *argv[])
       std::filesystem::create_directories(outputFolder);
     }
 
-    for (int framei = 0; framei < numSimSteps; framei++) {
+    int frameStart = 0;
+    for (int framei = numSimSteps - 1; framei >= 0; framei--) {
+      if (!std::filesystem::exists(fmt::format("{}/deform{:04d}.u", outputFolder, framei))) {
+        std::cerr << "Frame " << framei << " not found." << std::endl;
+        continue;
+      }
+
+      ES::MXd uMat(n3, 3);
+      if (ES::readMatrix(fmt::format("{}/deform{:04d}.u", outputFolder, framei).c_str(), uMat) == 0) {
+        frameStart = framei;
+        u.noalias() = uMat.col(0);
+        uvel.noalias() = uMat.col(1);
+        uacc.noalias() = uMat.col(2);
+        std::cout << "Restarting from frame " << framei << std::endl;
+        break;
+      }
+    }
+
+    usurf = u;
+
+    std::cout << frameStart << std::endl;
+    std::cin.get();
+
+    ES::VXd psurf = surfaceRestPositions + usurf;
+    for (size_t eobji = 0; eobji < kinematicObjects.size(); eobji++) {
+      ES::V3d movement = kinematicObjectMovements[eobji] / (numSimSteps - 1) * (frameStart + 1);
+      for (int vi = 0; vi < kinematicObjects[eobji].numVertices(); vi++) {
+        kinematicObjects[eobji].pos(vi) += movement;
+      }
+      externalContactHandler->updateExternalSurface(eobji, kinematicObjectsRef[eobji]);
+    }
+
+    for (int framei = frameStart + 1; framei < numSimSteps; framei++) {
       intg->clearGeneralImplicitForceModel();
 
       if (framei > numSimSteps / 2) {
@@ -329,6 +364,14 @@ int main(int argc, char *argv[])
         }
       }
 
+      if (collisionHandler) {
+        psurf.noalias() = surfaceRestPositions + usurf;
+        collisionHandler->findCollisionPairs(psurf);
+        if (collisionHandler->getPTPairs().size() + collisionHandler->getEEPairs().size() > 0) {
+          intg->addGeneralImplicitForceModel(collisionHandler, 0, 0);
+        }
+      }
+
       intg->setqState(u, uvel, uacc);
 
       intg->doTimestep(1, 2, 1);
@@ -350,13 +393,20 @@ int main(int argc, char *argv[])
       usurf = u;
 
       if (framei % frameGap == 0) {
-        ES::VXd psurf = surfaceRestPositions + usurf;
+        psurf.noalias() = surfaceRestPositions + usurf;
 
         Mesh::TriMeshGeo mesh = surfaceMesh;
         for (int vi = 0; vi < mesh.numVertices(); vi++) {
           mesh.pos(vi) = psurf.segment<3>(vi * 3) / scale;
         }
         mesh.save(fmt::format("{}/ret{:04d}.obj", outputFolder, framei / frameGap));
+
+        ES::MXd uMat(n3, 3);
+        uMat.col(0) = u;
+        uMat.col(1) = uvel;
+        uMat.col(2) = uacc;
+
+        ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder, framei).c_str(), uMat);
       }
 
       for (size_t eobji = 0; eobji < kinematicObjects.size(); eobji++) {
@@ -379,14 +429,14 @@ int main(int argc, char *argv[])
     energyAll->addPotentialEnergy(externalForcesEnergy, -1.0);
     energyAll->init();
 
-    NonlinearOptimization::NewtonRaphsonSolver::SolverParam solverParam;
+    NonlinearOptimization::NewtonSolver::SolverParam solverParam;
 
     ES::VXd u(n3);
     u.setZero();
 
     energyAll->printEnergy(u);
 
-    NonlinearOptimization::NewtonRaphsonSolver solver(u.data(), solverParam, energyAll, std::vector<int>(), nullptr);
+    NonlinearOptimization::NewtonSolver solver(u.data(), solverParam, energyAll, std::vector<int>(), nullptr);
     solver.solve(u.data(), solverMaxIter, solverEps, 2);
 
     ES::VXd x = restPosition + u;

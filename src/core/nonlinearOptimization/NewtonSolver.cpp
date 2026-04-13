@@ -1,4 +1,4 @@
-#include "NewtonRaphsonSolver.h"
+#include "NewtonSolver.h"
 
 #include "EigenSupport.h"
 #include "lineSearch.h"
@@ -27,7 +27,7 @@ inline double dura(const hclock::time_point &t1, const hclock::time_point &t2)
   return std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1e6;
 }
 
-NewtonRaphsonSolver::NewtonRaphsonSolver(const double *x_, SolverParam sp, PotentialEnergy_const_p energy_, const std::vector<int> &fixedDOFs_, const double *fixedValues_):
+NewtonSolver::NewtonSolver(const double *x_, SolverParam sp, PotentialEnergy_const_p energy_, const std::vector<int> &fixedDOFs_, const double *fixedValues_):
   energy(energy_), solverParam(sp)
 {
   n3 = (int)energy->getNumDOFs();
@@ -62,7 +62,7 @@ NewtonRaphsonSolver::NewtonRaphsonSolver(const double *x_, SolverParam sp, Poten
   }
 }
 
-void NewtonRaphsonSolver::setFixedDOFs(const std::vector<int> &fixedDOFs_, const double *fixedValues_)
+void NewtonSolver::setFixedDOFs(const std::vector<int> &fixedDOFs_, const double *fixedValues_)
 {
   if (fixedDOFs_.size() != 0 && fixedDOFs.size() == fixedDOFs_.size() &&
     std::memcmp(fixedDOFs.data(), fixedDOFs_.data(), sizeof(int) * fixedDOFs.size()) == 0) {
@@ -107,7 +107,7 @@ void NewtonRaphsonSolver::setFixedDOFs(const std::vector<int> &fixedDOFs_, const
   fixedValues = ES::Mp<const ES::VXd>(fixedValues_, fixedDOFs_.size());
 }
 
-int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
+int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
 {
   hclock::time_point t1 = hclock::now();
 
@@ -273,7 +273,10 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
       double alpha = 1;
       double stepSize = 0;
 
-      alpha = alphaTestFunc ? alphaTestFunc(x, deltax) : 1.0;
+      double maxStepSize = energy->computeMaxStepSize(x, deltax);
+      if (verbose >= 2 && iter % printGap == 0)
+        std::cout << "        max step size=" << maxStepSize << std::endl;
+      deltax *= maxStepSize;
 
       lineSearchx.noalias() = x + deltax;
       double eng1 = energy->func(lineSearchx);
@@ -431,7 +434,7 @@ int NewtonRaphsonSolver::solve(double *x_, int numIter, double epsilon, int verb
   return 0;
 }
 
-void NewtonRaphsonSolver::filterVector(ES::VXd &v)
+void NewtonSolver::filterVector(ES::VXd &v)
 {
   for (int dof : fixedDOFs)
     v[dof] = 0;

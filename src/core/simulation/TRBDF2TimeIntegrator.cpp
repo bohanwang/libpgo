@@ -154,7 +154,8 @@ void TRBDF2TimeIntegrator::updateA2()
 
 void TRBDF2TimeIntegrator::updateb1()
 {
-  // b1 = 2 alpha M qvel + M qacc + D qvel + fext
+  // b1 = -(2 alpha M qvel + M qacc + D qvel + fext) - A1 q
+  // (the -A1*q term comes from changing the optimization variable from du to u)
 
   // b1 = 2 alpha M qvel
   ES::mv(MasK, qvel, b1);
@@ -173,11 +174,15 @@ void TRBDF2TimeIntegrator::updateb1()
 
   // cblas_dscal(n3, -1.0, b1.data(), 1);
   b1 *= -1;
+
+  // -= A1 q (shift from du to u variable)
+  ES::mv(A1, q, b1, -1.0, 1.0);
 }
 
 void TRBDF2TimeIntegrator::updateb2()
 {
   // b2 = M (b1 q + b2 qy + b3 qvel + b4 qvely)
+  // (the -A2*q term comes from changing the optimization variable from du to u)
   temp0.noalias() = beta[0] * q;
   temp0 += beta[1] * qy;
 
@@ -195,12 +200,15 @@ void TRBDF2TimeIntegrator::updateb2()
   // b2 -= fext
   // cblas_daxpy(n3, -1.0, fext.data(), 1, b2.data(), 1);
   b2 -= f_ext;
+
+  // -= A2 q (shift from du to u variable)
+  ES::mv(A2, q, b2, -1.0, 1.0);
 }
 
 void TRBDF2TimeIntegrator::solve(ES::VXd &x, std::shared_ptr<TRBDF2TimeIntegratorEnergy> eng, int verbose, int printResidual)
 {
   bool needRenew = (constraintsChanged || generalForceModelChanged);
-  solverRet = solver[stage]->solve(needRenew, x, g, lambda, deltauRangeLow, deltauRangeHi,
+  solverRet = solver[stage]->solve(needRenew, x, g, lambda, uRangeLow, uRangeHi,
     constraintsRangeLow, constraintsRangeHi, eng, constraints,
     nIter, eps, verbose, solverConfigFilename.length() ? solverConfigFilename.c_str() : nullptr,
     solverOption);
@@ -234,8 +242,18 @@ void TRBDF2TimeIntegrator::doTimestep(int updateq, int verbose, int printResidua
 
   stage = 0;
 
-  for (int i = 0; i < n3; i++) {
-    z1[i] = deltauInitial[i];
+  // z1 is the optimization variable u (full position)
+  // initialize based on initial guess mode
+  if (initialGuessMode == InitialGuessMode::LAST_U_PLUS_VH) {
+    for (int i = 0; i < n3; i++) {
+      z1[i] = q[i] + qvel[i] * timestep;
+    }
+  }
+  else {
+    // InitialGuessMode::LAST_U
+    for (int i = 0; i < n3; i++) {
+      z1[i] = q[i];
+    }
   }
 
   if (generalForceModelChanged) {
@@ -244,14 +262,16 @@ void TRBDF2TimeIntegrator::doTimestep(int updateq, int verbose, int printResidua
 
   solve(z1, trEnergy, verbose, printResidual);
 
-  // qy = q + z
-  // qvely = alpha z - qvel
-  // qaccy = alpha^2 z - 2 alpha qvel - qacc
+  // z1 is u (full position), so du = z1 - q
+  // qy = u = z1
+  // qvely = alpha * (u - q) - qvel
+  // qaccy = alpha^2 * (u - q) - 2 alpha qvel - qacc
   tbb::parallel_for(
     0, n3, [&](int i) {
-      qy[i] = q[i] + z1[i];
-      qvely[i] = alpha * z1[i] - qvel[i];
-      qaccy[i] = alpha * alpha * z1[i] - 2.0 * alpha * qvel[i] - qacc[i];
+      double du = z1[i] - q[i];
+      qy[i] = z1[i];
+      qvely[i] = alpha * du - qvel[i];
+      qaccy[i] = alpha * alpha * du - 2.0 * alpha * qvel[i] - qacc[i];
     },
     tbb::static_partitioner());
 
@@ -262,9 +282,17 @@ void TRBDF2TimeIntegrator::doTimestep(int updateq, int verbose, int printResidua
     updateA2();
     updateb2();
 
-    for (int i = 0; i < n3; i++) {
-      // z2 can be z1 too.
-      z2[i] = deltauInitial[i];
+    // z2 initial guess uses qy and qvely from TR stage
+    if (initialGuessMode == InitialGuessMode::LAST_U_PLUS_VH) {
+      for (int i = 0; i < n3; i++) {
+        z2[i] = qy[i] + qvely[i] * timestep;
+      }
+    }
+    else {
+      // InitialGuessMode::LAST_U
+      for (int i = 0; i < n3; i++) {
+        z2[i] = qy[i];
+      }
     }
 
     if (generalForceModelChanged) {
@@ -273,14 +301,16 @@ void TRBDF2TimeIntegrator::doTimestep(int updateq, int verbose, int printResidua
 
     solve(z2, bdf2Energy, verbose, printResidual);
 
-    // q1 = q + z
-    // qvel1 = b6 q + b7 qy + b8 z
-    // qacc1 = b1 q + b2 qy + b3 qvel + b4 qvely + b5 z
+    // z2 is u (full position), so du = z2 - q
+    // q1 = u = z2
+    // qvel1 = b6 q + b7 qy + b8 (u - q)
+    // qacc1 = b1 q + b2 qy + b3 qvel + b4 qvely + b5 (u - q)
     tbb::parallel_for(
       0, n3, [&](int i) {
-        q1[i] = q[i] + z2[i];
-        qvel1[i] = beta[5] * q[i] + beta[6] * qy[i] + beta[7] * z2[i];
-        qacc1[i] = beta[0] * q[i] + beta[1] * qy[i] + beta[2] * qvel[i] + beta[3] * qvely[i] + beta[4] * z2[i];
+        double du = z2[i] - q[i];
+        q1[i] = z2[i];
+        qvel1[i] = beta[5] * q[i] + beta[6] * qy[i] + beta[7] * du;
+        qacc1[i] = beta[0] * q[i] + beta[1] * qy[i] + beta[2] * qvel[i] + beta[3] * qvely[i] + beta[4] * du;
       },
       tbb::static_partitioner());
 

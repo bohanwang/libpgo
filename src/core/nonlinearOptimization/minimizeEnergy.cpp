@@ -5,7 +5,7 @@ copyright to USC
 
 #include "minimizeEnergy.h"
 #include "lagrangian.h"
-#include "NewtonRaphsonSolver.h"
+#include "NewtonSolver.h"
 #include "potentialEnergy.h"
 
 #ifdef USE_IPOPT
@@ -531,11 +531,11 @@ int EnergyOptimizer::minimizeUsingNewton(EigenSupport::RefVecXd x, PotentialEner
     L = energy;
   }
 
-  NewtonRaphsonSolver::SolverParam solverParam;
-  solverParam.lsm = NewtonRaphsonSolver::LSM_SIMPLE;
-  // solverParam.lsm = NewtonRaphsonSolver::LSM_BRENTS;
-  // solverParam.sst = NewtonRaphsonSolver::SST_SUBITERATION_ONE;
-  NewtonRaphsonSolver solver(x.data(), solverParam, L, fixedDOFs);
+  NewtonSolver::SolverParam solverParam;
+  solverParam.lsm = NewtonSolver::LSM_SIMPLE;
+  // solverParam.lsm = NewtonSolver::LSM_BRENTS;
+  // solverParam.sst = NewtonSolver::SST_SUBITERATION_ONE;
+  NewtonSolver solver(x.data(), solverParam, L, fixedDOFs);
   ES::VXd xinit(L->getNumDOFs());
   xinit.head(energy->getNumDOFs()) = x;
 

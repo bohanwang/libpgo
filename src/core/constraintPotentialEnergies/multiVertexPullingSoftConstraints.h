@@ -20,6 +20,8 @@ public:
   virtual void gradient(EigenSupport::ConstRefVecXd u, EigenSupport::RefVecXd grad) const override;
   virtual void hessian(EigenSupport::ConstRefVecXd, EigenSupport::SpMatD &hess) const override;
 
+  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override { return 1.0; }
+
   void setCoeff(double v) { coeffAll = v; }
   void setCoeff(const double *v);
   void setMasks(const double *v);

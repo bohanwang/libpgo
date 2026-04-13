@@ -10,7 +10,7 @@ set(NONLINEAROPTIMIZATION_HEADERS
   linearConstraintFunctions.h
   
   nonlinearProblem.h lagrangian.h 
-  NewtonRaphsonSolver.h minimizeEnergy.h
+  NewtonSolver.h minimizeEnergy.h
   finiteDifference.h
   determinantDerivatives.h polarDecompositionDerivatives.h naturalCubicSplineDerivatives.h svdDerivatives.h 
   barrierFunction.h
@@ -26,7 +26,7 @@ set(NONLINEAROPTIMIZATION_SOURCES
 
   potentialEnergyFromConstraintFunctions.cpp
   nonlinearProblem.cpp lagrangian.cpp  
-  NewtonRaphsonSolver.cpp minimizeEnergy.cpp
+  NewtonSolver.cpp minimizeEnergy.cpp
   finiteDifference.cpp    
   determinantDerivatives.cpp polarDecompositionDerivatives.cpp naturalCubicSplineDerivatives.cpp svdDerivatives.cpp
   barrierFunction.cpp

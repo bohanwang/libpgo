@@ -34,6 +34,8 @@ public:
   virtual void getDOFs(std::vector<int> &dofs) const { dofs = allDOFs; }
   virtual int getNumDOFs() const { return (int)allDOFs.size(); }
 
+  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override { return 1.0; }
+
   static void convertRowMajorFG(const EigenSupport::SpMatD &GRowMajor, EigenSupport::SpMatD &GColMajor);
 
 protected:

@@ -1094,23 +1094,30 @@ M12d projectToPSD(const M12d &H)
 //  CollisionIPC  —  mesh setup
 // =========================================================================
 
-void CIPCSolver::setMesh(const MXd &V, const MXi &F)
+void CIPCPotentialEnergy::setMesh(const MXd &V, const MXi &F)
 {
   numVerts_ = (int)V.rows();
   triangles_.resize(F.rows());
   for (int i = 0; i < (int)F.rows(); ++i)
     triangles_[i] = { F(i, 0), F(i, 1), F(i, 2) };
 
+  allDOFs_.resize(3 * numVerts_);
+  std::iota(allDOFs_.begin(), allDOFs_.end(), 0);
+
   buildEdges();
   buildAdjacency();
   buildAreaWeights(V);
 }
 
-void CIPCSolver::setMesh(int numVerts,
+void CIPCPotentialEnergy::setMesh(int numVerts,
   const std::vector<std::array<int, 3>> &triangles)
 {
   numVerts_ = numVerts;
   triangles_ = triangles;
+
+  allDOFs_.resize(3 * numVerts_);
+  std::iota(allDOFs_.begin(), allDOFs_.end(), 0);
+
   buildEdges();
   buildAdjacency();
   // Area weights not computed — caller must provide positions via the other overload
@@ -1119,7 +1126,7 @@ void CIPCSolver::setMesh(int numVerts,
   edgeLength_.assign(edges_.size(), 1.0);
 }
 
-void CIPCSolver::buildEdges()
+void CIPCPotentialEnergy::buildEdges()
 {
   std::set<std::pair<int, int>> edgeSet;
   for (auto &tri : triangles_) {
@@ -1136,7 +1143,7 @@ void CIPCSolver::buildEdges()
     edges_.push_back({ e.first, e.second });
 }
 
-void CIPCSolver::buildAdjacency()
+void CIPCPotentialEnergy::buildAdjacency()
 {
   vertexTriAdj_.clear();
   for (int fi = 0; fi < (int)triangles_.size(); ++fi) {
@@ -1151,7 +1158,7 @@ void CIPCSolver::buildAdjacency()
   }
 }
 
-void CIPCSolver::buildAreaWeights(const MXd &V)
+void CIPCPotentialEnergy::buildAreaWeights(const MXd &V)
 {
   int nTri = (int)triangles_.size();
   int nEdge = (int)edges_.size();
@@ -1291,7 +1298,7 @@ struct SpatialHash
 //  Broad phase: find candidate PT and EE pairs using spatial hashing
 //  Uses insert-then-query: insert one type, query with the other.
 // =========================================================================
-void CIPCSolver::findCollisionPairs(const VXd &x)
+void CIPCPotentialEnergy::findCollisionPairs(const VXd &x) const
 {
   ptPairs_.clear();
   eePairs_.clear();
@@ -1439,7 +1446,7 @@ void CIPCSolver::findCollisionPairs(const VXd &x)
 // =========================================================================
 //  1)  Maximum step size  (CCD-based line search with spatial hashing)
 // =========================================================================
-double CIPCSolver::computeMaxStepSize(const VXd &x, const VXd &dx,
+double CIPCPotentialEnergy::computeMaxStepSize(const VXd &x, const VXd &dx,
   double slackness) const
 {
   auto getV = [&](int i) -> V3d {
@@ -1684,7 +1691,7 @@ double CIPCSolver::computeMaxStepSize(const VXd &x, const VXd &dx,
 // =========================================================================
 //  2)  Energy
 // =========================================================================
-double CIPCSolver::computeEnergy(const VXd &x)
+double CIPCPotentialEnergy::computeEnergy(const VXd &x) const
 {
   double ee_eps = eps_ee;
 
@@ -1752,7 +1759,7 @@ double CIPCSolver::computeEnergy(const VXd &x)
 // =========================================================================
 //  2)  Gradient
 // =========================================================================
-void CIPCSolver::computeGradient(const VXd &x, VXd &grad)
+void CIPCPotentialEnergy::computeGradient(const VXd &x, VXd &grad) const
 {
   int n = 3 * numVerts_;
   if (grad.size() != n)
@@ -1848,7 +1855,7 @@ void CIPCSolver::computeGradient(const VXd &x, VXd &grad)
 // =========================================================================
 //  2)  Sparse Hessian
 // =========================================================================
-void CIPCSolver::computeHessian(const VXd &x, SpMatD &hess)
+void CIPCPotentialEnergy::computeHessian(const VXd &x, SpMatD &hess) const
 {
   int n = 3 * numVerts_;
   int nPT = (int)ptPairs_.size();
@@ -1975,8 +1982,8 @@ void CIPCSolver::computeHessian(const VXd &x, SpMatD &hess)
 // =========================================================================
 //  Combined computation (single broad-phase pass)
 // =========================================================================
-void CIPCSolver::computeAll(const VXd &x,
-  double &energy, VXd &grad, SpMatD &hess)
+void CIPCPotentialEnergy::computeAll(const VXd &x,
+  double &energy, VXd &grad, SpMatD &hess) const
 {
   findCollisionPairs(x);  // one broad-phase pass
 
@@ -2156,6 +2163,45 @@ void CIPCSolver::computeAll(const VXd &x,
   hess.setFromTriplets(triplets.begin(), triplets.end());
 }
 
+
+// =========================================================================
+//  PotentialEnergy interface
+// =========================================================================
+double CIPCPotentialEnergy::func(EigenSupport::ConstRefVecXd x) const
+{
+  findCollisionPairs(x);
+  return computeEnergy(x);
+}
+
+void CIPCPotentialEnergy::gradient(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad) const
+{
+  findCollisionPairs(x);
+  grad.setZero();
+  VXd g = grad;
+  computeGradient(x, g);
+  grad = g;
+}
+
+void CIPCPotentialEnergy::hessian(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const
+{
+  findCollisionPairs(x);
+  computeHessian(x, hess);
+}
+
+void CIPCPotentialEnergy::createHessian(EigenSupport::SpMatD &hess) const
+{
+  // assume  find collision pairs is called
+  VXd x(3 * numVerts_);
+  x.setZero();
+  hess.setZero();
+  
+  computeHessian(x, hess);
+}
+
+double CIPCPotentialEnergy::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
+{
+  return computeMaxStepSize(x, dx, 0.8);
+}
 
 }  // namespace CIPC
 }  // namespace Contact

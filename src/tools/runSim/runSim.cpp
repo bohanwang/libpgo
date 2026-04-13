@@ -24,7 +24,7 @@
 #include "triangleMeshSelfContactHandler.h"
 #include "pointTrianglePairCouplingEnergyWithCollision.h"
 #include "linearPotentialEnergy.h"
-#include "NewtonRaphsonSolver.h"
+#include "NewtonSolver.h"
 #include "createTriMesh.h"
 #include "finiteDifference.h"
 
@@ -507,14 +507,14 @@ int main(int argc, char *argv[])
     energyAll->addPotentialEnergy(externalForcesEnergy, -1.0);
     energyAll->init();
 
-    NonlinearOptimization::NewtonRaphsonSolver::SolverParam solverParam;
+    NonlinearOptimization::NewtonSolver::SolverParam solverParam;
 
     ES::VXd u(n3);
     u.setZero();
 
     energyAll->printEnergy(u);
 
-    NonlinearOptimization::NewtonRaphsonSolver solver(u.data(), solverParam, energyAll, std::vector<int>(), nullptr);
+    NonlinearOptimization::NewtonSolver solver(u.data(), solverParam, energyAll, std::vector<int>(), nullptr);
     solver.solve(u.data(), solverMaxIter, solverEps, 2);
 
     ES::VXd x = restPosition + u;

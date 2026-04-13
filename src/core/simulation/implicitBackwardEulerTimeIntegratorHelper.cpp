@@ -17,51 +17,36 @@ ImplicitBackwardEulerEnergy::ImplicitBackwardEulerEnergy(ImplicitBackwardEulerTi
 
 double ImplicitBackwardEulerEnergy::func(ES::ConstRefVecXd x) const
 {
-  //std::cout << "Energy: ";
-  // 0.5 Az^2
+  // x is u (the full position), not du
+  // 0.5 Au^2
   double energy = ES::vTMv(intg->A, x, intg->temp0, 0) * 0.5;
-  //std::cout << energy << ',';
-  //// compute current u
-  tbb::parallel_for(
-    0, intg->n3, [&](int i) {
-      intg->qz[i] = intg->q[i] + x[i];
-    },
-    tbb::static_partitioner());
 
   for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
-    // elastic(q+z)
-    double tempEnergy = intg->implicitModelsAll[i]->func(intg->qz);
-    // std::cout << tempEnergy << ',';
-      energy += tempEnergy;
+    // elastic(u)
+    double tempEnergy = intg->implicitModelsAll[i]->func(x);
+    energy += tempEnergy;
   }
 
-  // - b_y^T z
-  // double last_term = cblas_ddot(intg->n3, x.data(), 1, intg->b.data(), 1);
+  // - b^T u
   double last_term = x.dot(intg->b);
 
   energy -= last_term;
-  // std::cout << last_term << std::endl;
 
   return energy;
 }
 
 void ImplicitBackwardEulerEnergy::gradient(ES::ConstRefVecXd x, ES::RefVecXd grad) const
 {
-  // Az
+  // x is u (the full position)
+  // Au
   ES::mv(intg->A, x, grad, 0);
-
-  tbb::parallel_for(
-    0, intg->n3, [&](int i) {
-      intg->qz[i] = intg->q[i] + x[i];
-    },
-    tbb::static_partitioner());
 
   for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
     ES::VXd &fint = *intg->implicitModelsAll_fint[i];
     // ES::SpMatD &K = *intg->implicitModelsAll_K[i];
 
-    // fint(q+z)
-    intg->implicitModelsAll[i]->gradient(intg->qz, fint);
+    // fint(u)
+    intg->implicitModelsAll[i]->gradient(x, fint);
     grad += fint;
   }
 
@@ -71,14 +56,9 @@ void ImplicitBackwardEulerEnergy::gradient(ES::ConstRefVecXd x, ES::RefVecXd gra
 
 void ImplicitBackwardEulerEnergy::hessian(ES::ConstRefVecXd x, ES::SpMatD &hess) const
 {
+  // x is u (the full position)
   // constexpr double eps = 1e-8;
   memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
-
-  tbb::parallel_for(
-    0, intg->n3, [&](int i) {
-      intg->qz[i] = intg->q[i] + x[i];
-    },
-    tbb::static_partitioner());
 
   for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
     ES::SpMatD &K = *intg->implicitModelsAll_K[i];
@@ -86,7 +66,7 @@ void ImplicitBackwardEulerEnergy::hessian(ES::ConstRefVecXd x, ES::SpMatD &hess)
     const ES::SpMatI &mapping = *intg->implicitModelsAll_Kmaping[i];
 
     // beta/h K + K
-    intg->implicitModelsAll[i]->hessian(intg->qz, K);
+    intg->implicitModelsAll[i]->hessian(x, K);
     double scale = 1.0;
 
     ES::addSmallToBig(scale, K, hess, 1.0, mapping, 1);
@@ -112,10 +92,11 @@ int ImplicitBackwardEulerEnergy::getNumDOFs() const
 
 void ImplicitBackwardEulerEnergy::printImplicitEnergy(ES::ConstRefVecXd x) const
 {
+  // x is u (the full position)
   //std::cout << "Energy: ";
-  // 0.5 Az^2
+  // 0.5 Au^2
   double energy = ES::vTMv(intg->A, x, intg->temp0, 0) * 0.5;
-  // - b_y^T z
+  // - b^T u
   // double last_term = cblas_ddot(intg->n3, x.data(), 1, intg->b.data(), 1);
   double last_term = x.dot(intg->b);
   energy -= last_term;
@@ -123,17 +104,21 @@ void ImplicitBackwardEulerEnergy::printImplicitEnergy(ES::ConstRefVecXd x) const
   std::cout << "  main: " << energy << '\n';
 
   //std::cout << energy << ',';
-  //// compute current u
-  tbb::parallel_for(
-    0, intg->n3, [&](int i) {
-      intg->qz[i] = intg->q[i] + x[i];
-    },
-    tbb::static_partitioner());
-
   for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
-    // elastic(q+z)
-    double tempEnergy = intg->implicitModelsAll[i]->func(intg->qz);
+    // elastic(u)
+    double tempEnergy = intg->implicitModelsAll[i]->func(x);
 
     std::cout << "  sub " << i << ": " << tempEnergy << '\n';
   }
+}
+
+double ImplicitBackwardEulerEnergy::computeMaxStepSize(ES::ConstRefVecXd x, ES::ConstRefVecXd dx) const
+{
+  double maxStepSize = 1.0;
+  for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
+    double s = intg->implicitModelsAll[i]->computeMaxStepSize(x, dx);
+    if (s < maxStepSize)
+      maxStepSize = s;
+  }
+  return maxStepSize;
 }

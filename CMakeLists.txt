@@ -29,8 +29,16 @@ option(PGO_ENABLE_GMSH "Enable GMSH support" OFF)
 project(libpgo LANGUAGES CXX C)
 
 if (PGO_ENABLE_CUDA)
-  enable_language(CUDA)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    if(EXISTS "/usr/bin/g++")
+      message(STATUS "Set CUDA host compiler: /usr/bin/g++")
+      set(CMAKE_CUDA_HOST_COMPILER /usr/bin/g++)
+    else()
+    endif()
+  endif()
+
   set(CMAKE_CUDA_ARCHITECTURES native)
+  enable_language(CUDA)
 endif()
 
 # message(STATUS "CMake module path: ${CMAKE_MODULE_PATH}")
@@ -73,13 +81,7 @@ add_library(cuda_compilation_flag INTERFACE)
 message(STATUS "PGO compiler: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "OS: ${CMAKE_SYSTEM_NAME}")
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  if(EXISTS "/usr/bin/g++")
-    message(STATUS "Set CUDA host compiler: /usr/bin/g++")
-    set(CMAKE_CUDA_HOST_COMPILER /usr/bin/g++)
-  else()
-  endif()
-endif()
+
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "^(Apple)?Clang$")
   message(STATUS "CMake build type: ${CMAKE_BUILD_TYPE}")

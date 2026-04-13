@@ -69,12 +69,17 @@ public:
   void getFinalContraint(EigenSupport::RefVecXd g_) const { g_ = g; }
   void getFinalContraintLambda(EigenSupport::RefVecXd l_) const { l_ = lambda; }
 
-  void setDeltauInitial(EigenSupport::ConstRefVecXd deltau) { deltauInitial.noalias() = deltau; }
-  void clearDeltauInitial();
+  enum class InitialGuessMode
+  {
+    LAST_U = 1,         // u_init = q (last timestep's position)
+    LAST_U_PLUS_VH = 2  // u_init = q + qvel * h (velocity extrapolation)
+  };
 
-  void setDeltauRange(double delta);
-  void setDeltauRange(EigenSupport::ConstRefVecXd low, EigenSupport::ConstRefVecXd hi);
-  void clearDeltauRange();
+  void setInitialGuessMode(InitialGuessMode mode) { initialGuessMode = mode; }
+
+  void setURange(double delta);
+  void setURange(EigenSupport::ConstRefVecXd low, EigenSupport::ConstRefVecXd hi);
+  void clearURange();
 
   void setFixedVertices(const std::vector<int> &fixedVertices, EigenSupport::ConstRefVecXd fixedRestPosition, EigenSupport::ConstRefVecXd fixedPosition, int isIndexSorted = 1);
   void setFixedVertices(const std::vector<int> &fixedVertices);
@@ -153,8 +158,8 @@ protected:
 
   EigenSupport::VXd f_int, f_ext;
 
-  EigenSupport::VXd deltauInitial;
-  EigenSupport::VXd deltauRangeLow, deltauRangeHi;
+  EigenSupport::VXd uRangeLow, uRangeHi;
+  InitialGuessMode initialGuessMode = InitialGuessMode::LAST_U;
   EigenSupport::VXd constraintsRangeLow, constraintsRangeHi;
 
   std::vector<int> rhss2b, rhsb2s;

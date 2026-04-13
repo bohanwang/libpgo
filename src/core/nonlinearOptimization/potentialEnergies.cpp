@@ -216,3 +216,16 @@ void PotentialEnergies::hessianVector(EigenSupport::ConstRefVecXd x, EigenSuppor
     }
   }
 }
+
+double PotentialEnergies::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
+{
+  double maxStepSize = 1.0;
+  for (size_t i = 0; i < potentialEnergies.size(); i++) {
+    mapx(x, energyDOFs[i], buffer->xlocals[i]);
+    mapx(dx, energyDOFs[i], buffer->vecs[i]);
+    double s = potentialEnergies[i]->computeMaxStepSize(buffer->xlocals[i], buffer->vecs[i]);
+    if (s < maxStepSize)
+      maxStepSize = s;
+  }
+  return maxStepSize;
+}

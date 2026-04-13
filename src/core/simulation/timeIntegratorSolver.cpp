@@ -10,7 +10,7 @@
 #  include "IpoptProblem.h"
 #endif
 
-#include "NewtonRaphsonSolver.h"
+#include "NewtonSolver.h"
 
 #include "potentialEnergies.h"
 #include "constraintFunctions.h"
@@ -33,7 +33,7 @@ public:
   std::shared_ptr<KnitroProblem> problem;
 #endif
 
-  std::shared_ptr<NewtonRaphsonSolver> newtonSolver;
+  std::shared_ptr<NewtonSolver> newtonSolver;
   std::vector<int> fixedDOFs;
   ES::VXd fixedValues;
 };
@@ -167,12 +167,12 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
 
       da->xinit.resize(da->L->getNumDOFs());
 
-      NewtonRaphsonSolver::SolverParam solverParam;
-      solverParam.lsm = NewtonRaphsonSolver::LSM_THUENTEMORE;
-      // solverParam.lsm = NewtonRaphsonSolver::LSM_BRENTS;
-      // solverParam.sst = NewtonRaphsonSolver::SST_SUBITERATION_ONE;
+      NewtonSolver::SolverParam solverParam;
+      solverParam.lsm = NewtonSolver::LSM_THUENTEMORE;
+      // solverParam.lsm = NewtonSolver::LSM_BRENTS;
+      // solverParam.sst = NewtonSolver::SST_SUBITERATION_ONE;
 
-      da->solver = std::make_shared<NewtonRaphsonSolver>(da->xinit.data(), solverParam, da->L, da->fixedDOFs[0]);
+      da->solver = std::make_shared<NewtonSolver>(da->xinit.data(), solverParam, da->L, da->fixedDOFs[0]);
     }
 
     if (needRenew == false && sameFixedDOFs == false) {
@@ -226,9 +226,9 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
       }
 
       if (needRenew || !da->newtonSolver) {
-        NewtonRaphsonSolver::SolverParam sp;
+        NewtonSolver::SolverParam sp;
 
-        da->newtonSolver = std::make_shared<NewtonRaphsonSolver>(x.data(), sp, energy, da->fixedDOFs, da->fixedValues.data());
+        da->newtonSolver = std::make_shared<NewtonSolver>(x.data(), sp, energy, da->fixedDOFs, da->fixedValues.data());
       }
       else {
         da->newtonSolver->setFixedDOFs(da->fixedDOFs, da->fixedValues.data());

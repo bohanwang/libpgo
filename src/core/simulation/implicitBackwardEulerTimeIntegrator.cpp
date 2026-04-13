@@ -51,8 +51,18 @@ void ImplicitBackwardEulerTimeIntegrator::doTimestep(int updateq, int verbose, i
   updateA();
   updateb();
 
-  for (int i = 0; i < n3; i++) {
-    z[i] = deltauInitial[i];
+  // z is the optimization variable u (full position)
+  // initialize based on initial guess mode
+  if (initialGuessMode == InitialGuessMode::LAST_U_PLUS_VH) {
+    for (int i = 0; i < n3; i++) {
+      z[i] = q[i] + qvel[i] * timestep;
+    }
+  }
+  else {
+    // InitialGuessMode::LAST_U
+    for (int i = 0; i < n3; i++) {
+      z[i] = q[i];
+    }
   }
 
   if (generalForceModelChanged) {
@@ -60,7 +70,7 @@ void ImplicitBackwardEulerTimeIntegrator::doTimestep(int updateq, int verbose, i
   }
 
   bool needRenew = (constraintsChanged || generalForceModelChanged);
-  solverRet = solver->solve(needRenew, z, g, lambda, deltauRangeLow, deltauRangeHi,
+  solverRet = solver->solve(needRenew, z, g, lambda, uRangeLow, uRangeHi,
     constraintsRangeLow, constraintsRangeHi, eulerEnergy, constraints,
     nIter, eps, verbose, solverConfigFilename.length() ? solverConfigFilename.c_str() : nullptr,
     solverOption);
@@ -79,13 +89,14 @@ void ImplicitBackwardEulerTimeIntegrator::doTimestep(int updateq, int verbose, i
   if (finiteDifferenceTestFlag)
     finiteDifferenceTest(z, q);
 
-  // q1 = q + z
-  // qvel1 = 1/h * z
-  // qacc1 = 1/h(1/h * z - qvel)
+  // z is now u (full position)
+  // q1 = u
+  // qvel1 = (u - q) / h
+  // qacc1 = (qvel1 - qvel) / h
   tbb::parallel_for(
     0, n3, [&](int i) {
-      q1[i] = q[i] + z[i];
-      qvel1[i] = z[i] / timestep;
+      q1[i] = z[i];
+      qvel1[i] = (z[i] - q[i]) / timestep;
       qacc1[i] = (qvel1[i] - qvel[i]) / timestep;
     },
     tbb::static_partitioner());
@@ -100,13 +111,14 @@ void ImplicitBackwardEulerTimeIntegrator::doTimestep(int updateq, int verbose, i
 void ImplicitBackwardEulerTimeIntegrator::setSolution(ES::ConstRefVecXd newz)
 {
   z = newz;
-  // q1 = q + z
-  // qvel1 = 1/h * z
-  // qacc1 = 1/h(1/h * z - qvel)
+  // z is u (full position)
+  // q1 = u
+  // qvel1 = (u - q) / h
+  // qacc1 = (qvel1 - qvel) / h
   tbb::parallel_for(
     0, n3, [&](int i) {
-      q1[i] = q[i] + z[i];
-      qvel1[i] = z[i] / timestep;
+      q1[i] = z[i];
+      qvel1[i] = (z[i] - q[i]) / timestep;
       qacc1[i] = (qvel1[i] - qvel[i]) / timestep;
     },
     tbb::static_partitioner());
@@ -169,7 +181,8 @@ void ImplicitBackwardEulerTimeIntegrator::updateA()
 
 void ImplicitBackwardEulerTimeIntegrator::updateb()
 {
-  // b = fext + 1/h M qvel
+  // b = fext + 1/h M qvel + A q
+  // (the A*q term comes from changing the optimization variable from du to u)
   // 1/h M qvel
   ES::mv(MasK, qvel, b);
   // cblas_dscal(n3, 1.0 / timestep, b.data(), 1);
@@ -178,6 +191,9 @@ void ImplicitBackwardEulerTimeIntegrator::updateb()
   // += fext
   // cblas_daxpy(n3, 1.0, fext.data(), 1, b.data(), 1);
   b += f_ext;
+
+  // += A q (shift from du to u variable)
+  ES::mv(A, q, b, 1.0, 1.0);
 }
 
 void ImplicitBackwardEulerTimeIntegrator::finiteDifferenceTestIntegratorEnergy(ES::ConstRefVecXd x) const

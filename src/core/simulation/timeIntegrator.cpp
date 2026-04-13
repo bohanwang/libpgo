@@ -46,14 +46,12 @@ TimeIntegrator::TimeIntegrator(const ES::SpMatD &massMatrix, std::shared_ptr<con
   allDOFs.resize(n3);
   std::iota(allDOFs.begin(), allDOFs.end(), 0);
 
-  deltauInitial.setZero(n3);
-
-  deltauRangeLow.setZero(n3);
-  deltauRangeHi.setZero(n3);
+  uRangeLow.setZero(n3);
+  uRangeHi.setZero(n3);
 
   for (int i = 0; i < n3; i++) {
-    deltauRangeLow[i] = -defaultUnknownBoundary;
-    deltauRangeHi[i] = defaultUnknownBoundary;
+    uRangeLow[i] = -defaultUnknownBoundary;
+    uRangeHi[i] = defaultUnknownBoundary;
   }
 
   hessianAll = K;
@@ -296,36 +294,31 @@ void TimeIntegrator::assembleImplicitModels()
   }
 }
 
-void TimeIntegrator::clearDeltauInitial()
+void TimeIntegrator::setURange(ES::ConstRefVecXd low, ES::ConstRefVecXd hi)
 {
-  memset(deltauInitial.data(), 0, sizeof(double) * n3);
-}
-
-void TimeIntegrator::setDeltauRange(ES::ConstRefVecXd low, ES::ConstRefVecXd hi)
-{
-  deltauRangeLow.noalias() = low;
-  deltauRangeHi.noalias() = hi;
+  uRangeLow.noalias() = low;
+  uRangeHi.noalias() = hi;
 
   updateFixedDOFs();
 }
 
-void TimeIntegrator::setDeltauRange(double delta)
+void TimeIntegrator::setURange(double delta)
 {
   for (int i = 0; i < n3; i++) {
-    deltauRangeLow[i] = -delta;
-    deltauRangeHi[i] = delta;
+    uRangeLow[i] = -delta;
+    uRangeHi[i] = delta;
   }
 
   updateFixedDOFs();
 
-  std::cout << "delta u range:" << deltauRangeLow[0] << ',' << deltauRangeHi[1] << std::endl;
+  std::cout << "u range:" << uRangeLow[0] << ',' << uRangeHi[1] << std::endl;
 }
 
-void TimeIntegrator::clearDeltauRange()
+void TimeIntegrator::clearURange()
 {
   for (int i = 0; i < n3; i++) {
-    deltauRangeLow[i] = -defaultUnknownBoundary;
-    deltauRangeHi[i] = defaultUnknownBoundary;
+    uRangeLow[i] = -defaultUnknownBoundary;
+    uRangeHi[i] = defaultUnknownBoundary;
   }
 
   updateFixedDOFs();
@@ -410,12 +403,12 @@ void TimeIntegrator::updateFixedDOFs()
   for (size_t i = 0; i < fixedDOFs.size(); i++) {
     double targetp = fixedPosition[i];
     double restp = fixedRestPosition[i];
-    double curu = q[fixedDOFs[i]];
 
-    double deltau = targetp - curu - restp;
+    // u-space bound: target displacement = targetPosition - restPosition
+    double targetU = targetp - restp;
 
-    deltauRangeLow[fixedDOFs[i]] = deltau;
-    deltauRangeHi[fixedDOFs[i]] = deltau;
+    uRangeLow[fixedDOFs[i]] = targetU;
+    uRangeHi[fixedDOFs[i]] = targetU;
   }
 }
 

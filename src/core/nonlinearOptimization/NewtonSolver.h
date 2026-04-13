@@ -18,7 +18,7 @@ namespace NonlinearOptimization
 
 class LineSearchHandle;
 
-class NewtonRaphsonSolver
+class NewtonSolver
 {
 public:
   enum SolverSubiterationType
@@ -45,14 +45,11 @@ public:
     int addDamping = 0;
   };
 
-  NewtonRaphsonSolver(const double *x, SolverParam sp, PotentialEnergy_const_p energy_,
+  NewtonSolver(const double *x, SolverParam sp, PotentialEnergy_const_p energy_,
     const std::vector<int> &fixedDOFs, const double *fixedValues_ = nullptr);
 
   void setFixedDOFs(const std::vector<int> &fixedDOFs, const double *fixedValues);
   int solve(double *x, int numIter, double epsilon, int verbose);
-
-  using AlphaTestFunc = std::function<double(const EigenSupport::VXd &, const EigenSupport::VXd &)>;
-  void setAlphaTestFunc(AlphaTestFunc func) { alphaTestFunc = func; }
 
   using StepFunc = std::function<void(const EigenSupport::VXd &, int)>;
   void setStepFunc(StepFunc func) { stepFunc = func; }
@@ -87,7 +84,6 @@ protected:
   EigenSupport::VXd historyx;
   double historyGradNormMin;
 
-  AlphaTestFunc alphaTestFunc;
   StepFunc stepFunc;
 };
 }  // namespace NonlinearOptimization

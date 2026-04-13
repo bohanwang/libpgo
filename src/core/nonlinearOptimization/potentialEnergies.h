@@ -49,6 +49,8 @@ public:
   virtual int isQuadratic() const override { return isQuadraticEnergy; }
   virtual int hasHessianVector() const override { return hasHessianVectorProduct; }
 
+  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override;
+
   void printEnergy(EigenSupport::ConstRefVecXd x) const;
 
 protected:

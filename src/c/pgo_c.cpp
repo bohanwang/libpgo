@@ -30,7 +30,7 @@
 #include "triangleMeshSelfContactHandler.h"
 #include "pointTrianglePairCouplingEnergyWithCollision.h"
 #include "linearPotentialEnergy.h"
-#include "NewtonRaphsonSolver.h"
+#include "NewtonSolver.h"
 #include "animationLoader.h"
 
 #if defined(PGO_HAS_MKL)
@@ -942,14 +942,14 @@ int pgo_run_sim_from_config(const char *configFileName)
     energyAll->addPotentialEnergy(externalForcesEnergy, -1.0);
     energyAll->init();
 
-    NonlinearOptimization::NewtonRaphsonSolver::SolverParam solverParam;
+    NonlinearOptimization::NewtonSolver::SolverParam solverParam;
 
     ES::VXd u(n3);
     u.setZero();
 
     energyAll->printEnergy(u);
 
-    NonlinearOptimization::NewtonRaphsonSolver solver(u.data(), solverParam, energyAll, std::vector<int>(), nullptr);
+    NonlinearOptimization::NewtonSolver solver(u.data(), solverParam, energyAll, std::vector<int>(), nullptr);
     solver.solve(u.data(), solverMaxIter, solverEps, 2);
 
     ES::VXd x = restPosition + u;

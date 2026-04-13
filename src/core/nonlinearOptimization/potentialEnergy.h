@@ -35,6 +35,8 @@ public:
   virtual int isQuadratic() const { return 0; }
   virtual int hasHessianVector() const { return 0; }
   virtual int hasHessian() const { return 1; }
+
+  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const = 0;
 };
 
 typedef std::shared_ptr<PotentialEnergy> PotentialEnergy_p;
