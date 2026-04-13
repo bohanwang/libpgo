@@ -228,17 +228,17 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
 
     rhs *= -1.0;
 
-    std::cout << "      rhs: ";
-    for (int kk = 0; kk < 10; kk++) {
-      std::cout << rhs[kk] << ' ';
-    }
-    std::cout << std::endl;
+    // std::cout << "      rhs: ";
+    // for (int kk = 0; kk < 10; kk++) {
+    //   std::cout << rhs[kk] << ' ';
+    // }
+    // std::cout << std::endl;
 
-    std::cout << "      A11: ";
-    for (int kk = 0; kk < 10; kk++) {
-      std::cout << A11.valuePtr()[kk] << ' ';
-    }
-    std::cout << std::endl;
+    // std::cout << "      A11: ";
+    // for (int kk = 0; kk < 10; kk++) {
+    //   std::cout << A11.valuePtr()[kk] << ' ';
+    // }
+    // std::cout << std::endl;
 
     if (!energy->isHessianTopologyFixed() || solver == nullptr) {
 #if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
@@ -282,10 +282,10 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
       abort();
     }
 
-    for (int kk = 0; kk < 10; kk++) {
-      std::cout << deltax[kk] << ' ';
-    }
-    std::cout << std::endl;
+    // for (int kk = 0; kk < 10; kk++) {
+    //   std::cout << deltax[kk] << ' ';
+    // }
+    // std::cout << std::endl;
 
     // if (iter == 0)
     //   error0 = deltax.norm();
