@@ -1755,6 +1755,8 @@ void CIPCPotentialEnergy::computeGradient(const VXd &pos, EigenSupport::RefVecXd
   if (grad.size() != n)
     throw std::runtime_error("Gradient vector has wrong size");
 
+  grad.setZero();
+
   // Atomic scatter: accumulate a 12-vector into global gradient
   auto scatter = [&](const V12d &local, const int idx[4]) {
     double *gdata = grad.data();
@@ -1970,6 +1972,7 @@ void CIPCPotentialEnergy::computeHessian(const VXd &pos, SpMatD &hess) const
 
   hess.resize(n, n);
   hess.setFromTriplets(triplets.begin(), triplets.end());
+  SPDLOG_LOGGER_INFO(Logging::lgr(), "# nonzeros in Hessian: {}", hess.nonZeros());
 }
 
 // =========================================================================

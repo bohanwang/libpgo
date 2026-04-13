@@ -228,6 +228,18 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
 
     rhs *= -1.0;
 
+    std::cout << "      rhs: ";
+    for (int kk = 0; kk < 10; kk++) {
+      std::cout << rhs[kk] << ' ';
+    }
+    std::cout << std::endl;
+
+    std::cout << "      A11: ";
+    for (int kk = 0; kk < 10; kk++) {
+      std::cout << A11.valuePtr()[kk] << ' ';
+    }
+    std::cout << std::endl;
+
     if (!energy->isHessianTopologyFixed() || solver == nullptr) {
 #if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
       solver = std::make_shared<ES::EigenMKLPardisoSupport>(A11, ES::EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
@@ -269,6 +281,11 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
                 << std::endl;
       abort();
     }
+
+    for (int kk = 0; kk < 10; kk++) {
+      std::cout << deltax[kk] << ' ';
+    }
+    std::cout << std::endl;
 
     // if (iter == 0)
     //   error0 = deltax.norm();
@@ -341,7 +358,7 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
             break;
           }
 
-          alpha *= 0.75;
+          alpha *= 0.5;
         }
 
         if (verbose >= 2 && iter % printGap == 0) {
@@ -353,6 +370,7 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
         if (verbose >= 1) {
           std::cout << "    Iter=" << iter << "; line search failed. Times: " << lineSearchFailedTimes << std::endl;
           break;
+          // abort();
           // std::cout << "          Adding damping." << std::endl;
         }
 

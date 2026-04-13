@@ -1067,6 +1067,11 @@ EIGEN_SUPPORT_INLINE void pgo::EigenSupport::removeRowsCols(const SpMatD &Abig, 
 
 EIGEN_SUPPORT_INLINE void pgo::EigenSupport::removeRowsCols(const SpMatD &Abig, const std::vector<int> &removedRowDofs, const std::vector<int> &removedColDofs, SpMatD &mat)
 {
+  if (removedRowDofs.size() == 0 && removedColDofs.size() == 0) {
+    mat = Abig;
+    return;
+  }
+
   std::vector<int> dofMappingsRow(Abig.rows());
   std::vector<int> dofMappingsCol(Abig.cols());
 

@@ -205,7 +205,7 @@ public:
   double floorHeight = -1e-4;
   double floorKappa = 0.1;  // floor penalty stiffness (independent of kappa)
 
-  double slackness = 0.99;
+  double slackness = 1;  // for line search: require energy decrease by at least this fraction of predicted decrease
 
   // --- mesh setup -------------------------------------------------------
   //  V : #V x 3   vertex positions (only topology is stored here)

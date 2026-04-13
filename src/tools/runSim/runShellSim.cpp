@@ -112,7 +112,7 @@ int main(int argc, char *argv[])
 
   Mesh::BoundingBox surfaceBox(surfaceMesh.positions());
   double E = 1000000;
-  double h = 1e-3;
+  double h = 3e-3;
 
   // initialize fem
   std::shared_ptr<SolidDeformationModel::SimulationMesh> simMesh(SolidDeformationModel::loadShellMesh(surfaceMesh, &matParam));
@@ -371,7 +371,7 @@ int main(int argc, char *argv[])
 
       intg->setqState(u, uvel, uacc);
 
-      intg->doTimestep(1, 2, 1);
+      intg->doTimestep(1, 3, 1);
 
       intg->getq(u);
       intg->getqvel(uvel);
