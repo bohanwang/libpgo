@@ -119,7 +119,8 @@ int main(int argc, char *argv[])
   std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm = std::make_shared<SolidDeformationModel::DeformationModelManager>();
 
   dmm->setMesh(simMesh.get(), nullptr, nullptr);
-  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::SHELL_FF_DOF0, elasticMat, 1);
+  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::SHELL_FF_DOF0, elasticMat);
+  dmm->setEnforceSPD(1);
 
   std::vector<double> elementWeights(simMesh->getNumElements(), 1.0);
   std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> assembler =
