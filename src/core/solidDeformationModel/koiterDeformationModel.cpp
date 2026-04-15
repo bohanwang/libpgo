@@ -85,12 +85,12 @@ void KoiterDeformationModel::enableSPD(int enable)
 
 KoiterDeformationModel::KoiterDeformationModel(const double X0[3], const double X1[3], const double X2[3],
   const double X3[3], const double X4[3], const double X5[3],
-  ElasticModel *elasticModel, PlasticModel *plasticModel, int enableSPD):
+  ElasticModel *elasticModel, PlasticModel *plasticModel):
   SolidDeformationModel::DeformationModel(elasticModel, plasticModel)
 {
   ind = new KoiterDeformationModelInternal;
 
-  ind->enableSPD = enableSPD;
+  ind->enableSPD = 0;
 
   ind->restX[0] = ES::V3d(X0[0], X0[1], X0[2]);
   ind->restX[1] = ES::V3d(X1[0], X1[1], X1[2]);

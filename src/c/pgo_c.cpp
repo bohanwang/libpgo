@@ -674,7 +674,8 @@ int pgo_run_sim_from_config(const char *configFileName)
   std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm = std::make_shared<SolidDeformationModel::DeformationModelManager>();
 
   dmm->setMesh(simMesh.get(), nullptr, nullptr);
-  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, elasticMat, 1);
+  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, elasticMat);
+  dmm->setEnforceSPD(1);
 
   std::vector<double> elementWeights(simMesh->getNumElements(), 1.0);
   std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> assembler =

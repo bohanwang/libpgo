@@ -8,6 +8,7 @@ copyright to USC,MIT,NUS
 #include "simulationMesh.h"
 #include "deformationModel.h"
 #include "deformationModelManager.h"
+#include "tetMeshDeformationModel.h"
 
 // #include "elementLocalDirection.h"
 #include "tetMesh.h"
@@ -98,7 +99,7 @@ int SolidDeformationModel::fdTestTetMesh(const char *tetMeshFilename, int numTes
 
       std::shared_ptr<DeformationModelManager> dmm = std::make_shared<DeformationModelManager>();
       dmm->setMesh(mesh.get());
-      dmm->init(plasticMat, elasticMat, 0);
+      dmm->init(plasticMat, elasticMat);
 
       int nplastic = dmm->getNumPlasticParameters();
       int nelastic = 0;
@@ -147,7 +148,7 @@ int SolidDeformationModel::fdTestTetMesh(const char *tetMeshFilename, int numTes
         hclock::time_point t1 = hclock::now();
 
         for (int ele = 0; ele < numTestElements; ele++) {
-          const DeformationModel *fem = dmm->getDeformationModel(ele);
+          const TetMeshDeformationModel *fem = dynamic_cast<const TetMeshDeformationModel *>(dmm->getDeformationModel(ele));
           DeformationModelCacheData *cache = fem->allocateCacheData();
 
           for (int j = 0; j < 4; j++) {
@@ -433,7 +434,7 @@ int SolidDeformationModel::fdTestShellMesh(const char *surfaceMeshFilename, int 
 
       std::shared_ptr<DeformationModelManager> dmm = std::make_shared<DeformationModelManager>();
       dmm->setMesh(mesh.get());
-      dmm->init(plasticMat, elasticMat, 0);
+      dmm->init(plasticMat, elasticMat);
 
       int nplastic = dmm->getNumPlasticParameters();
       int nelastic = dmm->getNumElasticParameters();
@@ -478,7 +479,7 @@ int SolidDeformationModel::fdTestShellMesh(const char *surfaceMeshFilename, int 
         hclock::time_point t1 = hclock::now();
 
         for (int ele = 0; ele < numTestElements; ele++) {
-          const DeformationModel *fem = dmm->getDeformationModel(ele);
+          const TetMeshDeformationModel *fem = dynamic_cast<const TetMeshDeformationModel *>(dmm->getDeformationModel(ele));
           DeformationModelCacheData *cache = fem->allocateCacheData();
 
           for (int j = 0; j < mesh->getNumElementVertices(); j++) {
