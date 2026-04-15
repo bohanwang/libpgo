@@ -42,7 +42,7 @@ Do `pip install ./dist/your-chosen.whl` to install the package. Note that the pa
     Or it can be installed on Mac OS by
 
     ```bash
-        brew install gmp mpfr
+        brew install gmp mpfr imath
     ```
 
 4. (Optional) Ninja\
@@ -61,14 +61,14 @@ Do `pip install ./dist/your-chosen.whl` to install the package. Note that the pa
 
 Going forward, it is assumed that all specified prerequisites are installed and that a Conda environment is used for python.
 
-### Windows & Ubuntu
-
 Install prerequisites:
 
 ```bash
     conda install tbb tbb-devel mkl mkl-devel
     conda install conda-forge::imath
 ```
+
+### Windows & Ubuntu
 
 Install libpgo:
 

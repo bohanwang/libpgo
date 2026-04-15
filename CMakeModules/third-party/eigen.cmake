@@ -3,6 +3,7 @@ else()
   message(STATUS "Loading eigen...")
 
   set(BUILD_TESTING OFF CACHE BOOL "eigen build test" FORCE)
+  set(BUILD_EXAMPLES OFF CACHE BOOL "eigen build examples" FORCE)
   set(EIGEN_BUILD_CMAKE_PACKAGE ON CACHE BOOL "eigen build cmake package" FORCE)
 
   include(FetchContent)
