@@ -178,6 +178,43 @@ We provide three python scripts to test the installation.
         cd examples/box
         python ../../src/python/pypgo/pgo_dump_abc.py anim.json ./
     ```
+
+## Tools
+
+### Cubic Mesher
+
+`cubicMesher` converts a closed triangle surface mesh in `.obj` format into a cubic volumetric `.veg` mesh and can optionally export the extracted cubic surface as `.obj`.
+
+Build the tool:
+
+```bash
+    cmake --preset base_no_mkl_debug
+    cmake --build build/base_no_mkl_debug --target cubicMesher
+```
+
+Basic usage:
+
+```bash
+    build/base_no_mkl_debug/bin/cubicMesher \
+        --input-mesh examples/cubic/box/box.obj \
+        --resolution 4 \
+        --output-mesh examples/cubic/box/box.veg \
+        --output-surface examples/cubic/box/box-surface.obj \
+        --E 10000000 \
+        --nu 0.45 \
+        --density 1000
+```
+
+Main arguments:
+
+- `--input-mesh`: input closed triangle mesh in `.obj`
+- `--resolution`: number of cubic cells along the shortest input AABB edge
+- `--output-mesh`: output cubic `.veg`
+- `--output-surface`: optional extracted surface `.obj`
+- `--E`, `--nu`, `--density`: isotropic material parameters written into the output mesh
+
+Generated sample cubic assets are stored under `examples/cubic/`. See [`examples/cubic/README.md`](./examples/cubic/README.md) for the exact commands and parameters used for `box`, `bunny`, `dragon-dyn`, and `box-with-sphere`.
+
 ---
 
 ## Setup without Python (Optional)
