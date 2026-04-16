@@ -316,10 +316,9 @@ int main(int argc, char *argv[])
       std::filesystem::create_directories(outputFolder);
     }
 
-    int frameStart = 0;
+    int frameStart = -1;
     for (int framei = numSimSteps - 1; framei >= 0; framei--) {
       if (!std::filesystem::exists(fmt::format("{}/deform{:04d}.u", outputFolder, framei))) {
-        std::cerr << "Frame " << framei << " not found." << std::endl;
         continue;
       }
 
@@ -334,10 +333,15 @@ int main(int argc, char *argv[])
       }
     }
 
+    if (frameStart < 0) {
+      std::cout << "No restart state found in " << outputFolder << ". Starting from frame 0." << std::endl;
+    }
+
     ES::mv(W, u, usurf);
 
-    std::cout << frameStart << std::endl;
+# ifdef NDEBUG
     std::cin.get();
+# endif
 
     for (size_t eobji = 0; eobji < kinematicObjects.size(); eobji++) {
       ES::V3d movement = kinematicObjectMovements[eobji] / (numSimSteps - 1) * (frameStart + 1);
