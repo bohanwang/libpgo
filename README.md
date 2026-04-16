@@ -140,8 +140,7 @@ We provide three python scripts to test the installation.
 2. `pgo_run_sim.py`. It reads input config file and run simulation. You can try `box`, `box-with-sphere`, `dragon`, and `dragon-dyn` to test different simulation results. Take the box example for illustration. You can run the box example using the following commands.
    
     ```bash
-        cd examples/box
-        python ../../src/python/pypgo/pgo_run_sim.py box.json
+        python src/python/pypgo/pgo_run_sim.py examples/box/box.json
     ```
 
     The expected result will look like the first image. The time integrator is hard-coded as implicit backward Euler (BE). You are free to change it to implicit Newmark (NW) or TR-BDF2 integrator (not support friction).
@@ -175,8 +174,7 @@ We provide three python scripts to test the installation.
 3. `pgo_dump_abc.py`. It creates the abc file that can be used for blender/maya from config file `anim.json`. Essentially, it takes the simulation output `.obj` sequences and output a `.abc` file.
 
     ```bash
-        cd examples/box
-        python ../../src/python/pypgo/pgo_dump_abc.py anim.json ./
+        python src/python/pypgo/pgo_dump_abc.py examples/box/anim.json examples/box/
     ```
 
 ## Tools

@@ -7,6 +7,7 @@ copyright to MIT, USC
 
 #include <nlohmann/json.hpp>
 
+#include <filesystem>
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -29,10 +30,14 @@ public:
   float getFloat(const char *key, int forceExistance = 0) const { return getValue<float>(key, forceExistance); }
   double getDouble(const char *key, int forceExistance = 0) const { return getValue<double>(key, forceExistance); }
   std::string getString(const char *key, int forceExistance = 0) const { return getValue<std::string>(key, forceExistance); }
+  std::string getResolvedPath(const char *key, int forceExistance = 0, const std::string &default_value = "") const;
   std::vector<int> getVectorInt(const char *key, int forceExistance = 0) const { return getValue<std::vector<int>>(key, forceExistance); }
   std::vector<double> getVectorDouble(const char *key, int forceExistance = 0) const { return getValue<std::vector<double>>(key, forceExistance); }
   std::vector<std::string> getVectorString(const char *key, int forceExistance = 0) const { return getValue<std::vector<std::string>>(key, forceExistance); }
   std::vector<std::string> getVectorPath(const char *key, int forceExistance = 0) const;
+  std::string resolvePath(const std::string &pathString) const;
+  const std::string &getConfigFilename() const { return configFilename; }
+  const std::string &getConfigDirectory() const { return configDirectory; }
 
   template<typename T>
   nlohmann::json::reference operator[](T &&key);
@@ -55,6 +60,8 @@ protected:
   std::ptrdiff_t findMatchedToken(const std::string &str, std::ptrdiff_t start, char tkLeft, char tkRight) const;
 
   nlohmann::json j;
+  std::string configFilename;
+  std::string configDirectory;
 };
 
 template<typename T>

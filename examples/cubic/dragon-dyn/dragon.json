@@ -1,6 +1,6 @@
 {
   "cubic-mesh": "dragon.veg",
-  "surface-mesh": "dragon-surface.obj",
+  "surface-mesh": "dragon.obj",
   "fixed-vertices": [],
   "external-objects": [
     {

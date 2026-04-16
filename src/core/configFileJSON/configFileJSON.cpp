@@ -15,6 +15,7 @@ copyright to MIT, USC
 #include <sstream>
 
 using namespace pgo;
+namespace fs = std::filesystem;
 
 ConfigFileJSON::ConfigFileJSON()
 {
@@ -133,6 +134,10 @@ bool ConfigFileJSON::open(const char *filename)
   }
 
   try {
+    const fs::path absoluteConfigPath = fs::absolute(fs::path(filename)).lexically_normal();
+    configFilename = absoluteConfigPath.string();
+    configDirectory = absoluteConfigPath.parent_path().string();
+
     std::string line;
     std::stringstream ss;
 
@@ -153,6 +158,11 @@ bool ConfigFileJSON::open(const char *filename)
   }
 
   return true;
+}
+
+std::string ConfigFileJSON::getResolvedPath(const char *key, int forceExistance, const std::string &default_value) const
+{
+  return resolvePath(getValue<std::string>(key, forceExistance, default_value));
 }
 
 std::string ConfigFileJSON::getPathFromKey(const char *key, const char *token, const char *dir)
@@ -177,9 +187,27 @@ std::string ConfigFileJSON::getPathFromInput(const char *pathString, const char 
   return std::regex_replace(pathString, re, dir);
 }
 
+std::string ConfigFileJSON::resolvePath(const std::string &pathString) const
+{
+  if (pathString.empty())
+    return pathString;
+
+  fs::path rawPath(pathString);
+  if (rawPath.is_absolute())
+    return rawPath.lexically_normal().string();
+
+  if (configDirectory.empty())
+    return rawPath.lexically_normal().string();
+
+  return (fs::path(configDirectory) / rawPath).lexically_normal().string();
+}
+
 std::vector<std::string> ConfigFileJSON::getVectorPath(const char *key, int forceExistance) const
 {
   std::vector<std::string> paths = getVectorString(key, forceExistance);
+  for (std::string &path : paths) {
+    path = resolvePath(path);
+  }
 
   return paths;
 }

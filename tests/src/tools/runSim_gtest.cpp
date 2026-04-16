@@ -27,6 +27,7 @@ using pgo::VolumetricMeshes::VolumetricMesh;
 constexpr const char *kTetBoxVegPath = LIBPGO_TEST_TET_BOX_VEG;
 constexpr const char *kTetBoxObjPath = LIBPGO_TEST_TET_BOX_OBJ;
 constexpr const char *kCubicBoxVegPath = LIBPGO_TEST_CUBIC_BOX_VEG;
+constexpr const char *kCubicBoxObjPath = LIBPGO_TEST_CUBIC_BOX_OBJ;
 
 fs::path tetExampleDir()
 {
@@ -48,16 +49,16 @@ std::string cubicConfigPath()
   return (cubicExampleDir() / "box.json").string();
 }
 
-std::string cubicSurfaceObjPath()
-{
-  return (cubicExampleDir() / "box-surface.obj").string();
-}
-
 VolumeMeshInputConfig parseConfig(const char *key, const char *filename, const std::string &configFilename)
 {
   pgo::ConfigFileJSON config;
+  if (!config.open(configFilename.c_str())) {
+    throw std::runtime_error("Failed to open test config: " + configFilename);
+  }
+  config.handle().erase("tet-mesh");
+  config.handle().erase("cubic-mesh");
   config.handle()[key] = filename;
-  return pgo::RunSim::parseVolumeMeshInputConfig(config, configFilename);
+  return pgo::RunSim::parseVolumeMeshInputConfig(config);
 }
 
 void expectInvalidArgumentContaining(const std::function<void()> &fn, const std::string &needle)
@@ -83,18 +84,20 @@ void expectScaledBoundingBox(const VolumetricMesh &referenceMesh, const Volumetr
 
 ResolvedRunSimPaths resolvePaths(const pgo::ConfigFileJSON &config, const std::string &configFilename)
 {
-  return pgo::RunSim::resolveRunSimPaths(config, configFilename);
+  (void)configFilename;
+  return pgo::RunSim::resolveRunSimPaths(config);
 }
 
 void expectCommonPreprocessingWorks(const std::string &configFilename, const char *meshKey, const char *meshPath,
   const char *surfacePath, VolumetricMesh::elementType expectedType)
 {
   pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configFilename.c_str()));
   config.handle()[meshKey] = meshPath;
   config.handle()["surface-mesh"] = surfacePath;
   config.handle()["output"] = "ret-test";
 
-  const VolumeMeshInputConfig meshConfig = pgo::RunSim::parseVolumeMeshInputConfig(config, configFilename);
+  const VolumeMeshInputConfig meshConfig = pgo::RunSim::parseVolumeMeshInputConfig(config);
   const ResolvedRunSimPaths paths = resolvePaths(config, configFilename);
   std::unique_ptr<VolumetricMesh> volumetricMesh = pgo::RunSim::loadValidatedVolumeMesh(meshConfig, 1.0);
   ASSERT_NE(volumetricMesh, nullptr);
@@ -157,19 +160,23 @@ TEST(RunSimVolumeMeshIOGTest, AcceptsCubicMeshKey)
 TEST(RunSimVolumeMeshIOGTest, RejectsMissingVolumeMeshKey)
 {
   pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(tetConfigPath().c_str()));
+  config.handle().erase("tet-mesh");
+  config.handle().erase("cubic-mesh");
   expectInvalidArgumentContaining(
-    [&]() { (void)pgo::RunSim::parseVolumeMeshInputConfig(config, tetConfigPath()); },
+    [&]() { (void)pgo::RunSim::parseVolumeMeshInputConfig(config); },
     "exactly one");
 }
 
 TEST(RunSimVolumeMeshIOGTest, RejectsDuplicateVolumeMeshKeys)
 {
   pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(tetConfigPath().c_str()));
   config.handle()["tet-mesh"] = kTetBoxVegPath;
   config.handle()["cubic-mesh"] = kCubicBoxVegPath;
 
   expectInvalidArgumentContaining(
-    [&]() { (void)pgo::RunSim::parseVolumeMeshInputConfig(config, tetConfigPath()); },
+    [&]() { (void)pgo::RunSim::parseVolumeMeshInputConfig(config); },
     "exactly one");
 }
 
@@ -192,14 +199,15 @@ TEST(RunSimVolumeMeshIOGTest, RejectsCubicFileBoundToTetKey)
 TEST(RunSimVolumeMeshIOGTest, ResolvesCubicExamplePathsAgainstConfigDirectory)
 {
   pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(cubicConfigPath().c_str()));
   config.handle()["cubic-mesh"] = "box.veg";
-  config.handle()["surface-mesh"] = "box-surface.obj";
+  config.handle()["surface-mesh"] = "box.obj";
   config.handle()["output"] = "ret-cubic-box";
   config.handle()["fixed-vertices"] = nlohmann::json::array({ { { "filename", "fixed.txt" }, { "movement", { 0.0, 0.0, 0.0 } }, { "coeff", 1.0 } } });
   config.handle()["external-objects"] = nlohmann::json::array({ { { "filename", "../../bottom.obj" }, { "movement", { 0.0, 0.0, 0.0 } } } });
 
   const ResolvedRunSimPaths paths = resolvePaths(config, cubicConfigPath());
-  EXPECT_EQ(paths.surfaceMeshFilename, cubicSurfaceObjPath());
+  EXPECT_EQ(paths.surfaceMeshFilename, kCubicBoxObjPath);
   EXPECT_EQ(paths.outputPath, (cubicExampleDir() / "ret-cubic-box").string());
   ASSERT_EQ(paths.fixedVertexFilenames.size(), 1u);
   EXPECT_EQ(paths.fixedVertexFilenames[0], (cubicExampleDir() / "fixed.txt").string());
@@ -210,6 +218,7 @@ TEST(RunSimVolumeMeshIOGTest, ResolvesCubicExamplePathsAgainstConfigDirectory)
 TEST(RunSimVolumeMeshIOGTest, ResolvesLegacyTetExamplePathsAgainstConfigDirectory)
 {
   pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(tetConfigPath().c_str()));
   config.handle()["tet-mesh"] = "box.veg";
   config.handle()["surface-mesh"] = "box.obj";
   config.handle()["output"] = "ret-box";
@@ -225,5 +234,5 @@ TEST(RunSimVolumeMeshIOGTest, ResolvesLegacyTetExamplePathsAgainstConfigDirector
 TEST(RunSimVolumeMeshIOGTest, BuildsCommonPreprocessingForTetAndCubic)
 {
   expectCommonPreprocessingWorks(tetConfigPath(), "tet-mesh", "box.veg", "box.obj", VolumetricMesh::TET);
-  expectCommonPreprocessingWorks(cubicConfigPath(), "cubic-mesh", "box.veg", "box-surface.obj", VolumetricMesh::CUBIC);
+  expectCommonPreprocessingWorks(cubicConfigPath(), "cubic-mesh", "box.veg", "box.obj", VolumetricMesh::CUBIC);
 }

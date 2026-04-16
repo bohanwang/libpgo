@@ -1,6 +1,6 @@
 {
   "cubic-mesh": "bunny.veg",
-  "surface-mesh": "bunny-surface.obj",
+  "surface-mesh": "bunny.obj",
   "fixed-vertices": [],
   "external-objects": [
     {

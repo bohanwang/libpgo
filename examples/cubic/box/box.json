@@ -1,6 +1,6 @@
 {
   "cubic-mesh": "box.veg",
-  "surface-mesh": "box-surface.obj",
+  "surface-mesh": "box.obj",
   "fixed-vertices": [],
   "external-objects": [
     {

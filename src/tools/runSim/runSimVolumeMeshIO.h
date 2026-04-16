@@ -24,15 +24,14 @@ struct VolumeMeshInputConfig
 
 struct ResolvedRunSimPaths
 {
-  std::string configDirectory;
   std::string surfaceMeshFilename;
   std::string outputPath;
   std::vector<std::string> fixedVertexFilenames;
   std::vector<std::string> externalObjectFilenames;
 };
 
-VolumeMeshInputConfig parseVolumeMeshInputConfig(const ConfigFileJSON &jconfig, const std::string &configFilename);
-ResolvedRunSimPaths resolveRunSimPaths(const ConfigFileJSON &jconfig, const std::string &configFilename);
+VolumeMeshInputConfig parseVolumeMeshInputConfig(const ConfigFileJSON &jconfig);
+ResolvedRunSimPaths resolveRunSimPaths(const ConfigFileJSON &jconfig);
 std::unique_ptr<VolumetricMeshes::VolumetricMesh> loadValidatedVolumeMesh(const VolumeMeshInputConfig &config, double scale);
 }  // namespace RunSim
 }  // namespace pgo

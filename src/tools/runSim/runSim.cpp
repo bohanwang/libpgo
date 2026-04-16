@@ -122,8 +122,8 @@ int main(int argc, char *argv[])
 
   std::unique_ptr<VolumetricMeshes::VolumetricMesh> volumetricMesh;
   try {
-    resolvedPaths = RunSim::resolveRunSimPaths(jconfig, configFilename);
-    volumetricMesh = RunSim::loadValidatedVolumeMesh(RunSim::parseVolumeMeshInputConfig(jconfig, configFilename), scale);
+    resolvedPaths = RunSim::resolveRunSimPaths(jconfig);
+    volumetricMesh = RunSim::loadValidatedVolumeMesh(RunSim::parseVolumeMeshInputConfig(jconfig), scale);
   }
   catch (const std::exception &err) {
     SPDLOG_LOGGER_ERROR(Logging::lgr(), "{}", err.what());

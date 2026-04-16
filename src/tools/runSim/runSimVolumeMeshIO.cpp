@@ -7,7 +7,6 @@
 
 #include <fmt/format.h>
 
-#include <filesystem>
 #include <stdexcept>
 
 namespace pgo::RunSim
@@ -15,7 +14,6 @@ namespace pgo::RunSim
 namespace
 {
 using VolumetricMesh = pgo::VolumetricMeshes::VolumetricMesh;
-namespace fs = std::filesystem;
 
 std::string elementTypeName(VolumetricMesh::elementType type)
 {
@@ -28,31 +26,12 @@ std::string elementTypeName(VolumetricMesh::elementType type)
     return "invalid";
   }
 }
-
-std::string getConfigDirectory(const std::string &configFilename)
-{
-  const fs::path absoluteConfigPath = fs::absolute(fs::path(configFilename));
-  return absoluteConfigPath.parent_path().lexically_normal().string();
 }
 
-std::string resolveRunSimPath(const std::string &pathString, const std::string &configDirectory)
-{
-  if (pathString.empty())
-    return pathString;
-
-  const fs::path rawPath(pathString);
-  if (rawPath.is_absolute())
-    return rawPath.lexically_normal().string();
-
-  return (fs::path(configDirectory) / rawPath).lexically_normal().string();
-}
-}
-
-VolumeMeshInputConfig parseVolumeMeshInputConfig(const ConfigFileJSON &jconfig, const std::string &configFilename)
+VolumeMeshInputConfig parseVolumeMeshInputConfig(const ConfigFileJSON &jconfig)
 {
   const bool hasTetMesh = jconfig.exist("tet-mesh");
   const bool hasCubicMesh = jconfig.exist("cubic-mesh");
-  const std::string configDirectory = getConfigDirectory(configFilename);
 
   if (hasTetMesh == hasCubicMesh) {
     throw std::invalid_argument("runSim expects exactly one of \"tet-mesh\" or \"cubic-mesh\".");
@@ -61,34 +40,33 @@ VolumeMeshInputConfig parseVolumeMeshInputConfig(const ConfigFileJSON &jconfig, 
   VolumeMeshInputConfig config;
   if (hasTetMesh) {
     config.configKey = "tet-mesh";
-    config.meshFilename = resolveRunSimPath(jconfig.getString("tet-mesh", 1), configDirectory);
+    config.meshFilename = jconfig.getResolvedPath("tet-mesh", 1);
     config.expectedElementType = VolumetricMesh::TET;
   }
   else {
     config.configKey = "cubic-mesh";
-    config.meshFilename = resolveRunSimPath(jconfig.getString("cubic-mesh", 1), configDirectory);
+    config.meshFilename = jconfig.getResolvedPath("cubic-mesh", 1);
     config.expectedElementType = VolumetricMesh::CUBIC;
   }
 
   return config;
 }
 
-ResolvedRunSimPaths resolveRunSimPaths(const ConfigFileJSON &jconfig, const std::string &configFilename)
+ResolvedRunSimPaths resolveRunSimPaths(const ConfigFileJSON &jconfig)
 {
   ResolvedRunSimPaths paths;
-  paths.configDirectory = getConfigDirectory(configFilename);
-  paths.surfaceMeshFilename = resolveRunSimPath(jconfig.getString("surface-mesh", 1), paths.configDirectory);
-  paths.outputPath = resolveRunSimPath(jconfig.getString("output", 1), paths.configDirectory);
+  paths.surfaceMeshFilename = jconfig.getResolvedPath("surface-mesh", 1);
+  paths.outputPath = jconfig.getResolvedPath("output", 1);
 
   if (jconfig.exist("fixed-vertices")) {
     for (const auto &fv : jconfig.handle()["fixed-vertices"]) {
-      paths.fixedVertexFilenames.push_back(resolveRunSimPath(fv["filename"].get<std::string>(), paths.configDirectory));
+      paths.fixedVertexFilenames.push_back(jconfig.resolvePath(fv["filename"].get<std::string>()));
     }
   }
 
   if (jconfig.exist("external-objects")) {
     for (const auto &jko : jconfig.handle()["external-objects"]) {
-      paths.externalObjectFilenames.push_back(resolveRunSimPath(jko["filename"].get<std::string>(), paths.configDirectory));
+      paths.externalObjectFilenames.push_back(jconfig.resolvePath(jko["filename"].get<std::string>()));
     }
   }
 

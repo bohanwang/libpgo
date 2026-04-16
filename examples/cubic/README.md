@@ -11,6 +11,8 @@ Each case lives under `examples/cubic/<case>/` and contains:
 - the extracted cubic surface mesh `.obj`
 - a companion `runSim` config `.json`
 
+The companion JSON files use the original input `.obj` as `surface-mesh`. The extracted `*-surface.obj` files are kept as generated artifacts from `cubicMesher`, not as the default display mesh in the current `runSim` configs.
+
 Current `runSim` expectation for these JSON files:
 
 - input loading succeeds
