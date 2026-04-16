@@ -71,8 +71,7 @@ int main(int argc, char *argv[])
     return 0;
   }
 
-  // surface mesh filename
-  std::string surfaceMeshFilename = jconfig.getString("surface-mesh", 1);
+  RunSim::ResolvedRunSimPaths resolvedPaths;
 
   // external acceleration
   ES::V3d extAcc = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("g", 1).data());
@@ -119,18 +118,19 @@ int main(int argc, char *argv[])
 
   // sim type
   std::string simType = jconfig.getString("sim-type");
-
-  // output
-  std::string outputFolder = jconfig.getString("output", 1);
+  std::string outputFolder;
 
   std::unique_ptr<VolumetricMeshes::VolumetricMesh> volumetricMesh;
   try {
-    volumetricMesh = RunSim::loadValidatedVolumeMesh(RunSim::parseVolumeMeshInputConfig(jconfig), scale);
+    resolvedPaths = RunSim::resolveRunSimPaths(jconfig, configFilename);
+    volumetricMesh = RunSim::loadValidatedVolumeMesh(RunSim::parseVolumeMeshInputConfig(jconfig, configFilename), scale);
   }
   catch (const std::exception &err) {
     SPDLOG_LOGGER_ERROR(Logging::lgr(), "{}", err.what());
     return 1;
   }
+  std::string surfaceMeshFilename = resolvedPaths.surfaceMeshFilename;
+  outputFolder = resolvedPaths.outputPath;
 
   Mesh::TriMeshGeo surfaceMesh;
   if (surfaceMesh.load(surfaceMeshFilename) != true)
@@ -216,8 +216,9 @@ int main(int argc, char *argv[])
   std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> pullingEnergies;
   std::vector<ES::VXd> pullingTargets, pullingTargetRests;
   Mesh::TriMeshGeo tempMesh;
+  int fixedVertexFileIndex = 0;
   for (const auto &fv : jconfig.handle()["fixed-vertices"]) {
-    std::string filename = fv["filename"].get<std::string>();
+    std::string filename = resolvedPaths.fixedVertexFilenames[fixedVertexFileIndex++];
     std::array<double, 3> movement = fv["movement"].get<std::array<double, 3>>();
     double attachmentCoeff = fv["coeff"].get<double>();
 
@@ -249,8 +250,9 @@ int main(int argc, char *argv[])
   std::vector<ES::V3d> kinematicObjectMovements;
   if (jconfig.exist("external-objects")) {
     auto jkinObjects = jconfig.handle()["external-objects"];
+    int kinematicObjectFileIndex = 0;
     for (const auto &jko : jkinObjects) {
-      std::string koFilename = jko["filename"].get<std::string>();
+      std::string koFilename = resolvedPaths.externalObjectFilenames[kinematicObjectFileIndex++];
       kinematicObjectFilenames.push_back(koFilename);
       kinematicObjectMovements.push_back(ES::Mp<ES::V3d>(jko["movement"].get<std::array<double, 3>>().data()));
     }

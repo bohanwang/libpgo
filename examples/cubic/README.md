@@ -9,6 +9,13 @@ Each case lives under `examples/cubic/<case>/` and contains:
 - the input surface mesh `.obj`
 - the generated cubic volumetric mesh `.veg`
 - the extracted cubic surface mesh `.obj`
+- a companion `runSim` config `.json`
+
+Current `runSim` expectation for these JSON files:
+
+- input loading succeeds
+- cubic preprocessing succeeds
+- execution then stops at the current phase gate because the cubic FEM path is not enabled until phases `2B/2C`
 
 ## Generator
 
@@ -37,6 +44,7 @@ Files:
 - `examples/cubic/box/box.obj`
 - `examples/cubic/box/box.veg`
 - `examples/cubic/box/box-surface.obj`
+- `examples/cubic/box/box.json`
 
 Parameters:
 
@@ -63,6 +71,10 @@ Observed output:
 - `125` vertices
 - `64` elements
 
+Run config:
+
+- `runSim examples/cubic/box/box.json`
+
 ### bunny
 
 Files:
@@ -70,6 +82,7 @@ Files:
 - `examples/cubic/bunny/bunny.obj`
 - `examples/cubic/bunny/bunny.veg`
 - `examples/cubic/bunny/bunny-surface.obj`
+- `examples/cubic/bunny/bunny.json`
 
 Parameters:
 
@@ -96,6 +109,10 @@ Observed output:
 - `6084` vertices
 - `4695` elements
 
+Run config:
+
+- `runSim examples/cubic/bunny/bunny.json`
+
 ### dragon-dyn
 
 Files:
@@ -103,6 +120,7 @@ Files:
 - `examples/cubic/dragon-dyn/dragon.obj`
 - `examples/cubic/dragon-dyn/dragon.veg`
 - `examples/cubic/dragon-dyn/dragon-surface.obj`
+- `examples/cubic/dragon-dyn/dragon.json`
 
 Parameters:
 
@@ -129,6 +147,10 @@ Observed output:
 - `10495` vertices
 - `7503` elements
 
+Run config:
+
+- `runSim examples/cubic/dragon-dyn/dragon.json`
+
 ### box-with-sphere
 
 Files:
@@ -136,6 +158,7 @@ Files:
 - `examples/cubic/box-with-sphere/box-with-sphere.obj`
 - `examples/cubic/box-with-sphere/box-with-sphere.veg`
 - `examples/cubic/box-with-sphere/box-with-sphere-surface.obj`
+- `examples/cubic/box-with-sphere/box-with-sphere.json`
 
 Parameters:
 
@@ -161,3 +184,7 @@ Observed output:
 
 - `57366` vertices
 - `51845` elements
+
+Run config:
+
+- `runSim examples/cubic/box-with-sphere/box-with-sphere.json`

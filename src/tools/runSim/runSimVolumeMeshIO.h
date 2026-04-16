@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace pgo
 {
@@ -21,7 +22,17 @@ struct VolumeMeshInputConfig
   int expectedElementType = -1;
 };
 
-VolumeMeshInputConfig parseVolumeMeshInputConfig(const ConfigFileJSON &jconfig);
+struct ResolvedRunSimPaths
+{
+  std::string configDirectory;
+  std::string surfaceMeshFilename;
+  std::string outputPath;
+  std::vector<std::string> fixedVertexFilenames;
+  std::vector<std::string> externalObjectFilenames;
+};
+
+VolumeMeshInputConfig parseVolumeMeshInputConfig(const ConfigFileJSON &jconfig, const std::string &configFilename);
+ResolvedRunSimPaths resolveRunSimPaths(const ConfigFileJSON &jconfig, const std::string &configFilename);
 std::unique_ptr<VolumetricMeshes::VolumetricMesh> loadValidatedVolumeMesh(const VolumeMeshInputConfig &config, double scale);
 }  // namespace RunSim
 }  // namespace pgo
