@@ -30,6 +30,10 @@ option(PGO_ENABLE_GMSH "Enable GMSH support" OFF)
 
 project(libpgo LANGUAGES CXX C)
 
+include(CTest)
+set(PGO_BUILD_TESTING ${BUILD_TESTING})
+set(BUILD_TESTING OFF CACHE BOOL "Disable third-party tests during dependency configuration" FORCE)
+
 set(PGO_CLANGD_BUILD_DIR "${CMAKE_SOURCE_DIR}/build")
 set(PGO_CLANGD_COMPILE_COMMANDS "${PGO_CLANGD_BUILD_DIR}/compile_commands.json")
 
@@ -404,6 +408,13 @@ function(add_libpgo_tools tgt sources deps)
 endfunction()
 
 add_subdirectory(src)
+
+set(BUILD_TESTING ${PGO_BUILD_TESTING} CACHE BOOL "Enable testing" FORCE)
+
+if(BUILD_TESTING)
+  message(STATUS "Testing enabled.")
+  add_subdirectory(tests)
+endif()
 
 if(PGO_BUILD_SUBPROJECTS)
   add_subdirectory(projects)
