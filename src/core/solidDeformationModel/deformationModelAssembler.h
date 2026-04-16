@@ -46,16 +46,15 @@ protected:
   std::shared_ptr<const DeformationModelManager> deformationModelManager;
   DeformationModelAssemblerCacheData *data;
 
-  int n3, nele, nvtx, neleVtx;
+  int n3, nele, nvtx, neleVtx, localDOFs;
   int numElasticParams = 0;
   int numPlasticParams = 0;
 
-  typedef Eigen::Matrix<std::ptrdiff_t, 24, 24> IndexMatrix;
   typedef Eigen::Matrix<std::ptrdiff_t, Eigen::Dynamic, Eigen::Dynamic> DynamicIndexMatrix;
 
   EigenSupport::VXd restPositions;
   EigenSupport::SpMatD KTemplate, dfdaTemplate, dfdbTemplate;
-  std::vector<IndexMatrix> elementKInverseIndices, element_dfda_InverseIndices, element_dfdb_InverseIndices;
+  std::vector<DynamicIndexMatrix> elementKInverseIndices, element_dfda_InverseIndices, element_dfdb_InverseIndices;
 
   std::vector<double> elementFlags;
   std::vector<const DeformationModel *> femModels;
