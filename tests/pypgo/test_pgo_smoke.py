@@ -88,12 +88,17 @@ def test_python_api_smoke_workflow():
         gradient_mats = pypgo.create_tet_gradient_per_element_matrix(tetmesh)
         assert gradient_mats.ndim == 3
         assert gradient_mats.shape[0] == repeated_tets.shape[0]
-        assert sorted(gradient_mats.shape[1:]) == [3, 4]
+        # The C API fills a 9x12 element gradient matrix in Eigen's column-major
+        # storage, and the Python binding exposes that buffer as a C-contiguous
+        # (12, 9) array for each tet. Transposing recovers the mathematical 9x12
+        # element gradient used throughout libpgo.
+        assert gradient_mats.shape[1:] == (12, 9)
         assert np.isfinite(gradient_mats).all()
 
         first_gradient = np.transpose(gradient_mats[0, :, :])
-        assert first_gradient.shape in {(3, 4), (4, 3)}
+        assert first_gradient.shape == (9, 12)
         assert np.isfinite(first_gradient).all()
+        assert np.max(np.abs(first_gradient)) > 0
         assert repeated_vertices.shape[0] == vertices.shape[0] * 10
     finally:
         pypgo.destroy_tetmeshgeo(tetmesh)
