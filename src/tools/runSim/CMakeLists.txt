@@ -6,7 +6,7 @@ foreach(lib ${PGO_GLOBAL_LIBRARY_TARGETS})
   endif()
 endforeach()
 
-add_libpgo_tools(runSim runSim.cpp "${AVAILABLE_LIBS}")
+add_libpgo_tools(runSim "runSim.cpp;runSimVolumeMeshIO.cpp" "${AVAILABLE_LIBS}")
 
 target_link_libraries(runSim PRIVATE argparse::argparse)
 

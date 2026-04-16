@@ -3,6 +3,7 @@
 #include "initPredicates.h"
 #include "triMeshGeo.h"
 #include "generateTetMeshMatrix.h"
+#include "volumetricMesh.h"
 #include "tetMesh.h"
 #include "pgoLogging.h"
 #include "geometryQuery.h"
@@ -27,6 +28,7 @@
 #include "NewtonSolver.h"
 #include "createTriMesh.h"
 #include "finiteDifference.h"
+#include "runSimVolumeMeshIO.h"
 
 #include <argparse/argparse.hpp>
 
@@ -68,9 +70,6 @@ int main(int argc, char *argv[])
   if (jconfig.open(configFilename.c_str()) != true) {
     return 0;
   }
-
-  // tet mesh filename
-  std::string tetMeshFilename = jconfig.getString("tet-mesh", 1);
 
   // surface mesh filename
   std::string surfaceMeshFilename = jconfig.getString("surface-mesh", 1);
@@ -124,9 +123,13 @@ int main(int argc, char *argv[])
   // output
   std::string outputFolder = jconfig.getString("output", 1);
 
-  VolumetricMeshes::TetMesh tetMesh(tetMeshFilename.c_str());
-  for (int vi = 0; vi < tetMesh.getNumVertices(); vi++) {
-    tetMesh.setVertex(vi, tetMesh.getVertex(vi) * scale);
+  std::unique_ptr<VolumetricMeshes::VolumetricMesh> volumetricMesh;
+  try {
+    volumetricMesh = RunSim::loadValidatedVolumeMesh(RunSim::parseVolumeMeshInputConfig(jconfig), scale);
+  }
+  catch (const std::exception &err) {
+    SPDLOG_LOGGER_ERROR(Logging::lgr(), "{}", err.what());
+    return 1;
   }
 
   Mesh::TriMeshGeo surfaceMesh;
@@ -145,11 +148,26 @@ int main(int argc, char *argv[])
   }
 
   // initialize interpolation weights
-  InterpolationCoordinates::BarycentricCoordinates bc(surfaceMesh.numVertices(), surfaceRestPositions.data(), &tetMesh);
+  InterpolationCoordinates::BarycentricCoordinates bc(surfaceMesh.numVertices(), surfaceRestPositions.data(), volumetricMesh.get());
   ES::SpMatD W = bc.generateInterpolationMatrix();
 
+  ES::SpMatD M;
+  VolumetricMeshes::GenerateMassMatrix::computeMassMatrix(volumetricMesh.get(), M, true);
+
+  if (volumetricMesh->getElementType() == VolumetricMeshes::VolumetricMesh::CUBIC) {
+    SPDLOG_LOGGER_ERROR(Logging::lgr(),
+      "cubic volumetric mesh preprocessing is available, but runSim cubic FEM path is not enabled until phases 2B/2C.");
+    return 1;
+  }
+
+  const auto *tetMesh = dynamic_cast<const VolumetricMeshes::TetMesh *>(volumetricMesh.get());
+  if (!tetMesh) {
+    SPDLOG_LOGGER_ERROR(Logging::lgr(), "Expected a TetMesh after volumetric mesh type validation.");
+    return 1;
+  }
+
   // initialize fem
-  std::shared_ptr<SolidDeformationModel::SimulationMesh> simMesh(SolidDeformationModel::loadTetMesh(&tetMesh));
+  std::shared_ptr<SolidDeformationModel::SimulationMesh> simMesh(SolidDeformationModel::loadTetMesh(tetMesh));
   std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm = std::make_shared<SolidDeformationModel::DeformationModelManager>();
 
   dmm->setMesh(simMesh.get(), nullptr, nullptr);
@@ -237,9 +255,6 @@ int main(int argc, char *argv[])
       kinematicObjectMovements.push_back(ES::Mp<ES::V3d>(jko["movement"].get<std::array<double, 3>>().data()));
     }
   }
-
-  ES::SpMatD M;
-  VolumetricMeshes::GenerateMassMatrix::computeMassMatrix(&tetMesh, M, true);
 
   // initialize gravity
   ES::VXd g(n3);
