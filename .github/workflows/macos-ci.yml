@@ -11,8 +11,8 @@ on:
 
 jobs:
   python-build-and-test:
-    name: Python Build and Smoke Test
-    runs-on: macos-14
+    name: Python Build and Test
+    runs-on: macos-15
     timeout-minutes: 120
 
     defaults:
@@ -66,8 +66,8 @@ jobs:
         run: pytest -q tests/pypgo
 
   cmake-build:
-    name: CMake Preset Build
-    runs-on: macos-14
+    name: CMake Preset Build and Test
+    runs-on: macos-15
     timeout-minutes: 120
 
     defaults:
