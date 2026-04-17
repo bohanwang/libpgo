@@ -23,6 +23,8 @@ using pgo::SolidDeformationModel::DeformationModelPlasticMaterial;
 using pgo::SolidDeformationModel::PlasticModel3DDeformationGradient;
 using pgo::SolidDeformationModel::SimulationMesh;
 using pgo::SolidDeformationModel::SimulationMeshENuhMaterial;
+using pgo::SolidDeformationModel::SimulationMeshENuMaterial;
+using pgo::SolidDeformationModel::SimulationMeshType;
 
 constexpr const char *kTorusVegPath = LIBPGO_TEST_TORUS_VEG;
 constexpr const char *kShellObjPath = LIBPGO_TEST_SHELL_OBJ;
@@ -58,6 +60,31 @@ void expectAllFinite(const ES::SpMatD &m)
   for (Eigen::Index i = 0; i < m.nonZeros(); i++) {
     EXPECT_TRUE(std::isfinite(m.valuePtr()[i])) << "Non-finite sparse entry at " << i;
   }
+}
+
+std::shared_ptr<SimulationMesh> makeSingleElementCubicSimulationMesh()
+{
+  const double vertices[] = {
+    0.0, 0.0, 0.0,
+    1.0, 0.0, 0.0,
+    1.0, 1.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+    1.0, 0.0, 1.0,
+    1.0, 1.0, 1.0,
+    0.0, 1.0, 1.0,
+  };
+  const int elementVertices[] = { 0, 1, 2, 3, 4, 5, 6, 7 };
+  const int elementMaterialIndices[] = { 0 };
+
+  SimulationMeshENuMaterial baseMaterial(1200.0, 0.45);
+  const pgo::SolidDeformationModel::SimulationMeshMaterial *materials[] = { &baseMaterial };
+
+  return std::shared_ptr<SimulationMesh>(new SimulationMesh(
+    8, vertices,
+    1, 8, elementVertices,
+    elementMaterialIndices, 1, materials,
+    SimulationMeshType::CUBIC));
 }
 }
 
@@ -203,4 +230,53 @@ TEST(DeformationModelAssemblerGTest, CubicAssemblerSmokeRegression)
   EXPECT_EQ(dfda.rows(), assembler->getNumDOFs());
   EXPECT_EQ(dfda.cols(), mesh->getNumElements() * dmm->getNumPlasticParameters());
   expectAllFinite(dfda);
+}
+
+TEST(DeformationModelAssemblerGTest, CubicAssemblerMaterialParamRegression)
+{
+  pgo::Logging::init();
+
+  std::shared_ptr<SimulationMesh> mesh = makeSingleElementCubicSimulationMesh();
+  ASSERT_NE(mesh, nullptr);
+
+  pgo::SolidDeformationModel::SimulationMeshHillMaterial hillMaterial(2500.0, 0.35, 1.0);
+  mesh->appendMaterialToAllElements(&hillMaterial);
+
+  ES::VXd elementFiberDirections = ES::VXd::Zero(mesh->getNumElements() * 3);
+  for (int ei = 0; ei < mesh->getNumElements(); ei++) {
+    elementFiberDirections.segment<3>(ei * 3) << 1.0, 0.0, 0.0;
+  }
+
+  ES::VXd vertexFiberDirections = ES::VXd::Zero(mesh->getNumVertices() * 3);
+  for (int vi = 0; vi < mesh->getNumVertices(); vi++) {
+    vertexFiberDirections.segment<3>(vi * 3) << 1.0, 0.0, 0.0;
+  }
+
+  auto dmm = std::make_shared<DeformationModelManager>();
+  dmm->setMesh(mesh.get(), elementFiberDirections.data(), vertexFiberDirections.data());
+  dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::HILL_STABLE_NEO);
+
+  ASSERT_EQ(dmm->getNumElasticParameters(), 1);
+
+  auto assembler = std::make_shared<DeformationModelAssembler>(dmm, nullptr);
+
+  ES::VXd x = makePerturbedRestPositions(*mesh);
+  ES::VXd plasticParams(dmm->getNumPlasticParameters() * mesh->getNumElements());
+  ES::VXd elasticParams = ES::VXd::Constant(dmm->getNumElasticParameters() * mesh->getNumElements(), 0.75);
+
+  const auto *plasticModel = dynamic_cast<const PlasticModel3DDeformationGradient *>(
+    dmm->getDeformationModel(0)->getPlasticModel());
+  ASSERT_NE(plasticModel, nullptr);
+
+  ES::M3d identity = ES::M3d::Identity();
+  for (int ei = 0; ei < mesh->getNumElements(); ei++) {
+    plasticModel->toParam(identity.data(), plasticParams.data() + ei * dmm->getNumPlasticParameters());
+  }
+
+  ES::SpMatD dfdb = assembler->get_dfdb_Template();
+  assembler->compute_df_db(x.data(), dataOrNull(plasticParams), dataOrNull(elasticParams), dfdb);
+  EXPECT_EQ(dfdb.rows(), assembler->getNumDOFs());
+  EXPECT_EQ(dfdb.cols(), mesh->getNumElements() * dmm->getNumElasticParameters());
+  expectAllFinite(dfdb);
+  EXPECT_GT(dfdb.norm(), 0.0);
 }

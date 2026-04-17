@@ -254,6 +254,7 @@ public:
   int getElementNumMaterials(int ele) const;
 
   void setMaterial(int matID, const SimulationMeshMaterial *mat);
+  void appendMaterialToAllElements(const SimulationMeshMaterial *mat);
 
 protected:
   SimulationMeshImpl *impl;

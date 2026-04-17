@@ -152,6 +152,15 @@ void SimulationMesh::setMaterial(int matID, const SimulationMeshMaterial *mat)
   }
 }
 
+void SimulationMesh::appendMaterialToAllElements(const SimulationMeshMaterial *mat)
+{
+  const int newMaterialID = (int)impl->materials.size();
+  impl->materials.push_back(mat->clone());
+  for (auto &elementMaterialIDs : impl->elementMaterialID) {
+    elementMaterialIDs.push_back(newMaterialID);
+  }
+}
+
 SimulationMeshImpl::SimulationMeshImpl(int numVertices, const double *vertexPositions,
   int numElements, int numElementVertices, const int *elementVertexIndices,
   const int *elementMaterialIndices, int numMaterials, const SimulationMeshMaterial *const *mats,
