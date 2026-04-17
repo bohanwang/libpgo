@@ -28,6 +28,7 @@
 #include "NewtonSolver.h"
 #include "createTriMesh.h"
 #include "finiteDifference.h"
+#include "runSimFEMSetup.h"
 #include "runSimVolumeMeshIO.h"
 
 #include <argparse/argparse.hpp>
@@ -154,56 +155,26 @@ int main(int argc, char *argv[])
   ES::SpMatD M;
   VolumetricMeshes::GenerateMassMatrix::computeMassMatrix(volumetricMesh.get(), M, true);
 
-  if (volumetricMesh->getElementType() == VolumetricMeshes::VolumetricMesh::CUBIC) {
-    SPDLOG_LOGGER_ERROR(Logging::lgr(),
-      "cubic volumetric mesh preprocessing is available, but runSim cubic FEM path is not enabled until phases 2B/2C.");
+  RunSim::InitializedVolumetricSimulation initialized;
+  try {
+    initialized = RunSim::initializeVolumetricSimulation(*volumetricMesh, elasticMat);
+  }
+  catch (const std::exception &err) {
+    SPDLOG_LOGGER_ERROR(Logging::lgr(), "{}", err.what());
     return 1;
   }
 
-  const auto *tetMesh = dynamic_cast<const VolumetricMeshes::TetMesh *>(volumetricMesh.get());
-  if (!tetMesh) {
-    SPDLOG_LOGGER_ERROR(Logging::lgr(), "Expected a TetMesh after volumetric mesh type validation.");
-    return 1;
-  }
+  std::shared_ptr<SolidDeformationModel::SimulationMesh> simMesh = initialized.simMesh;
+  std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm = initialized.dmm;
+  std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> assembler = initialized.assembler;
+  std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy = initialized.elasticEnergy;
 
-  // initialize fem
-  std::shared_ptr<SolidDeformationModel::SimulationMesh> simMesh(SolidDeformationModel::loadTetMesh(tetMesh));
-  std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm = std::make_shared<SolidDeformationModel::DeformationModelManager>();
-
-  dmm->setMesh(simMesh.get(), nullptr, nullptr);
-  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, elasticMat);
-  dmm->setEnforceSPD(1);
-
-  std::vector<double> elementWeights(simMesh->getNumElements(), 1.0);
-  std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> assembler =
-    std::make_shared<SolidDeformationModel::DeformationModelAssembler>(dmm, elementWeights.data());
+  ES::VXd plasticity = initialized.plasticity;
+  ES::VXd restPosition = initialized.restPosition;
 
   int n = simMesh->getNumVertices();
   int n3 = n * 3;
   int nele = simMesh->getNumElements();
-
-  ES::VXd plasticity(nele * 6);
-  ES::M3d I = ES::M3d::Identity();
-  for (int ei = 0; ei < nele; ei++) {
-    const SolidDeformationModel::PlasticModel3DDeformationGradient *pm =
-      dynamic_cast<const SolidDeformationModel::PlasticModel3DDeformationGradient *>(dmm->getDeformationModel(ei)->getPlasticModel());
-    if (!pm) {
-      SPDLOG_LOGGER_ERROR(Logging::lgr(), "Plastic model is not of type PlasticModel3DDeformationGradient.");
-      return 1;
-    }
-    pm->toParam(I.data(), plasticity.data() + ei * dmm->getNumPlasticParameters());
-  }
-
-  ES::VXd restPosition(n3);
-  for (int vi = 0; vi < n; vi++) {
-    double p[3];
-    simMesh->getVertex(vi, p);
-    restPosition.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
-  }
-
-  std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy =
-    std::make_shared<SolidDeformationModel::DeformationModelEnergy>(assembler, &restPosition, 0);
-  elasticEnergy->setPlasticParams(plasticity);
 
   ES::VXd zero(n3);
   zero.setZero();

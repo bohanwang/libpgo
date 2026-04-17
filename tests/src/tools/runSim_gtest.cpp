@@ -3,14 +3,22 @@
 #include "EigenSupport.h"
 #include "barycentricCoordinates.h"
 #include "configFileJSON.h"
+#include "cubicMeshDeformationModel.h"
 #include "cubicMesh.h"
+#include "deformationModelAssembler.h"
+#include "deformationModelEnergy.h"
+#include "deformationModelManager.h"
 #include "generateMassMatrix.h"
+#include "pgoLogging.h"
+#include "runSimFEMSetup.h"
 #include "runSimVolumeMeshIO.h"
+#include "simulationMesh.h"
 #include "tetMesh.h"
 #include "triMeshGeo.h"
 #include "volumetricMesh.h"
 
 #include <filesystem>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -23,6 +31,8 @@ namespace fs = std::filesystem;
 using pgo::RunSim::VolumeMeshInputConfig;
 using pgo::RunSim::ResolvedRunSimPaths;
 using pgo::VolumetricMeshes::VolumetricMesh;
+using pgo::SolidDeformationModel::CubicMeshDeformationModel;
+using pgo::SolidDeformationModel::SimulationMeshType;
 
 constexpr const char *kTetBoxVegPath = LIBPGO_TEST_TET_BOX_VEG;
 constexpr const char *kTetBoxObjPath = LIBPGO_TEST_TET_BOX_OBJ;
@@ -126,6 +136,20 @@ void expectCommonPreprocessingWorks(const std::string &configFilename, const cha
   EXPECT_EQ(M.rows(), volumetricMesh->getNumVertices() * 3);
   EXPECT_EQ(M.cols(), volumetricMesh->getNumVertices() * 3);
   EXPECT_GT(M.nonZeros(), 0);
+}
+
+void expectAllFinite(const ES::VXd &v)
+{
+  for (Eigen::Index i = 0; i < v.size(); i++) {
+    EXPECT_TRUE(std::isfinite(v[i])) << "Non-finite vector entry at " << i;
+  }
+}
+
+void expectAllFinite(const ES::SpMatD &m)
+{
+  for (Eigen::Index i = 0; i < m.nonZeros(); i++) {
+    EXPECT_TRUE(std::isfinite(m.valuePtr()[i])) << "Non-finite sparse entry at " << i;
+  }
 }
 }  // namespace
 
@@ -235,4 +259,49 @@ TEST(RunSimVolumeMeshIOGTest, BuildsCommonPreprocessingForTetAndCubic)
 {
   expectCommonPreprocessingWorks(tetConfigPath(), "tet-mesh", "box.veg", "box.obj", VolumetricMesh::TET);
   expectCommonPreprocessingWorks(cubicConfigPath(), "cubic-mesh", "box.veg", "box.obj", VolumetricMesh::CUBIC);
+}
+
+TEST(RunSimVolumeMeshIOGTest, InitializesCubicRuntimeMainPath)
+{
+  pgo::Logging::init();
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(cubicConfigPath().c_str()));
+
+  const VolumeMeshInputConfig meshConfig = pgo::RunSim::parseVolumeMeshInputConfig(config);
+  std::unique_ptr<VolumetricMesh> volumetricMesh = pgo::RunSim::loadValidatedVolumeMesh(meshConfig, config.getDouble("scale", 1));
+  ASSERT_NE(volumetricMesh, nullptr);
+  ASSERT_EQ(volumetricMesh->getElementType(), VolumetricMesh::CUBIC);
+
+  const auto initialized = pgo::RunSim::initializeVolumetricSimulation(
+    *volumetricMesh, pgo::SolidDeformationModel::DeformationModelElasticMaterial::STABLE_NEO);
+
+  ASSERT_NE(initialized.simMesh, nullptr);
+  EXPECT_EQ(initialized.simMesh->getElementType(), SimulationMeshType::CUBIC);
+  ASSERT_GT(initialized.simMesh->getNumElements(), 0);
+
+  ASSERT_NE(initialized.dmm, nullptr);
+  ASSERT_NE(initialized.assembler, nullptr);
+  ASSERT_NE(initialized.elasticEnergy, nullptr);
+
+  const auto *cubicFEM = dynamic_cast<const CubicMeshDeformationModel *>(initialized.dmm->getDeformationModel(0));
+  ASSERT_NE(cubicFEM, nullptr);
+  EXPECT_EQ(cubicFEM->getNumDOFs(), 24);
+
+  EXPECT_EQ(initialized.assembler->getNumDOFs(), initialized.restPosition.size());
+  EXPECT_EQ(initialized.plasticity.size(),
+    initialized.simMesh->getNumElements() * initialized.dmm->getNumPlasticParameters());
+
+  ES::VXd zero = ES::VXd::Zero(initialized.restPosition.size());
+  ES::SpMatD hess;
+  initialized.elasticEnergy->createHessian(hess);
+  initialized.elasticEnergy->hessian(zero, hess);
+  EXPECT_EQ(hess.rows(), initialized.restPosition.size());
+  EXPECT_EQ(hess.cols(), initialized.restPosition.size());
+  expectAllFinite(hess);
+
+  ES::VXd grad = ES::VXd::Zero(initialized.assembler->getNumDOFs());
+  initialized.assembler->computeGradient(initialized.restPosition.data(), initialized.plasticity.data(), nullptr, grad.data());
+  EXPECT_EQ(grad.size(), initialized.assembler->getNumDOFs());
+  expectAllFinite(grad);
 }
