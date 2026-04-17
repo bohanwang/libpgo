@@ -190,3 +190,43 @@ Observed output:
 Run config:
 
 - `runSim examples/cubic/box-with-sphere/box-with-sphere.json`
+
+### box-with-sphere-lite
+
+Lightweight variant rebuilt from the same input surface mesh for faster iteration and debugging.
+
+Files:
+
+- `examples/cubic/box-with-sphere/box-with-sphere-lite.veg`
+- `examples/cubic/box-with-sphere/box-with-sphere-lite-surface.obj`
+- `examples/cubic/box-with-sphere/box-with-sphere-lite.json`
+- `examples/cubic/box-with-sphere/anim-lite.json`
+
+Parameters:
+
+- `resolution=20`
+- `E=1000000`
+- `nu=0.45`
+- `density=1000`
+
+Command:
+
+```bash
+build/base_no_mkl/bin/cubicMesher \
+  --input-mesh examples/cubic/box-with-sphere/box-with-sphere.obj \
+  --resolution 20 \
+  --output-mesh examples/cubic/box-with-sphere/box-with-sphere-lite.veg \
+  --output-surface examples/cubic/box-with-sphere/box-with-sphere-lite-surface.obj \
+  --E 1000000 \
+  --nu 0.45 \
+  --density 1000
+```
+
+Observed output:
+
+- `4304` vertices
+- `3362` elements
+
+Run config:
+
+- `runSim examples/cubic/box-with-sphere/box-with-sphere-lite.json`
