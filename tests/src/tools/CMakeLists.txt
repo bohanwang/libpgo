@@ -7,6 +7,16 @@ target_compile_definitions(cubicMesher_gtest PRIVATE
 set_property(TARGET cubicMesher_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(cubicMesher_gtest)
 
+if(TARGET convertAnimation)
+  add_executable(convertAnimation_gtest convertAnimation_gtest.cpp)
+  target_link_libraries(convertAnimation_gtest PRIVATE GTest::gtest_main)
+  add_dependencies(convertAnimation_gtest convertAnimation)
+  target_compile_definitions(convertAnimation_gtest PRIVATE
+    PGO_TEST_CONVERT_ANIMATION_BIN="$<TARGET_FILE:convertAnimation>")
+  set_property(TARGET convertAnimation_gtest PROPERTY FOLDER "tests/gtest")
+  gtest_discover_tests(convertAnimation_gtest)
+endif()
+
 add_executable(runSim_gtest
   runSim_gtest.cpp
   ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimVolumeMeshIO.cpp

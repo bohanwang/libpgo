@@ -177,6 +177,14 @@ We provide three python scripts to test the installation.
         python src/python/pypgo/pgo_dump_abc.py examples/box/anim.json examples/box/
     ```
 
+    The `convertAnimation` tool provides the same conversion on the CLI:
+
+    ```bash
+        convertAnimation examples/box/anim.json
+    ```
+
+    If the optional second argument is omitted, the tool writes `.abc` files into the folder containing `anim.json`, and each output filename uses the mesh `name` field from the config.
+
 ## Tools
 
 ### Cubic Mesher

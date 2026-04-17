@@ -1,9 +1,9 @@
 {
   "meshes": [
     {
-      "name": "box",
-      "driving-mesh": "box.obj",
-      "sequence": "ret-box/ret{:04d}.obj",
+      "name": "bunny-cubic",
+      "driving-mesh": "bunny.obj",
+      "sequence": "ret-cubic-bunny/ret{:04d}.obj",
       "sequence-type": "objmesh",
       "sequence-range": [
         0,
