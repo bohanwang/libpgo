@@ -12,6 +12,7 @@
 #include <tbb/spin_mutex.h>
 
 #include <queue>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -23,6 +24,41 @@ using namespace pgo::BasicAlgorithms;
 namespace ES = pgo::EigenSupport;
 
 using hclock = std::chrono::high_resolution_clock;
+
+namespace
+{
+int validateEmbeddingArity(const std::vector<ES::V3d> &vertices,
+  const std::vector<int> *vertexEmbeddingIndices,
+  const std::vector<double> *vertexEmbeddingWeights)
+{
+  if ((vertexEmbeddingIndices == nullptr) != (vertexEmbeddingWeights == nullptr)) {
+    throw std::invalid_argument("Contact embedding requires both vertexEmbeddingIndices and vertexEmbeddingWeights.");
+  }
+
+  if (vertexEmbeddingIndices == nullptr) {
+    return 0;
+  }
+
+  if (vertices.empty()) {
+    throw std::invalid_argument("Contact embedding requires at least one surface vertex.");
+  }
+
+  if (vertexEmbeddingIndices->size() != vertexEmbeddingWeights->size()) {
+    throw std::invalid_argument("Contact embedding index and weight arrays must have the same size.");
+  }
+
+  if (vertexEmbeddingIndices->size() % vertices.size() != 0) {
+    throw std::invalid_argument("Contact embedding arrays must be divisible by the number of surface vertices.");
+  }
+
+  const int embeddingArity = static_cast<int>(vertexEmbeddingIndices->size() / vertices.size());
+  if (embeddingArity <= 0) {
+    throw std::invalid_argument("Contact embedding arity must be positive.");
+  }
+
+  return embeddingArity;
+}
+}  // namespace
 
 inline double dura(const hclock::time_point &t1, const hclock::time_point &t2)
 {
@@ -201,29 +237,31 @@ TriangleMeshExternalContactHandler::TriangleMeshExternalContactHandler(const std
   SPDLOG_LOGGER_INFO(Logging::lgr(), "  #samples: {}", count.load());
   SPDLOG_LOGGER_INFO(Logging::lgr(), "  #vtx : {}", vertices.size());
 
+  const int embeddingArity = validateEmbeddingArity(vertices, vertexEmbeddingIndices, vertexEmbeddingWeights);
+
   // if embedding weights and indices are given
-  if (vertexEmbeddingIndices && vertexEmbeddingWeights) {
+  if (embeddingArity > 0) {
     // we need to first compute an interpolation matrix
     tbb::concurrent_vector<ES::TripletD> entries;
 
     // for (auto it = sampleIDQueryTable.begin(); it != sampleIDQueryTable.end(); ++it) {
     tbb::parallel_for(0, (int)sampleInfoAndIDs.size(), [&](int si) {
-      const ES::V3d &p = sampleInfoAndIDs[si].pos;
       int triID = sampleInfoAndIDs[si].triangleID;
 
       for (int vj = 0; vj < 3; vj++) {
         int vid = triangles[triID][vj];
+        const std::size_t embeddingOffset = static_cast<std::size_t>(vid) * static_cast<std::size_t>(embeddingArity);
 
-        for (int j = 0; j < 4; j++) {
-          int tetVid = vertexEmbeddingIndices->at(vid * 4 + j);
-          double tetw = vertexEmbeddingWeights->at(vid * 4 + j);
+        for (int j = 0; j < embeddingArity; j++) {
+          int embeddedVid = vertexEmbeddingIndices->at(embeddingOffset + static_cast<std::size_t>(j));
+          double embeddedWeight = vertexEmbeddingWeights->at(embeddingOffset + static_cast<std::size_t>(j));
 
-          double wfinal = sampleInfoAndIDs[si].w[vj] * tetw;
+          double wfinal = sampleInfoAndIDs[si].w[vj] * embeddedWeight;
           if (std::abs(wfinal) < 1e-16)
             continue;
 
           for (int dofi = 0; dofi < 3; dofi++) {
-            entries.emplace_back(si * 3 + dofi, tetVid * 3 + dofi, wfinal);
+            entries.emplace_back(si * 3 + dofi, embeddedVid * 3 + dofi, wfinal);
           }
         }
       }

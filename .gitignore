@@ -63,3 +63,6 @@ docs/*
 
 fv.obj
 ret*
+
+paper/*
+*.pdf

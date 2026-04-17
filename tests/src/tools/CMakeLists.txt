@@ -24,6 +24,7 @@ add_executable(runSim_gtest
 target_link_libraries(runSim_gtest PRIVATE
   GTest::gtest_main
   configFileJSON
+  contact
   interpolationCoordinates
   solidDeformationModel
   volumetricMesh

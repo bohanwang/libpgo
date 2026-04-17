@@ -14,6 +14,8 @@
 #include "runSimVolumeMeshIO.h"
 #include "simulationMesh.h"
 #include "tetMesh.h"
+#include "triangleMeshExternalContactHandler.h"
+#include "triangleMeshSelfContactHandler.h"
 #include "triMeshGeo.h"
 #include "volumetricMesh.h"
 
@@ -150,6 +152,76 @@ void expectAllFinite(const ES::SpMatD &m)
   for (Eigen::Index i = 0; i < m.nonZeros(); i++) {
     EXPECT_TRUE(std::isfinite(m.valuePtr()[i])) << "Non-finite sparse entry at " << i;
   }
+}
+
+struct ContactEmbeddingTestInput
+{
+  std::unique_ptr<VolumetricMesh> volumetricMesh;
+  pgo::Mesh::TriMeshGeo surfaceMesh;
+  std::vector<int> embeddingVertexIndices;
+  std::vector<double> embeddingWeights;
+  ES::SpMatD expectedEmbeddingMatrix;
+  int embeddingArity = 0;
+  int nDOFs = 0;
+};
+
+ContactEmbeddingTestInput makeContactEmbeddingTestInput(
+  const std::string &configFilename,
+  VolumetricMesh::elementType expectedType)
+{
+  pgo::Logging::init();
+
+  pgo::ConfigFileJSON config;
+  if (!config.open(configFilename.c_str())) {
+    throw std::runtime_error("Failed to open test config: " + configFilename);
+  }
+
+  const double scale = config.getDouble("scale", 1);
+  const VolumeMeshInputConfig meshConfig = pgo::RunSim::parseVolumeMeshInputConfig(config);
+
+  ContactEmbeddingTestInput input;
+  input.volumetricMesh = pgo::RunSim::loadValidatedVolumeMesh(meshConfig, scale);
+  if (!input.volumetricMesh) {
+    throw std::runtime_error("Failed to load volumetric mesh for contact embedding test.");
+  }
+  if (input.volumetricMesh->getElementType() != expectedType) {
+    throw std::runtime_error("Unexpected volumetric mesh type in contact embedding test.");
+  }
+
+  const ResolvedRunSimPaths paths = resolvePaths(config, configFilename);
+  if (!input.surfaceMesh.load(paths.surfaceMeshFilename)) {
+    throw std::runtime_error("Failed to load surface mesh for contact embedding test.");
+  }
+  for (int vi = 0; vi < input.surfaceMesh.numVertices(); vi++) {
+    input.surfaceMesh.pos(vi) *= scale;
+  }
+
+  ES::VXd surfaceRestPositions(input.surfaceMesh.numVertices() * 3);
+  for (int vi = 0; vi < input.surfaceMesh.numVertices(); vi++) {
+    surfaceRestPositions.segment<3>(vi * 3) = input.surfaceMesh.pos(vi);
+  }
+
+  pgo::InterpolationCoordinates::BarycentricCoordinates bc(
+    input.surfaceMesh.numVertices(), surfaceRestPositions.data(), input.volumetricMesh.get());
+
+  input.embeddingArity = bc.getNumElementVertices();
+  input.embeddingVertexIndices = bc.getEmbeddingVertexIndices();
+  input.embeddingWeights = bc.getEmbeddingWeights();
+  input.expectedEmbeddingMatrix = bc.generateInterpolationMatrix();
+  input.nDOFs = input.volumetricMesh->getNumVertices() * 3;
+
+  return input;
+}
+
+void expectSparseMatrixNear(const ES::SpMatD &actual, const ES::SpMatD &expected, double tol = 1e-12)
+{
+  ASSERT_EQ(actual.rows(), expected.rows());
+  ASSERT_EQ(actual.cols(), expected.cols());
+
+  const ES::MXd actualDense(actual);
+  const ES::MXd expectedDense(expected);
+  const double maxDiff = (actualDense - expectedDense).cwiseAbs().maxCoeff();
+  EXPECT_LE(maxDiff, tol);
 }
 }  // namespace
 
@@ -304,4 +376,81 @@ TEST(RunSimVolumeMeshIOGTest, InitializesCubicRuntimeMainPath)
   initialized.assembler->computeGradient(initialized.restPosition.data(), initialized.plasticity.data(), nullptr, grad.data());
   EXPECT_EQ(grad.size(), initialized.assembler->getNumDOFs());
   expectAllFinite(grad);
+}
+
+TEST(RunSimVolumeMeshIOGTest, TetExternalContactEmbeddingMatchesBarycentricInterpolation)
+{
+  const auto input = makeContactEmbeddingTestInput(tetConfigPath(), VolumetricMesh::TET);
+  ASSERT_EQ(input.embeddingArity, 4);
+
+  const std::vector<pgo::Mesh::TriMeshRef> noExternalSurfaces;
+  pgo::Contact::TriangleMeshExternalContactHandler handler(
+    input.surfaceMesh.positions(), input.surfaceMesh.triangles(), input.nDOFs,
+    noExternalSurfaces, 1, &input.embeddingVertexIndices, &input.embeddingWeights);
+
+  expectSparseMatrixNear(handler.getSampleEmbeddingMatrix(), input.expectedEmbeddingMatrix);
+}
+
+TEST(RunSimVolumeMeshIOGTest, TetSelfContactEmbeddingMatchesBarycentricInterpolation)
+{
+  const auto input = makeContactEmbeddingTestInput(tetConfigPath(), VolumetricMesh::TET);
+  ASSERT_EQ(input.embeddingArity, 4);
+
+  pgo::Contact::TriangleMeshSelfContactHandler handler(
+    input.surfaceMesh.positions(), input.surfaceMesh.triangles(), input.nDOFs,
+    1, &input.embeddingVertexIndices, &input.embeddingWeights);
+
+  expectSparseMatrixNear(handler.getSampleEmbeddingMatrix(), input.expectedEmbeddingMatrix);
+}
+
+TEST(RunSimVolumeMeshIOGTest, CubicExternalContactEmbeddingMatchesBarycentricInterpolation)
+{
+  const auto input = makeContactEmbeddingTestInput(cubicConfigPath(), VolumetricMesh::CUBIC);
+  ASSERT_EQ(input.embeddingArity, 8);
+
+  const std::vector<pgo::Mesh::TriMeshRef> noExternalSurfaces;
+  pgo::Contact::TriangleMeshExternalContactHandler handler(
+    input.surfaceMesh.positions(), input.surfaceMesh.triangles(), input.nDOFs,
+    noExternalSurfaces, 1, &input.embeddingVertexIndices, &input.embeddingWeights);
+
+  expectSparseMatrixNear(handler.getSampleEmbeddingMatrix(), input.expectedEmbeddingMatrix);
+}
+
+TEST(RunSimVolumeMeshIOGTest, CubicSelfContactEmbeddingMatchesBarycentricInterpolation)
+{
+  const auto input = makeContactEmbeddingTestInput(cubicConfigPath(), VolumetricMesh::CUBIC);
+  ASSERT_EQ(input.embeddingArity, 8);
+
+  pgo::Contact::TriangleMeshSelfContactHandler handler(
+    input.surfaceMesh.positions(), input.surfaceMesh.triangles(), input.nDOFs,
+    1, &input.embeddingVertexIndices, &input.embeddingWeights);
+
+  expectSparseMatrixNear(handler.getSampleEmbeddingMatrix(), input.expectedEmbeddingMatrix);
+}
+
+TEST(RunSimVolumeMeshIOGTest, ExternalContactRejectsMalformedEmbeddingArrays)
+{
+  auto input = makeContactEmbeddingTestInput(tetConfigPath(), VolumetricMesh::TET);
+  ASSERT_FALSE(input.embeddingWeights.empty());
+  input.embeddingWeights.pop_back();
+
+  const std::vector<pgo::Mesh::TriMeshRef> noExternalSurfaces;
+  expectInvalidArgumentContaining([&]() {
+    pgo::Contact::TriangleMeshExternalContactHandler handler(
+      input.surfaceMesh.positions(), input.surfaceMesh.triangles(), input.nDOFs,
+      noExternalSurfaces, 1, &input.embeddingVertexIndices, &input.embeddingWeights);
+  }, "embedding");
+}
+
+TEST(RunSimVolumeMeshIOGTest, SelfContactRejectsMalformedEmbeddingArrays)
+{
+  auto input = makeContactEmbeddingTestInput(tetConfigPath(), VolumetricMesh::TET);
+  ASSERT_FALSE(input.embeddingWeights.empty());
+  input.embeddingWeights.pop_back();
+
+  expectInvalidArgumentContaining([&]() {
+    pgo::Contact::TriangleMeshSelfContactHandler handler(
+      input.surfaceMesh.positions(), input.surfaceMesh.triangles(), input.nDOFs,
+      1, &input.embeddingVertexIndices, &input.embeddingWeights);
+  }, "embedding");
 }
