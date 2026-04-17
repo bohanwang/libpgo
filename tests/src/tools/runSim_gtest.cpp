@@ -228,7 +228,7 @@ TEST(RunSimVolumeMeshIOGTest, ResolvesCubicExamplePathsAgainstConfigDirectory)
   config.handle()["surface-mesh"] = "box.obj";
   config.handle()["output"] = "ret-cubic-box";
   config.handle()["fixed-vertices"] = nlohmann::json::array({ { { "filename", "fixed.txt" }, { "movement", { 0.0, 0.0, 0.0 } }, { "coeff", 1.0 } } });
-  config.handle()["external-objects"] = nlohmann::json::array({ { { "filename", "../../bottom.obj" }, { "movement", { 0.0, 0.0, 0.0 } } } });
+  config.handle()["external-objects"] = nlohmann::json::array({ { { "filename", "../bottom.obj" }, { "movement", { 0.0, 0.0, 0.0 } } } });
 
   const ResolvedRunSimPaths paths = resolvePaths(config, cubicConfigPath());
   EXPECT_EQ(paths.surfaceMeshFilename, kCubicBoxObjPath);
@@ -236,7 +236,7 @@ TEST(RunSimVolumeMeshIOGTest, ResolvesCubicExamplePathsAgainstConfigDirectory)
   ASSERT_EQ(paths.fixedVertexFilenames.size(), 1u);
   EXPECT_EQ(paths.fixedVertexFilenames[0], (cubicExampleDir() / "fixed.txt").string());
   ASSERT_EQ(paths.externalObjectFilenames.size(), 1u);
-  EXPECT_EQ(paths.externalObjectFilenames[0], (cubicExampleDir() / "../../bottom.obj").lexically_normal().string());
+  EXPECT_EQ(paths.externalObjectFilenames[0], (cubicExampleDir() / "../bottom.obj").lexically_normal().string());
 }
 
 TEST(RunSimVolumeMeshIOGTest, ResolvesLegacyTetExamplePathsAgainstConfigDirectory)
