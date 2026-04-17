@@ -9,6 +9,12 @@ add_executable(deformationModelAssembler_gtest deformationModelAssembler_gtest.c
 target_link_libraries(deformationModelAssembler_gtest PRIVATE GTest::gtest_main solidDeformationModel volumetricMesh mesh)
 target_compile_definitions(deformationModelAssembler_gtest PRIVATE
   LIBPGO_TEST_TORUS_VEG="${CMAKE_SOURCE_DIR}/examples/torus.veg"
-  LIBPGO_TEST_SHELL_OBJ="${CMAKE_SOURCE_DIR}/examples/shell/shell.obj")
+  LIBPGO_TEST_SHELL_OBJ="${CMAKE_SOURCE_DIR}/examples/shell/shell.obj"
+  LIBPGO_TEST_CUBIC_BOX_VEG="${CMAKE_SOURCE_DIR}/examples/cubic/box/box.veg")
 set_property(TARGET deformationModelAssembler_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(deformationModelAssembler_gtest)
+
+add_executable(cubicMeshDeformationModel_gtest cubicMeshDeformationModel_gtest.cpp)
+target_link_libraries(cubicMeshDeformationModel_gtest PRIVATE GTest::gtest_main solidDeformationModel)
+set_property(TARGET cubicMeshDeformationModel_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(cubicMeshDeformationModel_gtest)

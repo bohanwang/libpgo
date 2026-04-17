@@ -6,6 +6,7 @@
 #include "pgoLogging.h"
 #include "simulationMesh.h"
 #include "plasticModel3DDeformationGradient.h"
+#include "cubicMesh.h"
 #include "tetMesh.h"
 #include "triMeshGeo.h"
 
@@ -25,6 +26,7 @@ using pgo::SolidDeformationModel::SimulationMeshENuhMaterial;
 
 constexpr const char *kTorusVegPath = LIBPGO_TEST_TORUS_VEG;
 constexpr const char *kShellObjPath = LIBPGO_TEST_SHELL_OBJ;
+constexpr const char *kCubicBoxVegPath = LIBPGO_TEST_CUBIC_BOX_VEG;
 
 const double *dataOrNull(const ES::VXd &v)
 {
@@ -155,4 +157,50 @@ TEST(DeformationModelAssemblerGTest, ShellAssemblerRegression)
     EXPECT_EQ(dfdb.cols(), mesh->getNumElements() * dmm->getNumElasticParameters());
     expectAllFinite(dfdb);
   }
+}
+
+TEST(DeformationModelAssemblerGTest, CubicAssemblerSmokeRegression)
+{
+  pgo::Logging::init();
+
+  pgo::VolumetricMeshes::CubicMesh cubicMesh(kCubicBoxVegPath);
+  std::shared_ptr<SimulationMesh> mesh(pgo::SolidDeformationModel::loadCubicMesh(&cubicMesh));
+  ASSERT_NE(mesh, nullptr);
+
+  auto dmm = std::make_shared<DeformationModelManager>();
+  dmm->setMesh(mesh.get());
+  dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
+
+  auto assembler = std::make_shared<DeformationModelAssembler>(dmm, nullptr);
+
+  ES::VXd x = makePerturbedRestPositions(*mesh);
+  ES::VXd plasticParams(dmm->getNumPlasticParameters() * mesh->getNumElements());
+  ES::VXd elasticParams(dmm->getNumElasticParameters() * mesh->getNumElements());
+  elasticParams.setZero();
+
+  const auto *plasticModel = dynamic_cast<const PlasticModel3DDeformationGradient *>(
+    dmm->getDeformationModel(0)->getPlasticModel());
+  ASSERT_NE(plasticModel, nullptr);
+
+  ES::M3d identity = ES::M3d::Identity();
+  for (int ei = 0; ei < mesh->getNumElements(); ei++) {
+    plasticModel->toParam(identity.data(), plasticParams.data() + ei * dmm->getNumPlasticParameters());
+  }
+
+  ES::VXd grad = ES::VXd::Zero(assembler->getNumDOFs());
+  assembler->computeGradient(x.data(), dataOrNull(plasticParams), dataOrNull(elasticParams), grad.data());
+  EXPECT_EQ(grad.size(), assembler->getNumDOFs());
+  expectAllFinite(grad);
+
+  ES::SpMatD hess = assembler->getHessianTemplate();
+  assembler->computeHessian(x.data(), dataOrNull(plasticParams), dataOrNull(elasticParams), hess);
+  EXPECT_EQ(hess.rows(), assembler->getNumDOFs());
+  EXPECT_EQ(hess.cols(), assembler->getNumDOFs());
+  expectAllFinite(hess);
+
+  ES::SpMatD dfda = assembler->get_dfda_Template();
+  assembler->compute_df_da(x.data(), dataOrNull(plasticParams), dataOrNull(elasticParams), dfda);
+  EXPECT_EQ(dfda.rows(), assembler->getNumDOFs());
+  EXPECT_EQ(dfda.cols(), mesh->getNumElements() * dmm->getNumPlasticParameters());
+  expectAllFinite(dfda);
 }
