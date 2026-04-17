@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
     try {
       const std::filesystem::path logPath = RunSim::deriveDefaultLogPathFromConfig(configFilename);
       logRedirect = std::make_unique<RunSim::ScopedRunSimCliLogRedirect>(logPath.string());
-      pgo::Logging::init(logPath.string().c_str());
+      pgo::Logging::init();
     }
     catch (const std::exception &err) {
       std::cerr << err.what() << std::endl;

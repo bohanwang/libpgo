@@ -1,8 +1,6 @@
 #pragma once
 
 #include <filesystem>
-#include <fstream>
-#include <iosfwd>
 #include <string>
 
 namespace pgo::RunSim
@@ -19,8 +17,7 @@ public:
   ScopedRunSimCliLogRedirect &operator=(const ScopedRunSimCliLogRedirect &) = delete;
 
 private:
-  std::ofstream logStream;
-  std::streambuf *coutBuffer = nullptr;
-  std::streambuf *cerrBuffer = nullptr;
+  int savedStdoutFd = -1;
+  int savedStderrFd = -1;
 };
 }  // namespace pgo::RunSim
