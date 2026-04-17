@@ -11,6 +11,7 @@
             "hidden": false,
             "binaryDir": "${sourceDir}/build/base_no_mkl",
             "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
                 "PGO_USE_MKL": "OFF",
                 "PGO_ENABLE_FULL": "ON",
                 "PGO_BUILD_SUBPROJECTS": "ON",
@@ -23,6 +24,7 @@
             "hidden": false,
             "binaryDir": "${sourceDir}/build/base",
             "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
                 "PGO_USE_MKL": "ON",
                 "PGO_ENABLE_FULL": "ON",
                 "PGO_BUILD_SUBPROJECTS": "ON",
@@ -35,6 +37,7 @@
             "hidden": false,
             "binaryDir": "${sourceDir}/build/base_win",
             "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
                 "PGO_USE_MKL": "ON",
                 "PGO_ENABLE_FULL": "ON",
                 "PGO_BUILD_SUBPROJECTS": "ON",
@@ -97,7 +100,10 @@
                 "pardiso",
                 "cuda",
                 "debug"
-            ]
+            ],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
         },
         {
             "name": "all_release",
@@ -119,7 +125,10 @@
                 "base",
                 "cuda",
                 "debug"
-            ]
+            ],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
         },
         {
             "name": "base_no_mkl_debug",
@@ -127,7 +136,10 @@
             "inherits": [
                 "base_no_mkl",
                 "debug"
-            ]
+            ],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
         },
         {
             "name": "base_cuda_release",

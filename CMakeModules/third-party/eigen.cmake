@@ -36,7 +36,4 @@ if(TARGET MKL::MKL)
   target_compile_definitions(${REAL_TGT} INTERFACE EIGEN_MKL_NO_DIRECT_CALL)
 endif()
 
-get_target_property(flags compilation_flag INTERFACE_COMPILE_OPTIONS)
-message(STATUS "Eigen3 compilation flags: ${flags}")
-target_compile_options(${REAL_TGT} INTERFACE ${flags})
 target_compile_definitions(${REAL_TGT} INTERFACE EIGEN_MAX_ALIGN_BYTES=32)
