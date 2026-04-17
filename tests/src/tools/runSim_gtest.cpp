@@ -10,6 +10,7 @@
 #include "deformationModelManager.h"
 #include "generateMassMatrix.h"
 #include "pgoLogging.h"
+#include "runSimCliLogging.h"
 #include "runSimFEMSetup.h"
 #include "runSimVolumeMeshIO.h"
 #include "simulationMesh.h"
@@ -20,6 +21,7 @@
 #include "volumetricMesh.h"
 
 #include <filesystem>
+#include <fstream>
 #include <cmath>
 #include <functional>
 #include <memory>
@@ -325,6 +327,41 @@ TEST(RunSimVolumeMeshIOGTest, ResolvesLegacyTetExamplePathsAgainstConfigDirector
   EXPECT_EQ(paths.outputPath, (tetExampleDir() / "ret-box").string());
   ASSERT_EQ(paths.externalObjectFilenames.size(), 1u);
   EXPECT_EQ(paths.externalObjectFilenames[0], (tetExampleDir() / "../bottom.obj").lexically_normal().string());
+}
+
+TEST(RunSimCliLoggingGTest, DerivesDefaultLogPathFromConfigPath)
+{
+  const fs::path logPath = pgo::RunSim::deriveDefaultLogPathFromConfig(cubicExampleDir() / "bunny.json");
+  EXPECT_EQ(logPath, cubicExampleDir() / "bunny.log");
+}
+
+TEST(RunSimCliLoggingGTest, RedirectsStdoutAndStderrToLogFile)
+{
+  const fs::path tempDir = fs::temp_directory_path() / "libpgo_runSim_cli_logging_gtest";
+  fs::remove_all(tempDir);
+  fs::create_directories(tempDir);
+
+  const fs::path logPath = tempDir / "runSim.log";
+  {
+    pgo::RunSim::ScopedRunSimCliLogRedirect redirect(logPath.string());
+    std::cout << "stdout redirect check" << std::endl;
+    std::cerr << "stderr redirect check" << std::endl;
+  }
+
+  std::ifstream in(logPath);
+  ASSERT_TRUE(in.is_open());
+  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  EXPECT_NE(contents.find("stdout redirect check"), std::string::npos);
+  EXPECT_NE(contents.find("stderr redirect check"), std::string::npos);
+
+  std::cout << "stdout restored check" << std::endl;
+  std::cerr << "stderr restored check" << std::endl;
+
+  std::ifstream after(logPath);
+  ASSERT_TRUE(after.is_open());
+  const std::string afterContents((std::istreambuf_iterator<char>(after)), std::istreambuf_iterator<char>());
+  EXPECT_EQ(afterContents.find("stdout restored check"), std::string::npos);
+  EXPECT_EQ(afterContents.find("stderr restored check"), std::string::npos);
 }
 
 TEST(RunSimVolumeMeshIOGTest, BuildsCommonPreprocessingForTetAndCubic)

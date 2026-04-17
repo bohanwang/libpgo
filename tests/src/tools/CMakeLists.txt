@@ -19,6 +19,7 @@ endif()
 
 add_executable(runSim_gtest
   runSim_gtest.cpp
+  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimCliLogging.cpp
   ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimVolumeMeshIO.cpp
   ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimFEMSetup.cpp)
 target_link_libraries(runSim_gtest PRIVATE
