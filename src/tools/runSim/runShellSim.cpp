@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
   }
 
   // surface mesh filename
-  std::string surfaceMeshFilename = jconfig.getString("surface-mesh", 1);
+  std::string surfaceMeshFilename = jconfig.getResolvedPath("surface-mesh", 1);
 
   // external acceleration
   ES::V3d extAcc = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("g", 1).data());
@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
   std::string simType = jconfig.getString("sim-type");
 
   // output
-  std::string outputFolder = jconfig.getString("output", 1);
+  std::string outputFolder = jconfig.getResolvedPath("output", 1);
 
   Mesh::TriMeshGeo surfaceMesh;
   if (surfaceMesh.load(surfaceMeshFilename) != true)
@@ -119,7 +119,8 @@ int main(int argc, char *argv[])
   std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm = std::make_shared<SolidDeformationModel::DeformationModelManager>();
 
   dmm->setMesh(simMesh.get(), nullptr, nullptr);
-  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::SHELL_FF_DOF0, elasticMat, 1);
+  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::SHELL_FF_DOF0, elasticMat);
+  dmm->setEnforceSPD(1);
 
   std::vector<double> elementWeights(simMesh->getNumElements(), 1.0);
   std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> assembler =
@@ -162,7 +163,7 @@ int main(int argc, char *argv[])
   std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> pullingEnergies;
   std::vector<ES::VXd> pullingTargets, pullingTargetRests;
   for (const auto &fv : jconfig.handle()["fixed-vertices"]) {
-    std::string filename = fv["filename"].get<std::string>();
+    std::string filename = jconfig.resolvePath(fv["filename"].get<std::string>());
     std::array<double, 3> movement = fv["movement"].get<std::array<double, 3>>();
     double attachmentCoeff = fv["coeff"].get<double>();
 
@@ -206,7 +207,7 @@ int main(int argc, char *argv[])
   if (jconfig.exist("external-objects")) {
     auto jkinObjects = jconfig.handle()["external-objects"];
     for (const auto &jko : jkinObjects) {
-      std::string koFilename = jko["filename"].get<std::string>();
+      std::string koFilename = jconfig.resolvePath(jko["filename"].get<std::string>());
       kinematicObjectFilenames.push_back(koFilename);
       kinematicObjectMovements.push_back(ES::Mp<ES::V3d>(jko["movement"].get<std::array<double, 3>>().data()));
     }
@@ -276,10 +277,9 @@ int main(int argc, char *argv[])
       std::filesystem::create_directories(outputFolder);
     }
 
-    int frameStart = 0;
+    int frameStart = -1;
     for (int framei = numSimSteps - 1; framei >= 0; framei--) {
       if (!std::filesystem::exists(fmt::format("{}/deform{:04d}.u", outputFolder, framei))) {
-        std::cerr << "Frame " << framei << " not found." << std::endl;
         continue;
       }
 
@@ -294,10 +294,15 @@ int main(int argc, char *argv[])
       }
     }
 
+    if (frameStart < 0) {
+      std::cout << "No restart state found in " << outputFolder << ". Starting from frame 0." << std::endl;
+    }
+
     usurf = u;
 
-    std::cout << frameStart << std::endl;
+# ifdef NDEBUG
     std::cin.get();
+# endif
 
     ES::VXd psurf = surfaceRestPositions + usurf;
     for (size_t eobji = 0; eobji < kinematicObjects.size(); eobji++) {

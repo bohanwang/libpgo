@@ -49,7 +49,8 @@ public:
   ~DeformationModelManager();
 
   void setMesh(const SimulationMesh *simulationMesh, const double *elementFiberDirections = nullptr, const double *vertexFiberDirections = nullptr);
-  void init(DeformationModelPlasticMaterial plasticModelType, DeformationModelElasticMaterial elasticMaterialType, int enforceSPD);
+  void init(DeformationModelPlasticMaterial plasticModelType, DeformationModelElasticMaterial elasticMaterialType);
+  void setEnforceSPD(int enable);
   void updateMeshRigidTransformation(const double R[9]);
 
   int getNumPlasticParameters() const;

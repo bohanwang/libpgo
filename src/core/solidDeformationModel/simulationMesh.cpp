@@ -152,6 +152,15 @@ void SimulationMesh::setMaterial(int matID, const SimulationMeshMaterial *mat)
   }
 }
 
+void SimulationMesh::appendMaterialToAllElements(const SimulationMeshMaterial *mat)
+{
+  const int newMaterialID = (int)impl->materials.size();
+  impl->materials.push_back(mat->clone());
+  for (auto &elementMaterialIDs : impl->elementMaterialID) {
+    elementMaterialIDs.push_back(newMaterialID);
+  }
+}
+
 SimulationMeshImpl::SimulationMeshImpl(int numVertices, const double *vertexPositions,
   int numElements, int numElementVertices, const int *elementVertexIndices,
   const int *elementMaterialIndices, int numMaterials, const SimulationMeshMaterial *const *mats,
@@ -210,6 +219,42 @@ SimulationMesh *pgo::SolidDeformationModel::loadTetMesh(const VolumetricMeshes::
   SimulationMesh *mesh = new SimulationMesh(tetMesh->getNumVertices(), vtx.data(),
     tetMesh->getNumElements(), 4, elementVertices.data(),
     elementMaterialIndices.data(), tetMesh->getNumElements(), materials.data(), SimulationMeshType::TET);
+
+  for (auto ptr : materials)
+    delete ptr;
+
+  return mesh;
+}
+
+SimulationMesh *pgo::SolidDeformationModel::loadCubicMesh(const VolumetricMeshes::CubicMesh *cubicMesh)
+{
+  std::vector<double> vtx;
+  for (int vi = 0; vi < cubicMesh->getNumVertices(); vi++) {
+    Vec3d p = cubicMesh->getVertex(vi);
+    vtx.push_back(p[0]);
+    vtx.push_back(p[1]);
+    vtx.push_back(p[2]);
+  }
+
+  std::vector<int> elementVertices;
+  std::vector<SimulationMeshMaterial *> materials;
+  std::vector<int> elementMaterialIndices;
+
+  for (int ei = 0; ei < cubicMesh->getNumElements(); ei++) {
+    for (int j = 0; j < 8; j++) {
+      elementVertices.push_back(cubicMesh->getVertexIndex(ei, j));
+    }
+
+    const VolumetricMeshes::VolumetricMesh::ENuMaterial *mat = downcastENuMaterial(cubicMesh->getElementMaterial(ei));
+    SimulationMeshENuMaterial *mat1 = new SimulationMeshENuMaterial(mat->getE(), mat->getNu());
+
+    materials.push_back(mat1);
+    elementMaterialIndices.push_back(ei);
+  }
+
+  SimulationMesh *mesh = new SimulationMesh(cubicMesh->getNumVertices(), vtx.data(),
+    cubicMesh->getNumElements(), 8, elementVertices.data(),
+    elementMaterialIndices.data(), cubicMesh->getNumElements(), materials.data(), SimulationMeshType::CUBIC);
 
   for (auto ptr : materials)
     delete ptr;

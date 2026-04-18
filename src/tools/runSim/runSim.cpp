@@ -3,6 +3,7 @@
 #include "initPredicates.h"
 #include "triMeshGeo.h"
 #include "generateTetMeshMatrix.h"
+#include "volumetricMesh.h"
 #include "tetMesh.h"
 #include "pgoLogging.h"
 #include "geometryQuery.h"
@@ -27,11 +28,15 @@
 #include "NewtonSolver.h"
 #include "createTriMesh.h"
 #include "finiteDifference.h"
+#include "runSimCliLogging.h"
+#include "runSimFEMSetup.h"
+#include "runSimVolumeMeshIO.h"
 
 #include <argparse/argparse.hpp>
 
 #include <tbb/global_control.h>
 
+#include <memory>
 #include <thread>
 #include <iostream>
 
@@ -49,6 +54,10 @@ int main(int argc, char *argv[])
   program.add_argument("config")
     .help("Config File")
     .required();
+  program.add_argument("--log")
+    .help("Write command-line output to a .log file next to the config file")
+    .default_value(false)
+    .implicit_value(true);
 
   try {
     program.parse_args(argc, argv);  // Example: ./main --color orange
@@ -59,21 +68,32 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  pgo::Logging::init();
-  pgo::Mesh::initPredicates();
-
   std::string configFilename = program.get<std::string>("config");
+  const bool enableCliLog = program.get<bool>("--log");
+  std::unique_ptr<RunSim::ScopedRunSimCliLogRedirect> logRedirect;
+
+  if (enableCliLog) {
+    try {
+      const std::filesystem::path logPath = RunSim::deriveDefaultLogPathFromConfig(configFilename);
+      logRedirect = std::make_unique<RunSim::ScopedRunSimCliLogRedirect>(logPath.string());
+      pgo::Logging::init();
+    }
+    catch (const std::exception &err) {
+      std::cerr << err.what() << std::endl;
+      return 1;
+    }
+  }
+  else {
+    pgo::Logging::init();
+  }
+  pgo::Mesh::initPredicates();
 
   ConfigFileJSON jconfig;
   if (jconfig.open(configFilename.c_str()) != true) {
     return 0;
   }
 
-  // tet mesh filename
-  std::string tetMeshFilename = jconfig.getString("tet-mesh", 1);
-
-  // surface mesh filename
-  std::string surfaceMeshFilename = jconfig.getString("surface-mesh", 1);
+  RunSim::ResolvedRunSimPaths resolvedPaths;
 
   // external acceleration
   ES::V3d extAcc = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("g", 1).data());
@@ -120,14 +140,19 @@ int main(int argc, char *argv[])
 
   // sim type
   std::string simType = jconfig.getString("sim-type");
+  std::string outputFolder;
 
-  // output
-  std::string outputFolder = jconfig.getString("output", 1);
-
-  VolumetricMeshes::TetMesh tetMesh(tetMeshFilename.c_str());
-  for (int vi = 0; vi < tetMesh.getNumVertices(); vi++) {
-    tetMesh.setVertex(vi, tetMesh.getVertex(vi) * scale);
+  std::unique_ptr<VolumetricMeshes::VolumetricMesh> volumetricMesh;
+  try {
+    resolvedPaths = RunSim::resolveRunSimPaths(jconfig);
+    volumetricMesh = RunSim::loadValidatedVolumeMesh(RunSim::parseVolumeMeshInputConfig(jconfig), scale);
   }
+  catch (const std::exception &err) {
+    SPDLOG_LOGGER_ERROR(Logging::lgr(), "{}", err.what());
+    return 1;
+  }
+  std::string surfaceMeshFilename = resolvedPaths.surfaceMeshFilename;
+  outputFolder = resolvedPaths.outputPath;
 
   Mesh::TriMeshGeo surfaceMesh;
   if (surfaceMesh.load(surfaceMeshFilename) != true)
@@ -145,46 +170,32 @@ int main(int argc, char *argv[])
   }
 
   // initialize interpolation weights
-  InterpolationCoordinates::BarycentricCoordinates bc(surfaceMesh.numVertices(), surfaceRestPositions.data(), &tetMesh);
+  InterpolationCoordinates::BarycentricCoordinates bc(surfaceMesh.numVertices(), surfaceRestPositions.data(), volumetricMesh.get());
   ES::SpMatD W = bc.generateInterpolationMatrix();
 
-  // initialize fem
-  std::shared_ptr<SolidDeformationModel::SimulationMesh> simMesh(SolidDeformationModel::loadTetMesh(&tetMesh));
-  std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm = std::make_shared<SolidDeformationModel::DeformationModelManager>();
+  ES::SpMatD M;
+  VolumetricMeshes::GenerateMassMatrix::computeMassMatrix(volumetricMesh.get(), M, true);
 
-  dmm->setMesh(simMesh.get(), nullptr, nullptr);
-  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, elasticMat, 1);
+  RunSim::InitializedVolumetricSimulation initialized;
+  try {
+    initialized = RunSim::initializeVolumetricSimulation(*volumetricMesh, elasticMat);
+  }
+  catch (const std::exception &err) {
+    SPDLOG_LOGGER_ERROR(Logging::lgr(), "{}", err.what());
+    return 1;
+  }
 
-  std::vector<double> elementWeights(simMesh->getNumElements(), 1.0);
-  std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> assembler =
-    std::make_shared<SolidDeformationModel::DeformationModelAssembler>(dmm, elementWeights.data());
+  std::shared_ptr<SolidDeformationModel::SimulationMesh> simMesh = initialized.simMesh;
+  std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm = initialized.dmm;
+  std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> assembler = initialized.assembler;
+  std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy = initialized.elasticEnergy;
+
+  ES::VXd plasticity = initialized.plasticity;
+  ES::VXd restPosition = initialized.restPosition;
 
   int n = simMesh->getNumVertices();
   int n3 = n * 3;
   int nele = simMesh->getNumElements();
-
-  ES::VXd plasticity(nele * 6);
-  ES::M3d I = ES::M3d::Identity();
-  for (int ei = 0; ei < nele; ei++) {
-    const SolidDeformationModel::PlasticModel3DDeformationGradient *pm =
-      dynamic_cast<const SolidDeformationModel::PlasticModel3DDeformationGradient *>(dmm->getDeformationModel(ei)->getPlasticModel());
-    if (!pm) {
-      SPDLOG_LOGGER_ERROR(Logging::lgr(), "Plastic model is not of type PlasticModel3DDeformationGradient.");
-      return 1;
-    }
-    pm->toParam(I.data(), plasticity.data() + ei * dmm->getNumPlasticParameters());
-  }
-
-  ES::VXd restPosition(n3);
-  for (int vi = 0; vi < n; vi++) {
-    double p[3];
-    simMesh->getVertex(vi, p);
-    restPosition.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
-  }
-
-  std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy =
-    std::make_shared<SolidDeformationModel::DeformationModelEnergy>(assembler, &restPosition, 0);
-  elasticEnergy->setPlasticParams(plasticity);
 
   ES::VXd zero(n3);
   zero.setZero();
@@ -197,8 +208,9 @@ int main(int argc, char *argv[])
   std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> pullingEnergies;
   std::vector<ES::VXd> pullingTargets, pullingTargetRests;
   Mesh::TriMeshGeo tempMesh;
+  int fixedVertexFileIndex = 0;
   for (const auto &fv : jconfig.handle()["fixed-vertices"]) {
-    std::string filename = fv["filename"].get<std::string>();
+    std::string filename = resolvedPaths.fixedVertexFilenames[fixedVertexFileIndex++];
     std::array<double, 3> movement = fv["movement"].get<std::array<double, 3>>();
     double attachmentCoeff = fv["coeff"].get<double>();
 
@@ -230,15 +242,13 @@ int main(int argc, char *argv[])
   std::vector<ES::V3d> kinematicObjectMovements;
   if (jconfig.exist("external-objects")) {
     auto jkinObjects = jconfig.handle()["external-objects"];
+    int kinematicObjectFileIndex = 0;
     for (const auto &jko : jkinObjects) {
-      std::string koFilename = jko["filename"].get<std::string>();
+      std::string koFilename = resolvedPaths.externalObjectFilenames[kinematicObjectFileIndex++];
       kinematicObjectFilenames.push_back(koFilename);
       kinematicObjectMovements.push_back(ES::Mp<ES::V3d>(jko["movement"].get<std::array<double, 3>>().data()));
     }
   }
-
-  ES::SpMatD M;
-  VolumetricMeshes::GenerateMassMatrix::computeMassMatrix(&tetMesh, M, true);
 
   // initialize gravity
   ES::VXd g(n3);
@@ -316,10 +326,9 @@ int main(int argc, char *argv[])
       std::filesystem::create_directories(outputFolder);
     }
 
-    int frameStart = 0;
+    int frameStart = -1;
     for (int framei = numSimSteps - 1; framei >= 0; framei--) {
       if (!std::filesystem::exists(fmt::format("{}/deform{:04d}.u", outputFolder, framei))) {
-        std::cerr << "Frame " << framei << " not found." << std::endl;
         continue;
       }
 
@@ -334,10 +343,17 @@ int main(int argc, char *argv[])
       }
     }
 
+    if (frameStart < 0) {
+      std::cout << "No restart state found in " << outputFolder << ". Starting from frame 0." << std::endl;
+    }
+
     ES::mv(W, u, usurf);
 
-    std::cout << frameStart << std::endl;
-    std::cin.get();
+# ifdef NDEBUG
+    if (!enableCliLog) {
+      std::cin.get();
+    }
+# endif
 
     for (size_t eobji = 0; eobji < kinematicObjects.size(); eobji++) {
       ES::V3d movement = kinematicObjectMovements[eobji] / (numSimSteps - 1) * (frameStart + 1);

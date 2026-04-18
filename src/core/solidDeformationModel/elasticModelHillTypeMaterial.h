@@ -17,7 +17,7 @@ public:
   ElasticModelHillTypeMaterial(double shapeParam, double maximalContractionForce, double optimalLengthRatio, const double fiberDirection[3]);
   virtual ~ElasticModelHillTypeMaterial() {}
 
-  void enforceSPD(bool enforce) { enforceSPD_ = enforce ? 1 : 0; }
+  void enableSPD(int enable) override { enforceSPD_ = enable ? 1 : 0; }
 
   virtual double compute_psi(const double *param, const double F[9],
     const double U[9], const double V[9], const double S[3]) const override;

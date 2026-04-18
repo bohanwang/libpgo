@@ -6,6 +6,7 @@ copyright to USC, MIT, NUS
 #include "deformationModelManager.h"
 
 #include "deformationModel.h"
+#include "cubicMeshDeformationModel.h"
 #include "tetMeshDeformationModel.h"
 #include "koiterDeformationModel.h"
 
@@ -98,7 +99,6 @@ public:
   int numPlasticParams;
   int nele;
   int nvtx;
-  int enforceSPD = 0;
 
   void computeFiberAxes();
 };
@@ -337,10 +337,8 @@ void DeformationModelManager::setMesh(const SimulationMesh *simulationMesh, cons
   }
 }
 
-void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelType, DeformationModelElasticMaterial elasticMaterialType, int enforceSPD)
+void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelType, DeformationModelElasticMaterial elasticMaterialType)
 {
-  data->enforceSPD = enforceSPD;
-
   SPDLOG_LOGGER_INFO(pgo::Logging::lgr(), "Computing the type of each element...");
 
   if (data->fiberDirections.size() || data->vertexFiberDirections.size()) {
@@ -445,7 +443,6 @@ void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelT
         double lambda = mat->getLambdaLame();
 
         data->stableNeoHookeanMaterials[ele] = new ElasticModelStableNeoHookeanMaterial(mu, lambda);
-        data->stableNeoHookeanMaterials[ele]->enforceSPD(data->enforceSPD);
 
         const SimulationMeshHillMaterial *hillMat = dynamic_cast<const SimulationMeshHillMaterial *>(data->simulationMesh->getElementMaterial(ele, 1));
         PGO_ALOG(hillMat != nullptr);
@@ -479,7 +476,6 @@ void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelT
         data->invariantModels[ele] = new InvariantBasedMaterialStVK(E, nu, compressionRatio);
 
         data->invariantBasedMaterials[ele] = new ElasticModelInvariantBasedMaterial(data->invariantModels[ele]);
-        data->invariantBasedMaterials[ele]->enforceSPD(data->enforceSPD);
 
         const SimulationMeshHillMaterial *hillMat = dynamic_cast<const SimulationMeshHillMaterial *>(data->simulationMesh->getElementMaterial(ele, 1));
         PGO_ALOG(hillMat != nullptr);
@@ -503,7 +499,6 @@ void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelT
         data->invariantModels[ele] = new InvariantBasedMaterialStVK(E, nu, compressionRatio);
 
         data->invariantBasedMaterials[ele] = new ElasticModelInvariantBasedMaterial(data->invariantModels[ele]);
-        data->invariantBasedMaterials[ele]->enforceSPD(data->enforceSPD);
 
         const SimulationMeshHillMaterial *hillMat = dynamic_cast<const SimulationMeshHillMaterial *>(data->simulationMesh->getElementMaterial(ele, 1));
         PGO_ALOG(hillMat != nullptr);
@@ -527,8 +522,6 @@ void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelT
         double lambda = mat->getLambdaLame();
 
         data->stableNeoHookeanMaterials[ele] = new ElasticModelStableNeoHookeanMaterial(mu, lambda);
-        data->stableNeoHookeanMaterials[ele]->enforceSPD(data->enforceSPD);
-        // data->stableNeoHookeanMaterials[ele]->enforceSPD(true);
 
         data->elementMaterials[ele] = data->stableNeoHookeanMaterials[ele];
       }
@@ -543,7 +536,6 @@ void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelT
         data->invariantModels[ele] = new InvariantBasedMaterialStVK(E, nu, compressionRatio);
 
         data->invariantBasedMaterials[ele] = new ElasticModelInvariantBasedMaterial(data->invariantModels[ele]);
-        data->invariantBasedMaterials[ele]->enforceSPD(data->enforceSPD);
 
         data->elementMaterials[ele] = data->invariantBasedMaterials[ele];
       }
@@ -558,7 +550,6 @@ void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelT
         data->invariantModels[ele] = new InvariantBasedMaterialStVK(E, nu, compressionRatio);
 
         data->invariantBasedMaterials[ele] = new ElasticModelInvariantBasedMaterial(data->invariantModels[ele]);
-        data->invariantBasedMaterials[ele]->enforceSPD(data->enforceSPD);
 
         data->volumeMaterials[ele] = new ElasticModelVolumeMaterial(compressionRatio);
 
@@ -658,6 +649,16 @@ void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelT
         data->elementFEMs[ele] = new TetMeshDeformationModel(
           restPosition.data(), restPosition.data() + 3, restPosition.data() + 6, restPosition.data() + 9,
           data->elementMaterials[ele], pm);
+      } else if (data->simulationMesh->getElementType() == SimulationMeshType::CUBIC) {
+        ES::V24d restPosition;
+        for (int j = 0; j < 8; j++) {
+          ES::V3d p;
+          data->simulationMesh->getVertex(ele, j, p.data());
+          restPosition.segment<3>(j * 3) = p;
+        }
+
+        data->elementFEMs[ele] = new CubicMeshDeformationModel(
+          restPosition.data(), data->elementMaterials[ele], pm);
       }
       else if (data->simulationMesh->getElementType() == SimulationMeshType::SHELL) {
         ES::V18d restPosition;
@@ -693,7 +694,7 @@ void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelT
         else if (elasticMaterialType == DeformationModelElasticMaterial::KOITER_FABRIC ||
           elasticMaterialType == DeformationModelElasticMaterial::KOITER_STVK) {
           data->elementFEMs[ele] = new KoiterDeformationModel(restPosition.data(), restPosition.data() + 3, restPosition.data() + 6, restPosition.data() + 9, restPosition.data() + 12,
-            restPosition.data() + 15, data->elementMaterials[ele], pm, data->enforceSPD);
+            restPosition.data() + 15, data->elementMaterials[ele], pm);
         }
         else {
           throw std::logic_error("unsupported elastic material for shell element");
@@ -710,6 +711,19 @@ void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelT
 const DeformationModel *DeformationModelManager::getDeformationModel(int eleID) const
 {
   return data->elementFEMs[eleID];
+}
+
+void DeformationModelManager::setEnforceSPD(int enable)
+{
+  for (auto dm : data->elementFEMs) {
+    if (dm)
+      dm->enableSPD(enable);
+  }
+
+  for (auto mat : data->elementMaterials) {
+    if (mat)
+      mat->enableSPD(enable);
+  }
 }
 
 const SimulationMesh *DeformationModelManager::getMesh() const

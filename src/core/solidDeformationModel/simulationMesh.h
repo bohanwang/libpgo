@@ -16,6 +16,7 @@ class TetMeshGeo;
 
 namespace VolumetricMeshes
 {
+class CubicMesh;
 class TetMesh;
 }
 
@@ -253,12 +254,14 @@ public:
   int getElementNumMaterials(int ele) const;
 
   void setMaterial(int matID, const SimulationMeshMaterial *mat);
+  void appendMaterialToAllElements(const SimulationMeshMaterial *mat);
 
 protected:
   SimulationMeshImpl *impl;
 };
 
 SimulationMesh *loadTetMesh(const VolumetricMeshes::TetMesh *tetmesh);
+SimulationMesh *loadCubicMesh(const VolumetricMeshes::CubicMesh *cubicMesh);
 
 SimulationMesh *loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat, int toTriangle);
 SimulationMesh *loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, int numMaterials, const SimulationMeshMaterial *const *const mat, const int *materialIndices, int toTriangle);

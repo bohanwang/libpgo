@@ -140,8 +140,7 @@ We provide three python scripts to test the installation.
 2. `pgo_run_sim.py`. It reads input config file and run simulation. You can try `box`, `box-with-sphere`, `dragon`, and `dragon-dyn` to test different simulation results. Take the box example for illustration. You can run the box example using the following commands.
    
     ```bash
-        cd examples/box
-        python ../../src/python/pypgo/pgo_run_sim.py box.json
+        python src/python/pypgo/pgo_run_sim.py examples/box/box.json
     ```
 
     The expected result will look like the first image. The time integrator is hard-coded as implicit backward Euler (BE). You are free to change it to implicit Newmark (NW) or TR-BDF2 integrator (not support friction).
@@ -175,9 +174,53 @@ We provide three python scripts to test the installation.
 3. `pgo_dump_abc.py`. It creates the abc file that can be used for blender/maya from config file `anim.json`. Essentially, it takes the simulation output `.obj` sequences and output a `.abc` file.
 
     ```bash
-        cd examples/box
-        python ../../src/python/pypgo/pgo_dump_abc.py anim.json ./
+        python src/python/pypgo/pgo_dump_abc.py examples/box/anim.json examples/box/
     ```
+
+    The `convertAnimation` tool provides the same conversion on the CLI:
+
+    ```bash
+        convertAnimation examples/box/anim.json
+    ```
+
+    If the optional second argument is omitted, the tool writes `.abc` files into the folder containing `anim.json`, and each output filename uses the mesh `name` field from the config.
+
+## Tools
+
+### Cubic Mesher
+
+`cubicMesher` converts a closed triangle surface mesh in `.obj` format into a cubic volumetric `.veg` mesh and can optionally export the extracted cubic surface as `.obj`.
+
+Build the tool:
+
+```bash
+    cmake --preset base_no_mkl_debug
+    cmake --build build/base_no_mkl_debug --target cubicMesher
+```
+
+Basic usage:
+
+```bash
+    build/base_no_mkl_debug/bin/cubicMesher \
+        --input-mesh examples/cubic/box/box.obj \
+        --resolution 4 \
+        --output-mesh examples/cubic/box/box.veg \
+        --output-surface examples/cubic/box/box-surface.obj \
+        --E 10000000 \
+        --nu 0.45 \
+        --density 1000
+```
+
+Main arguments:
+
+- `--input-mesh`: input closed triangle mesh in `.obj`
+- `--resolution`: number of cubic cells along the shortest input AABB edge
+- `--output-mesh`: output cubic `.veg`
+- `--output-surface`: optional extracted surface `.obj`
+- `--E`, `--nu`, `--density`: isotropic material parameters written into the output mesh
+
+Generated sample cubic assets are stored under `examples/cubic/`. See [`examples/cubic/README.md`](./examples/cubic/README.md) for the exact commands and parameters used for `box`, `bunny`, `dragon-dyn`, and `box-with-sphere`.
+
 ---
 
 ## Setup without Python (Optional)

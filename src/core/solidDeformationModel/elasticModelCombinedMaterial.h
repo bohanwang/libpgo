@@ -44,6 +44,12 @@ public:
   virtual void compute_d2PdFdparam(const double *param, int i, const double F[9],
     const double U[9], const double V[9], const double S[3], double d2P_dFdparam[81]) const override;
 
+  void enableSPD(int enable) override
+  {
+    for (int i = 0; i < count; i++)
+      const_cast<ElasticModel3DDeformationGradient *>(materials[i])->enableSPD(enable);
+  }
+
   const ElasticModel3DDeformationGradient *getMaterial(int id) const { return materials[id]; }
 
 protected:
@@ -297,6 +303,12 @@ public:
     const double U[9], const double V[9], const double S[3], double d2p_dparam2[9]) const override;
   virtual void compute_d2PdFdparam(const double *param, int i, const double F[9],
     const double U[9], const double V[9], const double S[3], double d2P_dFdparam[81]) const override;
+
+  void enableSPD(int enable) override
+  {
+    for (int i = 0; i < count; i++)
+      const_cast<ElasticModel3DDeformationGradient *>(materials[i])->enableSPD(enable);
+  }
 
 protected:
   const ElasticModel3DDeformationGradient **materials;
