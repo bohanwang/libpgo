@@ -191,20 +191,21 @@ Run config:
 
 - `runSim examples/cubic/box-with-sphere/box-with-sphere.json`
 
-### box-with-sphere-lite
+### box-with-sphere-xlite
 
-Lightweight variant rebuilt from the same input surface mesh for faster iteration and debugging.
+Ultra-lightweight variant rebuilt from the same input surface mesh for the fastest iteration and debugging while preserving the two original connected components.
 
 Files:
 
-- `examples/cubic/box-with-sphere/box-with-sphere-lite.veg`
-- `examples/cubic/box-with-sphere/box-with-sphere-lite-surface.obj`
-- `examples/cubic/box-with-sphere/box-with-sphere-lite.json`
-- `examples/cubic/box-with-sphere/anim-lite.json`
+- `examples/cubic/box-with-sphere-xlite/box-with-sphere.obj`
+- `examples/cubic/box-with-sphere-xlite/box-with-sphere-xlite.veg`
+- `examples/cubic/box-with-sphere-xlite/box-with-sphere-xlite-surface.obj`
+- `examples/cubic/box-with-sphere-xlite/box-with-sphere-xlite.json`
+- `examples/cubic/box-with-sphere-xlite/anim-xlite.json`
 
 Parameters:
 
-- `resolution=20`
+- `resolution=5`
 - `E=1000000`
 - `nu=0.45`
 - `density=1000`
@@ -213,10 +214,10 @@ Command:
 
 ```bash
 build/base_no_mkl/bin/cubicMesher \
-  --input-mesh examples/cubic/box-with-sphere/box-with-sphere.obj \
-  --resolution 20 \
-  --output-mesh examples/cubic/box-with-sphere/box-with-sphere-lite.veg \
-  --output-surface examples/cubic/box-with-sphere/box-with-sphere-lite-surface.obj \
+  --input-mesh examples/cubic/box-with-sphere-xlite/box-with-sphere.obj \
+  --resolution 5 \
+  --output-mesh examples/cubic/box-with-sphere-xlite/box-with-sphere-xlite.veg \
+  --output-surface examples/cubic/box-with-sphere-xlite/box-with-sphere-xlite-surface.obj \
   --E 1000000 \
   --nu 0.45 \
   --density 1000
@@ -224,9 +225,9 @@ build/base_no_mkl/bin/cubicMesher \
 
 Observed output:
 
-- `4304` vertices
-- `3362` elements
+- `174` vertices
+- `80` elements
 
 Run config:
 
-- `runSim examples/cubic/box-with-sphere/box-with-sphere-lite.json`
+- `runSim examples/cubic/box-with-sphere-xlite/box-with-sphere-xlite.json`
