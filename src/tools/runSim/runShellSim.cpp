@@ -20,12 +20,14 @@
 #include "createTriMesh.h"
 #include "libiglInterface.h"
 #include "CIPC.h"
+#include "runSimCliLogging.h"
 #include "triangleMeshExternalContactHandler.h"
 #include "pointPenetrationEnergy.h"
 
 #include <argparse/argparse.hpp>
 
 #include <iostream>
+#include <memory>
 
 int main(int argc, char *argv[])
 {
@@ -37,6 +39,10 @@ int main(int argc, char *argv[])
   program.add_argument("config")
     .help("Config File")
     .required();
+  program.add_argument("--log")
+    .help("Write command-line output to a .log file next to the config file")
+    .default_value(false)
+    .implicit_value(true);
 
   try {
     program.parse_args(argc, argv);  // Example: ./main --color orange
@@ -47,10 +53,25 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  pgo::Logging::init();
-  pgo::Mesh::initPredicates();
-
   std::string configFilename = program.get<std::string>("config");
+  const bool enableCliLog = program.get<bool>("--log");
+  std::unique_ptr<RunSim::ScopedRunSimCliLogRedirect> logRedirect;
+
+  if (enableCliLog) {
+    try {
+      const std::filesystem::path logPath = RunSim::deriveDefaultLogPathFromConfig(configFilename);
+      logRedirect = std::make_unique<RunSim::ScopedRunSimCliLogRedirect>(logPath.string());
+      pgo::Logging::init();
+    }
+    catch (const std::exception &err) {
+      std::cerr << err.what() << std::endl;
+      return 1;
+    }
+  }
+  else {
+    pgo::Logging::init();
+  }
+  pgo::Mesh::initPredicates();
 
   ConfigFileJSON jconfig;
   if (jconfig.open(configFilename.c_str()) != true) {
@@ -301,7 +322,9 @@ int main(int argc, char *argv[])
     usurf = u;
 
 # ifdef NDEBUG
-    std::cin.get();
+    if (!enableCliLog) {
+      std::cin.get();
+    }
 # endif
 
     ES::VXd psurf = surfaceRestPositions + usurf;

@@ -10,6 +10,6 @@ add_libpgo_tools(runSim "runSim.cpp;runSimVolumeMeshIO.cpp;runSimFEMSetup.cpp;ru
 
 target_link_libraries(runSim PRIVATE argparse::argparse)
 
-add_libpgo_tools(runShellSim runShellSim.cpp "${AVAILABLE_LIBS}")
+add_libpgo_tools(runShellSim "runShellSim.cpp;runSimCliLogging.cpp" "${AVAILABLE_LIBS}")
 
 target_link_libraries(runShellSim PRIVATE argparse::argparse)

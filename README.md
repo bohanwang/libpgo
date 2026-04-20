@@ -194,14 +194,14 @@ We provide three python scripts to test the installation.
 Build the tool:
 
 ```bash
-    cmake --preset base_no_mkl_debug
-    cmake --build build/base_no_mkl_debug --target cubicMesher
+    cmake --preset base_no_mkl
+    cmake --build build/base_no_mkl --target cubicMesher
 ```
 
 Basic usage:
 
 ```bash
-    build/base_no_mkl_debug/bin/cubicMesher \
+    build/base_no_mkl/bin/cubicMesher \
         --input-mesh examples/cubic/box/box.obj \
         --resolution 4 \
         --output-mesh examples/cubic/box/box.veg \
@@ -220,6 +220,27 @@ Main arguments:
 - `--E`, `--nu`, `--density`: isotropic material parameters written into the output mesh
 
 Generated sample cubic assets are stored under `examples/cubic/`. See [`examples/cubic/README.md`](./examples/cubic/README.md) for the exact commands and parameters used for `box`, `bunny`, `dragon-dyn`, and `box-with-sphere`.
+
+### Shell Simulation
+
+Build the shell simulation CLI:
+
+```bash
+    cmake --preset base_no_mkl
+    cmake --build build/base_no_mkl --target runShellSim
+```
+
+Run the bundled shell example:
+
+```bash
+    build/base_no_mkl/bin/runShellSim examples/shell/shell.json
+```
+
+To also write the command-line output to `examples/shell/shell.log`, add `--log`:
+
+```bash
+    build/base_no_mkl/bin/runShellSim examples/shell/shell.json --log
+```
 
 ---
 

@@ -14,14 +14,14 @@ The examples are meant to cover the typical cubic workflow in this repo:
 Build the tools:
 
 ```bash
-cmake --preset base_no_mkl_debug
-cmake --build build/base_no_mkl_debug --target cubicMesher runSim convertAnimation
+cmake --preset base_no_mkl
+cmake --build build/base_no_mkl --target cubicMesher runSim convertAnimation
 ```
 
 Run the smallest example from the repo root:
 
 ```bash
-build/base_no_mkl_debug/bin/runSim examples/cubic/box/box.json
+build/base_no_mkl/bin/runSim examples/cubic/box/box.json
 ```
 
 This writes the output frame sequence to `examples/cubic/box/ret-cubic-box/`.
@@ -29,7 +29,7 @@ This writes the output frame sequence to `examples/cubic/box/ret-cubic-box/`.
 Convert the dumped frames into Alembic:
 
 ```bash
-build/base_no_mkl_debug/bin/convertAnimation examples/cubic/box/anim.json
+build/base_no_mkl/bin/convertAnimation examples/cubic/box/anim.json
 ```
 
 The JSON configs use paths relative to the config file, so they can be launched from the repo root without first changing into the case directory.
@@ -78,8 +78,8 @@ Minimal sanity-check case for the cubic pipeline. This is the smallest mesh here
 - files: `box.obj`, `box.veg`, `box-surface.obj`, `box.json`, `anim.json`
 - mesher params: `resolution=4`, `E=10000000`, `nu=0.45`, `density=1000`
 - observed mesh size: `125` vertices, `64` elements
-- run: `build/base_no_mkl_debug/bin/runSim examples/cubic/box/box.json`
-- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/cubic/box/anim.json`
+- run: `build/base_no_mkl/bin/runSim examples/cubic/box/box.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/box/anim.json`
 
 ### `bunny`
 
@@ -88,8 +88,8 @@ Medium-size single-body drop test. This case is useful when you want a more inte
 - files: `bunny.obj`, `bunny.veg`, `bunny-surface.obj`, `bunny.json`, `anim.json`
 - mesher params: `resolution=20`, `E=100000`, `nu=0.45`, `density=1000`
 - observed mesh size: `6084` vertices, `4695` elements
-- run: `build/base_no_mkl_debug/bin/runSim examples/cubic/bunny/bunny.json`
-- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/cubic/bunny/anim.json`
+- run: `build/base_no_mkl/bin/runSim examples/cubic/bunny/bunny.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/bunny/anim.json`
 
 ### `dragon-dyn`
 
@@ -98,8 +98,8 @@ Larger dynamic drop example with a longer recorded animation range. Use this whe
 - files: `dragon.obj`, `dragon.veg`, `dragon-surface.obj`, `dragon.json`, `anim.json`
 - mesher params: `resolution=20`, `E=1000000`, `nu=0.45`, `density=1000`
 - observed mesh size: `10495` vertices, `7503` elements
-- run: `build/base_no_mkl_debug/bin/runSim examples/cubic/dragon-dyn/dragon.json`
-- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/cubic/dragon-dyn/anim.json`
+- run: `build/base_no_mkl/bin/runSim examples/cubic/dragon-dyn/dragon.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/dragon-dyn/anim.json`
 
 ### `box-with-sphere`
 
@@ -109,8 +109,8 @@ Full-resolution two-component example generated from the box-plus-sphere input s
 - mesher params: `resolution=50`, `E=1000000`, `nu=0.45`, `density=1000`
 - runtime note: `contact-stiffness` has been increased to `1e5` in the cubic case
 - observed mesh size: `57366` vertices, `51845` elements
-- run: `build/base_no_mkl_debug/bin/runSim examples/cubic/box-with-sphere/box-with-sphere.json`
-- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/cubic/box-with-sphere/anim.json`
+- run: `build/base_no_mkl/bin/runSim examples/cubic/box-with-sphere/box-with-sphere.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/box-with-sphere/anim.json`
 - note: the full-resolution GIF has not been committed under `examples/cubic/media/` yet
 
 ### `box-with-sphere-xlite`
@@ -121,7 +121,7 @@ Ultra-lightweight version of the same two-component setup. This is the best case
 - mesher params: `resolution=5`, `E=1000000`, `nu=0.45`, `density=1000`
 - observed mesh size: `174` vertices, `80` elements
 - run: `build/base_no_mkl/bin/runSim examples/cubic/box-with-sphere-xlite/box-with-sphere-xlite.json`
-- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/cubic/box-with-sphere-xlite/anim-xlite.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/box-with-sphere-xlite/anim-xlite.json`
 - note: the committed `box-with-sphere` preview GIF currently corresponds to this lightweight case
 
 ## Regenerating the Cubic Mesh Assets
@@ -129,7 +129,7 @@ Ultra-lightweight version of the same two-component setup. This is the best case
 Tool:
 
 ```bash
-build/base_no_mkl_debug/bin/cubicMesher
+build/base_no_mkl/bin/cubicMesher
 ```
 
 Main arguments:
@@ -145,7 +145,7 @@ Main arguments:
 ### `box`
 
 ```bash
-build/base_no_mkl_debug/bin/cubicMesher \
+build/base_no_mkl/bin/cubicMesher \
   --input-mesh examples/cubic/box/box.obj \
   --resolution 4 \
   --output-mesh examples/cubic/box/box.veg \
@@ -158,7 +158,7 @@ build/base_no_mkl_debug/bin/cubicMesher \
 ### `bunny`
 
 ```bash
-build/base_no_mkl_debug/bin/cubicMesher \
+build/base_no_mkl/bin/cubicMesher \
   --input-mesh examples/cubic/bunny/bunny.obj \
   --resolution 20 \
   --output-mesh examples/cubic/bunny/bunny.veg \
@@ -171,7 +171,7 @@ build/base_no_mkl_debug/bin/cubicMesher \
 ### `dragon-dyn`
 
 ```bash
-build/base_no_mkl_debug/bin/cubicMesher \
+build/base_no_mkl/bin/cubicMesher \
   --input-mesh examples/cubic/dragon-dyn/dragon.obj \
   --resolution 20 \
   --output-mesh examples/cubic/dragon-dyn/dragon.veg \
@@ -184,7 +184,7 @@ build/base_no_mkl_debug/bin/cubicMesher \
 ### `box-with-sphere`
 
 ```bash
-build/base_no_mkl_debug/bin/cubicMesher \
+build/base_no_mkl/bin/cubicMesher \
   --input-mesh examples/cubic/box-with-sphere/box-with-sphere.obj \
   --resolution 50 \
   --output-mesh examples/cubic/box-with-sphere/box-with-sphere.veg \
@@ -212,13 +212,13 @@ build/base_no_mkl/bin/cubicMesher \
 After `runSim` dumps the OBJ sequence, use the per-case animation config to convert it:
 
 ```bash
-build/base_no_mkl_debug/bin/convertAnimation examples/cubic/<case>/anim.json
+build/base_no_mkl/bin/convertAnimation examples/cubic/<case>/anim.json
 ```
 
 For the lightweight box-with-sphere case, use:
 
 ```bash
-build/base_no_mkl_debug/bin/convertAnimation examples/cubic/box-with-sphere-xlite/anim-xlite.json
+build/base_no_mkl/bin/convertAnimation examples/cubic/box-with-sphere-xlite/anim-xlite.json
 ```
 
 If the optional output path is omitted, `convertAnimation` writes the `.abc` file next to the animation config and uses the mesh `name` field from that config as the output filename stem.

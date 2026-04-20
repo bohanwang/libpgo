@@ -37,6 +37,9 @@ target_compile_definitions(runSim_gtest PRIVATE
   LIBPGO_TEST_TET_BOX_VEG="${CMAKE_SOURCE_DIR}/examples/box/box.veg"
   LIBPGO_TEST_TET_BOX_OBJ="${CMAKE_SOURCE_DIR}/examples/box/box.obj"
   LIBPGO_TEST_CUBIC_BOX_VEG="${CMAKE_SOURCE_DIR}/examples/cubic/box/box.veg"
-  LIBPGO_TEST_CUBIC_BOX_OBJ="${CMAKE_SOURCE_DIR}/examples/cubic/box/box.obj")
+  LIBPGO_TEST_CUBIC_BOX_OBJ="${CMAKE_SOURCE_DIR}/examples/cubic/box/box.obj"
+  LIBPGO_TEST_SHELL_JSON="${CMAKE_SOURCE_DIR}/examples/shell/shell.json"
+  PGO_TEST_RUN_SHELL_SIM_BIN="$<TARGET_FILE:runShellSim>")
+add_dependencies(runSim_gtest runShellSim)
 set_property(TARGET runSim_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(runSim_gtest)
