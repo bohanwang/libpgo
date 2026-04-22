@@ -13,3 +13,7 @@ target_link_libraries(runSim PRIVATE argparse::argparse)
 add_libpgo_tools(runShellSim "runShellSim.cpp;runSimCliLogging.cpp" "${AVAILABLE_LIBS}")
 
 target_link_libraries(runShellSim PRIVATE argparse::argparse)
+
+add_libpgo_tools(runIPCSim "runIPCSim.cpp;runSimCliLogging.cpp" "${AVAILABLE_LIBS}")
+
+target_link_libraries(runIPCSim PRIVATE argparse::argparse)

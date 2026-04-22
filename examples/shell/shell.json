@@ -2,7 +2,7 @@
   "surface-mesh": "shell.obj",
   "fixed-vertices": [
     {
-      "filename": "shell-fixed.txt",
+      "filename": "shell-fixed0.txt",
       "movement": [
         0,
         0,

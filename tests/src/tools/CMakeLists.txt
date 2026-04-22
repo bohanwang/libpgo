@@ -43,3 +43,17 @@ target_compile_definitions(runSim_gtest PRIVATE
 add_dependencies(runSim_gtest runShellSim)
 set_property(TARGET runSim_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(runSim_gtest)
+
+add_executable(runIPCSim_gtest
+  runIPCSim_gtest.cpp
+  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimCliLogging.cpp)
+target_link_libraries(runIPCSim_gtest PRIVATE
+  GTest::gtest_main)
+target_include_directories(runIPCSim_gtest PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/tools/runSim)
+target_compile_definitions(runIPCSim_gtest PRIVATE
+  LIBPGO_TEST_SHELL_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/shell"
+  PGO_TEST_RUN_IPC_SIM_BIN="$<TARGET_FILE:runIPCSim>")
+add_dependencies(runIPCSim_gtest runIPCSim)
+set_property(TARGET runIPCSim_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(runIPCSim_gtest)
