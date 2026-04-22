@@ -8,6 +8,8 @@ copyright to Bohan Wang
 #include "CIPC.h"
 #include "CIPC_autogen.h"
 #include "CIPC_autogen_ll.h"
+#include "scopedProfileSection.h"
+#include "surfaceIPCProfiling.h"
 
 #include "pgoLogging.h"
 
@@ -1290,6 +1292,8 @@ struct SpatialHash
 // =========================================================================
 void CIPCPotentialEnergy::findCollisionPairs(const VXd &positions) const
 {
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildStatic);
+
   ptPairs_.clear();
   eePairs_.clear();
 
@@ -1450,61 +1454,69 @@ double CIPCPotentialEnergy::computeMaxStepSize(EigenSupport::ConstRefVecXd x, Ei
   int nTri = (int)triangles_.size();
   int nEdge = (int)edges_.size();
 
-  // Build swept-volume AABBs (parallel)
   std::vector<AABB> vertBox(numVerts_);
-  tbb::parallel_for(tbb::blocked_range<int>(0, numVerts_),
-    [&](const tbb::blocked_range<int> &r) {
-      for (int vi = r.begin(); vi < r.end(); ++vi) {
-        V3d p0 = getV(vi), p1 = p0 + getdV(vi);
-        vertBox[vi].init(p0, 0.0);
-        vertBox[vi].expand(p1);
-      }
-    });
-
   std::vector<AABB> triBox(nTri);
-  tbb::parallel_for(tbb::blocked_range<int>(0, nTri),
-    [&](const tbb::blocked_range<int> &r) {
-      for (int fi = r.begin(); fi < r.end(); ++fi) {
-        auto &tri = triangles_[fi];
-        V3d v0 = getV(tri[0]), v1 = getV(tri[1]), v2 = getV(tri[2]);
-        V3d d0 = getdV(tri[0]), d1 = getdV(tri[1]), d2 = getdV(tri[2]);
-        triBox[fi].init(v0, 0.0);
-        triBox[fi].expand(v1);
-        triBox[fi].expand(v2);
-        triBox[fi].expand(v0 + d0);
-        triBox[fi].expand(v1 + d1);
-        triBox[fi].expand(v2 + d2);
-      }
-    });
-
   std::vector<AABB> edgeBox(nEdge);
-  tbb::parallel_for(tbb::blocked_range<int>(0, nEdge),
-    [&](const tbb::blocked_range<int> &r) {
-      for (int ei = r.begin(); ei < r.end(); ++ei) {
-        V3d a0 = getV(edges_[ei][0]), a1 = getV(edges_[ei][1]);
-        V3d da0 = getdV(edges_[ei][0]), da1 = getdV(edges_[ei][1]);
-        edgeBox[ei].init(a0, 0.0);
-        edgeBox[ei].expand(a1);
-        edgeBox[ei].expand(a0 + da0);
-        edgeBox[ei].expand(a1 + da1);
-      }
-    });
+  double cellSize = 0.0;
 
-  // Cell size: average swept-AABB diagonal (parallel reduction)
-  double avgBoxDiag = tbb::parallel_reduce(
-    tbb::blocked_range<int>(0, nTri), 0.0,
-    [&](const tbb::blocked_range<int> &r, double sum) {
-      for (int fi = r.begin(); fi < r.end(); ++fi)
-        sum += (triBox[fi].hi - triBox[fi].lo).norm();
-      return sum;
-    },
-    std::plus<double>());
-  double cellSize = nTri > 0 ? std::max(avgBoxDiag / nTri, 1e-6) : std::max(1e-6, dhat);
+  {
+    Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildSwept);
+
+    // Build swept-volume AABBs (parallel)
+    tbb::parallel_for(tbb::blocked_range<int>(0, numVerts_),
+      [&](const tbb::blocked_range<int> &r) {
+        for (int vi = r.begin(); vi < r.end(); ++vi) {
+          V3d p0 = getV(vi), p1 = p0 + getdV(vi);
+          vertBox[vi].init(p0, 0.0);
+          vertBox[vi].expand(p1);
+        }
+      });
+
+    tbb::parallel_for(tbb::blocked_range<int>(0, nTri),
+      [&](const tbb::blocked_range<int> &r) {
+        for (int fi = r.begin(); fi < r.end(); ++fi) {
+          auto &tri = triangles_[fi];
+          V3d v0 = getV(tri[0]), v1 = getV(tri[1]), v2 = getV(tri[2]);
+          V3d d0 = getdV(tri[0]), d1 = getdV(tri[1]), d2 = getdV(tri[2]);
+          triBox[fi].init(v0, 0.0);
+          triBox[fi].expand(v1);
+          triBox[fi].expand(v2);
+          triBox[fi].expand(v0 + d0);
+          triBox[fi].expand(v1 + d1);
+          triBox[fi].expand(v2 + d2);
+        }
+      });
+
+    tbb::parallel_for(tbb::blocked_range<int>(0, nEdge),
+      [&](const tbb::blocked_range<int> &r) {
+        for (int ei = r.begin(); ei < r.end(); ++ei) {
+          V3d a0 = getV(edges_[ei][0]), a1 = getV(edges_[ei][1]);
+          V3d da0 = getdV(edges_[ei][0]), da1 = getdV(edges_[ei][1]);
+          edgeBox[ei].init(a0, 0.0);
+          edgeBox[ei].expand(a1);
+          edgeBox[ei].expand(a0 + da0);
+          edgeBox[ei].expand(a1 + da1);
+        }
+      });
+
+    // Cell size: average swept-AABB diagonal (parallel reduction)
+    double avgBoxDiag = tbb::parallel_reduce(
+      tbb::blocked_range<int>(0, nTri), 0.0,
+      [&](const tbb::blocked_range<int> &r, double sum) {
+        for (int fi = r.begin(); fi < r.end(); ++fi)
+          sum += (triBox[fi].hi - triBox[fi].lo).norm();
+        return sum;
+      },
+      std::plus<double>());
+    cellSize = nTri > 0 ? std::max(avgBoxDiag / nTri, 1e-6) : std::max(1e-6, dhat);
+  }
 
   double alpha = 1.0;
 
   // --- PT CCD: insert triangles (serial), query with vertices (parallel reduce) ---
   {
+    Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kMaxStepPT);
+
     SpatialHash triHash(nTri);
     triHash.cellSize = cellSize;
     for (int fi = 0; fi < nTri; ++fi)
@@ -1629,6 +1641,8 @@ double CIPCPotentialEnergy::computeMaxStepSize(EigenSupport::ConstRefVecXd x, Ei
 
   // --- EE CCD: insert edges (serial), query with edges (parallel reduce) ---
   {
+    Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kMaxStepEE);
+
     SpatialHash edgeHash(nEdge);
     edgeHash.cellSize = cellSize;
     for (int ei = 0; ei < nEdge; ++ei)
@@ -1684,6 +1698,8 @@ double CIPCPotentialEnergy::computeMaxStepSize(EigenSupport::ConstRefVecXd x, Ei
 // =========================================================================
 double CIPCPotentialEnergy::computeEnergy(const VXd &pos) const
 {
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kEnergy);
+
   double ee_eps = eps_ee;
   double dhat2 = dhat * dhat;
 
@@ -1751,6 +1767,8 @@ double CIPCPotentialEnergy::computeEnergy(const VXd &pos) const
 // =========================================================================
 void CIPCPotentialEnergy::computeGradient(const VXd &pos, EigenSupport::RefVecXd &grad) const
 {
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kGradient);
+
   int n = 3 * numVerts_;
   if (grad.size() != n)
     throw std::runtime_error("Gradient vector has wrong size");
@@ -1849,6 +1867,8 @@ void CIPCPotentialEnergy::computeGradient(const VXd &pos, EigenSupport::RefVecXd
 // =========================================================================
 void CIPCPotentialEnergy::computeHessian(const VXd &pos, SpMatD &hess) const
 {
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kHessian);
+
   int n = 3 * numVerts_;
   int nPT = (int)ptPairs_.size();
   int nEE = (int)eePairs_.size();
@@ -1981,6 +2001,8 @@ void CIPCPotentialEnergy::computeHessian(const VXd &pos, SpMatD &hess) const
 void CIPCPotentialEnergy::computeAll(const VXd &x,
   double &energy, VXd &grad, SpMatD &hess) const
 {
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kCombined);
+
   findCollisionPairs(x);  // one broad-phase pass
 
   int n = 3 * numVerts_;

@@ -1,6 +1,7 @@
 set(CONTACT_HEADERS
   CCDKernel.h
   contactEnergyUtilities.h
+  surfaceIPCProfiling.h
   pointPenetrationEnergy.h
   pointTrianglePairCouplingEnergyWithCollision.h
   triangleMeshExternalContactHandler.h
@@ -22,7 +23,7 @@ set(CONTACT_SOURCES
   CIPC.cpp
 )
 
-set(CONTACT_DEPS mesh nonlinearOptimization CCD::SafeCCD CCD::Exact)
+set(CONTACT_DEPS mesh nonlinearOptimization profiling CCD::SafeCCD CCD::Exact)
 
 foreach(tgt ${CONTACT_DEPS})
   if(NOT TARGET ${tgt})

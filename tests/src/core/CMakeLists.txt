@@ -14,4 +14,6 @@ if (TARGET animationIO)
   gtest_discover_tests(animationLoader_gtest)
 endif()
 
+add_subdirectory(contact)
+add_subdirectory(profiling)
 add_subdirectory(solidDeformationModel)

@@ -1,6 +1,7 @@
 set(PGO_GLOBAL_LIBRARY_TARGETS
   macros  
   basicAlgorithms
+  profiling
   pgoLogging
   basicIO
   eigenSupport
