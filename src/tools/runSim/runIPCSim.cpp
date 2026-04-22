@@ -1,5 +1,6 @@
 #include "configFileJSON.h"
 #include "EigenSupport.h"
+#include "geometryQuery.h"
 #include "initPredicates.h"
 #include "triMeshGeo.h"
 #include "pgoLogging.h"
@@ -111,9 +112,10 @@ int main(int argc, char *argv[])
     rejectIfPresent(jconfig, "external-objects", "external contact is out of scope for phase1BC.");
     if (!jconfig.exist("fixed-vertices"))
       throwConfigError("Missing required field `fixed-vertices`.");
-    if (!jconfig.exist("ipc-dhat"))
+    const bool ipcHeuristic = jconfig.getValue<bool>("ipc-heuristic", 0, false);
+    if (!ipcHeuristic && !jconfig.exist("ipc-dhat"))
       throwConfigError("Missing required field `ipc-dhat`.");
-    if (!jconfig.exist("ipc-kappa"))
+    if (!ipcHeuristic && !jconfig.exist("ipc-kappa"))
       throwConfigError("Missing required field `ipc-kappa`.");
 
     const std::string surfaceMeshFilename = jconfig.getResolvedPath("surface-mesh", 1);
@@ -141,21 +143,34 @@ int main(int argc, char *argv[])
 
     const std::string outputFolder = jconfig.getResolvedPath("output", 1);
 
+    Mesh::TriMeshGeo surfaceMesh;
+    if (surfaceMesh.load(surfaceMeshFilename) != true)
+      return 1;
+
+    const Mesh::BoundingBox surfaceBox(surfaceMesh.positions());
+    const double E = 1000000;
+    const double h = 3e-3;
+
     Contact::CIPC::SurfaceIPCCore::Parameters ipcParams;
-    ipcParams.dhat = jconfig.getDouble("ipc-dhat", 1);
-    ipcParams.kappa = jconfig.getDouble("ipc-kappa", 1);
+    const char *ipcParamSource = ipcHeuristic ? "heuristic" : "config";
+    if (ipcHeuristic) {
+      ipcParams.dhat = surfaceBox.sides().norm() * 1e-3;
+      ipcParams.kappa = E * h;
+    }
+    else {
+      ipcParams.dhat = jconfig.getDouble("ipc-dhat", 1);
+      ipcParams.kappa = jconfig.getDouble("ipc-kappa", 1);
+    }
     ipcParams.eps_ee = 0.0;
     ipcParams.slackness = 1.0;
 
     std::cout << "runIPCSim phase1BC shell IPC parameters: "
+              << "ipc-heuristic=" << (ipcHeuristic ? "true" : "false") << ", "
+              << "source=" << ipcParamSource << ", "
               << "ipc-dhat=" << ipcParams.dhat << ", "
               << "ipc-kappa=" << ipcParams.kappa << ", "
               << "eps_ee=" << ipcParams.eps_ee << ", "
               << "slackness=" << ipcParams.slackness << std::endl;
-
-    Mesh::TriMeshGeo surfaceMesh;
-    if (surfaceMesh.load(surfaceMeshFilename) != true)
-      return 1;
 
     int surfn = surfaceMesh.numVertices();
     int surfn3 = surfn * 3;
@@ -181,8 +196,6 @@ int main(int argc, char *argv[])
     const int n3 = n * 3;
     const int nele = simMesh->getNumElements();
 
-    double E = 1000000;
-    double h = 3e-3;
     ES::VXd elasticParams(5 * nele);
     for (int ei = 0; ei < nele; ei++) {
       double E_bend = E;
@@ -315,18 +328,18 @@ int main(int argc, char *argv[])
       intg->getqvel(uvel);
       intg->getqacc(uacc);
 
+      ES::MXd uMat(n3, 3);
+      uMat.col(0) = u;
+      uMat.col(1) = uvel;
+      uMat.col(2) = uacc;
+      ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder, framei).c_str(), uMat);
+
       if (framei % frameGap == 0) {
         Mesh::TriMeshGeo mesh = surfaceMesh;
         const ES::VXd psurf = surfaceRestPositions + u;
         for (int vi = 0; vi < mesh.numVertices(); vi++)
           mesh.pos(vi) = psurf.segment<3>(vi * 3) / scale;
         mesh.save(fmt::format("{}/ret{:04d}.obj", outputFolder, framei / frameGap));
-
-        ES::MXd uMat(n3, 3);
-        uMat.col(0) = u;
-        uMat.col(1) = uvel;
-        uMat.col(2) = uacc;
-        ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder, framei).c_str(), uMat);
       }
     }
   }

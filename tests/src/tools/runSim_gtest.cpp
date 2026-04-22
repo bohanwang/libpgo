@@ -137,6 +137,40 @@ fs::path runShellSimBinaryPath()
   return fs::path(PGO_TEST_RUN_SHELL_SIM_BIN);
 }
 
+std::string makeShellSimConfig(const fs::path &surfaceMeshPath, const fs::path &fixedVerticesPath,
+  const fs::path &outputDir, int numTimesteps, int dumpInterval, double contactStiffness = 0.0)
+{
+  std::ostringstream json;
+  json << "{\n"
+       << "  \"surface-mesh\": " << quotePath(surfaceMeshPath) << ",\n"
+       << "  \"fixed-vertices\": [\n"
+       << "    {\n"
+       << "      \"filename\": " << quotePath(fixedVerticesPath) << ",\n"
+       << "      \"movement\": [0, 0, 0],\n"
+       << "      \"coeff\": 1e5\n"
+       << "    }\n"
+       << "  ],\n"
+       << "  \"g\": [0, -9.81, 0],\n"
+       << "  \"init-vel\": [0, 0, 0],\n"
+       << "  \"init-disp\": [0, 0, 0],\n"
+       << "  \"scale\": 1.0,\n"
+       << "  \"timestep\": 0.001,\n"
+       << "  \"num-timestep\": " << numTimesteps << ",\n"
+       << "  \"damping-params\": [0, 0],\n"
+       << "  \"sim-type\": \"dynamic\",\n"
+       << "  \"contact-stiffness\": " << contactStiffness << ",\n"
+       << "  \"contact-samples\": 1,\n"
+       << "  \"contact-friction-coeff\": 0.0,\n"
+       << "  \"contact-vel-eps\": 1e-5,\n"
+       << "  \"solver-eps\": 1e-4,\n"
+       << "  \"solver-max-iter\": 5,\n"
+       << "  \"elastic-material\": \"koiter-stvk\",\n"
+       << "  \"dump-interval\": " << dumpInterval << ",\n"
+       << "  \"output\": " << quotePath(outputDir) << "\n"
+       << "}";
+  return json.str();
+}
+
 VolumeMeshInputConfig parseConfig(const char *key, const char *filename, const std::string &configFilename)
 {
   pgo::ConfigFileJSON config;
@@ -451,33 +485,7 @@ TEST(RunShellSimCliLoggingGTest, LogFlagWritesCliOutputNextToConfig)
   const fs::path surfaceMeshPath = shellExampleDir() / "shell.obj";
   const fs::path fixedVerticesPath = shellExampleDir() / "shell-fixed.txt";
 
-  writeTextFile(configPath, R"({
-  "surface-mesh": ")" + surfaceMeshPath.string() + R"(",
-  "fixed-vertices": [
-    {
-      "filename": ")" + fixedVerticesPath.string() + R"(",
-      "movement": [0, 0, 0],
-      "coeff": 1e5
-    }
-  ],
-  "g": [0, -9.81, 0],
-  "init-vel": [0, 0, 0],
-  "init-disp": [0, 0, 0],
-  "scale": 1.0,
-  "timestep": 0.001,
-  "num-timestep": 0,
-  "damping-params": [0, 0],
-  "sim-type": "dynamic",
-  "contact-stiffness": 0,
-  "contact-samples": 1,
-  "contact-friction-coeff": 0.0,
-  "contact-vel-eps": 1e-5,
-  "solver-eps": 1e-4,
-  "solver-max-iter": 5,
-  "elastic-material": "koiter-stvk",
-  "dump-interval": 1,
-  "output": ")" + outputDir.string() + R"("
-})");
+  writeTextFile(configPath, makeShellSimConfig(surfaceMeshPath, fixedVerticesPath, outputDir, 0, 1));
 
   std::ostringstream command;
   command << shellExecutable(binary)
@@ -491,6 +499,32 @@ TEST(RunShellSimCliLoggingGTest, LogFlagWritesCliOutputNextToConfig)
   ASSERT_TRUE(in.is_open());
   const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
   EXPECT_NE(contents.find("No restart state found"), std::string::npos);
+}
+
+TEST(RunShellSimCliLoggingGTest, DeformStateIsWrittenEveryTimestep)
+{
+  const fs::path binary = runShellSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-deform-every-step.json";
+  const fs::path outputDir = tempDir.path() / "shell-output";
+  const fs::path surfaceMeshPath = shellExampleDir() / "shell.obj";
+  const fs::path fixedVerticesPath = shellExampleDir() / "shell-fixed.txt";
+
+  writeTextFile(configPath, makeShellSimConfig(surfaceMeshPath, fixedVerticesPath, outputDir, 2, 10));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  EXPECT_TRUE(fs::exists(outputDir / "deform0000.u"));
+  EXPECT_TRUE(fs::exists(outputDir / "deform0001.u"));
+  EXPECT_TRUE(fs::exists(outputDir / "ret0000.obj"));
+  EXPECT_FALSE(fs::exists(outputDir / "ret0001.obj"));
 }
 
 TEST(RunSimVolumeMeshIOGTest, BuildsCommonPreprocessingForTetAndCubic)

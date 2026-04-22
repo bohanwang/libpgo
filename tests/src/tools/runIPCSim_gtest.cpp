@@ -81,7 +81,9 @@ fs::path runIPCSimBinaryPath()
   return fs::path(PGO_TEST_RUN_IPC_SIM_BIN);
 }
 
-std::string makeShellIPCConfig(const fs::path &tempDir, int numTimesteps, bool includeIPCFields = true)
+std::string makeShellIPCConfig(const fs::path &tempDir, int numTimesteps,
+  bool includeIPCFields = true, bool ipcHeuristic = false,
+  double ipcDhat = 0.002, double ipcKappa = 3000.0, int dumpInterval = 1)
 {
   const fs::path shellDir = fs::path(kShellExampleDir);
   const fs::path outputDir = tempDir / "shell-output";
@@ -107,13 +109,18 @@ std::string makeShellIPCConfig(const fs::path &tempDir, int numTimesteps, bool i
        << "  \"solver-eps\": 1e-4,\n"
        << "  \"solver-max-iter\": 5,\n"
        << "  \"elastic-material\": \"koiter-stvk\",\n"
-       << "  \"dump-interval\": 1,\n"
+       << "  \"dump-interval\": " << dumpInterval << ",\n"
        << "  \"output\": " << quotePath(outputDir);
+
+  if (ipcHeuristic) {
+    json << ",\n"
+         << "  \"ipc-heuristic\": true";
+  }
 
   if (includeIPCFields) {
     json << ",\n"
-         << "  \"ipc-dhat\": 0.002,\n"
-         << "  \"ipc-kappa\": 3000.0\n";
+         << "  \"ipc-dhat\": " << ipcDhat << ",\n"
+         << "  \"ipc-kappa\": " << ipcKappa << "\n";
   }
   else {
     json << "\n";
@@ -210,6 +217,25 @@ TEST(RunIPCSimCliGTest, MissingIPCDhatOrKappaFails)
   ASSERT_NE(runCommand(command.str()), 0);
 }
 
+TEST(RunIPCSimCliGTest, HeuristicAllowsMissingIPCDhatAndKappa)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-ipc-heuristic.json";
+
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0, false, true));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+}
+
 TEST(RunIPCSimCliGTest, OneTimestepShellSmokeSucceeds)
 {
   const fs::path binary = runIPCSimBinaryPath();
@@ -230,6 +256,29 @@ TEST(RunIPCSimCliGTest, OneTimestepShellSmokeSucceeds)
   ASSERT_TRUE(fs::exists(tempDir.path() / "shell-output"));
 }
 
+TEST(RunIPCSimCliGTest, DeformStateIsWrittenEveryTimestep)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-ipc-deform-every-step.json";
+
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 2, true, false, 0.002, 3000.0, 10));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  EXPECT_TRUE(fs::exists(tempDir.path() / "shell-output" / "deform0000.u"));
+  EXPECT_TRUE(fs::exists(tempDir.path() / "shell-output" / "deform0001.u"));
+  EXPECT_TRUE(fs::exists(tempDir.path() / "shell-output" / "ret0000.obj"));
+  EXPECT_FALSE(fs::exists(tempDir.path() / "shell-output" / "ret0001.obj"));
+}
+
 TEST(RunIPCSimCliGTest, LegacyContactFieldsAreIgnoredWhenPresent)
 {
   const fs::path binary = runIPCSimBinaryPath();
@@ -247,4 +296,35 @@ TEST(RunIPCSimCliGTest, LegacyContactFieldsAreIgnoredWhenPresent)
           << quotePath(configPath);
 
   ASSERT_EQ(runCommand(command.str()), 0);
+}
+
+TEST(RunIPCSimCliGTest, HeuristicOverridesExplicitIPCFieldsInLog)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-ipc-heuristic-override.json";
+  const fs::path logPath = tempDir.path() / "shell-ipc-heuristic-override.log";
+
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0, true, true, 9.0, 42.0));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " --log "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  ASSERT_TRUE(fs::exists(logPath));
+
+  std::ifstream in(logPath);
+  ASSERT_TRUE(in.is_open());
+  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  EXPECT_NE(contents.find("ipc-heuristic=true"), std::string::npos);
+  EXPECT_NE(contents.find("source=heuristic"), std::string::npos);
+  EXPECT_NE(contents.find("ipc-dhat=0.00141421"), std::string::npos);
+  EXPECT_NE(contents.find("ipc-kappa=3000"), std::string::npos);
+  EXPECT_EQ(contents.find("ipc-dhat=9"), std::string::npos);
+  EXPECT_EQ(contents.find("ipc-kappa=42"), std::string::npos);
 }

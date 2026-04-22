@@ -417,6 +417,12 @@ int main(int argc, char *argv[])
 
       usurf = u;
 
+      ES::MXd uMat(n3, 3);
+      uMat.col(0) = u;
+      uMat.col(1) = uvel;
+      uMat.col(2) = uacc;
+      ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder, framei).c_str(), uMat);
+
       if (framei % frameGap == 0) {
         psurf.noalias() = surfaceRestPositions + usurf;
 
@@ -425,13 +431,6 @@ int main(int argc, char *argv[])
           mesh.pos(vi) = psurf.segment<3>(vi * 3) / scale;
         }
         mesh.save(fmt::format("{}/ret{:04d}.obj", outputFolder, framei / frameGap));
-
-        ES::MXd uMat(n3, 3);
-        uMat.col(0) = u;
-        uMat.col(1) = uvel;
-        uMat.col(2) = uacc;
-
-        ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder, framei).c_str(), uMat);
       }
 
       for (size_t eobji = 0; eobji < kinematicObjects.size(); eobji++) {
