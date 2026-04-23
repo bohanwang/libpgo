@@ -298,18 +298,17 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     //   }
     // }
 
+    const double rawStepMaxNorm = deltax.cwiseAbs().maxCoeff();
     if (verbose >= 2 && iter % printGap == 0)
-      std::cout << "        ||deltax||_max=" << deltax.cwiseAbs().maxCoeff() << std::endl;
+      std::cout << "        rawStepMaxNorm=" << rawStepMaxNorm << std::endl;
 
     // x += alpha delta x ?
     if (solverParam.sst == SST_SUBITERATION_LINE_SEARCH) {
       double alpha = 1;
       double stepSize = 0;
 
-      double maxStepSize = energy->computeMaxStepSize(x, deltax);
-      if (verbose >= 2 && iter % printGap == 0)
-        std::cout << "        max step size=" << maxStepSize << std::endl;
-      deltax *= maxStepSize;
+      const double feasibleAlpha = energy->computeMaxStepSize(x, deltax);
+      deltax *= feasibleAlpha;
 
       lineSearchx.noalias() = x + deltax;
       double eng1 = energy->func(lineSearchx);
@@ -323,30 +322,18 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
         LineSearch::Result ret = lineSearchHandle->nativeLineSearch->golden(x.data(), deltax.data(), eng);
         alpha = ret.alpha;
         eng1 = ret.f;
-
-        if (verbose >= 2 && iter % printGap == 0) {
-          std::cout << "        f=" << ret.f << ";alpha=" << alpha << std::endl;
-        }
       }
       else if (solverParam.lsm == LSM_BRENTS) {
         lineSearchHandle->nativeLineSearch->setMaxIterations(maxIter);
         LineSearch::Result ret = lineSearchHandle->nativeLineSearch->BrentsMethod(x.data(), deltax.data(), eng);
         alpha = ret.alpha;
         eng1 = ret.f;
-
-        if (verbose >= 2 && iter % printGap == 0) {
-          std::cout << "        f=" << ret.f << ";alpha=" << alpha << std::endl;
-        }
       }
       else if (solverParam.lsm == LSM_BACKTRACK) {
         lineSearchHandle->nativeLineSearch->setMaxIterations(maxIter);
         LineSearch::Result ret = lineSearchHandle->nativeLineSearch->backtracking(x.data(), deltax.data(), eng, grad.data(), 0.0001, 0.5);
         alpha = ret.alpha;
         eng1 = ret.f;
-
-        if (verbose >= 2 && iter % printGap == 0) {
-          std::cout << "        f=" << ret.f << ";alpha=" << alpha << std::endl;
-        }
       }
       else if (solverParam.lsm == LSM_SIMPLE) {
         eng1 = eng;
@@ -359,10 +346,6 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
           }
 
           alpha *= 0.5;
-        }
-
-        if (verbose >= 2 && iter % printGap == 0) {
-          std::cout << "        f=" << eng1 << ";alpha=" << alpha << std::endl;
         }
       }
 
@@ -395,9 +378,28 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
         // }
       }
 
+      const double effectiveAlpha = feasibleAlpha * alpha;
+      const double acceptedStepMaxNorm = std::abs(alpha) * deltax.cwiseAbs().maxCoeff();
+      energy->recordLineSearchStepDiagnostics(feasibleAlpha, alpha, effectiveAlpha);
+
+      if (verbose >= 2 && iter % printGap == 0) {
+        std::cout << "        feasibleAlpha=" << feasibleAlpha << std::endl;
+        if (feasibleAlpha < 1.0) {
+          double materialAlpha = 1.0;
+          double contactAlpha = 1.0;
+          energy->getFeasibleAlphaClampBreakdown(materialAlpha, contactAlpha);
+          std::cout << "        feasible alpha clamped: material:" << materialAlpha
+                    << " contact:" << contactAlpha << std::endl;
+        }
+        std::cout << "        lineSearchAlpha=" << alpha << std::endl;
+        std::cout << "        effectiveAlpha=" << effectiveAlpha << std::endl;
+        std::cout << "        acceptedStepMaxNorm=" << acceptedStepMaxNorm << std::endl;
+        std::cout << "        acceptedEnergy=" << eng1 << std::endl;
+      }
+
       x += deltax * alpha;
 
-      stepSize = std::abs(alpha * deltax.cwiseAbs().maxCoeff());
+      stepSize = acceptedStepMaxNorm;
       if (stepSize < 1e-15) {
         if (verbose >= 1) {
           std::cout << "    Iter=" << iter << "; dx = " << stepSize << "; dx too small. Times: " << lineSearchFailedTimes << std::endl;

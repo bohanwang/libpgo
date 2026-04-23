@@ -501,6 +501,35 @@ TEST(RunShellSimCliLoggingGTest, LogFlagWritesCliOutputNextToConfig)
   EXPECT_NE(contents.find("No restart state found"), std::string::npos);
 }
 
+TEST(RunSimCliLoggingGTest, ResolveConfiguredLogLevelDefaultsToInfo)
+{
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "loglevel-default.json";
+  writeTextFile(configPath, "{\n  \"output\": \"ret\"\n}\n");
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  EXPECT_EQ(pgo::RunSim::resolveConfiguredLogLevel(config), spdlog::level::info);
+}
+
+TEST(RunSimCliLoggingGTest, ResolveConfiguredLogLevelParsesTraceAndWarn)
+{
+  ScopedTempDir tempDir;
+  const fs::path traceConfigPath = tempDir.path() / "loglevel-trace.json";
+  writeTextFile(traceConfigPath, "{\n  \"loglevel\": \"trace\",\n  \"output\": \"ret\"\n}\n");
+
+  pgo::ConfigFileJSON traceConfig;
+  ASSERT_TRUE(traceConfig.open(traceConfigPath.string().c_str()));
+  EXPECT_EQ(pgo::RunSim::resolveConfiguredLogLevel(traceConfig), spdlog::level::trace);
+
+  const fs::path warnConfigPath = tempDir.path() / "loglevel-warn.json";
+  writeTextFile(warnConfigPath, "{\n  \"loglevel\": \"warn\",\n  \"output\": \"ret\"\n}\n");
+
+  pgo::ConfigFileJSON warnConfig;
+  ASSERT_TRUE(warnConfig.open(warnConfigPath.string().c_str()));
+  EXPECT_EQ(pgo::RunSim::resolveConfiguredLogLevel(warnConfig), spdlog::level::warn);
+}
+
 TEST(RunShellSimCliLoggingGTest, DeformStateIsWrittenEveryTimestep)
 {
   const fs::path binary = runShellSimBinaryPath();

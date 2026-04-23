@@ -19,10 +19,19 @@ class DeformationModelAssemblerCacheData;
 class DeformationModelAssembler
 {
 public:
+  struct MaterialMaxStepObservation
+  {
+    double alpha = 1.0;
+    bool hasIllegalInitialState = false;
+    int limitingElementId = -1;
+    int limitingLocationId = -1;
+  };
+
   DeformationModelAssembler(std::shared_ptr<const DeformationModelManager> dm, const double *elementFlags = nullptr);
   virtual ~DeformationModelAssembler();
 
   double computeEnergy(const double *x, const double *plasticParams, const double *elasticParams) const;
+  MaterialMaxStepObservation computeMaxStepObservation(const double *x, const double *dx) const;
   double computeMaxStepSize(const double *x, const double *dx) const;
   void computeGradient(const double *x, const double *plasticParams, const double *elasticParams, double *grad) const;
   void computeHessian(const double *x, const double *plasticParams, const double *elasticParams, EigenSupport::SpMatD &hess) const;

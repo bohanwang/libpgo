@@ -16,6 +16,7 @@
 #include "deformationModelEnergy.h"
 #include "multiVertexPullingSoftConstraints.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
+#include "implicitBackwardEulerTimeIntegratorHelper.h"
 #include "TRBDF2TimeIntegrator.h"
 #include "generateMassMatrix.h"
 #include "generateSurfaceMesh.h"
@@ -47,6 +48,54 @@ bool parseEnableMaterialMaxStep(const pgo::ConfigFileJSON &jconfig)
   return jconfig.exist("enable-material-max-step")
     ? jconfig.getValue<bool>("enable-material-max-step", 1)
     : true;
+}
+
+struct SolveMaxStepSummary
+{
+  double minFeasibleAlphaThisSolve = 1.0;
+  double minLineSearchAlphaThisSolve = 1.0;
+  double minEffectiveAlphaThisSolve = 1.0;
+};
+
+SolveMaxStepSummary currentSolveMaxStepSummary(const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
+{
+  const auto internalEnergy = std::dynamic_pointer_cast<const pgo::Simulation::ImplicitBackwardEulerEnergy>(integrator->getInternalEnergy());
+  if (!internalEnergy)
+    return {};
+
+  return {
+    internalEnergy->getMinFeasibleAlphaThisSolve(),
+    internalEnergy->getMinLineSearchAlphaThisSolve(),
+    internalEnergy->getMinEffectiveAlphaThisSolve(),
+  };
+}
+
+void resetSolveMaxStepSummary(const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
+{
+  const auto internalEnergy = std::dynamic_pointer_cast<const pgo::Simulation::ImplicitBackwardEulerEnergy>(integrator->getInternalEnergy());
+  if (internalEnergy)
+    internalEnergy->resetSolveMaxStepStats();
+}
+
+void logRunSimMaxStepSummary(const std::shared_ptr<pgo::SolidDeformationModel::DeformationModelEnergy> &elasticEnergy,
+  const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
+{
+  auto logger = pgo::Logging::lgr();
+  if (!logger)
+    return;
+
+  const SolveMaxStepSummary summary = currentSolveMaxStepSummary(integrator);
+  const auto materialClampCount = elasticEnergy->getMaterialClampCount();
+
+  if (logger->should_log(spdlog::level::info)) {
+    SPDLOG_LOGGER_INFO(logger,
+      "runSim max-step summary: materialClampCount={} minMaterialFeasibleAlphaThisSolve={} minFeasibleAlphaThisSolve={} minLineSearchAlphaThisSolve={} minEffectiveAlphaThisSolve={}",
+      materialClampCount,
+      elasticEnergy->getMinMaterialFeasibleAlphaThisSolve(),
+      summary.minFeasibleAlphaThisSolve,
+      summary.minLineSearchAlphaThisSolve,
+      summary.minEffectiveAlphaThisSolve);
+  }
 }
 }
 
@@ -82,11 +131,16 @@ int main(int argc, char *argv[])
   const bool enableCliLog = program.get<bool>("--log");
   std::unique_ptr<RunSim::ScopedRunSimCliLogRedirect> logRedirect;
 
+  ConfigFileJSON jconfig;
+  if (jconfig.open(configFilename.c_str()) != true) {
+    return 0;
+  }
+
   if (enableCliLog) {
     try {
       const std::filesystem::path logPath = RunSim::deriveDefaultLogPathFromConfig(configFilename);
       logRedirect = std::make_unique<RunSim::ScopedRunSimCliLogRedirect>(logPath.string());
-      pgo::Logging::init();
+      pgo::Logging::init(nullptr, RunSim::resolveConfiguredLogLevel(jconfig));
     }
     catch (const std::exception &err) {
       std::cerr << err.what() << std::endl;
@@ -94,14 +148,9 @@ int main(int argc, char *argv[])
     }
   }
   else {
-    pgo::Logging::init();
+    pgo::Logging::init(nullptr, RunSim::resolveConfiguredLogLevel(jconfig));
   }
   pgo::Mesh::initPredicates();
-
-  ConfigFileJSON jconfig;
-  if (jconfig.open(configFilename.c_str()) != true) {
-    return 0;
-  }
 
   RunSim::ResolvedRunSimPaths resolvedPaths;
 
@@ -375,6 +424,9 @@ int main(int argc, char *argv[])
       externalContactHandler->updateExternalSurface(eobji, kinematicObjectsRef[eobji]);
     }
 
+    bool executedStep = false;
+    resetSolveMaxStepSummary(intg);
+    elasticEnergy->resetMaterialMaxStepStats();
     for (int framei = frameStart + 1; framei < numSimSteps; framei++) {
       intg->clearGeneralImplicitForceModel();
 
@@ -475,13 +527,16 @@ int main(int argc, char *argv[])
         }
       }
 
+      elasticEnergy->resetMaterialMaxStepStats();
       intg->setqState(u, uvel, uacc);
 
       intg->doTimestep(1, 2, 1);
+      executedStep = true;
 
       intg->getq(u);
       intg->getqvel(uvel);
       intg->getqacc(uacc);
+      logRunSimMaxStepSummary(elasticEnergy, intg);
 
       //double Ec = extContactEnergy ? extContactEnergy->func(u) : 0;
       //double Eelastic = elasticEnergy->func(u);
@@ -524,6 +579,9 @@ int main(int argc, char *argv[])
 
       ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder, framei).c_str(), uMat);
     }
+
+    if (!executedStep)
+      logRunSimMaxStepSummary(elasticEnergy, intg);
   }
   else if (simType == "static") {
     std::shared_ptr<PredefinedPotentialEnergies::LinearPotentialEnergy> externalForcesEnergy = std::make_shared<PredefinedPotentialEnergies::LinearPotentialEnergy>(fext);

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "pgoLogging.h"
 #include "surfaceIPCCore.h"
 
 #include "testCIPCHelpers.h"
@@ -36,6 +37,15 @@ SurfaceIPCCore makeConfiguredCore()
   auto [V, F] = makeTwoTriangleMesh();
   core.setMesh(V, F);
   return core;
+}
+
+void initializeLogging()
+{
+  static const bool initialized = []() {
+    pgo::Logging::init();
+    return true;
+  }();
+  (void)initialized;
 }
 }  // namespace
 
@@ -91,6 +101,7 @@ TEST(SurfaceIPCCoreGTest, ProjectedHessianRemainsSymmetricPSDAndTracksFiniteDiff
 
 TEST(SurfaceIPCCoreGTest, ComputeMaxStepSizeDetectsImpendingCollision)
 {
+  initializeLogging();
   SurfaceIPCCore core = makeConfiguredCore();
   const auto [V, _] = makeTwoTriangleMesh();
   const ES::VXd x = flattenPositions(V);
@@ -102,6 +113,50 @@ TEST(SurfaceIPCCoreGTest, ComputeMaxStepSizeDetectsImpendingCollision)
   const double alpha = core.computeMaxStepSize(x, dx);
   EXPECT_GT(alpha, 0.0);
   EXPECT_LT(alpha, 1.0);
+}
+
+TEST(SurfaceIPCCoreGTest, ComputeMaxStepSizeTracksClampCountAndSolveMinimumAlpha)
+{
+  initializeLogging();
+  SurfaceIPCCore core = makeConfiguredCore();
+  const auto [V, _] = makeTwoTriangleMesh();
+  const ES::VXd x = flattenPositions(V);
+
+  ES::VXd dx = ES::VXd::Zero(x.size());
+  for (int vi = 3; vi < 6; ++vi)
+    dx[3 * vi + 2] = -0.1;
+
+  const double alpha = core.computeMaxStepSize(x, dx);
+  EXPECT_GT(alpha, 0.0);
+  EXPECT_LT(alpha, 1.0);
+  EXPECT_EQ(core.getContactClampCount(), 1);
+  EXPECT_DOUBLE_EQ(core.getMinContactFeasibleAlphaThisSolve(), alpha);
+}
+
+TEST(SurfaceIPCCoreGTest, SmallContactAlphaWarnsAndResetClearsStats)
+{
+  initializeLogging();
+  SurfaceIPCCore core = makeConfiguredCore();
+  const auto [V, _] = makeTwoTriangleMesh();
+  const ES::VXd x = flattenPositions(V);
+
+  ES::VXd dx = ES::VXd::Zero(x.size());
+  for (int vi = 3; vi < 6; ++vi)
+    dx[3 * vi + 2] = -10.0;
+
+  testing::internal::CaptureStdout();
+  const double alpha = core.computeMaxStepSize(x, dx);
+  const std::string logOutput = testing::internal::GetCapturedStdout();
+
+  EXPECT_GT(alpha, 0.0);
+  EXPECT_LT(alpha, 0.01);
+  EXPECT_EQ(core.getContactClampCount(), 1);
+  EXPECT_DOUBLE_EQ(core.getMinContactFeasibleAlphaThisSolve(), alpha);
+  EXPECT_NE(logOutput.find("contactFeasibleAlpha"), std::string::npos);
+
+  core.resetContactMaxStepStats();
+  EXPECT_EQ(core.getContactClampCount(), 0);
+  EXPECT_DOUBLE_EQ(core.getMinContactFeasibleAlphaThisSolve(), 1.0);
 }
 
 TEST(SurfaceIPCCoreGTest, PairAccessorsRemainReadableAcrossComputes)

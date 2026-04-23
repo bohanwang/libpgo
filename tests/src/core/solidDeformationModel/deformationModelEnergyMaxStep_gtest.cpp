@@ -364,6 +364,38 @@ TEST(DeformationModelEnergyMaxStepGTest, TetIllegalInitialStateWarnsEachCallAndC
   EXPECT_EQ(countOccurrences(logOutput, "Phase 1.5 material max step encountered illegal initial state"), 2u);
 }
 
+TEST(DeformationModelEnergyMaxStepGTest, TetSmallAlphaWarnsAndTracksSolveMinimumAlpha)
+{
+  EnergyFixture fixture = makeSingleTetFixture();
+  const ES::VXd x = ES::VXd::Zero(fixture.restPositions.size());
+  const ES::VXd dx = makeTetFlipDirection(fixture.mesh->getNumVertices(), 3, -200.0);
+
+  testing::internal::CaptureStdout();
+  const double alpha = fixture.energy->computeMaxStepSize(x, dx);
+  const std::string logOutput = testing::internal::GetCapturedStdout();
+
+  EXPECT_GT(alpha, 0.0);
+  EXPECT_LT(alpha, 0.01);
+  EXPECT_EQ(fixture.energy->getMaterialClampCount(), 1);
+  EXPECT_DOUBLE_EQ(fixture.energy->getMinMaterialFeasibleAlphaThisSolve(), alpha);
+  EXPECT_NE(logOutput.find("materialFeasibleAlpha"), std::string::npos);
+}
+
+TEST(DeformationModelEnergyMaxStepGTest, ResetMaterialMaxStepStatsClearsCountAndMinimumAlpha)
+{
+  EnergyFixture fixture = makeSingleTetFixture();
+  const ES::VXd x = ES::VXd::Zero(fixture.restPositions.size());
+  const ES::VXd dx = makeTetFlipDirection(fixture.mesh->getNumVertices(), 3, -2.0);
+
+  const double alpha = fixture.energy->computeMaxStepSize(x, dx);
+  ASSERT_LT(alpha, 1.0);
+  ASSERT_EQ(fixture.energy->getMaterialClampCount(), 1);
+
+  fixture.energy->resetMaterialMaxStepStats();
+  EXPECT_EQ(fixture.energy->getMaterialClampCount(), 0);
+  EXPECT_DOUBLE_EQ(fixture.energy->getMinMaterialFeasibleAlphaThisSolve(), 1.0);
+}
+
 TEST(DeformationModelEnergyMaxStepGTest, TetMultipleElementsReturnEarliestClamp)
 {
   const std::vector<double> vertices = {
@@ -493,11 +525,15 @@ TEST(DeformationModelEnergyMaxStepGTest, ImplicitBackwardEulerTakesMinWithOtherE
   integrator.addGeneralImplicitForceModel(std::make_shared<FixedMaxStepEnergy>(fixture.restPositions.size(), 0.95));
   integrator.assembleImplicitModels();
   EXPECT_NEAR(integrator.getInternalEnergy()->computeMaxStepSize(x, dx), materialAlpha, 1e-12);
+  EXPECT_NEAR(std::static_pointer_cast<const pgo::Simulation::ImplicitBackwardEulerEnergy>(
+    integrator.getInternalEnergy())->getMinFeasibleAlphaThisSolve(), materialAlpha, 1e-12);
 
   integrator.clearGeneralImplicitForceModel();
   integrator.addGeneralImplicitForceModel(std::make_shared<FixedMaxStepEnergy>(fixture.restPositions.size(), 0.25));
   integrator.assembleImplicitModels();
   EXPECT_DOUBLE_EQ(integrator.getInternalEnergy()->computeMaxStepSize(x, dx), 0.25);
+  EXPECT_DOUBLE_EQ(std::static_pointer_cast<const pgo::Simulation::ImplicitBackwardEulerEnergy>(
+    integrator.getInternalEnergy())->getMinFeasibleAlphaThisSolve(), 0.25);
 }
 
 TEST(DeformationModelEnergyMaxStepGTest, TRBDF2TakesMinWithOtherEnergy)
@@ -516,9 +552,13 @@ TEST(DeformationModelEnergyMaxStepGTest, TRBDF2TakesMinWithOtherEnergy)
   integrator.addGeneralImplicitForceModel(std::make_shared<FixedMaxStepEnergy>(fixture.restPositions.size(), 0.9));
   integrator.assembleImplicitModels();
   EXPECT_NEAR(integrator.getTRStageEnergy()->computeMaxStepSize(x, dx), materialAlpha, 1e-12);
+  EXPECT_NEAR(std::static_pointer_cast<const pgo::Simulation::TRBDF2TimeIntegratorEnergy>(
+    integrator.getTRStageEnergy())->getMinFeasibleAlphaThisSolve(), materialAlpha, 1e-12);
 
   integrator.clearGeneralImplicitForceModel();
   integrator.addGeneralImplicitForceModel(std::make_shared<FixedMaxStepEnergy>(fixture.restPositions.size(), 0.2));
   integrator.assembleImplicitModels();
   EXPECT_DOUBLE_EQ(integrator.getTRStageEnergy()->computeMaxStepSize(x, dx), 0.2);
+  EXPECT_DOUBLE_EQ(std::static_pointer_cast<const pgo::Simulation::TRBDF2TimeIntegratorEnergy>(
+    integrator.getTRStageEnergy())->getMinFeasibleAlphaThisSolve(), 0.2);
 }

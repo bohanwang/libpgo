@@ -104,6 +104,11 @@ fs::path cubicIPCExampleDir()
   return fs::path(kCubicIPCExampleDir);
 }
 
+fs::path cubicBoxSquashIPCExampleDir()
+{
+  return fs::path(__FILE__).parent_path().parent_path().parent_path().parent_path() / "examples" / "ipc" / "cubic" / "box-squash";
+}
+
 fs::path tetIPCConfigPath()
 {
   return tetIPCExampleDir() / "box-ipc.json";
@@ -126,7 +131,8 @@ void initializeRunIPCSimTestEnvironment()
 
 std::string makeShellIPCConfig(const fs::path &tempDir, int numTimesteps,
   bool includeIPCFields = true, bool ipcHeuristic = false,
-  double ipcDhat = 0.002, double ipcKappa = 3000.0, int dumpInterval = 1)
+  double ipcDhat = 0.002, double ipcKappa = 3000.0, int dumpInterval = 1,
+  const std::string &logLevel = "info")
 {
   const fs::path shellDir = fs::path(kShellExampleDir);
   const fs::path outputDir = tempDir / "shell-output";
@@ -152,6 +158,7 @@ std::string makeShellIPCConfig(const fs::path &tempDir, int numTimesteps,
        << "  \"solver-eps\": 1e-4,\n"
        << "  \"solver-max-iter\": 5,\n"
        << "  \"elastic-material\": \"koiter-stvk\",\n"
+       << "  \"loglevel\": \"" << logLevel << "\",\n"
        << "  \"dump-interval\": " << dumpInterval << ",\n"
        << "  \"output\": " << quotePath(outputDir);
 
@@ -214,7 +221,7 @@ std::string makeShellIPCConfigWithIgnoredLegacyContactFields(const fs::path &tem
 std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey, const fs::path &outputDir, int numTimesteps,
   double scale = 1.0, bool includeIPCFields = true, bool ipcHeuristic = false, const std::string &material = "stable-neo",
   double ipcDhat = 0.002, double ipcKappa = 3000.0, int dumpInterval = 1,
-  bool enableMaterialMaxStep = true)
+  bool enableMaterialMaxStep = true, const std::string &logLevel = "info")
 {
   std::ostringstream json;
   json << "{\n"
@@ -238,6 +245,7 @@ std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey,
        << "  \"solver-eps\": 1e-4,\n"
        << "  \"solver-max-iter\": 5,\n"
        << "  \"elastic-material\": \"" << material << "\",\n"
+       << "  \"loglevel\": \"" << logLevel << "\",\n"
        << "  \"dump-interval\": " << dumpInterval << ",\n"
        << "  \"output\": " << quotePath(outputDir) << ",\n"
        << "  \"enable-material-max-step\": " << (enableMaterialMaxStep ? "true" : "false");
@@ -262,18 +270,60 @@ std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey,
 
 std::string makeTetIPCConfig(const fs::path &tempDir, int numTimesteps,
   double scale = 1.0, bool includeIPCFields = true, bool ipcHeuristic = false, const std::string &material = "stable-neo",
-  int dumpInterval = 1)
+  int dumpInterval = 1, const std::string &logLevel = "info")
 {
   return makeVolumeIPCConfig(tetIPCExampleDir(), "tet-mesh", tempDir / "tet-output", numTimesteps,
-    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval);
+    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel);
 }
 
 std::string makeCubicIPCConfig(const fs::path &tempDir, int numTimesteps,
   double scale = 1.0, bool includeIPCFields = true, bool ipcHeuristic = false, const std::string &material = "stable-neo",
-  int dumpInterval = 1)
+  int dumpInterval = 1, const std::string &logLevel = "info")
 {
   return makeVolumeIPCConfig(cubicIPCExampleDir(), "cubic-mesh", tempDir / "cubic-output", numTimesteps,
-    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval);
+    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel);
+}
+
+std::string makeCubicSquashIPCConfig(const fs::path &tempDir, int numTimesteps, const std::string &logLevel = "info")
+{
+  const fs::path exampleDir = cubicBoxSquashIPCExampleDir();
+  const fs::path outputDir = tempDir / "cubic-squash-output";
+
+  std::ostringstream json;
+  json << "{\n"
+       << "  \"cubic-mesh\": " << quotePath(exampleDir / "box.veg") << ",\n"
+       << "  \"surface-mesh\": " << quotePath(exampleDir / "box.obj") << ",\n"
+       << "  \"fixed-vertices\": [\n"
+       << "    {\n"
+       << "      \"filename\": " << quotePath(exampleDir / "box-zmin-fixed.txt") << ",\n"
+       << "      \"movement\": [0, 0, 0],\n"
+       << "      \"coeff\": 1e5\n"
+       << "    },\n"
+       << "    {\n"
+       << "      \"filename\": " << quotePath(exampleDir / "box-zmax-push.txt") << ",\n"
+       << "      \"movement\": [0, 0, 500.55],\n"
+       << "      \"coeff\": 1e5\n"
+       << "    }\n"
+       << "  ],\n"
+       << "  \"g\": [0, 0, 0],\n"
+       << "  \"init-vel\": [0, 0, 0],\n"
+       << "  \"init-disp\": [0, 0, 0],\n"
+       << "  \"scale\": 1.0,\n"
+       << "  \"timestep\": 0.001,\n"
+       << "  \"num-timestep\": " << numTimesteps << ",\n"
+       << "  \"damping-params\": [0, 0],\n"
+       << "  \"sim-type\": \"dynamic\",\n"
+       << "  \"solver-eps\": 1e-5,\n"
+       << "  \"solver-max-iter\": 20,\n"
+       << "  \"elastic-material\": \"stable-neo\",\n"
+       << "  \"loglevel\": \"" << logLevel << "\",\n"
+       << "  \"dump-interval\": 1,\n"
+       << "  \"output\": " << quotePath(outputDir) << ",\n"
+       << "  \"ipc-dhat\": 0.002,\n"
+       << "  \"ipc-kappa\": 3000.0,\n"
+       << "  \"enable-material-max-step\": true\n"
+       << "}\n";
+  return json.str();
 }
 
 ES::SpMatD computeExpectedEmbeddingMatrix(const fs::path &configPath)
@@ -363,6 +413,106 @@ TEST(RunIPCSimCliGTest, LogFlagWritesCliOutputNextToConfig)
   EXPECT_NE(contents.find("ipc-kappa"), std::string::npos);
   EXPECT_NE(contents.find("eps_ee"), std::string::npos);
   EXPECT_NE(contents.find("slackness"), std::string::npos);
+  EXPECT_NE(contents.find("max-step summary"), std::string::npos);
+  EXPECT_NE(contents.find("minFeasibleAlphaThisSolve"), std::string::npos);
+  EXPECT_NE(contents.find("minLineSearchAlphaThisSolve"), std::string::npos);
+  EXPECT_NE(contents.find("minEffectiveAlphaThisSolve"), std::string::npos);
+  EXPECT_EQ(contents.find("finalAlpha"), std::string::npos);
+  EXPECT_EQ(contents.find("lastMaterialAlpha"), std::string::npos);
+  EXPECT_EQ(contents.find("lastContactAlpha"), std::string::npos);
+}
+
+TEST(RunIPCSimCliGTest, DebugLogLevelPrintsFullMaxStepSummary)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-ipc-debug.json";
+  const fs::path logPath = tempDir.path() / "shell-ipc-debug.log";
+
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "debug"));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " --log "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  ASSERT_TRUE(fs::exists(logPath));
+
+  std::ifstream in(logPath);
+  ASSERT_TRUE(in.is_open());
+  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  EXPECT_NE(contents.find("max-step summary"), std::string::npos);
+  EXPECT_NE(contents.find("minMaterialFeasibleAlphaThisSolve"), std::string::npos);
+  EXPECT_NE(contents.find("minContactFeasibleAlphaThisSolve"), std::string::npos);
+  EXPECT_NE(contents.find("minFeasibleAlphaThisSolve"), std::string::npos);
+  EXPECT_NE(contents.find("minLineSearchAlphaThisSolve"), std::string::npos);
+  EXPECT_NE(contents.find("minEffectiveAlphaThisSolve"), std::string::npos);
+  EXPECT_NE(contents.find("rawStepMaxNorm="), std::string::npos);
+  EXPECT_NE(contents.find("feasibleAlpha="), std::string::npos);
+  EXPECT_NE(contents.find("lineSearchAlpha="), std::string::npos);
+  EXPECT_NE(contents.find("effectiveAlpha="), std::string::npos);
+  EXPECT_NE(contents.find("acceptedStepMaxNorm="), std::string::npos);
+  EXPECT_NE(contents.find("acceptedEnergy="), std::string::npos);
+  EXPECT_EQ(contents.find("finalAlpha"), std::string::npos);
+  EXPECT_EQ(contents.find("lastMaterialAlpha"), std::string::npos);
+  EXPECT_EQ(contents.find("lastContactAlpha"), std::string::npos);
+}
+
+TEST(RunIPCSimCliGTest, DebugLogLevelPrintsClampedFeasibleAlphaBreakdownForCubicIPC)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "cubic-squash-ipc-debug.json";
+  const fs::path logPath = tempDir.path() / "cubic-squash-ipc-debug.log";
+
+  writeTextFile(configPath, makeCubicSquashIPCConfig(tempDir.path(), 3, "debug"));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " --log "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  ASSERT_TRUE(fs::exists(logPath));
+
+  std::ifstream in(logPath);
+  ASSERT_TRUE(in.is_open());
+  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  EXPECT_NE(contents.find("feasible alpha clamped: material:"), std::string::npos);
+  EXPECT_NE(contents.find("contact:"), std::string::npos);
+}
+
+TEST(RunIPCSimCliGTest, WarnLogLevelSuppressesMaxStepSummary)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-ipc-warn.json";
+  const fs::path logPath = tempDir.path() / "shell-ipc-warn.log";
+
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "warn"));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " --log "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  ASSERT_TRUE(fs::exists(logPath));
+
+  std::ifstream in(logPath);
+  ASSERT_TRUE(in.is_open());
+  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  EXPECT_EQ(contents.find("max-step summary"), std::string::npos);
 }
 
 TEST(RunIPCSimCliGTest, MissingIPCDhatOrKappaFails)

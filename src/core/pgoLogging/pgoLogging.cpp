@@ -6,7 +6,7 @@
 #include <cstring>
 std::shared_ptr<spdlog::logger> pgo::Logging::logger;
 
-void pgo::Logging::init(const char *filename)
+void pgo::Logging::init(const char *filename, spdlog::level::level_enum level)
 {
   auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
   console_sink->set_level(spdlog::level::trace);
@@ -23,7 +23,7 @@ void pgo::Logging::init(const char *filename)
     logger = std::make_shared<spdlog::logger>("pgo", spdlog::sinks_init_list{ console_sink });
   }
 
-  logger->set_level(spdlog::level::trace);
+  logger->set_level(level);
   logger->flush_on(spdlog::level::debug);
   
   spdlog::set_default_logger(logger);
@@ -32,4 +32,11 @@ void pgo::Logging::init(const char *filename)
   //  return;
 
   //spdlog::register_logger(logger);
+}
+
+void pgo::Logging::setLevel(spdlog::level::level_enum level)
+{
+  if (logger) {
+    logger->set_level(level);
+  }
 }

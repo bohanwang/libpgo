@@ -1,5 +1,7 @@
 #include "runSimCliLogging.h"
 
+#include "configFileJSON.h"
+
 #include <cstdio>
 #include <cerrno>
 #include <iostream>
@@ -72,6 +74,27 @@ namespace pgo::RunSim
 std::filesystem::path deriveDefaultLogPathFromConfig(const std::filesystem::path &configPath)
 {
   return configPath.parent_path() / (configPath.stem().string() + ".log");
+}
+
+spdlog::level::level_enum resolveConfiguredLogLevel(const ConfigFileJSON &config)
+{
+  const std::string configuredLevel = config.exist("loglevel")
+    ? config.getString("loglevel")
+    : "trace";
+    // "info";
+
+  if (configuredLevel == "trace")
+    return spdlog::level::trace;
+  if (configuredLevel == "debug")
+    return spdlog::level::debug;
+  if (configuredLevel == "info")
+    return spdlog::level::info;
+  if (configuredLevel == "warn")
+    return spdlog::level::warn;
+  if (configuredLevel == "error")
+    return spdlog::level::err;
+
+  throw std::invalid_argument("Unsupported loglevel: " + configuredLevel);
 }
 
 ScopedRunSimCliLogRedirect::ScopedRunSimCliLogRedirect(const std::string &logFilename)

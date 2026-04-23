@@ -39,6 +39,9 @@ public:
   virtual double computeMaxStepSize(
     EigenSupport::ConstRefVecXd simulationDisplacements,
     EigenSupport::ConstRefVecXd trialSimulationDisplacements) const override;
+  std::int64_t getContactClampCount() const { return surfaceIPCCore_.getContactClampCount(); }
+  double getMinContactFeasibleAlphaThisSolve() const { return surfaceIPCCore_.getMinContactFeasibleAlphaThisSolve(); }
+  void resetContactMaxStepStats() const { surfaceIPCCore_.resetContactMaxStepStats(); }
 
   virtual void getDOFs(std::vector<int> &dofs) const override { dofs = simulationDOFs_; }
   virtual int getNumDOFs() const override { return static_cast<int>(simulationDOFs_.size()); }

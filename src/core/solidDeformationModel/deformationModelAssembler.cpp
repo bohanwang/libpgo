@@ -325,9 +325,9 @@ double DeformationModelAssembler::computeEnergy(const double *x, const double *p
   return energyAll;
 }
 
-double DeformationModelAssembler::computeMaxStepSize(const double *x, const double *dx) const
+DeformationModelAssembler::MaterialMaxStepObservation DeformationModelAssembler::computeMaxStepObservation(const double *x, const double *dx) const
 {
-  double maxStepSize = 1.0;
+  MaterialMaxStepObservation observation;
   const SimulationMeshType meshType = deformationModelManager->getMesh()->getElementType();
 
   for (int ele = 0; ele < nele; ele++) {
@@ -341,17 +341,27 @@ double DeformationModelAssembler::computeMaxStepSize(const double *x, const doub
     gatherLocalPositions(*deformationModelManager, ele, neleVtx, dx, localDx);
 
     const DeformationModel::LocalMaxStepResult localResult = femModels[ele]->computeLocalMaxStepSize(localX.data(), localDx.data());
-    maxStepSize = std::min(maxStepSize, localResult.alpha);
+    if (localResult.alpha < observation.alpha) {
+      observation.alpha = localResult.alpha;
+      observation.limitingElementId = ele;
+      observation.limitingLocationId = localResult.locationId;
+    }
     if (localResult.illegalInitialState) {
+      observation.hasIllegalInitialState = true;
       warnIllegalInitialState(meshType, ele, localResult.locationId, localResult.phi0, localResult.eps);
     }
 
-    if (maxStepSize <= kMaterialMaxStepMinClamp) {
+    if (observation.alpha <= kMaterialMaxStepMinClamp) {
       break;
     }
   }
 
-  return maxStepSize;
+  return observation;
+}
+
+double DeformationModelAssembler::computeMaxStepSize(const double *x, const double *dx) const
+{
+  return computeMaxStepObservation(x, dx).alpha;
 }
 
 void DeformationModelAssembler::computeGradient(const double *x, const double *plasticParams, const double *elasticParams, double *grad) const

@@ -3,6 +3,7 @@
 #include "deformationModelEnergy.h"
 #include "embeddedSurfaceIPCPotentialEnergy.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
+#include "implicitBackwardEulerTimeIntegratorHelper.h"
 #include "initPredicates.h"
 #include "multiVertexPullingSoftConstraints.h"
 #include "pgoLogging.h"
@@ -21,6 +22,58 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
+
+struct SolveMaxStepSummary
+{
+  double minFeasibleAlphaThisSolve = 1.0;
+  double minLineSearchAlphaThisSolve = 1.0;
+  double minEffectiveAlphaThisSolve = 1.0;
+};
+
+SolveMaxStepSummary currentSolveMaxStepSummary(const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
+{
+  const auto internalEnergy = std::dynamic_pointer_cast<const pgo::Simulation::ImplicitBackwardEulerEnergy>(integrator->getInternalEnergy());
+  if (!internalEnergy)
+    return {};
+
+  return {
+    internalEnergy->getMinFeasibleAlphaThisSolve(),
+    internalEnergy->getMinLineSearchAlphaThisSolve(),
+    internalEnergy->getMinEffectiveAlphaThisSolve(),
+  };
+}
+
+void resetSolveMaxStepSummary(const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
+{
+  const auto internalEnergy = std::dynamic_pointer_cast<const pgo::Simulation::ImplicitBackwardEulerEnergy>(integrator->getInternalEnergy());
+  if (internalEnergy)
+    internalEnergy->resetSolveMaxStepStats();
+}
+
+void logRunIPCSimMaxStepSummary(
+  const std::shared_ptr<pgo::SolidDeformationModel::DeformationModelEnergy> &elasticEnergy,
+  const std::shared_ptr<pgo::Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy> &collisionHandler,
+  const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
+{
+  auto logger = pgo::Logging::lgr();
+  if (!logger)
+    return;
+
+  const SolveMaxStepSummary summary = currentSolveMaxStepSummary(integrator);
+  const auto materialClampCount = elasticEnergy->getMaterialClampCount();
+  const auto contactClampCount = collisionHandler->getContactClampCount();
+
+  if (logger->should_log(spdlog::level::info)) {
+    SPDLOG_LOGGER_INFO(logger,
+      "runIPCSim max-step summary: materialClampCount={} contactClampCount={} minMaterialFeasibleAlphaThisSolve={} minContactFeasibleAlphaThisSolve={} minFeasibleAlphaThisSolve={} minLineSearchAlphaThisSolve={} minEffectiveAlphaThisSolve={}",
+      materialClampCount, contactClampCount,
+      elasticEnergy->getMinMaterialFeasibleAlphaThisSolve(),
+      collisionHandler->getMinContactFeasibleAlphaThisSolve(),
+      summary.minFeasibleAlphaThisSolve,
+      summary.minLineSearchAlphaThisSolve,
+      summary.minEffectiveAlphaThisSolve);
+  }
+}
 }
 
 int main(int argc, char *argv[])
@@ -50,26 +103,20 @@ int main(int argc, char *argv[])
   const bool enableCliLog = program.get<bool>("--log");
   std::unique_ptr<RunSim::ScopedRunSimCliLogRedirect> logRedirect;
 
-  if (enableCliLog) {
-    try {
-      const std::filesystem::path logPath = RunSim::deriveDefaultLogPathFromConfig(configFilename);
-      logRedirect = std::make_unique<RunSim::ScopedRunSimCliLogRedirect>(logPath.string());
-      pgo::Logging::init();
-    }
-    catch (const std::exception &err) {
-      std::cerr << err.what() << std::endl;
-      return 1;
-    }
-  }
-  else {
-    pgo::Logging::init();
-  }
-  pgo::Mesh::initPredicates();
-
   try {
     ConfigFileJSON jconfig;
     if (jconfig.open(configFilename.c_str()) != true)
       return 0;
+
+    if (enableCliLog) {
+      const std::filesystem::path logPath = RunSim::deriveDefaultLogPathFromConfig(configFilename);
+      logRedirect = std::make_unique<RunSim::ScopedRunSimCliLogRedirect>(logPath.string());
+      pgo::Logging::init(nullptr, RunSim::resolveConfiguredLogLevel(jconfig));
+    }
+    else {
+      pgo::Logging::init(nullptr, RunSim::resolveConfiguredLogLevel(jconfig));
+    }
+    pgo::Mesh::initPredicates();
 
     const ES::V3d extAcc = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("g", 1).data());
     const ES::V3d initialVel = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("init-vel", 1).data());
@@ -146,6 +193,10 @@ int main(int argc, char *argv[])
 
     const double ratioDenom = numSimSteps > 1 ? static_cast<double>(numSimSteps - 1) : 1.0;
 
+    bool executedStep = false;
+    resetSolveMaxStepSummary(intg);
+    context.elasticEnergy->resetMaterialMaxStepStats();
+    context.collisionHandler->resetContactMaxStepStats();
     for (int framei = frameStart + 1; framei < numSimSteps; ++framei) {
       intg->clearGeneralImplicitForceModel();
 
@@ -156,12 +207,16 @@ int main(int argc, char *argv[])
         std::cout << "Frame " << framei << ", attachment " << pi << " target: " << curTgt.transpose().head(3) << std::endl;
       }
 
+      context.elasticEnergy->resetMaterialMaxStepStats();
+      context.collisionHandler->resetContactMaxStepStats();
       intg->addGeneralImplicitForceModel(context.collisionHandler, 0, 0);
       intg->setqState(u, uvel, uacc);
       intg->doTimestep(1, 3, 1);
+      executedStep = true;
       intg->getq(u);
       intg->getqvel(uvel);
       intg->getqacc(uacc);
+      logRunIPCSimMaxStepSummary(context.elasticEnergy, context.collisionHandler, intg);
 
       ES::MXd uMat(n3, 3);
       uMat.col(0) = u;
@@ -178,6 +233,9 @@ int main(int argc, char *argv[])
         mesh.save(fmt::format("{}/ret{:04d}.obj", outputFolder, framei / frameGap));
       }
     }
+
+    if (!executedStep)
+      logRunIPCSimMaxStepSummary(context.elasticEnergy, context.collisionHandler, intg);
   }
   catch (const std::exception &err) {
     SPDLOG_LOGGER_ERROR(Logging::lgr(), "{}", err.what());

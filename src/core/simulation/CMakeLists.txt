@@ -16,7 +16,7 @@ set(SIMULATION_SOURCES
   TRBDF2TimeIntegrator.cpp
 )
 
-set(SIMULATION_DEPS constraintPotentialEnergies solidDeformationModel)
+set(SIMULATION_DEPS constraintPotentialEnergies solidDeformationModel contact)
 
 foreach(tgt ${SIMULATION_DEPS})
   if(NOT TARGET ${tgt})

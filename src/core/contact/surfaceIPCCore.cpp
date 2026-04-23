@@ -36,11 +36,65 @@ namespace Contact
 namespace CIPC
 {
 static constexpr double kEps = 1e-20;  // numerical guard
+static constexpr double kSmallContactAlphaWarnThreshold = 1e-2;
+
+void updateMinAtomic(std::atomic<double> &target, double value)
+{
+  double current = target.load(std::memory_order_relaxed);
+  while (value < current && !target.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
+  }
+}
 
 // helper: pack an edge key for adjacency lookup
 static int64_t packPair(int a, int b)
 {
   return (int64_t)a * 10000000LL + (int64_t)b;
+}
+
+SurfaceIPCCore::SurfaceIPCCore(const SurfaceIPCCore &other):
+  dhat(other.dhat),
+  kappa(other.kappa),
+  eps_ee(other.eps_ee),
+  slackness(other.slackness),
+  numVerts_(other.numVerts_),
+  triangles_(other.triangles_),
+  edges_(other.edges_),
+  allDOFs_(other.allDOFs_),
+  vertexTriAdj_(other.vertexTriAdj_),
+  edgeVertAdj_(other.edgeVertAdj_),
+  vertexArea_(other.vertexArea_),
+  triArea_(other.triArea_),
+  edgeLength_(other.edgeLength_),
+  contactClampCount_(other.contactClampCount_.load(std::memory_order_relaxed)),
+  minContactFeasibleAlphaThisSolve_(other.minContactFeasibleAlphaThisSolve_.load(std::memory_order_relaxed)),
+  ptPairs_(other.ptPairs_),
+  eePairs_(other.eePairs_)
+{
+}
+
+SurfaceIPCCore &SurfaceIPCCore::operator=(const SurfaceIPCCore &other)
+{
+  if (this == &other)
+    return *this;
+
+  dhat = other.dhat;
+  kappa = other.kappa;
+  eps_ee = other.eps_ee;
+  slackness = other.slackness;
+  numVerts_ = other.numVerts_;
+  triangles_ = other.triangles_;
+  edges_ = other.edges_;
+  allDOFs_ = other.allDOFs_;
+  vertexTriAdj_ = other.vertexTriAdj_;
+  edgeVertAdj_ = other.edgeVertAdj_;
+  vertexArea_ = other.vertexArea_;
+  triArea_ = other.triArea_;
+  edgeLength_ = other.edgeLength_;
+  contactClampCount_.store(other.contactClampCount_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+  minContactFeasibleAlphaThisSolve_.store(other.minContactFeasibleAlphaThisSolve_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+  ptPairs_ = other.ptPairs_;
+  eePairs_ = other.eePairs_;
+  return *this;
 }
 
 void SurfaceIPCCore::setParameters(const Parameters &params)
@@ -59,6 +113,12 @@ SurfaceIPCCore::Parameters SurfaceIPCCore::getParameters() const
   params.eps_ee = eps_ee;
   params.slackness = slackness;
   return params;
+}
+
+void SurfaceIPCCore::resetContactMaxStepStats() const
+{
+  contactClampCount_.store(0, std::memory_order_relaxed);
+  minContactFeasibleAlphaThisSolve_.store(1.0, std::memory_order_relaxed);
 }
 
 // =========================================================================
@@ -1704,7 +1764,26 @@ double SurfaceIPCCore::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSu
       [](double a, double b) { return std::min(a, b); });
   }
 
-  return std::max(alpha, 1e-12);
+  const double clampedAlpha = std::max(alpha, 1e-12);
+  updateMinAtomic(minContactFeasibleAlphaThisSolve_, clampedAlpha);
+
+  if (clampedAlpha < 1.0) {
+    const std::int64_t clampCount = contactClampCount_.fetch_add(1, std::memory_order_relaxed) + 1;
+
+    if (clampedAlpha > 0.0 && clampedAlpha < kSmallContactAlphaWarnThreshold) {
+      SPDLOG_LOGGER_WARN(Logging::lgr(),
+        "IPC contact max step produced small contactFeasibleAlpha={} (contactClampCount={}, slackness={}).",
+        clampedAlpha, clampCount, slackness);
+    }
+
+    if (auto logger = Logging::lgr(); logger && logger->should_log(spdlog::level::trace)) {
+      SPDLOG_LOGGER_TRACE(logger,
+        "IPC contact clamp: contactFeasibleAlpha={} contactClampCount={} slackness={}.",
+        clampedAlpha, clampCount, slackness);
+    }
+  }
+
+  return clampedAlpha;
 }
 
 // =========================================================================
