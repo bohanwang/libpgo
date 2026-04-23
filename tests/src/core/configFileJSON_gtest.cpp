@@ -84,8 +84,8 @@ TEST(ConfigFileJSONGTest, ResolvesShellNestedPathsAgainstConfigDirectory)
 
   const std::string fixedFilename = config.handle()["fixed-vertices"][0]["filename"].get<std::string>();
   const std::string externalFilename = config.handle()["external-objects"][0]["filename"].get<std::string>();
-  EXPECT_EQ(fs::path(config.resolvePath(fixedFilename)), (configDir / "shell-fixed.txt").lexically_normal());
-  EXPECT_EQ(fs::path(config.resolvePath(externalFilename)), (configDir / "../bottom.obj").lexically_normal());
+  EXPECT_EQ(fs::path(config.resolvePath(fixedFilename)), (configDir / fixedFilename).lexically_normal());
+  EXPECT_EQ(fs::path(config.resolvePath(externalFilename)), (configDir / externalFilename).lexically_normal());
 }
 
 TEST(ConfigFileJSONGTest, ResolvesRawRelativeAndAbsolutePaths)
