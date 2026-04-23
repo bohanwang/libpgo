@@ -219,7 +219,7 @@ Main arguments:
 - `--output-surface`: optional extracted surface `.obj`
 - `--E`, `--nu`, `--density`: isotropic material parameters written into the output mesh
 
-Generated sample cubic assets are stored under `examples/cubic/`. See [`examples/cubic/README.md`](./examples/cubic/README.md) for the exact commands and parameters used for `box`, `bunny`, `dragon-dyn`, and `box-with-sphere`.
+Generated sample cubic assets are stored under `examples/cubic/`. See [`examples/cubic/README.md`](./examples/cubic/README.md) for the exact commands and parameters used for `box`, `box-hang`, `bunny`, `dragon-dyn`, and `box-with-sphere`.
 
 ### Shell Simulation
 

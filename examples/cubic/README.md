@@ -63,6 +63,7 @@ Recorded previews under `examples/cubic/media/`:
 | Case | Preview |
 | --- | --- |
 | `box` | ![box preview](media/box_rec.gif) |
+| `box-hang` | preview not committed |
 | `bunny` | ![bunny preview](media/bunny_rec.gif) |
 | `dragon-dyn` | ![dragon preview](media/dragon_rec.gif) |
 | `box-with-sphere-xlite` | ![box-with-sphere-xlite preview](media/box-with-sphere_rec.gif) |
@@ -80,6 +81,16 @@ Minimal sanity-check case for the cubic pipeline. This is the smallest mesh here
 - observed mesh size: `125` vertices, `64` elements
 - run: `build/base_no_mkl/bin/runSim examples/cubic/box/box.json`
 - animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/box/anim.json`
+
+### `box-hang`
+
+Hanging variant of the cubic box setup. This case reuses the same cubic box mesh as `box`, but pins the vertices listed in `box-fixed.txt` instead of dropping onto the floor, which makes it a compact fixed-boundary sanity check.
+
+- files: `box.obj`, `box.veg`, `box-surface.obj`, `box-fixed.txt`, `box.json`, `anim.json`
+- mesher params: `resolution=4`, `E=10000000`, `nu=0.45`, `density=1000`
+- observed mesh size: `125` vertices, `64` elements
+- run: `build/base_no_mkl/bin/runSim examples/cubic/box-hang/box.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/box-hang/anim.json`
 
 ### `bunny`
 
@@ -150,6 +161,21 @@ build/base_no_mkl/bin/cubicMesher \
   --resolution 4 \
   --output-mesh examples/cubic/box/box.veg \
   --output-surface examples/cubic/box/box-surface.obj \
+  --E 10000000 \
+  --nu 0.45 \
+  --density 1000
+```
+
+### `box-hang`
+
+`box-hang` uses the same cubic mesh asset as `box`, generated with:
+
+```bash
+build/base_no_mkl/bin/cubicMesher \
+  --input-mesh examples/cubic/box-hang/box.obj \
+  --resolution 4 \
+  --output-mesh examples/cubic/box-hang/box.veg \
+  --output-surface examples/cubic/box-hang/box-surface.obj \
   --E 10000000 \
   --nu 0.45 \
   --density 1000

@@ -46,13 +46,37 @@ gtest_discover_tests(runSim_gtest)
 
 add_executable(runIPCSim_gtest
   runIPCSim_gtest.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimCliLogging.cpp)
+  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimCliLogging.cpp
+  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimVolumeMeshIO.cpp
+  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimFEMSetup.cpp
+  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runIPCSimSetup.cpp)
 target_link_libraries(runIPCSim_gtest PRIVATE
-  GTest::gtest_main)
+  GTest::gtest_main
+  configFileJSON
+  contact
+  constraintPotentialEnergies
+  interpolationCoordinates
+  libiglInterface
+  solidDeformationModel
+  volumetricMesh
+  mesh)
 target_include_directories(runIPCSim_gtest PRIVATE
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim)
+  ${CMAKE_SOURCE_DIR}/src/tools/runSim
+  ${CMAKE_SOURCE_DIR}/src/core/basicIO
+  ${CMAKE_SOURCE_DIR}/src/core/contact
+  ${CMAKE_SOURCE_DIR}/src/core/constraintPotentialEnergies
+  ${CMAKE_SOURCE_DIR}/src/core/eigenSupport
+  ${CMAKE_SOURCE_DIR}/src/core/interpolationCoordinates
+  ${CMAKE_SOURCE_DIR}/src/core/libiglInterface
+  ${CMAKE_SOURCE_DIR}/src/core/mesh
+  ${CMAKE_SOURCE_DIR}/src/core/pgoLogging
+  ${CMAKE_SOURCE_DIR}/src/core/simulation
+  ${CMAKE_SOURCE_DIR}/src/core/solidDeformationModel
+  ${CMAKE_SOURCE_DIR}/src/core/volumetricMesh)
 target_compile_definitions(runIPCSim_gtest PRIVATE
   LIBPGO_TEST_SHELL_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/shell"
+  LIBPGO_TEST_IPC_TET_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/ipc/tet/box-hang"
+  LIBPGO_TEST_IPC_CUBIC_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/ipc/cubic/box-hang"
   PGO_TEST_RUN_IPC_SIM_BIN="$<TARGET_FILE:runIPCSim>")
 add_dependencies(runIPCSim_gtest runIPCSim)
 set_property(TARGET runIPCSim_gtest PROPERTY FOLDER "tests/gtest")
