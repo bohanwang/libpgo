@@ -3,6 +3,7 @@
 #include "EigenSupport.h"
 #include "barycentricCoordinates.h"
 #include "configFileJSON.h"
+#include "deformationModelEnergy.h"
 #include "initPredicates.h"
 #include "pgoLogging.h"
 #include "runIPCSimSetup.h"
@@ -212,7 +213,8 @@ std::string makeShellIPCConfigWithIgnoredLegacyContactFields(const fs::path &tem
 
 std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey, const fs::path &outputDir, int numTimesteps,
   double scale = 1.0, bool includeIPCFields = true, bool ipcHeuristic = false, const std::string &material = "stable-neo",
-  double ipcDhat = 0.002, double ipcKappa = 3000.0, int dumpInterval = 1)
+  double ipcDhat = 0.002, double ipcKappa = 3000.0, int dumpInterval = 1,
+  bool enableMaterialMaxStep = true)
 {
   std::ostringstream json;
   json << "{\n"
@@ -237,7 +239,8 @@ std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey,
        << "  \"solver-max-iter\": 5,\n"
        << "  \"elastic-material\": \"" << material << "\",\n"
        << "  \"dump-interval\": " << dumpInterval << ",\n"
-       << "  \"output\": " << quotePath(outputDir);
+       << "  \"output\": " << quotePath(outputDir) << ",\n"
+       << "  \"enable-material-max-step\": " << (enableMaterialMaxStep ? "true" : "false");
 
   if (ipcHeuristic) {
     json << ",\n"
@@ -315,6 +318,23 @@ void expectSparseMatrixNear(const ES::SpMatD &actual, const ES::SpMatD &expected
   EXPECT_LE(maxDiff, tol);
 }
 }  // namespace
+
+TEST(RunIPCSimCliGTest, VolumeSetupRespectsDisabledMaterialMaxStepFlag)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-ipc-disable-material-max-step.json";
+  writeTextFile(configPath, makeTetIPCConfig(tempDir.path(), 0, 1.0, true, false, "stable-neo", 1));
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  config.handle()["enable-material-max-step"] = false;
+
+  const pgo::RunIPCSim::IpcSimulationContext context = pgo::RunIPCSim::buildVolumeIpcSimulation(config);
+  ASSERT_NE(context.elasticEnergy, nullptr);
+  EXPECT_FALSE(context.elasticEnergy->isMaterialMaxStepEnabled());
+}
 
 TEST(RunIPCSimCliGTest, LogFlagWritesCliOutputNextToConfig)
 {

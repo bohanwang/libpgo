@@ -35,6 +35,7 @@ InitializedVolumetricSimulation initializeVolumetricSimulation(
   const VolumetricMeshes::VolumetricMesh &volumetricMesh,
   SolidDeformationModel::DeformationModelElasticMaterial elasticMat,
   SolidDeformationModel::DeformationModelPlasticMaterial plasticMat =
-    SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6);
+    SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6,
+  bool enableMaterialMaxStep = true);
 }  // namespace RunSim
 }  // namespace pgo

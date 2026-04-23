@@ -1,6 +1,7 @@
 #include "cubicMeshDeformationModel.h"
 
 #include "elasticModel3DDeformationGradient.h"
+#include "materialMaxStepPolynomialUtils.h"
 #include "plasticModel3DDeformationGradient.h"
 
 #include "EigenSupport.h"
@@ -269,6 +270,33 @@ void CubicMeshDeformationModel::compute_d2E_dx2(const CacheData *cacheDataBase, 
 
   Eigen::Map<ES::M24d> hessMap(hess);
   hessMap = hessMat;
+}
+
+DeformationModel::LocalMaxStepResult CubicMeshDeformationModel::computeLocalMaxStepSize(const double *x_local, const double *dx_local) const
+{
+  LocalMaxStepResult result;
+  for (int q = 0; q < getNumMaterialLocations(); q++) {
+    double F0[9];
+    double deltaF[9];
+    computeF(x_local, q, F0);
+    computeF(dx_local, q, deltaF);
+
+    const auto poly = buildDeterminantCubicFromAffineMatrixPath(F0, deltaF, kCubicRelativeDetEps);
+    const ConservativeFeasibleAlphaResult alphaResult = findConservativeFeasibleAlpha(poly, kCubicRelativeDetEps);
+    if (alphaResult.alpha < result.alpha) {
+      result.alpha = alphaResult.alpha;
+      result.illegalInitialState = alphaResult.illegalInitialState;
+      result.phi0 = alphaResult.phi0;
+      result.eps = kCubicRelativeDetEps;
+      result.locationId = q;
+    }
+
+    if (result.alpha <= kMaterialMaxStepMinClamp) {
+      break;
+    }
+  }
+
+  return result;
 }
 
 void CubicMeshDeformationModel::compute_dE_da(const CacheData *cacheDataBase, double *grad) const

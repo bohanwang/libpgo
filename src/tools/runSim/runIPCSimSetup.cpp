@@ -176,6 +176,13 @@ SolidDeformationModel::DeformationModelElasticMaterial parseVolumeElasticMateria
   throwConfigError(
     "runIPCSim phase1D tet/cubic only supports `elastic-material = stable-neo` or `stvk-vol`.");
 }
+
+bool parseEnableMaterialMaxStep(const pgo::ConfigFileJSON &jconfig)
+{
+  return jconfig.exist("enable-material-max-step")
+    ? jconfig.getValue<bool>("enable-material-max-step", 1)
+    : true;
+}
 }  // namespace
 
 IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
@@ -203,11 +210,13 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   loadSurfaceMeshAndRestPositions(surfaceMeshFilename, 1.0, surfaceMesh, surfaceRestPositions);
   const pgo::Mesh::BoundingBox surfaceBox(surfaceMesh.positions());
   const bool ipcHeuristic = jconfig.exist("ipc-heuristic") ? jconfig.getValue<bool>("ipc-heuristic", 1) : false;
+  const bool enableMaterialMaxStep = parseEnableMaterialMaxStep(jconfig);
   const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeShellIPCParams(jconfig, surfaceBox);
 
   std::cout << "runIPCSim phase1D shell IPC parameters: "
             << "ipc-heuristic=" << (ipcHeuristic ? "true" : "false") << ", "
             << "source=" << (ipcHeuristic ? "heuristic" : "config") << ", "
+            << "enable-material-max-step=" << (enableMaterialMaxStep ? "true" : "false") << ", "
             << "ipc-dhat=" << ipcParams.dhat << ", "
             << "ipc-kappa=" << ipcParams.kappa << ", "
             << "eps_ee=" << ipcParams.eps_ee << ", "
@@ -255,6 +264,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
 
   std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy =
     std::make_shared<SolidDeformationModel::DeformationModelEnergy>(assembler, &simulationRestPosition, 0);
+  elasticEnergy->setEnableMaterialMaxStep(enableMaterialMaxStep);
   elasticEnergy->setElasticParams(elasticParams);
 
   ES::VXd zero = ES::VXd::Zero(n3);
@@ -309,10 +319,12 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   const double scale = jconfig.getDouble("scale", 1);
   const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeVolumeIPCParams(jconfig);
   const SolidDeformationModel::DeformationModelElasticMaterial elasticMat = parseVolumeElasticMaterial(jconfig);
+  const bool enableMaterialMaxStep = parseEnableMaterialMaxStep(jconfig);
 
   std::cout << "runIPCSim phase1D volume IPC parameters: "
             << "ipc-heuristic=false, "
             << "source=config, "
+            << "enable-material-max-step=" << (enableMaterialMaxStep ? "true" : "false") << ", "
             << "ipc-dhat=" << ipcParams.dhat << ", "
             << "ipc-kappa=" << ipcParams.kappa << ", "
             << "eps_ee=" << ipcParams.eps_ee << ", "
@@ -340,7 +352,9 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   VolumetricMeshes::GenerateMassMatrix::computeMassMatrix(volumetricMesh.get(), M, true);
 
   RunSim::InitializedVolumetricSimulation initialized =
-    RunSim::initializeVolumetricSimulation(*volumetricMesh, elasticMat);
+    RunSim::initializeVolumetricSimulation(*volumetricMesh, elasticMat,
+      SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6,
+      enableMaterialMaxStep);
   if (W.cols() != initialized.restPosition.size())
     throwConfigError("runIPCSim phase1D volume setup produced an embedding matrix incompatible with simulation DOFs.");
 

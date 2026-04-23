@@ -64,6 +64,7 @@ Recorded previews under `examples/cubic/media/`:
 | --- | --- |
 | `box` | ![box preview](media/box_rec.gif) |
 | `box-hang` | preview not committed |
+| `box-squash` | preview not committed |
 | `bunny` | ![bunny preview](media/bunny_rec.gif) |
 | `dragon-dyn` | ![dragon preview](media/dragon_rec.gif) |
 | `box-with-sphere-xlite` | ![box-with-sphere-xlite preview](media/box-with-sphere_rec.gif) |
@@ -91,6 +92,16 @@ Hanging variant of the cubic box setup. This case reuses the same cubic box mesh
 - observed mesh size: `125` vertices, `64` elements
 - run: `build/base_no_mkl/bin/runSim examples/cubic/box-hang/box.json`
 - animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/box-hang/anim.json`
+
+### `box-squash`
+
+Material max-step regression variant of the cubic box setup. This case fixes one full volume face and pushes the opposite full face inward along the volume mesh `z` axis, so it is meant to trigger material max-step clamping in a stable, reproducible way. It is not intended as a contact-rich demo.
+
+- files: `box.obj`, `box.veg`, `box-surface.obj`, `box-zmin-fixed.txt`, `box-zmax-push.txt`, `box.json`, `anim.json`
+- mesher params: reuses the same cubic mesh asset as `box-hang`
+- observed mesh size: `126` vertices, `64` elements
+- run: `build/base_no_mkl/bin/runSim examples/cubic/box-squash/box.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/box-squash/anim.json`
 
 ### `bunny`
 

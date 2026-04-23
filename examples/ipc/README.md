@@ -23,7 +23,9 @@ Run the three shipped cases from the repo root:
 ```bash
 build/base_no_mkl_debug/bin/runIPCSim examples/ipc/shell/shell-ipc.json
 build/base_no_mkl_debug/bin/runIPCSim examples/ipc/tet/box-hang/box-ipc.json
+build/base_no_mkl_debug/bin/runIPCSim examples/ipc/tet/box-squash/box-ipc.json
 build/base_no_mkl_debug/bin/runIPCSim examples/ipc/cubic/box-hang/box-ipc.json
+build/base_no_mkl_debug/bin/runIPCSim examples/ipc/cubic/box-squash/box-ipc.json
 ```
 
 Convert the dumped frames into Alembic:
@@ -31,7 +33,9 @@ Convert the dumped frames into Alembic:
 ```bash
 build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/anim.json
 build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
+build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-squash/anim.json
 build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-hang/anim.json
+build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-squash/anim.json
 ```
 
 The JSON configs use paths relative to the config file, so they can be launched from the repo root without first changing into the case directory.
@@ -42,12 +46,16 @@ The directory currently ships three runnable IPC inputs:
 
 - `examples/ipc/shell/shell-ipc.json`
 - `examples/ipc/tet/box-hang/box-ipc.json`
+- `examples/ipc/tet/box-squash/box-ipc.json`
 - `examples/ipc/cubic/box-hang/box-ipc.json`
+- `examples/ipc/cubic/box-squash/box-ipc.json`
 
 The shell case lives directly under `examples/ipc/shell/`. The two volume cases currently live under:
 
 - `examples/ipc/tet/box-hang/`
+- `examples/ipc/tet/box-squash/`
 - `examples/ipc/cubic/box-hang/`
+- `examples/ipc/cubic/box-squash/`
 
 The two volume cases each contain:
 
@@ -101,6 +109,19 @@ Minimal tetrahedral unified IPC hanging-box case. This is the compact tet sanity
 - animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-hang/anim.json`
 - Alembic: `examples/ipc/tet/box-hang/box-hang-ipc-tet.abc`
 
+### `tet/box-squash`
+
+Tet unified IPC material max-step regression case. This setup is intentionally not contact-rich: it fixes one full tet volume face and pushes the opposite face inward along the volume mesh `z` axis, so the primary validation target is that unified IPC line search still honors material clamping.
+
+- files: `box.obj`, `box.veg`, `box-zmin-fixed.txt`, `box-zmax-push.txt`, `box-ipc.json`, `anim.json`
+- material: `stable-neo`
+- IPC params: explicit `ipc-dhat = 0.002`, `ipc-kappa = 3000.0`
+- config note: `fixed-vertices` means tet simulation vertex indices
+- config note: `enable-material-max-step = true`
+- run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/tet/box-squash/box-ipc.json`
+- output: `examples/ipc/tet/box-squash/ret-box-squash-ipc/`
+- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-squash/anim.json`
+
 ### `cubic/box-hang`
 
 Minimal cubic unified IPC hanging-box case. This case mirrors the tet setup, but drives contact and output from a cubic volumetric simulation mesh.
@@ -114,6 +135,19 @@ Minimal cubic unified IPC hanging-box case. This case mirrors the tet setup, but
 - animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-hang/anim.json`
 - Alembic: `examples/ipc/cubic/box-hang/box-hang-ipc-cubic.abc`
 
+### `cubic/box-squash`
+
+Cubic unified IPC material max-step regression case. This mirrors the tet squash setup, but drives the embedded IPC path from a cubic volume mesh. The goal is to verify that unified IPC line search does not drop the cubic material clamp.
+
+- files: `box.obj`, `box.veg`, `box-zmin-fixed.txt`, `box-zmax-push.txt`, `box-ipc.json`, `anim.json`
+- material: `stable-neo`
+- IPC params: explicit `ipc-dhat = 0.002`, `ipc-kappa = 3000.0`
+- config note: `fixed-vertices` means cubic volume simulation vertex indices
+- config note: `enable-material-max-step = true`
+- run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/cubic/box-squash/box-ipc.json`
+- output: `examples/ipc/cubic/box-squash/ret-box-squash-ipc/`
+- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-squash/anim.json`
+
 ## Rebuilding Animation Outputs
 
 After `runIPCSim` dumps the OBJ sequence, use the per-case animation config to convert it:
@@ -121,7 +155,9 @@ After `runIPCSim` dumps the OBJ sequence, use the per-case animation config to c
 ```bash
 build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/anim.json
 build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
+build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-squash/anim.json
 build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-hang/anim.json
+build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-squash/anim.json
 ```
 
 If the optional output path is omitted, `convertAnimation` writes the `.abc` file next to the animation config and uses the mesh `name` field from that config as the output filename stem.

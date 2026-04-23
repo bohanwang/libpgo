@@ -32,6 +32,7 @@ set(SOLID_DEFORMATION_MODEL_HEADERS
   plasticModel2DFundamentalFormsFirstOnly.h
 
   deformationModel.h
+  materialMaxStepPolynomialUtils.h
   cubicMeshDeformationModel.h
   tetMeshDeformationModel.h  
   koiterDeformationModel.h
@@ -85,6 +86,7 @@ set(SOLID_DEFORMATION_MODEL_SOURCES
   cubicMeshDeformationModel.cpp
   tetMeshDeformationModel.cpp
   koiterDeformationModel.cpp
+  materialMaxStepPolynomialUtils.cpp
 
   deformationModelManager.cpp
 
@@ -106,7 +108,7 @@ set(SOLID_DEFORMATION_MODEL_SOURCES
 )
 
 set(SOLID_DEFORMATION_MODEL_DEPS
-  pgoLogging eigenSupport nonlinearOptimization configFileJSON volumetricMesh
+  pgoLogging basicAlgorithms eigenSupport nonlinearOptimization configFileJSON volumetricMesh
   Eigen3::Eigen TBB::tbb fmt::fmt-header-only
 )
 

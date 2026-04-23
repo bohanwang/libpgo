@@ -40,6 +40,16 @@
 #include <thread>
 #include <iostream>
 
+namespace
+{
+bool parseEnableMaterialMaxStep(const pgo::ConfigFileJSON &jconfig)
+{
+  return jconfig.exist("enable-material-max-step")
+    ? jconfig.getValue<bool>("enable-material-max-step", 1)
+    : true;
+}
+}
+
 int main(int argc, char *argv[])
 {
   using namespace pgo;
@@ -178,7 +188,9 @@ int main(int argc, char *argv[])
 
   RunSim::InitializedVolumetricSimulation initialized;
   try {
-    initialized = RunSim::initializeVolumetricSimulation(*volumetricMesh, elasticMat);
+    initialized = RunSim::initializeVolumetricSimulation(*volumetricMesh, elasticMat,
+      pgo::SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6,
+      parseEnableMaterialMaxStep(jconfig));
   }
   catch (const std::exception &err) {
     SPDLOG_LOGGER_ERROR(Logging::lgr(), "{}", err.what());

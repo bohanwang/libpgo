@@ -18,7 +18,8 @@ namespace pgo::RunSim
 InitializedVolumetricSimulation initializeVolumetricSimulation(
   const VolumetricMeshes::VolumetricMesh &volumetricMesh,
   SolidDeformationModel::DeformationModelElasticMaterial elasticMat,
-  SolidDeformationModel::DeformationModelPlasticMaterial plasticMat)
+  SolidDeformationModel::DeformationModelPlasticMaterial plasticMat,
+  bool enableMaterialMaxStep)
 {
   using namespace pgo::SolidDeformationModel;
   namespace ES = pgo::EigenSupport;
@@ -84,6 +85,7 @@ InitializedVolumetricSimulation initializeVolumetricSimulation(
   }
 
   initialized.elasticEnergy = std::make_shared<DeformationModelEnergy>(initialized.assembler, &initialized.restPosition, 0);
+  initialized.elasticEnergy->setEnableMaterialMaxStep(enableMaterialMaxStep);
   initialized.elasticEnergy->setPlasticParams(initialized.plasticity);
 
   return initialized;

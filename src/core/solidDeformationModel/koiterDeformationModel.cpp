@@ -172,6 +172,13 @@ void KoiterDeformationModel::prepareData(const double *x, const double *param, c
   }
 }
 
+DeformationModel::LocalMaxStepResult KoiterDeformationModel::computeLocalMaxStepSize(const double *x_local, const double *dx_local) const
+{
+  (void)x_local;
+  (void)dx_local;
+  return LocalMaxStepResult{};
+}
+
 double KoiterDeformationModel::computeEnergy(const CacheData *cacheDataBase) const
 {
   const KoiterDeformationModelCacheData *cacheData = dynamic_cast<const KoiterDeformationModelCacheData *>(cacheDataBase);

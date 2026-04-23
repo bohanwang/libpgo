@@ -23,6 +23,7 @@ public:
   virtual ~DeformationModelAssembler();
 
   double computeEnergy(const double *x, const double *plasticParams, const double *elasticParams) const;
+  double computeMaxStepSize(const double *x, const double *dx) const;
   void computeGradient(const double *x, const double *plasticParams, const double *elasticParams, double *grad) const;
   void computeHessian(const double *x, const double *plasticParams, const double *elasticParams, EigenSupport::SpMatD &hess) const;
 

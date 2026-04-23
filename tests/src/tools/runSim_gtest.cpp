@@ -578,6 +578,27 @@ TEST(RunSimVolumeMeshIOGTest, InitializesCubicRuntimeMainPath)
   expectAllFinite(grad);
 }
 
+TEST(RunSimVolumeMeshIOGTest, InitializeVolumetricSimulationCanDisableMaterialMaxStep)
+{
+  pgo::Logging::init();
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(tetConfigPath().c_str()));
+
+  const VolumeMeshInputConfig meshConfig = pgo::RunSim::parseVolumeMeshInputConfig(config);
+  std::unique_ptr<VolumetricMesh> volumetricMesh = pgo::RunSim::loadValidatedVolumeMesh(meshConfig, config.getDouble("scale", 1));
+  ASSERT_NE(volumetricMesh, nullptr);
+
+  const auto initialized = pgo::RunSim::initializeVolumetricSimulation(
+    *volumetricMesh,
+    pgo::SolidDeformationModel::DeformationModelElasticMaterial::STABLE_NEO,
+    pgo::SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6,
+    false);
+
+  ASSERT_NE(initialized.elasticEnergy, nullptr);
+  EXPECT_FALSE(initialized.elasticEnergy->isMaterialMaxStepEnabled());
+}
+
 TEST(RunSimVolumeMeshIOGTest, TetExternalContactEmbeddingMatchesBarycentricInterpolation)
 {
   const auto input = makeContactEmbeddingTestInput(tetConfigPath(), VolumetricMesh::TET);

@@ -4,7 +4,6 @@
 #include <spdlog/sinks/basic_file_sink.h>
 
 #include <cstring>
-
 std::shared_ptr<spdlog::logger> pgo::Logging::logger;
 
 void pgo::Logging::init(const char *filename)

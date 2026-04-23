@@ -4,6 +4,7 @@ copyright to USC,MIT,NUS
 */
 
 #include "deformationModelAssembler.h"
+#include "materialMaxStepPolynomialUtils.h"
 #include "deformationModelManager.h"
 #include "simulationMesh.h"
 #include "deformationModel.h"
@@ -53,6 +54,39 @@ void gatherLocalPositions(const pgo::SolidDeformationModel::DeformationModelMana
       localp.segment<3>(j * 3) = ES::V3d(x[vid * 3], x[vid * 3 + 1], x[vid * 3 + 2]);
     else
       localp.segment<3>(j * 3).setZero();
+  }
+}
+
+const char *meshTypeName(pgo::SolidDeformationModel::SimulationMeshType meshType)
+{
+  using pgo::SolidDeformationModel::SimulationMeshType;
+  switch (meshType) {
+  case SimulationMeshType::TET:
+    return "TET";
+  case SimulationMeshType::CUBIC:
+    return "CUBIC";
+  case SimulationMeshType::TRIANGLE:
+    return "TRIANGLE";
+  case SimulationMeshType::EDGE_QUAD:
+    return "EDGE_QUAD";
+  case SimulationMeshType::SHELL:
+    return "SHELL";
+  default:
+    return "UNKNOWN";
+  }
+}
+
+void warnIllegalInitialState(pgo::SolidDeformationModel::SimulationMeshType meshType, int elementId, int locationId, double phi0, double eps)
+{
+  if (locationId >= 0) {
+    SPDLOG_LOGGER_WARN(pgo::Logging::lgr(),
+      "Phase 1.5 material max step encountered illegal initial state on meshType={} element={} location={} : phi(0)={} <= eps={}. Returning recovery clamp {}.",
+      meshTypeName(meshType), elementId, locationId, phi0, eps, pgo::SolidDeformationModel::kMaterialMaxStepMinClamp);
+  }
+  else {
+    SPDLOG_LOGGER_WARN(pgo::Logging::lgr(),
+      "Phase 1.5 material max step encountered illegal initial state on meshType={} element={} : phi(0)={} <= eps={}. Returning recovery clamp {}.",
+      meshTypeName(meshType), elementId, phi0, eps, pgo::SolidDeformationModel::kMaterialMaxStepMinClamp);
   }
 }
 }
@@ -289,6 +323,35 @@ double DeformationModelAssembler::computeEnergy(const double *x, const double *p
     energyAll += *it;
 
   return energyAll;
+}
+
+double DeformationModelAssembler::computeMaxStepSize(const double *x, const double *dx) const
+{
+  double maxStepSize = 1.0;
+  const SimulationMeshType meshType = deformationModelManager->getMesh()->getElementType();
+
+  for (int ele = 0; ele < nele; ele++) {
+    if (elementFlags[ele] == 0) {
+      continue;
+    }
+
+    ES::VXd localX(localDOFs);
+    ES::VXd localDx(localDOFs);
+    gatherLocalPositions(*deformationModelManager, ele, neleVtx, x, localX);
+    gatherLocalPositions(*deformationModelManager, ele, neleVtx, dx, localDx);
+
+    const DeformationModel::LocalMaxStepResult localResult = femModels[ele]->computeLocalMaxStepSize(localX.data(), localDx.data());
+    maxStepSize = std::min(maxStepSize, localResult.alpha);
+    if (localResult.illegalInitialState) {
+      warnIllegalInitialState(meshType, ele, localResult.locationId, localResult.phi0, localResult.eps);
+    }
+
+    if (maxStepSize <= kMaterialMaxStepMinClamp) {
+      break;
+    }
+  }
+
+  return maxStepSize;
 }
 
 void DeformationModelAssembler::computeGradient(const double *x, const double *plasticParams, const double *elasticParams, double *grad) const
