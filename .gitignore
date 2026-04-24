@@ -5,7 +5,7 @@
 *.slo
 *.lo
 *.o
-*.obj
+# *.obj
 
 # Precompiled Headers
 *.gch
@@ -46,9 +46,24 @@ __pycache__/
 projects
 build-test
 
-*.obj
+# *.obj
 *.png
 
 *.u
 
 build*
+
+.cache/
+.mypy_cache/
+
+plan/*
+*.plan.md
+
+docs/*
+
+fv.obj
+ret*
+
+paper/*
+*.pdf
+*.log

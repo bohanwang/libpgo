@@ -1,0 +1,14 @@
+{
+  "meshes": [
+    {
+      "name": "box-with-sphere-cubic-xlite",
+      "driving-mesh": "box-with-sphere.obj",
+      "sequence": "ret-cubic-box-with-sphere-xlite/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        200
+      ]
+    }
+  ]
+}

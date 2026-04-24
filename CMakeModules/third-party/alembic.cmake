@@ -5,7 +5,7 @@ endif()
 message(STATUS "Loading alembic...")
 
 set(USE_ARNOLD OFF CACHE BOOL "Include Arnold stuff" FORCE)
-set(USE_BINARIES ON CACHE BOOL "Include binaries" FORCE)
+set(USE_BINARIES OFF CACHE BOOL "Include binaries" FORCE)
 set(USE_EXAMPLES OFF CACHE BOOL "Include examples" FORCE)
 set(USE_HDF5 OFF CACHE BOOL "Include HDF5 stuff" FORCE)
 set(USE_MAYA OFF CACHE BOOL "Include Maya stuff" FORCE)

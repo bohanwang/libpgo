@@ -5,6 +5,7 @@ copyright to USC,MIT,NUS
 
 #include "tetMeshDeformationModel.h"
 #include "elasticModel3DDeformationGradient.h"
+#include "materialMaxStepPolynomialUtils.h"
 #include "plasticModel3DDeformationGradient.h"
 
 // #define MKL_DIRECT_CALL_SEQ_JIT
@@ -143,6 +144,36 @@ void TetMeshDeformationModel::computeF(const double *x, int materialLocationIDs,
   ES::M3d Ds;
   ind->computeDs(xs[0], xs[1], xs[2], xs[3], Ds);
   (Eigen::Map<ES::M3d>(F)) = Ds * ind->restDmInv;
+}
+
+DeformationModel::LocalMaxStepResult TetMeshDeformationModel::computeLocalMaxStepSize(const double *x_local, const double *dx_local) const
+{
+  double Ds0[9];
+  double deltaDs[9];
+  double Dm[9];
+  double restLocal[12];
+
+  for (int i = 0; i < 4; i++) {
+    restLocal[i * 3 + 0] = ind->restX[i][0];
+    restLocal[i * 3 + 1] = ind->restX[i][1];
+    restLocal[i * 3 + 2] = ind->restX[i][2];
+  }
+
+  computeDs(x_local, Ds0);
+  computeDs(dx_local, deltaDs);
+  computeDm(restLocal, Dm);
+
+  const double detDm = Eigen::Map<const ES::M3d>(Dm).determinant();
+  const double eps = kTetRelativeDetEps * std::abs(detDm);
+  const auto poly = buildDeterminantCubicFromAffineMatrixPath(Ds0, deltaDs, eps);
+  const ConservativeFeasibleAlphaResult alphaResult = findConservativeFeasibleAlpha(poly, eps);
+
+  LocalMaxStepResult result;
+  result.alpha = alphaResult.alpha;
+  result.illegalInitialState = alphaResult.illegalInitialState;
+  result.phi0 = alphaResult.phi0;
+  result.eps = eps;
+  return result;
 }
 
 void TetMeshDeformationModel::computeP(const CacheData *cacheDataBase, int materialLocationIDs, double POut[9]) const

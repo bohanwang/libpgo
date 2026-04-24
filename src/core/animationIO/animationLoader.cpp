@@ -26,9 +26,9 @@ int AnimationLoader::load(const char *filename)
     for (auto &jmesh : jconfig_root["meshes"]) {
       AnimationSequence aseq;
       aseq.name = jmesh.at("name").get<std::string>();
-      aseq.drivingMeshFilename = jmesh.at("driving-mesh").get<std::string>();
-      aseq.displayMeshFilename = jmesh.value("display-mesh", "");
-      aseq.sequenceName = jmesh.at("sequence").get<std::string>();
+      aseq.drivingMeshFilename = jconfig.resolvePath(jmesh.at("driving-mesh").get<std::string>());
+      aseq.displayMeshFilename = jconfig.resolvePath(jmesh.value("display-mesh", ""));
+      aseq.sequenceName = jconfig.resolvePath(jmesh.at("sequence").get<std::string>());
       aseq.sequenceType = jmesh.at("sequence-type").get<std::string>();
       aseq.scaleString = jmesh.value("scale", "1,1,1");
       aseq.sequenceRange = jmesh.at("sequence-range").get<std::vector<int>>();
@@ -98,7 +98,7 @@ int AnimationLoader::load(const char *filename)
       }
     }
 
-    std::string uCacheFilename = fmt::format("{}-uAll.u", aseq.name);
+    std::string uCacheFilename = jconfig.resolvePath(fmt::format("{}-uAll.u", aseq.name));
     size_t foundTemp = aseq.name.find("temp");
     int saveCache = saveCacheGlobal;
     if (saveCache) {

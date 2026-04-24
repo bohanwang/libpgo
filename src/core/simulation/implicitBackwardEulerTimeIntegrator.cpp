@@ -70,6 +70,7 @@ void ImplicitBackwardEulerTimeIntegrator::doTimestep(int updateq, int verbose, i
   }
 
   bool needRenew = (constraintsChanged || generalForceModelChanged);
+  eulerEnergy->resetSolveMaxStepStats();
   solverRet = solver->solve(needRenew, z, g, lambda, uRangeLow, uRangeHi,
     constraintsRangeLow, constraintsRangeHi, eulerEnergy, constraints,
     nIter, eps, verbose, solverConfigFilename.length() ? solverConfigFilename.c_str() : nullptr,

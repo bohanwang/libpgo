@@ -7,6 +7,8 @@ copyright to USC,MIT,NUS
 
 #include "potentialEnergy.h"
 
+#include <atomic>
+#include <cstdint>
 #include <vector>
 
 namespace pgo
@@ -28,10 +30,15 @@ public:
   virtual void getDOFs(std::vector<int> &dofs) const override { dofs = this->allDOFs; }
   virtual int getNumDOFs() const override { return (int)allDOFs.size(); }
 
-  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override { return 1.0; }
+  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override;
 
   void setElasticParams(const EigenSupport::ConstRefVecXd elasticParams) { this->elasticParams = elasticParams; }
   void setPlasticParams(const EigenSupport::ConstRefVecXd plasticParams) { this->plasticParams = plasticParams; }
+  void setEnableMaterialMaxStep(bool enable) { enableMaterialMaxStep_ = enable; }
+  bool isMaterialMaxStepEnabled() const { return enableMaterialMaxStep_; }
+  std::int64_t getMaterialClampCount() const { return materialClampCount_.load(); }
+  double getMinMaterialFeasibleAlphaThisSolve() const { return minMaterialFeasibleAlphaThisSolve_.load(std::memory_order_relaxed); }
+  void resetMaterialMaxStepStats() const;
 
 protected:
   std::shared_ptr<DeformationModelAssembler> forceModelAssembler;
@@ -40,6 +47,9 @@ protected:
   EigenSupport::VXd restPosition;
   EigenSupport::VXd elasticParams;
   EigenSupport::VXd plasticParams;
+  bool enableMaterialMaxStep_ = true;
+  mutable std::atomic<std::int64_t> materialClampCount_{0};
+  mutable std::atomic<double> minMaterialFeasibleAlphaThisSolve_{1.0};
 };
 }  // namespace SolidDeformationModel
 }  // namespace pgo

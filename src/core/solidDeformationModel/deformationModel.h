@@ -5,6 +5,8 @@ copyright to USC,MIT,NUS
 
 #pragma once
 
+#include <limits>
+
 namespace pgo
 {
 namespace SolidDeformationModel
@@ -22,6 +24,15 @@ public:
 class DeformationModel
 {
 public:
+  struct LocalMaxStepResult
+  {
+    double alpha = 1.0;
+    bool illegalInitialState = false;
+    double phi0 = std::numeric_limits<double>::quiet_NaN();
+    double eps = 0.0;
+    int locationId = -1;
+  };
+
   DeformationModel(ElasticModel *elasticModel, PlasticModel *plasticModel):
     em(elasticModel), pm(plasticModel) {}
   virtual ~DeformationModel() {}
@@ -32,8 +43,8 @@ public:
   virtual void freeCacheData(CacheData *data) const = 0;
   virtual void prepareData(const double *x, const double *param, const double *materialParam, CacheData *cacheData) const = 0;
 
-  virtual void vonMisesStress(const CacheData *cacheDataBase, int &nPt, double *stresses) const {};
-  virtual void maxStrain(const CacheData *cacheDataBase, int &nPt, double *stresses) const {};
+  virtual void vonMisesStress(const CacheData *, int &, double *) const {};
+  virtual void maxStrain(const CacheData *, int &, double *) const {};
 
   virtual double computeEnergy(const CacheData *cacheData) const = 0;
   virtual void compute_dE_dx(const CacheData *cacheData, double *grad) const = 0;
@@ -56,6 +67,12 @@ public:
 
   virtual int getNumVertices() const = 0;
   virtual int getNumDOFs() const = 0;
+  virtual LocalMaxStepResult computeLocalMaxStepSize(const double *x_local, const double *dx_local) const
+  {
+    (void)x_local;
+    (void)dx_local;
+    return LocalMaxStepResult{};
+  }
 
   // advanced routines
   virtual int getNumMaterialLocations() const { return 1; }

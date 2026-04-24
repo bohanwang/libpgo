@@ -6,6 +6,7 @@ copyright to USC, MIT, NUS
 #include "deformationModelManager.h"
 
 #include "deformationModel.h"
+#include "cubicMeshDeformationModel.h"
 #include "tetMeshDeformationModel.h"
 #include "koiterDeformationModel.h"
 
@@ -648,6 +649,16 @@ void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelT
         data->elementFEMs[ele] = new TetMeshDeformationModel(
           restPosition.data(), restPosition.data() + 3, restPosition.data() + 6, restPosition.data() + 9,
           data->elementMaterials[ele], pm);
+      } else if (data->simulationMesh->getElementType() == SimulationMeshType::CUBIC) {
+        ES::V24d restPosition;
+        for (int j = 0; j < 8; j++) {
+          ES::V3d p;
+          data->simulationMesh->getVertex(ele, j, p.data());
+          restPosition.segment<3>(j * 3) = p;
+        }
+
+        data->elementFEMs[ele] = new CubicMeshDeformationModel(
+          restPosition.data(), data->elementMaterials[ele], pm);
       }
       else if (data->simulationMesh->getElementType() == SimulationMeshType::SHELL) {
         ES::V18d restPosition;

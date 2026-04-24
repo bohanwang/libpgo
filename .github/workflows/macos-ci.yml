@@ -1,0 +1,120 @@
+name: macOS CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - origin/*
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python-build-and-test:
+    name: Python Build and Test
+    runs-on: macos-15
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: libpgo-ci
+          auto-activate-base: false
+          use-mamba: true
+          python-version: "3.12"
+          channels: conda-forge
+          channel-priority: strict
+
+      - name: Install Conda packages
+        run: |
+          mamba install -y \
+            "cmake>=3.29" \
+            ninja \
+            numpy \
+            pip \
+            setuptools \
+            wheel
+
+      - name: Install Homebrew prerequisites
+        run: brew install gmp mpfr imath
+
+      - name: Configure build environment
+        run: |
+          echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: Build and install Python package
+        run: |
+          export CMAKE_ARGS="-DCMAKE_PREFIX_PATH=${CONDA_PREFIX};${HOMEBREW_PREFIX}"
+          python -m pip install --upgrade pip
+          python -m pip install ".[test]"
+
+      - name: Run Python API pytest suite
+        run: pytest -q tests/pypgo
+
+  cmake-build:
+    name: CMake Preset Build and Test
+    runs-on: macos-15
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: libpgo-ci
+          auto-activate-base: false
+          use-mamba: true
+          python-version: "3.12"
+          channels: conda-forge
+          channel-priority: strict
+
+      - name: Install Conda packages
+        run: |
+          mamba install -y \
+            "cmake>=3.29" \
+            ninja
+
+      - name: Install Homebrew prerequisites
+        run: brew install gmp mpfr imath
+
+      - name: Configure build environment
+        run: |
+          echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix)" >> "$GITHUB_ENV"
+          echo "CPATH=$(brew --prefix)/include" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
+
+      - name: Configure with preset base_no_mkl and tests enabled
+        run: cmake --preset base_no_mkl -DBUILD_TESTING=ON
+
+      - name: Build with preset base_no_mkl_release
+        run: cmake --build --preset base_no_mkl_release
+
+      - name: Run CTest
+        run: ctest --test-dir build/base_no_mkl --output-on-failure
