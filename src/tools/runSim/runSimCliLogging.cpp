@@ -80,8 +80,7 @@ spdlog::level::level_enum resolveConfiguredLogLevel(const ConfigFileJSON &config
 {
   const std::string configuredLevel = config.exist("loglevel")
     ? config.getString("loglevel")
-    : "trace";
-    // "info";
+    : "info";
 
   if (configuredLevel == "trace")
     return spdlog::level::trace;
