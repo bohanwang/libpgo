@@ -2,7 +2,7 @@
 
 #include "CIPC.h"
 #include "scopedProfileSection.h"
-#include "surfaceIPCProfiling.h"
+#include "ipc/profiling/surfaceIPCProfiling.h"
 
 #include <algorithm>
 #include <string_view>

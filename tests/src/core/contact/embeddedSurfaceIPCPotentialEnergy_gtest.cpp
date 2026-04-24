@@ -3,8 +3,8 @@
 #include "CIPC.h"
 #include "embeddedSurfaceIPCPotentialEnergy.h"
 #include "scopedProfileSection.h"
-#include "surfaceIPCCore.h"
-#include "surfaceIPCProfiling.h"
+#include "ipc/core/surfaceIPCCore.h"
+#include "ipc/profiling/surfaceIPCProfiling.h"
 #include "testCIPCHelpers.h"
 
 #include <algorithm>

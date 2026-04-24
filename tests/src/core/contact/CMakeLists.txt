@@ -13,6 +13,36 @@ target_link_libraries(cipcPotentialEnergy_gtest PRIVATE GTest::gtest_main contac
 set_property(TARGET cipcPotentialEnergy_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(cipcPotentialEnergy_gtest)
 
+add_executable(spatialHashGrid_gtest spatialHashGrid_gtest.cpp)
+target_link_libraries(spatialHashGrid_gtest PRIVATE GTest::gtest_main contact)
+set_property(TARGET spatialHashGrid_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(spatialHashGrid_gtest)
+
+add_executable(ipcGeometry_gtest ipcGeometry_gtest.cpp)
+target_link_libraries(ipcGeometry_gtest PRIVATE GTest::gtest_main contact)
+set_property(TARGET ipcGeometry_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(ipcGeometry_gtest)
+
+add_executable(surfaceIPCTopology_gtest surfaceIPCTopology_gtest.cpp)
+target_link_libraries(surfaceIPCTopology_gtest PRIVATE GTest::gtest_main contact)
+set_property(TARGET surfaceIPCTopology_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(surfaceIPCTopology_gtest)
+
+add_executable(surfaceIPCSelfBroadPhase_gtest surfaceIPCSelfBroadPhase_gtest.cpp)
+target_link_libraries(surfaceIPCSelfBroadPhase_gtest PRIVATE GTest::gtest_main contact)
+set_property(TARGET surfaceIPCSelfBroadPhase_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(surfaceIPCSelfBroadPhase_gtest)
+
+add_executable(surfaceIPCMaxStep_gtest surfaceIPCMaxStep_gtest.cpp)
+target_link_libraries(surfaceIPCMaxStep_gtest PRIVATE GTest::gtest_main contact)
+set_property(TARGET surfaceIPCMaxStep_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(surfaceIPCMaxStep_gtest)
+
+add_executable(surfaceIPCBarrierAssembler_gtest surfaceIPCBarrierAssembler_gtest.cpp)
+target_link_libraries(surfaceIPCBarrierAssembler_gtest PRIVATE GTest::gtest_main contact)
+set_property(TARGET surfaceIPCBarrierAssembler_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(surfaceIPCBarrierAssembler_gtest)
+
 add_executable(embeddedSurfaceIPCPotentialEnergy_gtest embeddedSurfaceIPCPotentialEnergy_gtest.cpp)
 target_link_libraries(embeddedSurfaceIPCPotentialEnergy_gtest PRIVATE GTest::gtest_main contact profiling)
 set_property(TARGET embeddedSurfaceIPCPotentialEnergy_gtest PROPERTY FOLDER "tests/gtest")

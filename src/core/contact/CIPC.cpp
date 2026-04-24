@@ -5,7 +5,7 @@ copyright to Bohan Wang
 #include "CIPC.h"
 
 #include "scopedProfileSection.h"
-#include "surfaceIPCProfiling.h"
+#include "ipc/profiling/surfaceIPCProfiling.h"
 
 #include "pgoLogging.h"
 

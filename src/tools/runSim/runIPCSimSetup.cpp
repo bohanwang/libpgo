@@ -17,7 +17,7 @@
 #include "runSimFEMSetup.h"
 #include "runSimVolumeMeshIO.h"
 #include "simulationMesh.h"
-#include "surfaceIPCCore.h"
+#include "ipc/core/surfaceIPCCore.h"
 #include "volumetricMesh.h"
 
 #include <algorithm>

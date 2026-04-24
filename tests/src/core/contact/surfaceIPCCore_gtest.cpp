@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "pgoLogging.h"
-#include "surfaceIPCCore.h"
+#include "ipc/core/surfaceIPCCore.h"
 
 #include "testCIPCHelpers.h"
 

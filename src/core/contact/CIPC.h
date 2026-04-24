@@ -4,7 +4,7 @@ copyright to Bohan Wang
 
 #pragma once
 
-#include "surfaceIPCCore.h"
+#include "ipc/core/surfaceIPCCore.h"
 #include "potentialEnergy.h"
 
 #include <vector>

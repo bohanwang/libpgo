@@ -5,7 +5,7 @@ copyright to Bohan Wang
 #include "mappedSurfacePotentialEnergy.h"
 
 #include "scopedProfileSection.h"
-#include "surfaceIPCProfiling.h"
+#include "ipc/profiling/surfaceIPCProfiling.h"
 
 #include <numeric>
 #include <stdexcept>
