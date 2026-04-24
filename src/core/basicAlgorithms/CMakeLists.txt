@@ -12,6 +12,7 @@ set(BASICALGORITHMS_HEADERS
   range.h 
   disjointSet.h
   graphSearchAlgorithms.h
+  polynomialRootUtils.h
 )
 
 set(BASICALGORITHMS_SOURCES 
@@ -20,6 +21,7 @@ set(BASICALGORITHMS_SOURCES
   fileIO.cpp 
   stringHelper.cpp 
   disjointSet.cpp
+  polynomialRootUtils.cpp
 )
 
 add_libpgo_lib(basicAlgorithms "${BASICALGORITHMS_SOURCES}" "${BASICALGORITHMS_HEADERS}")

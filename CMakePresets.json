@@ -7,9 +7,24 @@
     },
     "configurePresets": [
         {
+            "name": "base_no_mkl",
+            "hidden": false,
+            "binaryDir": "${sourceDir}/build/base_no_mkl",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "PGO_USE_MKL": "OFF",
+                "PGO_ENABLE_FULL": "ON",
+                "PGO_BUILD_SUBPROJECTS": "ON",
+                "PGO_ENABLE_ALEMBIC": "ON",
+                "PGO_ENABLE_GMSH": "ON"
+            }
+        },
+        {
             "name": "base",
             "hidden": false,
+            "binaryDir": "${sourceDir}/build/base",
             "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
                 "PGO_USE_MKL": "ON",
                 "PGO_ENABLE_FULL": "ON",
                 "PGO_BUILD_SUBPROJECTS": "ON",
@@ -20,7 +35,9 @@
         {
             "name": "base_win",
             "hidden": false,
+            "binaryDir": "${sourceDir}/build/base_win",
             "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
                 "PGO_USE_MKL": "ON",
                 "PGO_ENABLE_FULL": "ON",
                 "PGO_BUILD_SUBPROJECTS": "ON",
@@ -30,7 +47,6 @@
         },
         {
             "name": "debug",
-            "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
             }
@@ -60,6 +76,7 @@
         },
         {
             "name": "base_knitro",
+            "binaryDir": "${sourceDir}/build/base_knitro",
             "inherits": [
                 "base",
                 "knitro"
@@ -67,6 +84,7 @@
         },
         {
             "name": "base_knitro_cuda",
+            "binaryDir": "${sourceDir}/build/base_knitro_cuda",
             "inherits": [
                 "base",
                 "knitro",
@@ -75,16 +93,21 @@
         },
         {
             "name": "all_debug",
+            "binaryDir": "${sourceDir}/build/all_debug",
             "inherits": [
                 "base",
                 "knitro",
                 "pardiso",
                 "cuda",
                 "debug"
-            ]
+            ],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
         },
         {
             "name": "all_release",
+            "binaryDir": "${sourceDir}/build/all_release",
             "inherits": [
                 "base",
                 "knitro",
@@ -97,14 +120,30 @@
         },
         {
             "name": "base_cuda_debug",
+            "binaryDir": "${sourceDir}/build/base_cuda_debug",
             "inherits": [
                 "base",
                 "cuda",
                 "debug"
-            ]
+            ],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "base_no_mkl_debug",
+            "binaryDir": "${sourceDir}/build/base_no_mkl_debug",
+            "inherits": [
+                "base_no_mkl",
+                "debug"
+            ],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
         },
         {
             "name": "base_cuda_release",
+            "binaryDir": "${sourceDir}/build/base_cuda_release",
             "inherits": [
                 "base",
                 "cuda"
@@ -115,6 +154,7 @@
         },
         {
             "name": "base_cuda_win",
+            "binaryDir": "${sourceDir}/build/base_cuda_win",
             "inherits": [
                 "base_win",
                 "cuda"
@@ -147,6 +187,18 @@
         {
             "name": "base_cuda_debug",
             "configurePreset": "base_cuda_debug",
+            "hidden": false,
+            "jobs": 32
+        },
+        {
+            "name": "base_no_mkl_debug",
+            "configurePreset": "base_no_mkl_debug",
+            "hidden": false,
+            "jobs": 32
+        },
+        {
+            "name": "base_no_mkl_release",
+            "configurePreset": "base_no_mkl",
             "hidden": false,
             "jobs": 32
         },

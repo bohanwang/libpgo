@@ -63,7 +63,7 @@ void GenerateMassMatrix::computeMassMatrix(const VolumetricMesh *volumetricMesh,
   tbb::parallel_for(0, volumetricMesh->getNumElements(), [&](int el) {
     thread_local ES::MXd elementMass;
 
-    if (elementMass.rows() == 0) {
+    if (elementMass.rows() != numElementVertices || elementMass.cols() != numElementVertices) {
       elementMass.resize(numElementVertices, numElementVertices);
     }
 
@@ -102,7 +102,7 @@ void GenerateMassMatrix::computeVertexMasses(const VolumetricMesh *volumetricMes
   tbb::parallel_for(0, volumetricMesh->getNumElements(), [&](int el) {
     thread_local ES::MXd elementMass;
 
-    if (elementMass.rows() == 0) {
+    if (elementMass.rows() != numElementVertices || elementMass.cols() != numElementVertices) {
       elementMass.resize(numElementVertices, numElementVertices);
     }
 

@@ -29,8 +29,8 @@ public:
 
   void enableSPD(int enable) override;
 
-  void vonMisesStress(const CacheData *cacheDataBase, int &nPt, double *stresses) const;
-  void maxStrain(const CacheData *cacheDataBase, int &nPt, double *stresses) const;
+  void vonMisesStress(const CacheData *cacheDataBase, int &nPt, double *stresses) const override;
+  void maxStrain(const CacheData *cacheDataBase, int &nPt, double *stresses) const override;
 
   virtual double computeEnergy(const CacheData *cacheData) const override;
   virtual void compute_dE_dx(const CacheData *cacheData, double *grad) const override;
@@ -52,6 +52,7 @@ public:
 
   virtual int getNumVertices() const override { return 4; }
   virtual int getNumDOFs() const override { return 12; }
+  virtual LocalMaxStepResult computeLocalMaxStepSize(const double *x_local, const double *dx_local) const override;
 
   // inline static double d3E_dx3_ijk(const double *tensor, int i, int j, int k) { return DeformationModel::d3E_dx3_ijk(tensor, i, j, k, 12); }
   // inline static double &d3E_dx3_ijk(double *tensor, int i, int j, int k) { return DeformationModel::d3E_dx3_ijk(tensor, i, j, k, 12); }

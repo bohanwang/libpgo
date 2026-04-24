@@ -1,6 +1,7 @@
 set(PGO_GLOBAL_LIBRARY_TARGETS
   macros  
   basicAlgorithms
+  profiling
   pgoLogging
   basicIO
   eigenSupport
@@ -20,9 +21,12 @@ set(PGO_GLOBAL_LIBRARY_TARGETS
   libiglInterface
   tetgenInterface
   animationIO
-  cudaUtilities
   CACHE INTERNAL ""
 )
+
+if(PGO_ENABLE_CUDA)
+  list(APPEND PGO_GLOBAL_LIBRARY_TARGETS cudaUtilities)
+endif()
 
 foreach(lib ${PGO_GLOBAL_LIBRARY_TARGETS})
   add_subdirectory(core/${lib})

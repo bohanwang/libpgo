@@ -35,6 +35,7 @@ public:
 
   virtual int getNumVertices() const override { return 6; }
   virtual int getNumDOFs() const override { return 18; }
+  virtual LocalMaxStepResult computeLocalMaxStepSize(const double *x_local, const double *dx_local) const override;
 
 protected:
   KoiterDeformationModelInternal *ind;

@@ -3,6 +3,7 @@ else()
   message(STATUS "Loading eigen...")
 
   set(BUILD_TESTING OFF CACHE BOOL "eigen build test" FORCE)
+  set(BUILD_EXAMPLES OFF CACHE BOOL "eigen build examples" FORCE)
   set(EIGEN_BUILD_CMAKE_PACKAGE ON CACHE BOOL "eigen build cmake package" FORCE)
 
   include(FetchContent)
@@ -35,7 +36,4 @@ if(TARGET MKL::MKL)
   target_compile_definitions(${REAL_TGT} INTERFACE EIGEN_MKL_NO_DIRECT_CALL)
 endif()
 
-get_target_property(flags compilation_flag INTERFACE_COMPILE_OPTIONS)
-message(STATUS "Eigen3 compilation flags: ${flags}")
-target_compile_options(${REAL_TGT} INTERFACE ${flags})
 target_compile_definitions(${REAL_TGT} INTERFACE EIGEN_MAX_ALIGN_BYTES=32)

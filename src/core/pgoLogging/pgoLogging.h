@@ -1,6 +1,6 @@
 #pragma once
 
-#define SPDLOG_ACTIVE_LEVEL 1
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 
@@ -11,7 +11,8 @@ namespace pgo
 class Logging
 {
 public:
-  static void init(const char *filename = nullptr);
+  static void init(const char *filename = nullptr, spdlog::level::level_enum level = spdlog::level::info);
+  static void setLevel(spdlog::level::level_enum level);
   static inline std::shared_ptr<spdlog::logger> lgr() { return logger; }
 
 protected:

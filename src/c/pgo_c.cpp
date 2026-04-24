@@ -590,10 +590,10 @@ int pgo_run_sim_from_config(const char *configFileName)
   }
 
   // tet mesh filename
-  std::string tetMeshFilename = jconfig.getString("tet-mesh", 1);
+  std::string tetMeshFilename = jconfig.getResolvedPath("tet-mesh", 1);
 
   // surface mesh filename
-  std::string surfaceMeshFilename = jconfig.getString("surface-mesh", 1);
+  std::string surfaceMeshFilename = jconfig.getResolvedPath("surface-mesh", 1);
 
   // external acceleration
   ES::V3d extAcc = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("g", 1).data());
@@ -643,7 +643,7 @@ int pgo_run_sim_from_config(const char *configFileName)
   std::string simType = jconfig.getString("sim-type");
 
   // output
-  std::string outputFolder = jconfig.getString("output", 1);
+  std::string outputFolder = jconfig.getResolvedPath("output", 1);
 
   VolumetricMeshes::TetMesh tetMesh(tetMeshFilename.c_str());
   for (int vi = 0; vi < tetMesh.getNumVertices(); vi++) {
@@ -719,7 +719,7 @@ int pgo_run_sim_from_config(const char *configFileName)
   std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> pullingEnergies;
   std::vector<ES::VXd> pullingTargets, pullingTargetRests;
   for (const auto &fv : jconfig.handle()["fixed-vertices"]) {
-    std::string filename = fv["filename"].get<std::string>();
+    std::string filename = jconfig.resolvePath(fv["filename"].get<std::string>());
     std::array<double, 3> movement = fv["movement"].get<std::array<double, 3>>();
     double attachmentCoeff = fv["coeff"].get<double>();
 
@@ -750,7 +750,7 @@ int pgo_run_sim_from_config(const char *configFileName)
   if (jconfig.exist("external-objects")) {
     auto jkinObjects = jconfig.handle()["external-objects"];
     for (const auto &jko : jkinObjects) {
-      std::string koFilename = jko["filename"].get<std::string>();
+      std::string koFilename = jconfig.resolvePath(jko["filename"].get<std::string>());
       kinematicObjectFilenames.push_back(koFilename);
       kinematicObjectMovements.push_back(ES::Mp<ES::V3d>(jko["movement"].get<std::array<double, 3>>().data()));
     }

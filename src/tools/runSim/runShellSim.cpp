@@ -20,12 +20,14 @@
 #include "createTriMesh.h"
 #include "libiglInterface.h"
 #include "CIPC.h"
+#include "runSimCliLogging.h"
 #include "triangleMeshExternalContactHandler.h"
 #include "pointPenetrationEnergy.h"
 
 #include <argparse/argparse.hpp>
 
 #include <iostream>
+#include <memory>
 
 int main(int argc, char *argv[])
 {
@@ -37,6 +39,10 @@ int main(int argc, char *argv[])
   program.add_argument("config")
     .help("Config File")
     .required();
+  program.add_argument("--log")
+    .help("Write command-line output to a .log file next to the config file")
+    .default_value(false)
+    .implicit_value(true);
 
   try {
     program.parse_args(argc, argv);  // Example: ./main --color orange
@@ -47,10 +53,25 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  pgo::Logging::init();
-  pgo::Mesh::initPredicates();
-
   std::string configFilename = program.get<std::string>("config");
+  const bool enableCliLog = program.get<bool>("--log");
+  std::unique_ptr<RunSim::ScopedRunSimCliLogRedirect> logRedirect;
+
+  if (enableCliLog) {
+    try {
+      const std::filesystem::path logPath = RunSim::deriveDefaultLogPathFromConfig(configFilename);
+      logRedirect = std::make_unique<RunSim::ScopedRunSimCliLogRedirect>(logPath.string());
+      pgo::Logging::init();
+    }
+    catch (const std::exception &err) {
+      std::cerr << err.what() << std::endl;
+      return 1;
+    }
+  }
+  else {
+    pgo::Logging::init();
+  }
+  pgo::Mesh::initPredicates();
 
   ConfigFileJSON jconfig;
   if (jconfig.open(configFilename.c_str()) != true) {
@@ -58,7 +79,7 @@ int main(int argc, char *argv[])
   }
 
   // surface mesh filename
-  std::string surfaceMeshFilename = jconfig.getString("surface-mesh", 1);
+  std::string surfaceMeshFilename = jconfig.getResolvedPath("surface-mesh", 1);
 
   // external acceleration
   ES::V3d extAcc = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("g", 1).data());
@@ -97,7 +118,7 @@ int main(int argc, char *argv[])
   std::string simType = jconfig.getString("sim-type");
 
   // output
-  std::string outputFolder = jconfig.getString("output", 1);
+  std::string outputFolder = jconfig.getResolvedPath("output", 1);
 
   Mesh::TriMeshGeo surfaceMesh;
   if (surfaceMesh.load(surfaceMeshFilename) != true)
@@ -163,7 +184,7 @@ int main(int argc, char *argv[])
   std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> pullingEnergies;
   std::vector<ES::VXd> pullingTargets, pullingTargetRests;
   for (const auto &fv : jconfig.handle()["fixed-vertices"]) {
-    std::string filename = fv["filename"].get<std::string>();
+    std::string filename = jconfig.resolvePath(fv["filename"].get<std::string>());
     std::array<double, 3> movement = fv["movement"].get<std::array<double, 3>>();
     double attachmentCoeff = fv["coeff"].get<double>();
 
@@ -207,7 +228,7 @@ int main(int argc, char *argv[])
   if (jconfig.exist("external-objects")) {
     auto jkinObjects = jconfig.handle()["external-objects"];
     for (const auto &jko : jkinObjects) {
-      std::string koFilename = jko["filename"].get<std::string>();
+      std::string koFilename = jconfig.resolvePath(jko["filename"].get<std::string>());
       kinematicObjectFilenames.push_back(koFilename);
       kinematicObjectMovements.push_back(ES::Mp<ES::V3d>(jko["movement"].get<std::array<double, 3>>().data()));
     }
@@ -277,10 +298,9 @@ int main(int argc, char *argv[])
       std::filesystem::create_directories(outputFolder);
     }
 
-    int frameStart = 0;
+    int frameStart = -1;
     for (int framei = numSimSteps - 1; framei >= 0; framei--) {
       if (!std::filesystem::exists(fmt::format("{}/deform{:04d}.u", outputFolder, framei))) {
-        std::cerr << "Frame " << framei << " not found." << std::endl;
         continue;
       }
 
@@ -295,10 +315,17 @@ int main(int argc, char *argv[])
       }
     }
 
+    if (frameStart < 0) {
+      std::cout << "No restart state found in " << outputFolder << ". Starting from frame 0." << std::endl;
+    }
+
     usurf = u;
 
-    std::cout << frameStart << std::endl;
-    std::cin.get();
+# ifdef NDEBUG
+    if (!enableCliLog) {
+      std::cin.get();
+    }
+# endif
 
     ES::VXd psurf = surfaceRestPositions + usurf;
     for (size_t eobji = 0; eobji < kinematicObjects.size(); eobji++) {
@@ -390,6 +417,12 @@ int main(int argc, char *argv[])
 
       usurf = u;
 
+      ES::MXd uMat(n3, 3);
+      uMat.col(0) = u;
+      uMat.col(1) = uvel;
+      uMat.col(2) = uacc;
+      ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder, framei).c_str(), uMat);
+
       if (framei % frameGap == 0) {
         psurf.noalias() = surfaceRestPositions + usurf;
 
@@ -398,13 +431,6 @@ int main(int argc, char *argv[])
           mesh.pos(vi) = psurf.segment<3>(vi * 3) / scale;
         }
         mesh.save(fmt::format("{}/ret{:04d}.obj", outputFolder, framei / frameGap));
-
-        ES::MXd uMat(n3, 3);
-        uMat.col(0) = u;
-        uMat.col(1) = uvel;
-        uMat.col(2) = uacc;
-
-        ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder, framei).c_str(), uMat);
       }
 
       for (size_t eobji = 0; eobji < kinematicObjects.size(); eobji++) {

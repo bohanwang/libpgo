@@ -4,6 +4,7 @@ copyright to USC,MIT,NUS
 */
 
 #include "deformationModelAssembler.h"
+#include "materialMaxStepPolynomialUtils.h"
 #include "deformationModelManager.h"
 #include "simulationMesh.h"
 #include "deformationModel.h"
@@ -37,12 +38,66 @@ public:
 };
 }  // namespace pgo::SolidDeformationModel
 
+namespace
+{
+const double *paramPtr(const ES::VXd &param)
+{
+  return param.size() ? param.data() : nullptr;
+}
+
+void gatherLocalPositions(const pgo::SolidDeformationModel::DeformationModelManager &deformationModelManager,
+  int ele, int neleVtx, const double *x, ES::VXd &localp)
+{
+  for (int j = 0; j < neleVtx; j++) {
+    int vid = deformationModelManager.getMesh()->getVertexIndex(ele, j);
+    if (vid >= 0)
+      localp.segment<3>(j * 3) = ES::V3d(x[vid * 3], x[vid * 3 + 1], x[vid * 3 + 2]);
+    else
+      localp.segment<3>(j * 3).setZero();
+  }
+}
+
+const char *meshTypeName(pgo::SolidDeformationModel::SimulationMeshType meshType)
+{
+  using pgo::SolidDeformationModel::SimulationMeshType;
+  switch (meshType) {
+  case SimulationMeshType::TET:
+    return "TET";
+  case SimulationMeshType::CUBIC:
+    return "CUBIC";
+  case SimulationMeshType::TRIANGLE:
+    return "TRIANGLE";
+  case SimulationMeshType::EDGE_QUAD:
+    return "EDGE_QUAD";
+  case SimulationMeshType::SHELL:
+    return "SHELL";
+  default:
+    return "UNKNOWN";
+  }
+}
+
+void warnIllegalInitialState(pgo::SolidDeformationModel::SimulationMeshType meshType, int elementId, int locationId, double phi0, double eps)
+{
+  if (locationId >= 0) {
+    SPDLOG_LOGGER_WARN(pgo::Logging::lgr(),
+      "Phase 1.5 material max step encountered illegal initial state on meshType={} element={} location={} : phi(0)={} <= eps={}. Returning recovery clamp {}.",
+      meshTypeName(meshType), elementId, locationId, phi0, eps, pgo::SolidDeformationModel::kMaterialMaxStepMinClamp);
+  }
+  else {
+    SPDLOG_LOGGER_WARN(pgo::Logging::lgr(),
+      "Phase 1.5 material max step encountered illegal initial state on meshType={} element={} : phi(0)={} <= eps={}. Returning recovery clamp {}.",
+      meshTypeName(meshType), elementId, phi0, eps, pgo::SolidDeformationModel::kMaterialMaxStepMinClamp);
+  }
+}
+}
+
 DeformationModelAssembler::DeformationModelAssembler(std::shared_ptr<const DeformationModelManager> dm, const double *elementFlags_):
   deformationModelManager(dm)
 {
   nele = deformationModelManager->getMesh()->getNumElements();
   nvtx = deformationModelManager->getMesh()->getNumVertices();
   neleVtx = deformationModelManager->getMesh()->getNumElementVertices();
+  localDOFs = neleVtx * 3;
   n3 = 3 * nvtx;
 
   numElasticParams = deformationModelManager->getDeformationModel(0)->getElasticModel()->getNumParameters();
@@ -94,7 +149,7 @@ DeformationModelAssembler::DeformationModelAssembler(std::shared_ptr<const Defor
   elementKInverseIndices.resize(nele);
   for (int ele = 0; ele < nele; ele++) {
     const int *vertexIndices = deformationModelManager->getMesh()->getVertexIndices(ele);
-    IndexMatrix idxM;
+    DynamicIndexMatrix idxM(localDOFs, localDOFs);
     idxM.setConstant(-1);
 
     // upper-left block
@@ -143,7 +198,7 @@ DeformationModelAssembler::DeformationModelAssembler(std::shared_ptr<const Defor
   element_dfdb_InverseIndices.resize(nele);
   for (int ele = 0; ele < nele; ele++) {
     const int *vertexIndices = deformationModelManager->getMesh()->getVertexIndices(ele);
-    IndexMatrix idxM;
+    DynamicIndexMatrix idxM(localDOFs, numElasticParams);
     idxM.setConstant(-1);
 
     // upper-left block
@@ -189,7 +244,7 @@ DeformationModelAssembler::DeformationModelAssembler(std::shared_ptr<const Defor
   element_dfda_InverseIndices.resize(nele);
   for (int ele = 0; ele < nele; ele++) {
     const int *vertexIndices = deformationModelManager->getMesh()->getVertexIndices(ele);
-    IndexMatrix idxM;
+    DynamicIndexMatrix idxM(localDOFs, numPlasticParams);
     idxM.setConstant(-1);
 
     // upper-left block
@@ -245,22 +300,15 @@ double DeformationModelAssembler::computeEnergy(const double *x, const double *p
     if (elementFlags[ele] == 0)
       return;
 
-    ES::V24d localp;
-    for (int j = 0; j < neleVtx; j++) {
-      int vid = deformationModelManager->getMesh()->getVertexIndex(ele, j);
-      if (vid >= 0)
-        localp.segment<3>(j * 3) = ES::V3d(x[vid * 3], x[vid * 3 + 1], x[vid * 3 + 2]);
-      else
-        localp.segment<3>(j * 3).setZero();
-    }
+    ES::VXd localp(localDOFs);
+    gatherLocalPositions(*deformationModelManager, ele, neleVtx, x, localp);
 
-    double plasticParam[20];
-    double elasticParam[20];
-    getPlasticParameters(ele, plasticParams, plasticParam);
-    getElasticParameters(ele, elasticParams, elasticParam);
+    ES::VXd plasticParam(numPlasticParams), elasticParam(numElasticParams);
+    getPlasticParameters(ele, plasticParams, plasticParam.data());
+    getElasticParameters(ele, elasticParams, elasticParam.data());
 
     const DeformationModel *fem = femModels[ele];
-    fem->prepareData(localp.data(), plasticParam, elasticParam, data->elementCacheData[ele]);
+    fem->prepareData(localp.data(), paramPtr(plasticParam), paramPtr(elasticParam), data->elementCacheData[ele]);
     double energy = fem->computeEnergy(data->elementCacheData[ele]);
 
     data->energyLocalBuffer.local() += energy * elementFlags[ele];
@@ -277,6 +325,45 @@ double DeformationModelAssembler::computeEnergy(const double *x, const double *p
   return energyAll;
 }
 
+DeformationModelAssembler::MaterialMaxStepObservation DeformationModelAssembler::computeMaxStepObservation(const double *x, const double *dx) const
+{
+  MaterialMaxStepObservation observation;
+  const SimulationMeshType meshType = deformationModelManager->getMesh()->getElementType();
+
+  for (int ele = 0; ele < nele; ele++) {
+    if (elementFlags[ele] == 0) {
+      continue;
+    }
+
+    ES::VXd localX(localDOFs);
+    ES::VXd localDx(localDOFs);
+    gatherLocalPositions(*deformationModelManager, ele, neleVtx, x, localX);
+    gatherLocalPositions(*deformationModelManager, ele, neleVtx, dx, localDx);
+
+    const DeformationModel::LocalMaxStepResult localResult = femModels[ele]->computeLocalMaxStepSize(localX.data(), localDx.data());
+    if (localResult.alpha < observation.alpha) {
+      observation.alpha = localResult.alpha;
+      observation.limitingElementId = ele;
+      observation.limitingLocationId = localResult.locationId;
+    }
+    if (localResult.illegalInitialState) {
+      observation.hasIllegalInitialState = true;
+      warnIllegalInitialState(meshType, ele, localResult.locationId, localResult.phi0, localResult.eps);
+    }
+
+    if (observation.alpha <= kMaterialMaxStepMinClamp) {
+      break;
+    }
+  }
+
+  return observation;
+}
+
+double DeformationModelAssembler::computeMaxStepSize(const double *x, const double *dx) const
+{
+  return computeMaxStepObservation(x, dx).alpha;
+}
+
 void DeformationModelAssembler::computeGradient(const double *x, const double *plasticParams, const double *elasticParams, double *grad) const
 {
   memset(grad, 0, sizeof(double) * n3);
@@ -284,20 +371,12 @@ void DeformationModelAssembler::computeGradient(const double *x, const double *p
     if (elementFlags[ele] == 0)
       return;
 
-    ES::V24d localp;
-    for (int j = 0; j < neleVtx; j++) {
-      int vid = deformationModelManager->getMesh()->getVertexIndex(ele, j);
+    ES::VXd localp(localDOFs);
+    gatherLocalPositions(*deformationModelManager, ele, neleVtx, x, localp);
 
-      if (vid >= 0)
-        localp.segment<3>(j * 3) = ES::V3d(x[vid * 3], x[vid * 3 + 1], x[vid * 3 + 2]);
-      else
-        localp.segment<3>(j * 3).setZero();
-    }
-
-    double plasticParam[20];
-    double elasticParam[20];
-    getPlasticParameters(ele, plasticParams, plasticParam);
-    getElasticParameters(ele, elasticParams, elasticParam);
+    ES::VXd plasticParam(numPlasticParams), elasticParam(numElasticParams);
+    getPlasticParameters(ele, plasticParams, plasticParam.data());
+    getElasticParameters(ele, elasticParams, elasticParam.data());
 
     // std::cout << ele << " Fp:";
     // for (int i = 0; i < numPlasticParams; i++) {
@@ -306,18 +385,18 @@ void DeformationModelAssembler::computeGradient(const double *x, const double *p
     // std::cout << std::endl;
 
     const DeformationModel *fem = femModels[ele];
-    fem->prepareData(localp.data(), plasticParam, elasticParam, data->elementCacheData[ele]);
+    fem->prepareData(localp.data(), paramPtr(plasticParam), paramPtr(elasticParam), data->elementCacheData[ele]);
 
-    ES::V18d localGradx;
+    ES::VXd localGradx(localDOFs);
     fem->compute_dE_dx(data->elementCacheData[ele], localGradx.data());
     localGradx *= elementFlags[ele];
 
     if (enableSanityCheck) {
-      for (int i = 0; i < neleVtx * 3; i++) {
+      for (int i = 0; i < localDOFs; i++) {
         if (std::isfinite(localGradx[i]) == false) {
           SPDLOG_LOGGER_ERROR(Logging::lgr(), "Ele: {}", ele);
           SPDLOG_LOGGER_ERROR(Logging::lgr(), "Encounter weird numbers.\nGrad:\n{}\n;x:{}\n", localGradx, localp);
-          SPDLOG_LOGGER_ERROR(Logging::lgr(), "Plastic param: {}, {}, {}\n", plasticParam[0], plasticParam[1], plasticParam[2]);
+          SPDLOG_LOGGER_ERROR(Logging::lgr(), "Plastic param: {}\n", plasticParam.transpose());
           // exit(EXIT_FAILURE);
         }
       }
@@ -366,28 +445,20 @@ void DeformationModelAssembler::computeHessian(const double *x, const double *pl
     if (elementFlags[ele] == 0)
       return;
 
-    ES::V24d localp;
-    for (int j = 0; j < neleVtx; j++) {
-      int vid = deformationModelManager->getMesh()->getVertexIndex(ele, j);
+    ES::VXd localp(localDOFs);
+    gatherLocalPositions(*deformationModelManager, ele, neleVtx, x, localp);
 
-      if (vid >= 0)
-        localp.segment<3>(j * 3) = ES::V3d(x[vid * 3], x[vid * 3 + 1], x[vid * 3 + 2]);
-      else
-        localp.segment<3>(j * 3).setZero();
-    }
-
-    double plasticParam[20];
-    double elasticParam[20];
-    getPlasticParameters(ele, plasticParams, plasticParam);
-    getElasticParameters(ele, elasticParams, elasticParam);
+    ES::VXd plasticParam(numPlasticParams), elasticParam(numElasticParams);
+    getPlasticParameters(ele, plasticParams, plasticParam.data());
+    getElasticParameters(ele, elasticParams, elasticParam.data());
 
     const DeformationModel *fem = femModels[ele];
-    fem->prepareData(localp.data(), plasticParam, elasticParam, data->elementCacheData[ele]);
+    fem->prepareData(localp.data(), paramPtr(plasticParam), paramPtr(elasticParam), data->elementCacheData[ele]);
 
-    double localKData[24 * 24];
-    fem->compute_d2E_dx2(data->elementCacheData[ele], localKData);
+    std::vector<double> localKData(localDOFs * localDOFs);
+    fem->compute_d2E_dx2(data->elementCacheData[ele], localKData.data());
 
-    ES::Mp<ES::MXd> localK(localKData, neleVtx * 3, neleVtx * 3);
+    ES::Mp<ES::MXd> localK(localKData.data(), localDOFs, localDOFs);
     localK *= elementFlags[ele];
 
     const int *vertexIndices = deformationModelManager->getMesh()->getVertexIndices(ele);
@@ -448,34 +519,29 @@ void DeformationModelAssembler::computeHessian(const double *x, const double *pl
 
 void DeformationModelAssembler::compute_df_da(const double *x, const double *plasticParams, const double *elasticParams, EigenSupport::SpMatD &hess) const
 {
+  if (numPlasticParams == 0)
+    return;
+
   memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
 
   auto localHessFunc = [this, x, plasticParams, elasticParams, &hess](int ele) {
     if (elementFlags[ele] == 0)
       return;
 
-    ES::V24d localp;
-    for (int j = 0; j < neleVtx; j++) {
-      int vid = deformationModelManager->getMesh()->getVertexIndex(ele, j);
+    ES::VXd localp(localDOFs);
+    gatherLocalPositions(*deformationModelManager, ele, neleVtx, x, localp);
 
-      if (vid >= 0)
-        localp.segment<3>(j * 3) = ES::V3d(x[vid * 3], x[vid * 3 + 1], x[vid * 3 + 2]);
-      else
-        localp.segment<3>(j * 3).setZero();
-    }
-
-    double plasticParam[20];
-    double elasticParam[20];
-    getPlasticParameters(ele, plasticParams, plasticParam);
-    getElasticParameters(ele, elasticParams, elasticParam);
+    ES::VXd plasticParam(numPlasticParams), elasticParam(numElasticParams);
+    getPlasticParameters(ele, plasticParams, plasticParam.data());
+    getElasticParameters(ele, elasticParams, elasticParam.data());
 
     const DeformationModel *fem = femModels[ele];
-    fem->prepareData(localp.data(), plasticParam, elasticParam, data->elementCacheData[ele]);
+    fem->prepareData(localp.data(), paramPtr(plasticParam), paramPtr(elasticParam), data->elementCacheData[ele]);
 
-    double localKData[24 * 24];
-    fem->compute_d2E_dxda(data->elementCacheData[ele], localKData);
+    std::vector<double> localKData(localDOFs * numPlasticParams);
+    fem->compute_d2E_dxda(data->elementCacheData[ele], localKData.data());
 
-    ES::Mp<ES::MXd> localK(localKData, neleVtx * 3, numPlasticParams);
+    ES::Mp<ES::MXd> localK(localKData.data(), localDOFs, numPlasticParams);
     localK *= elementFlags[ele];
 
     const int *vertexIndices = deformationModelManager->getMesh()->getVertexIndices(ele);
@@ -525,34 +591,29 @@ void DeformationModelAssembler::compute_df_da(const double *x, const double *pla
 
 void DeformationModelAssembler::compute_df_db(const double *x, const double *plasticParams, const double *elasticParams, EigenSupport::SpMatD &hess) const
 {
+  if (numElasticParams == 0)
+    return;
+
   memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
 
   auto localHessFunc = [this, x, plasticParams, elasticParams, &hess](int ele) {
     if (elementFlags[ele] == 0)
       return;
 
-    ES::V24d localp;
-    for (int j = 0; j < neleVtx; j++) {
-      int vid = deformationModelManager->getMesh()->getVertexIndex(ele, j);
+    ES::VXd localp(localDOFs);
+    gatherLocalPositions(*deformationModelManager, ele, neleVtx, x, localp);
 
-      if (vid >= 0)
-        localp.segment<3>(j * 3) = ES::V3d(x[vid * 3], x[vid * 3 + 1], x[vid * 3 + 2]);
-      else
-        localp.segment<3>(j * 3).setZero();
-    }
-
-    double plasticParam[20];
-    double elasticParam[20];
-    getPlasticParameters(ele, plasticParams, plasticParam);
-    getElasticParameters(ele, elasticParams, elasticParam);
+    ES::VXd plasticParam(numPlasticParams), elasticParam(numElasticParams);
+    getPlasticParameters(ele, plasticParams, plasticParam.data());
+    getElasticParameters(ele, elasticParams, elasticParam.data());
 
     const DeformationModel *fem = femModels[ele];
-    fem->prepareData(localp.data(), plasticParam, elasticParam, data->elementCacheData[ele]);
+    fem->prepareData(localp.data(), paramPtr(plasticParam), paramPtr(elasticParam), data->elementCacheData[ele]);
 
-    double localKData[24 * 24];
-    fem->compute_d2E_dxdb(data->elementCacheData[ele], localKData);
+    std::vector<double> localKData(localDOFs * numElasticParams);
+    fem->compute_d2E_dxdb(data->elementCacheData[ele], localKData.data());
 
-    ES::Mp<ES::MXd> localK(localKData, neleVtx * 3, numElasticParams);
+    ES::Mp<ES::MXd> localK(localKData.data(), localDOFs, numElasticParams);
     localK *= elementFlags[ele];
 
     const int *vertexIndices = deformationModelManager->getMesh()->getVertexIndices(ele);

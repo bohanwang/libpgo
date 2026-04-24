@@ -1,19 +1,47 @@
 set(CONTACT_HEADERS
   CCDKernel.h
   contactEnergyUtilities.h
+  mappedSurfacePotentialEnergy.h
+  embeddedSurfaceFloorPotentialEnergy.h
+  embeddedSurfaceIPCPotentialEnergy.h
+  ipc/broadPhase/spatialHashGrid.h
+  ipc/broadPhase/surfaceIPCSelfBroadPhase.h
+  ipc/core/surfaceIPCBarrierAssembler.h
+  ipc/core/surfaceIPCMaxStep.h
+  ipc/core/surfaceIPCCore.h
+  ipc/core/surfaceIPCPairs.h
+  ipc/geometry/ipcBarrier.h
+  ipc/geometry/ipcCCD.h
+  ipc/geometry/ipcDistancePrimitives.h
+  ipc/geometry/ipcHessianProjection.h
+  ipc/geometry/generated/CIPC_autogen.h
+  ipc/geometry/generated/CIPC_autogen_ll.h
+  ipc/profiling/surfaceIPCProfiling.h
+  ipc/topology/surfaceIPCTopology.h
   pointPenetrationEnergy.h
   pointTrianglePairCouplingEnergyWithCollision.h
   triangleMeshExternalContactHandler.h
   triangleMeshSelfContactDetection.h
   triangleMeshSelfContactHandler.h
   CIPC.h
-  CIPC_autogen.h
-  CIPC_autogen_ll.h
 )
 
 set(CONTACT_SOURCES
   CCDKernel.cpp
   contactEnergyUtilities.cpp
+  mappedSurfacePotentialEnergy.cpp
+  embeddedSurfaceFloorPotentialEnergy.cpp
+  embeddedSurfaceIPCPotentialEnergy.cpp
+  ipc/broadPhase/spatialHashGrid.cpp
+  ipc/broadPhase/surfaceIPCSelfBroadPhase.cpp
+  ipc/core/surfaceIPCBarrierAssembler.cpp
+  ipc/core/surfaceIPCMaxStep.cpp
+  ipc/core/surfaceIPCCore.cpp
+  ipc/geometry/ipcBarrier.cpp
+  ipc/geometry/ipcCCD.cpp
+  ipc/geometry/ipcDistancePrimitives.cpp
+  ipc/geometry/ipcHessianProjection.cpp
+  ipc/topology/surfaceIPCTopology.cpp
   pointPenetrationEnergy.cpp
   pointTrianglePairCouplingEnergyWithCollision.cpp
   triangleMeshExternalContactHandler.cpp
@@ -22,7 +50,7 @@ set(CONTACT_SOURCES
   CIPC.cpp
 )
 
-set(CONTACT_DEPS mesh nonlinearOptimization CCD::SafeCCD CCD::Exact)
+set(CONTACT_DEPS mesh nonlinearOptimization profiling CCD::SafeCCD CCD::Exact)
 
 foreach(tgt ${CONTACT_DEPS})
   if(NOT TARGET ${tgt})

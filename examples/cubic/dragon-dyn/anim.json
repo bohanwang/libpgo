@@ -1,0 +1,14 @@
+{
+  "meshes": [
+    {
+      "name": "dragon-cubic",
+      "driving-mesh": "dragon.obj",
+      "sequence": "ret-cubic-dragon-dyn/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        400
+      ]
+    }
+  ]
+}

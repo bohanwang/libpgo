@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.28.0 FATAL_ERROR)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL "Export compile_commands.json for clangd" FORCE)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -27,6 +29,23 @@ option(PGO_ENABLE_ALEMBIC "Enable Alembic support" OFF)
 option(PGO_ENABLE_GMSH "Enable GMSH support" OFF)
 
 project(libpgo LANGUAGES CXX C)
+
+include(CTest)
+set(PGO_BUILD_TESTING ${BUILD_TESTING})
+set(BUILD_TESTING OFF CACHE BOOL "Disable third-party tests during dependency configuration" FORCE)
+
+set(PGO_CLANGD_BUILD_DIR "${CMAKE_SOURCE_DIR}/build")
+set(PGO_CLANGD_COMPILE_COMMANDS "${PGO_CLANGD_BUILD_DIR}/compile_commands.json")
+
+add_custom_target(copy_compile_commands_json
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${PGO_CLANGD_BUILD_DIR}"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${CMAKE_BINARY_DIR}/compile_commands.json"
+          "${PGO_CLANGD_COMPILE_COMMANDS}"
+  BYPRODUCTS "${PGO_CLANGD_COMPILE_COMMANDS}"
+  COMMENT "Copying compile_commands.json to ${PGO_CLANGD_COMPILE_COMMANDS}"
+  VERBATIM
+)
 
 if (PGO_ENABLE_CUDA)
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -389,6 +408,13 @@ function(add_libpgo_tools tgt sources deps)
 endfunction()
 
 add_subdirectory(src)
+
+set(BUILD_TESTING ${PGO_BUILD_TESTING} CACHE BOOL "Enable testing" FORCE)
+
+if(BUILD_TESTING)
+  message(STATUS "Testing enabled.")
+  add_subdirectory(tests)
+endif()
 
 if(PGO_BUILD_SUBPROJECTS)
   add_subdirectory(projects)

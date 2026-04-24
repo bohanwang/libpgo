@@ -13,10 +13,10 @@ import shutil
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
-if "Win" not in platform.platform():
-    install_requires=["tbb", "mkl"]
-else:
-    install_requires=[]
+# if "Win" not in platform.platform():
+#     install_requires=["tbb", "mkl"]
+# else:
+install_requires=[]
 
 # Convert distutils Windows platform specifiers to CMake -A arguments
 PLAT_TO_CMAKE = {
