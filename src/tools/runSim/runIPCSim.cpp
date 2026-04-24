@@ -210,6 +210,8 @@ int main(int argc, char *argv[])
       context.elasticEnergy->resetMaterialMaxStepStats();
       context.collisionHandler->resetContactMaxStepStats();
       intg->addGeneralImplicitForceModel(context.collisionHandler, 0, 0);
+      for (const auto &forceModel : context.extraGeneralImplicitForceModels)
+        intg->addGeneralImplicitForceModel(forceModel, 0, 0);
       intg->setqState(u, uvel, uacc);
       intg->doTimestep(1, 3, 1);
       executedStep = true;

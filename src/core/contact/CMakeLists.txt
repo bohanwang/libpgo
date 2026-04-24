@@ -1,6 +1,8 @@
 set(CONTACT_HEADERS
   CCDKernel.h
   contactEnergyUtilities.h
+  mappedSurfacePotentialEnergy.h
+  embeddedSurfaceFloorPotentialEnergy.h
   embeddedSurfaceIPCPotentialEnergy.h
   surfaceIPCCore.h
   surfaceIPCProfiling.h
@@ -17,6 +19,8 @@ set(CONTACT_HEADERS
 set(CONTACT_SOURCES
   CCDKernel.cpp
   contactEnergyUtilities.cpp
+  mappedSurfacePotentialEnergy.cpp
+  embeddedSurfaceFloorPotentialEnergy.cpp
   embeddedSurfaceIPCPotentialEnergy.cpp
   surfaceIPCCore.cpp
   pointPenetrationEnergy.cpp

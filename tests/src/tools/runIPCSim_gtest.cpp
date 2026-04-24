@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -86,6 +87,27 @@ void writeTextFile(const fs::path &path, const std::string &contents)
   out << contents;
 }
 
+void appendFloorFields(std::ostringstream &json, bool useFloor,
+  std::optional<std::string> floorAxis = std::nullopt,
+  std::optional<double> floorHeight = std::nullopt,
+  std::optional<double> floorKappa = std::nullopt)
+{
+  if (!useFloor && !floorAxis.has_value() && !floorHeight.has_value() && !floorKappa.has_value())
+    return;
+
+  json << ",\n"
+       << "  \"use-floor\": " << (useFloor ? "true" : "false");
+  if (floorAxis.has_value())
+    json << ",\n"
+         << "  \"floor-axis\": \"" << *floorAxis << "\"";
+  if (floorHeight.has_value())
+    json << ",\n"
+         << "  \"floor-height\": " << *floorHeight;
+  if (floorKappa.has_value())
+    json << ",\n"
+         << "  \"floor-kappa\": " << *floorKappa;
+}
+
 fs::path runIPCSimBinaryPath()
 {
   if (std::string(PGO_TEST_RUN_IPC_SIM_BIN).empty())
@@ -132,7 +154,11 @@ void initializeRunIPCSimTestEnvironment()
 std::string makeShellIPCConfig(const fs::path &tempDir, int numTimesteps,
   bool includeIPCFields = true, bool ipcHeuristic = false,
   double ipcDhat = 0.002, double ipcKappa = 3000.0, int dumpInterval = 1,
-  const std::string &logLevel = "info")
+  const std::string &logLevel = "info",
+  bool useFloor = false,
+  std::optional<std::string> floorAxis = std::nullopt,
+  std::optional<double> floorHeight = std::nullopt,
+  std::optional<double> floorKappa = std::nullopt)
 {
   const fs::path shellDir = fs::path(kShellExampleDir);
   const fs::path outputDir = tempDir / "shell-output";
@@ -161,6 +187,8 @@ std::string makeShellIPCConfig(const fs::path &tempDir, int numTimesteps,
        << "  \"loglevel\": \"" << logLevel << "\",\n"
        << "  \"dump-interval\": " << dumpInterval << ",\n"
        << "  \"output\": " << quotePath(outputDir);
+
+  appendFloorFields(json, useFloor, floorAxis, floorHeight, floorKappa);
 
   if (ipcHeuristic) {
     json << ",\n"
@@ -221,7 +249,11 @@ std::string makeShellIPCConfigWithIgnoredLegacyContactFields(const fs::path &tem
 std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey, const fs::path &outputDir, int numTimesteps,
   double scale = 1.0, bool includeIPCFields = true, bool ipcHeuristic = false, const std::string &material = "stable-neo",
   double ipcDhat = 0.002, double ipcKappa = 3000.0, int dumpInterval = 1,
-  bool enableMaterialMaxStep = true, const std::string &logLevel = "info")
+  bool enableMaterialMaxStep = true, const std::string &logLevel = "info",
+  bool useFloor = false,
+  std::optional<std::string> floorAxis = std::nullopt,
+  std::optional<double> floorHeight = std::nullopt,
+  std::optional<double> floorKappa = std::nullopt)
 {
   std::ostringstream json;
   json << "{\n"
@@ -250,6 +282,8 @@ std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey,
        << "  \"output\": " << quotePath(outputDir) << ",\n"
        << "  \"enable-material-max-step\": " << (enableMaterialMaxStep ? "true" : "false");
 
+  appendFloorFields(json, useFloor, floorAxis, floorHeight, floorKappa);
+
   if (ipcHeuristic) {
     json << ",\n"
          << "  \"ipc-heuristic\": true";
@@ -270,18 +304,26 @@ std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey,
 
 std::string makeTetIPCConfig(const fs::path &tempDir, int numTimesteps,
   double scale = 1.0, bool includeIPCFields = true, bool ipcHeuristic = false, const std::string &material = "stable-neo",
-  int dumpInterval = 1, const std::string &logLevel = "info")
+  int dumpInterval = 1, const std::string &logLevel = "info",
+  bool useFloor = false,
+  std::optional<std::string> floorAxis = std::nullopt,
+  std::optional<double> floorHeight = std::nullopt,
+  std::optional<double> floorKappa = std::nullopt)
 {
   return makeVolumeIPCConfig(tetIPCExampleDir(), "tet-mesh", tempDir / "tet-output", numTimesteps,
-    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel);
+    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel, useFloor, floorAxis, floorHeight, floorKappa);
 }
 
 std::string makeCubicIPCConfig(const fs::path &tempDir, int numTimesteps,
   double scale = 1.0, bool includeIPCFields = true, bool ipcHeuristic = false, const std::string &material = "stable-neo",
-  int dumpInterval = 1, const std::string &logLevel = "info")
+  int dumpInterval = 1, const std::string &logLevel = "info",
+  bool useFloor = false,
+  std::optional<std::string> floorAxis = std::nullopt,
+  std::optional<double> floorHeight = std::nullopt,
+  std::optional<double> floorKappa = std::nullopt)
 {
   return makeVolumeIPCConfig(cubicIPCExampleDir(), "cubic-mesh", tempDir / "cubic-output", numTimesteps,
-    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel);
+    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel, useFloor, floorAxis, floorHeight, floorKappa);
 }
 
 std::string makeCubicSquashIPCConfig(const fs::path &tempDir, int numTimesteps, const std::string &logLevel = "info")
@@ -420,6 +462,35 @@ TEST(RunIPCSimCliGTest, LogFlagWritesCliOutputNextToConfig)
   EXPECT_EQ(contents.find("finalAlpha"), std::string::npos);
   EXPECT_EQ(contents.find("lastMaterialAlpha"), std::string::npos);
   EXPECT_EQ(contents.find("lastContactAlpha"), std::string::npos);
+}
+
+TEST(RunIPCSimCliGTest, FloorEnabledLogPrintsFloorParameters)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-ipc-floor.json";
+  const fs::path logPath = tempDir.path() / "shell-ipc-floor.log";
+
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "info", true, "y", -0.15, 4321.0));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " --log "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  ASSERT_TRUE(fs::exists(logPath));
+
+  std::ifstream in(logPath);
+  ASSERT_TRUE(in.is_open());
+  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  EXPECT_NE(contents.find("use-floor=true"), std::string::npos);
+  EXPECT_NE(contents.find("floor-axis=y"), std::string::npos);
+  EXPECT_NE(contents.find("floor-height=-0.15"), std::string::npos);
+  EXPECT_NE(contents.find("floor-kappa=4321"), std::string::npos);
 }
 
 TEST(RunIPCSimCliGTest, DebugLogLevelPrintsFullMaxStepSummary)
@@ -573,6 +644,27 @@ TEST(RunIPCSimCliGTest, OneTimestepShellSmokeSucceeds)
   ASSERT_TRUE(fs::exists(tempDir.path() / "shell-output"));
 }
 
+TEST(RunIPCSimCliGTest, OneTimestepShellFloorSmokeSucceeds)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-ipc-floor-step.json";
+
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "info", true, "y", -0.15, 4000.0));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  EXPECT_TRUE(fs::exists(tempDir.path() / "shell-output" / "deform0000.u"));
+  EXPECT_TRUE(fs::exists(tempDir.path() / "shell-output" / "ret0000.obj"));
+}
+
 TEST(RunIPCSimCliGTest, DeformStateIsWrittenEveryTimestep)
 {
   const fs::path binary = runIPCSimBinaryPath();
@@ -710,6 +802,27 @@ TEST(RunIPCSimCliGTest, CubicOneTimestepSmokeWritesDeformAndRet)
   EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "ret0000.obj"));
 }
 
+TEST(RunIPCSimCliGTest, CubicOneTimestepFloorSmokeWritesDeformAndRet)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "cubic-ipc-floor-one-step.json";
+
+  writeTextFile(configPath, makeCubicIPCConfig(tempDir.path(), 1, 1.0, true, false, "stable-neo", 1, "info", true, "y", -0.15, 4000.0));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "deform0000.u"));
+  EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "ret0000.obj"));
+}
+
 TEST(RunIPCSimCliGTest, TetRejectsIPCHeuristic)
 {
   const fs::path binary = runIPCSimBinaryPath();
@@ -833,4 +946,45 @@ TEST(RunIPCSimSetupGTest, CubicEmbeddingMatrixMatchesBarycentricBaseline)
   const ES::SpMatD expected = computeExpectedEmbeddingMatrix(cubicIPCConfigPath());
 
   expectSparseMatrixNear(context.surfaceFromSimulationDispMap, expected);
+}
+
+TEST(RunIPCSimSetupGTest, UseFloorRequiresExplicitAxisHeightAndKappa)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path missingAxisConfig = tempDir.path() / "shell-floor-missing-axis.json";
+  const fs::path missingHeightConfig = tempDir.path() / "shell-floor-missing-height.json";
+  const fs::path missingKappaConfig = tempDir.path() / "shell-floor-missing-kappa.json";
+
+  writeTextFile(missingAxisConfig, makeShellIPCConfig(tempDir.path(), 0, true, false, 0.002, 3000.0, 1, "info", true, std::nullopt, -0.1, 4000.0));
+  writeTextFile(missingHeightConfig, makeShellIPCConfig(tempDir.path(), 0, true, false, 0.002, 3000.0, 1, "info", true, "y", std::nullopt, 4000.0));
+  writeTextFile(missingKappaConfig, makeShellIPCConfig(tempDir.path(), 0, true, false, 0.002, 3000.0, 1, "info", true, "y", -0.1, std::nullopt));
+
+  pgo::ConfigFileJSON missingAxis;
+  ASSERT_TRUE(missingAxis.open(missingAxisConfig.string().c_str()));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(missingAxis), std::invalid_argument);
+
+  pgo::ConfigFileJSON missingHeight;
+  ASSERT_TRUE(missingHeight.open(missingHeightConfig.string().c_str()));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(missingHeight), std::invalid_argument);
+
+  pgo::ConfigFileJSON missingKappa;
+  ASSERT_TRUE(missingKappa.open(missingKappaConfig.string().c_str()));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(missingKappa), std::invalid_argument);
+}
+
+TEST(RunIPCSimSetupGTest, FloorEnabledSetupCreatesExtraGeneralImplicitForceModel)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "cubic-floor-setup.json";
+  writeTextFile(configPath, makeCubicIPCConfig(tempDir.path(), 0, 1.0, true, false, "stable-neo", 1, "info", true, "y", -0.15, 4000.0));
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+
+  const auto context = pgo::RunIPCSim::buildVolumeIpcSimulation(config);
+  EXPECT_EQ(context.extraGeneralImplicitForceModels.size(), 1u);
 }

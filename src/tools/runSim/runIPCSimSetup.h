@@ -23,6 +23,11 @@ namespace ConstraintPotentialEnergies
 class MultipleVertexPulling;
 }
 
+namespace NonlinearOptimization
+{
+class PotentialEnergy;
+}
+
 namespace Contact
 {
 namespace CIPC
@@ -48,6 +53,7 @@ struct IpcSimulationContext
   std::vector<EigenSupport::VXd> pullingTargetRests;
   pgo::Mesh::TriMeshGeo surfaceMesh;
   std::shared_ptr<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy> collisionHandler;
+  std::vector<std::shared_ptr<NonlinearOptimization::PotentialEnergy>> extraGeneralImplicitForceModels;
 };
 
 IpcSimulationContext buildShellIpcSimulation(const ConfigFileJSON &jconfig);

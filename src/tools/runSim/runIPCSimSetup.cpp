@@ -7,6 +7,7 @@
 #include "deformationModelAssembler.h"
 #include "deformationModelEnergy.h"
 #include "deformationModelManager.h"
+#include "embeddedSurfaceFloorPotentialEnergy.h"
 #include "embeddedSurfaceIPCPotentialEnergy.h"
 #include "generateMassMatrix.h"
 #include "geometryQuery.h"
@@ -34,6 +35,8 @@ namespace pgo::RunIPCSim
 namespace
 {
 namespace ES = pgo::EigenSupport;
+using pgo::Contact::CIPC::FloorAxis;
+using pgo::Contact::CIPC::FloorPenaltyParameters;
 
 [[noreturn]] void throwConfigError(const std::string &message)
 {
@@ -183,6 +186,70 @@ bool parseEnableMaterialMaxStep(const pgo::ConfigFileJSON &jconfig)
     ? jconfig.getValue<bool>("enable-material-max-step", 1)
     : true;
 }
+
+struct ParsedFloorConfig
+{
+  bool useFloor = false;
+  FloorPenaltyParameters params;
+};
+
+FloorAxis parseFloorAxis(const std::string &axis)
+{
+  if (axis == "x")
+    return FloorAxis::X;
+  if (axis == "y")
+    return FloorAxis::Y;
+  if (axis == "z")
+    return FloorAxis::Z;
+  throwConfigError("`floor-axis` must be one of: x, y, z.");
+}
+
+const char *floorAxisToString(FloorAxis axis)
+{
+  switch (axis) {
+    case FloorAxis::X:
+      return "x";
+    case FloorAxis::Y:
+      return "y";
+    case FloorAxis::Z:
+      return "z";
+    default:
+      return "invalid";
+  }
+}
+
+ParsedFloorConfig parseFloorConfig(const pgo::ConfigFileJSON &jconfig)
+{
+  ParsedFloorConfig floorConfig;
+  floorConfig.useFloor = jconfig.exist("use-floor")
+    ? jconfig.getValue<bool>("use-floor", 1)
+    : false;
+
+  if (!floorConfig.useFloor) {
+    if (jconfig.exist("floor-axis") || jconfig.exist("floor-height") || jconfig.exist("floor-kappa")) {
+      SPDLOG_LOGGER_INFO(Logging::lgr(),
+        "runIPCSim floor config ignored because `use-floor=false`.");
+    }
+    return floorConfig;
+  }
+
+  if (!jconfig.exist("floor-axis"))
+    throwConfigError("Missing required field `floor-axis` when `use-floor=true`.");
+  if (!jconfig.exist("floor-height"))
+    throwConfigError("Missing required field `floor-height` when `use-floor=true`.");
+  if (!jconfig.exist("floor-kappa"))
+    throwConfigError("Missing required field `floor-kappa` when `use-floor=true`.");
+
+  floorConfig.params.floorAxis = parseFloorAxis(jconfig.getString("floor-axis", 1));
+  floorConfig.params.floorHeight = jconfig.getDouble("floor-height", 1);
+  floorConfig.params.floorKappa = jconfig.getDouble("floor-kappa", 1);
+  if (!std::isfinite(floorConfig.params.floorHeight))
+    throwConfigError("`floor-height` must be finite.");
+  if (!std::isfinite(floorConfig.params.floorKappa))
+    throwConfigError("`floor-kappa` must be finite.");
+
+  return floorConfig;
+}
 }  // namespace
 
 IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
@@ -212,6 +279,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   const bool ipcHeuristic = jconfig.exist("ipc-heuristic") ? jconfig.getValue<bool>("ipc-heuristic", 1) : false;
   const bool enableMaterialMaxStep = parseEnableMaterialMaxStep(jconfig);
   const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeShellIPCParams(jconfig, surfaceBox);
+  const ParsedFloorConfig floorConfig = parseFloorConfig(jconfig);
 
   std::cout << "runIPCSim phase1D shell IPC parameters: "
             << "ipc-heuristic=" << (ipcHeuristic ? "true" : "false") << ", "
@@ -220,7 +288,14 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
             << "ipc-dhat=" << ipcParams.dhat << ", "
             << "ipc-kappa=" << ipcParams.kappa << ", "
             << "eps_ee=" << ipcParams.eps_ee << ", "
-            << "slackness=" << ipcParams.slackness << std::endl;
+            << "slackness=" << ipcParams.slackness << ", "
+            << "use-floor=" << (floorConfig.useFloor ? "true" : "false");
+  if (floorConfig.useFloor) {
+    std::cout << ", floor-axis=" << floorAxisToString(floorConfig.params.floorAxis)
+              << ", floor-height=" << floorConfig.params.floorHeight
+              << ", floor-kappa=" << floorConfig.params.floorKappa;
+  }
+  std::cout << std::endl;
 
   SolidDeformationModel::SimulationMeshENuhMaterial matParam(10000, 0.4, 0.001);
   std::shared_ptr<SolidDeformationModel::SimulationMesh> simMesh(
@@ -305,6 +380,10 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   context.surfaceMesh = std::move(surfaceMesh);
   context.collisionHandler =
     std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(V, F, context.surfaceFromSimulationDispMap, ipcParams);
+  if (floorConfig.useFloor) {
+    context.extraGeneralImplicitForceModels.push_back(
+      std::make_shared<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params));
+  }
   return context;
 }
 
@@ -320,6 +399,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeVolumeIPCParams(jconfig);
   const SolidDeformationModel::DeformationModelElasticMaterial elasticMat = parseVolumeElasticMaterial(jconfig);
   const bool enableMaterialMaxStep = parseEnableMaterialMaxStep(jconfig);
+  const ParsedFloorConfig floorConfig = parseFloorConfig(jconfig);
 
   std::cout << "runIPCSim phase1D volume IPC parameters: "
             << "ipc-heuristic=false, "
@@ -328,7 +408,14 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
             << "ipc-dhat=" << ipcParams.dhat << ", "
             << "ipc-kappa=" << ipcParams.kappa << ", "
             << "eps_ee=" << ipcParams.eps_ee << ", "
-            << "slackness=" << ipcParams.slackness << std::endl;
+            << "slackness=" << ipcParams.slackness << ", "
+            << "use-floor=" << (floorConfig.useFloor ? "true" : "false");
+  if (floorConfig.useFloor) {
+    std::cout << ", floor-axis=" << floorAxisToString(floorConfig.params.floorAxis)
+              << ", floor-height=" << floorConfig.params.floorHeight
+              << ", floor-kappa=" << floorConfig.params.floorKappa;
+  }
+  std::cout << std::endl;
 
   const RunSim::ResolvedRunSimPaths resolvedPaths = RunSim::resolveRunSimPaths(jconfig);
   std::unique_ptr<VolumetricMeshes::VolumetricMesh> volumetricMesh =
@@ -388,6 +475,10 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   context.surfaceMesh = std::move(surfaceMesh);
   context.collisionHandler =
     std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(V, F, context.surfaceFromSimulationDispMap, ipcParams);
+  if (floorConfig.useFloor) {
+    context.extraGeneralImplicitForceModels.push_back(
+      std::make_shared<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params));
+  }
   return context;
 }
 }  // namespace pgo::RunIPCSim
