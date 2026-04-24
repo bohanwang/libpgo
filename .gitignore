@@ -68,3 +68,5 @@ paper/*
 *.pdf
 *.log
 *.abc
+
+examples/fbms/generated
