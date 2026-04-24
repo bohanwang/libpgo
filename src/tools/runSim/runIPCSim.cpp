@@ -9,6 +9,7 @@
 #include "pgoLogging.h"
 #include "runIPCSimSetup.h"
 #include "runSimCliLogging.h"
+#include "scopedProfileSection.h"
 
 #include <argparse/argparse.hpp>
 #include <fmt/format.h>
@@ -18,6 +19,7 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <vector>
 
 namespace
 {
@@ -74,6 +76,38 @@ void logRunIPCSimMaxStepSummary(
       summary.minEffectiveAlphaThisSolve);
   }
 }
+
+std::filesystem::path resolveRunIPCSimLogPath(const std::filesystem::path &outputFolder)
+{
+  return outputFolder / "runIPCSim.log";
+}
+
+void clearOutputDirectory(const std::filesystem::path &outputFolder)
+{
+  std::error_code ec;
+  std::filesystem::remove_all(outputFolder, ec);
+  if (ec)
+    throw std::runtime_error("Failed to clear output folder `" + outputFolder.string() + "`: " + ec.message());
+
+  std::filesystem::create_directories(outputFolder, ec);
+  if (ec)
+    throw std::runtime_error("Failed to create output folder `" + outputFolder.string() + "`: " + ec.message());
+}
+
+void logProfileSummary()
+{
+  auto logger = pgo::Logging::lgr();
+  if (!logger || !logger->should_log(spdlog::level::info))
+    return;
+
+  const std::vector<pgo::Profiling::ProfileStat> stats = pgo::Profiling::snapshotProfileStatistics();
+  SPDLOG_LOGGER_INFO(logger, "runIPCSim profiling summary:");
+  for (const pgo::Profiling::ProfileStat &stat : stats) {
+    SPDLOG_LOGGER_INFO(logger,
+      "profile name={} callCount={} totalSeconds={} maxSeconds={}",
+      stat.name, stat.callCount, stat.totalSeconds, stat.maxSeconds);
+  }
+}
 }
 
 int main(int argc, char *argv[])
@@ -102,21 +136,12 @@ int main(int argc, char *argv[])
   const std::string configFilename = program.get<std::string>("config");
   const bool enableCliLog = program.get<bool>("--log");
   std::unique_ptr<RunSim::ScopedRunSimCliLogRedirect> logRedirect;
+  bool enableProfiling = false;
 
   try {
     ConfigFileJSON jconfig;
     if (jconfig.open(configFilename.c_str()) != true)
       return 0;
-
-    if (enableCliLog) {
-      const std::filesystem::path logPath = RunSim::deriveDefaultLogPathFromConfig(configFilename);
-      logRedirect = std::make_unique<RunSim::ScopedRunSimCliLogRedirect>(logPath.string());
-      pgo::Logging::init(nullptr, RunSim::resolveConfiguredLogLevel(jconfig));
-    }
-    else {
-      pgo::Logging::init(nullptr, RunSim::resolveConfiguredLogLevel(jconfig));
-    }
-    pgo::Mesh::initPredicates();
 
     const ES::V3d extAcc = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("g", 1).data());
     const ES::V3d initialVel = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("init-vel", 1).data());
@@ -130,7 +155,31 @@ int main(int argc, char *argv[])
     const std::string simType = jconfig.getString("sim-type");
     if (simType != "dynamic")
       throw std::invalid_argument("runIPCSim phase1D only supports `sim-type = dynamic`.");
-    const std::string outputFolder = jconfig.getResolvedPath("output", 1);
+    const std::filesystem::path outputFolder = jconfig.getResolvedPath("output", 1);
+    const bool restartFromU = jconfig.exist("restart-from-u") ? jconfig.getValue<bool>("restart-from-u", 1) : false;
+    enableProfiling = jconfig.exist("profiling") ? jconfig.getValue<bool>("profiling", 1) : false;
+
+    if (restartFromU) {
+      std::filesystem::create_directories(outputFolder);
+    }
+    else {
+      clearOutputDirectory(outputFolder);
+    }
+
+    if (enableCliLog) {
+      const std::filesystem::path logPath = resolveRunIPCSimLogPath(outputFolder);
+      logRedirect = std::make_unique<RunSim::ScopedRunSimCliLogRedirect>(logPath.string());
+    }
+    pgo::Logging::init(nullptr, RunSim::resolveConfiguredLogLevel(jconfig));
+
+    if (!restartFromU) {
+      std::cout << "restart-from-u=false; clearing output folder " << outputFolder << "." << std::endl;
+    }
+    if (enableProfiling) {
+      pgo::Profiling::setProfilingEnabled(true);
+      pgo::Profiling::resetProfileStatistics();
+    }
+    pgo::Mesh::initPredicates();
 
     const bool hasTetMesh = jconfig.exist("tet-mesh");
     const bool hasCubicMesh = jconfig.exist("cubic-mesh");
@@ -168,28 +217,29 @@ int main(int argc, char *argv[])
     for (int i = 0; i < n; ++i)
       uvel.segment<3>(i * 3) = initialVel;
 
-    if (!std::filesystem::exists(outputFolder))
-      std::filesystem::create_directories(outputFolder);
-
     int frameStart = -1;
-    for (int framei = numSimSteps - 1; framei >= 0; --framei) {
-      const std::string deformFilename = fmt::format("{}/deform{:04d}.u", outputFolder, framei);
-      if (!std::filesystem::exists(deformFilename))
-        continue;
+    if (restartFromU) {
+      for (int framei = numSimSteps - 1; framei >= 0; --framei) {
+        const std::string deformFilename = fmt::format("{}/deform{:04d}.u", outputFolder.string(), framei);
+        if (!std::filesystem::exists(deformFilename))
+          continue;
 
-      ES::MXd uMat(n3, 3);
-      if (ES::readMatrix(deformFilename.c_str(), uMat) == 0) {
-        frameStart = framei;
-        u.noalias() = uMat.col(0);
-        uvel.noalias() = uMat.col(1);
-        uacc.noalias() = uMat.col(2);
-        std::cout << "Restarting from frame " << framei << std::endl;
-        break;
+        ES::MXd uMat(n3, 3);
+        if (ES::readMatrix(deformFilename.c_str(), uMat) == 0) {
+          frameStart = framei;
+          u.noalias() = uMat.col(0);
+          uvel.noalias() = uMat.col(1);
+          uacc.noalias() = uMat.col(2);
+          std::cout << "Restarting from frame " << framei << std::endl;
+          break;
+        }
       }
     }
 
-    if (frameStart < 0)
+    if (frameStart < 0 && restartFromU)
       std::cout << "No restart state found in " << outputFolder << ". Starting from frame 0." << std::endl;
+    else if (frameStart < 0)
+      std::cout << "Starting from frame 0." << std::endl;
 
     const double ratioDenom = numSimSteps > 1 ? static_cast<double>(numSimSteps - 1) : 1.0;
 
@@ -224,7 +274,7 @@ int main(int argc, char *argv[])
       uMat.col(0) = u;
       uMat.col(1) = uvel;
       uMat.col(2) = uacc;
-      ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder, framei).c_str(), uMat);
+      ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder.string(), framei).c_str(), uMat);
 
       if (framei % frameGap == 0) {
         Mesh::TriMeshGeo mesh = context.surfaceMesh;
@@ -232,15 +282,24 @@ int main(int argc, char *argv[])
         const ES::VXd psurf = context.surfaceRestPositions + usurf;
         for (int vi = 0; vi < mesh.numVertices(); ++vi)
           mesh.pos(vi) = psurf.segment<3>(vi * 3) / scale;
-        mesh.save(fmt::format("{}/ret{:04d}.obj", outputFolder, framei / frameGap));
+        mesh.save(fmt::format("{}/ret{:04d}.obj", outputFolder.string(), framei / frameGap));
       }
     }
 
     if (!executedStep)
       logRunIPCSimMaxStepSummary(context.elasticEnergy, context.collisionHandler, intg);
+    if (enableProfiling) {
+      logProfileSummary();
+      pgo::Profiling::setProfilingEnabled(false);
+      pgo::Profiling::resetProfileStatistics();
+    }
   }
   catch (const std::exception &err) {
     SPDLOG_LOGGER_ERROR(Logging::lgr(), "{}", err.what());
+    if (enableProfiling) {
+      pgo::Profiling::setProfilingEnabled(false);
+      pgo::Profiling::resetProfileStatistics();
+    }
     return 1;
   }
 

@@ -19,6 +19,16 @@ namespace Contact
 {
 namespace CIPC
 {
+namespace
+{
+bool parametersEqual(const SurfaceIPCCore::Parameters &lhs, const SurfaceIPCCore::Parameters &rhs)
+{
+  return lhs.dhat == rhs.dhat &&
+    lhs.kappa == rhs.kappa &&
+    lhs.eps_ee == rhs.eps_ee &&
+    lhs.slackness == rhs.slackness;
+}
+}  // namespace
 
 void CIPCPotentialEnergy::setMesh(const MXd &V, const MXi &F)
 {
@@ -41,7 +51,14 @@ void CIPCPotentialEnergy::syncCoreParametersFromWrapper() const
   params.kappa = kappa;
   params.eps_ee = eps_ee;
   params.slackness = slackness;
-  core.setParameters(params);
+  if (!parametersEqual(core.getParameters(), params))
+    core.setParameters(params);
+}
+
+void CIPCPotentialEnergy::ensurePreparedForSurfacePositions(const VXd &x_surf) const
+{
+  if (!core.isPreparedFor(x_surf))
+    core.prepareForSurfacePositions(x_surf);
 }
 
 VXd CIPCPotentialEnergy::toSurfacePositions(EigenSupport::ConstRefVecXd x) const
@@ -116,14 +133,16 @@ double CIPCPotentialEnergy::func(EigenSupport::ConstRefVecXd x) const
 {
   syncCoreParametersFromWrapper();
   const VXd x_surf = toSurfacePositions(x);
-  return core.computeEnergy(x_surf) + computeFloorEnergy(x_surf);
+  ensurePreparedForSurfacePositions(x_surf);
+  return core.computeEnergyWithPreparedPairs() + computeFloorEnergy(x_surf);
 }
 
 void CIPCPotentialEnergy::gradient(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad) const
 {
   syncCoreParametersFromWrapper();
   const VXd x_surf = toSurfacePositions(x);
-  core.computeGradient(x_surf, grad);
+  ensurePreparedForSurfacePositions(x_surf);
+  core.computeGradientWithPreparedPairs(grad);
   addFloorGradient(x_surf, grad);
 }
 
@@ -149,7 +168,8 @@ void CIPCPotentialEnergy::hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupp
 {
   syncCoreParametersFromWrapper();
   const VXd x_surf = toSurfacePositions(x);
-  core.computeHessian(x_surf, hess);
+  ensurePreparedForSurfacePositions(x_surf);
+  core.computeHessianWithPreparedPairs(hess);
   if (auto logger = Logging::lgr(); logger)
     SPDLOG_LOGGER_INFO(logger, "Computing Hessian with {} PT pairs and {} EE pairs", core.getPTPairs().size(), core.getEEPairs().size());
   addFloorHessian(x_surf, hess);

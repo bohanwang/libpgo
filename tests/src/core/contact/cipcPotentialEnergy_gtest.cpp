@@ -2,8 +2,14 @@
 
 #include "CIPC.h"
 #include "ipc/core/surfaceIPCCore.h"
+#include "scopedProfileSection.h"
+#include "ipc/profiling/surfaceIPCProfiling.h"
 
 #include "testCIPCHelpers.h"
+
+#include <algorithm>
+#include <string_view>
+#include <vector>
 
 namespace
 {
@@ -17,6 +23,14 @@ using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
 using pgo::Contact::CIPCTest::relativeError;
 using pgo::Contact::CIPCTest::sparseToDense;
+using pgo::Profiling::ProfileStat;
+
+const ProfileStat *findStat(const std::vector<ProfileStat> &stats, std::string_view name)
+{
+  const auto it = std::find_if(stats.begin(), stats.end(),
+    [name](const ProfileStat &stat) { return stat.name == name; });
+  return it == stats.end() ? nullptr : &(*it);
+}
 
 SurfaceIPCCore makeReferenceCore(const ES::MXd &V, const ES::MXi &F,
   double dhat, double kappa, double eps_ee, double slackness)
@@ -131,4 +145,40 @@ TEST(CIPCPotentialEnergyGTest, BarrierAndFloorActiveMatchesCorePlusFloorContribu
   EXPECT_NEAR(wrapper.func(x), core.computeEnergy(x) + floorE, 1e-10);
   EXPECT_LT(relativeError(wrapperGrad, coreGrad + floorG), 1e-12);
   EXPECT_LT(relativeError(sparseToDense(wrapperH), sparseToDense(coreH) + floorH), 1e-12);
+}
+
+TEST(CIPCPotentialEnergyGTest, ReusesPreparedPairsAcrossEnergyGradientHessianForSameState)
+{
+  const auto [V, F] = makeTwoTriangleMesh();
+  const ES::VXd x = flattenPositions(V);
+
+  CIPCPotentialEnergy wrapper(0.1, 1.0, false);
+  wrapper.setMesh(V, F);
+
+  pgo::Profiling::setProfilingEnabled(true);
+  pgo::Profiling::resetProfileStatistics();
+
+  const double energy0 = wrapper.func(x);
+  ES::VXd gradient0 = ES::VXd::Zero(x.size());
+  wrapper.gradient(x, gradient0);
+  ES::SpMatD hessian0;
+  wrapper.hessianDirect(x, hessian0);
+
+  const double energy1 = wrapper.func(x);
+  ES::VXd gradient1 = ES::VXd::Zero(x.size());
+  wrapper.gradient(x, gradient1);
+  ES::SpMatD hessian1;
+  wrapper.hessianDirect(x, hessian1);
+
+  const auto stats = pgo::Profiling::snapshotProfileStatistics();
+  const ProfileStat *pairBuild = findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kPairBuildStatic);
+
+  pgo::Profiling::setProfilingEnabled(false);
+  pgo::Profiling::resetProfileStatistics();
+
+  ASSERT_NE(pairBuild, nullptr);
+  EXPECT_EQ(pairBuild->callCount, 1u);
+  EXPECT_NEAR(energy1, energy0, 1e-12);
+  EXPECT_LT(relativeError(gradient1, gradient0), 1e-12);
+  EXPECT_LT(relativeError(sparseToDense(hessian1), sparseToDense(hessian0)), 1e-12);
 }

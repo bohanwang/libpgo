@@ -178,6 +178,44 @@ TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, ProfilingRecordsAdapterSections)
   pgo::Profiling::resetProfileStatistics();
 }
 
+TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, ReusesPreparedPairsAcrossEnergyGradientHessianForSameState)
+{
+  const auto [V, F] = makeTwoTriangleMesh();
+  const ES::VXd rest = flattenPositions(V);
+  ES::VXd u = ES::VXd::Zero(rest.size());
+  for (int vi = 3; vi < 6; ++vi)
+    u[3 * vi + 2] = 0.01;
+
+  EmbeddedSurfaceIPCPotentialEnergy adapter(V, F, makeIdentityEmbedding(rest.size()), makeParams());
+
+  pgo::Profiling::setProfilingEnabled(true);
+  pgo::Profiling::resetProfileStatistics();
+
+  const double energy0 = adapter.func(u);
+  ES::VXd gradient0 = ES::VXd::Zero(adapter.getNumDOFs());
+  adapter.gradient(u, gradient0);
+  ES::SpMatD hessian0;
+  adapter.hessianDirect(u, hessian0);
+
+  const double energy1 = adapter.func(u);
+  ES::VXd gradient1 = ES::VXd::Zero(adapter.getNumDOFs());
+  adapter.gradient(u, gradient1);
+  ES::SpMatD hessian1;
+  adapter.hessianDirect(u, hessian1);
+
+  const auto stats = pgo::Profiling::snapshotProfileStatistics();
+  const ProfileStat *pairBuild = findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kPairBuildStatic);
+
+  pgo::Profiling::setProfilingEnabled(false);
+  pgo::Profiling::resetProfileStatistics();
+
+  ASSERT_NE(pairBuild, nullptr);
+  EXPECT_EQ(pairBuild->callCount, 1u);
+  EXPECT_NEAR(energy1, energy0, 1e-12);
+  EXPECT_LT(relativeError(gradient1, gradient0), 1e-12);
+  EXPECT_LT(relativeError(sparseToDense(hessian1), sparseToDense(hessian0)), 1e-12);
+}
+
 TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, InvalidEmbeddingRowsThrow)
 {
   const auto [V, F] = makeTwoTriangleMesh();

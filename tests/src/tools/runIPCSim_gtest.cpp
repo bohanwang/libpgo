@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -85,6 +86,36 @@ void writeTextFile(const fs::path &path, const std::string &contents)
   std::ofstream out(path);
   ASSERT_TRUE(out.is_open());
   out << contents;
+}
+
+std::string readTextFile(const fs::path &path)
+{
+  std::ifstream in(path);
+  EXPECT_TRUE(in.is_open());
+  return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+std::string addBoolConfigField(std::string json, const std::string &name, bool value)
+{
+  const std::string marker = "\n}\n";
+  const std::size_t pos = json.rfind(marker);
+  if (pos == std::string::npos)
+    throw std::runtime_error("Failed to add bool config field to test JSON.");
+
+  json.insert(pos, ",\n  \"" + name + "\": " + (value ? "true" : "false"));
+  return json;
+}
+
+void writeZeroShellRestartState(const fs::path &outputDir, int frame)
+{
+  pgo::Mesh::TriMeshGeo mesh;
+  ASSERT_TRUE(mesh.load((fs::path(kShellExampleDir) / "shell.obj").string()));
+
+  fs::create_directories(outputDir);
+  ES::MXd restartState = ES::MXd::Zero(mesh.numVertices() * 3, 3);
+  std::ostringstream filename;
+  filename << "deform" << std::setfill('0') << std::setw(4) << frame << ".u";
+  ASSERT_EQ(ES::writeMatrix((outputDir / filename.str()).string().c_str(), restartState), 0);
 }
 
 void appendFloorFields(std::ostringstream &json, bool useFloor,
@@ -428,7 +459,7 @@ TEST(RunIPCSimCliGTest, VolumeSetupRespectsDisabledMaterialMaxStepFlag)
   EXPECT_FALSE(context.elasticEnergy->isMaterialMaxStepEnabled());
 }
 
-TEST(RunIPCSimCliGTest, LogFlagWritesCliOutputNextToConfig)
+TEST(RunIPCSimCliGTest, LogFlagWritesCliOutputIntoOutputDirectory)
 {
   const fs::path binary = runIPCSimBinaryPath();
   ASSERT_FALSE(binary.empty());
@@ -436,7 +467,7 @@ TEST(RunIPCSimCliGTest, LogFlagWritesCliOutputNextToConfig)
 
   ScopedTempDir tempDir;
   const fs::path configPath = tempDir.path() / "shell-ipc.json";
-  const fs::path logPath = tempDir.path() / "shell-ipc.log";
+  const fs::path logPath = tempDir.path() / "shell-output" / "runIPCSim.log";
 
   writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
 
@@ -448,9 +479,7 @@ TEST(RunIPCSimCliGTest, LogFlagWritesCliOutputNextToConfig)
   ASSERT_EQ(runCommand(command.str()), 0);
   ASSERT_TRUE(fs::exists(logPath));
 
-  std::ifstream in(logPath);
-  ASSERT_TRUE(in.is_open());
-  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  const std::string contents = readTextFile(logPath);
   EXPECT_NE(contents.find("ipc-dhat"), std::string::npos);
   EXPECT_NE(contents.find("ipc-kappa"), std::string::npos);
   EXPECT_NE(contents.find("eps_ee"), std::string::npos);
@@ -462,6 +491,92 @@ TEST(RunIPCSimCliGTest, LogFlagWritesCliOutputNextToConfig)
   EXPECT_EQ(contents.find("finalAlpha"), std::string::npos);
   EXPECT_EQ(contents.find("lastMaterialAlpha"), std::string::npos);
   EXPECT_EQ(contents.find("lastContactAlpha"), std::string::npos);
+  EXPECT_EQ(contents.find("runIPCSim profiling summary:"), std::string::npos);
+}
+
+TEST(RunIPCSimCliGTest, ProfilingConfigWritesSummaryToOutputLog)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-ipc-profile.json";
+  const fs::path logPath = tempDir.path() / "shell-output" / "runIPCSim.log";
+
+  writeTextFile(configPath, addBoolConfigField(makeShellIPCConfig(tempDir.path(), 1), "profiling", true));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " --log "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  ASSERT_TRUE(fs::exists(logPath));
+
+  const std::string contents = readTextFile(logPath);
+  EXPECT_NE(contents.find("runIPCSim profiling summary:"), std::string::npos);
+  EXPECT_NE(contents.find("profile name=contact.surface.pair_build.static"), std::string::npos);
+  EXPECT_NE(contents.find("callCount="), std::string::npos);
+}
+
+TEST(RunIPCSimCliGTest, DefaultRunClearsOutputAndDoesNotRestartFromDeformState)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path outputDir = tempDir.path() / "shell-output";
+  const fs::path sentinelPath = outputDir / "old-sentinel.txt";
+  const fs::path configPath = tempDir.path() / "shell-ipc-restart-off.json";
+  const fs::path logPath = outputDir / "runIPCSim.log";
+
+  writeTextFile(sentinelPath, "old output");
+  writeZeroShellRestartState(outputDir, 0);
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " --log "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  EXPECT_FALSE(fs::exists(sentinelPath));
+  ASSERT_TRUE(fs::exists(logPath));
+
+  const std::string contents = readTextFile(logPath);
+  EXPECT_NE(contents.find("restart-from-u=false; clearing output folder"), std::string::npos);
+  EXPECT_NE(contents.find("Starting from frame 0."), std::string::npos);
+  EXPECT_EQ(contents.find("Restarting from frame"), std::string::npos);
+}
+
+TEST(RunIPCSimCliGTest, RestartFromUTrueKeepsExistingDeformState)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path outputDir = tempDir.path() / "shell-output";
+  const fs::path configPath = tempDir.path() / "shell-ipc-restart-on.json";
+  const fs::path logPath = outputDir / "runIPCSim.log";
+
+  writeZeroShellRestartState(outputDir, 0);
+  writeTextFile(configPath, addBoolConfigField(makeShellIPCConfig(tempDir.path(), 2), "restart-from-u", true));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " --log "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  ASSERT_TRUE(fs::exists(logPath));
+  EXPECT_TRUE(fs::exists(outputDir / "deform0001.u"));
+
+  const std::string contents = readTextFile(logPath);
+  EXPECT_NE(contents.find("Restarting from frame 0"), std::string::npos);
+  EXPECT_EQ(contents.find("restart-from-u=false; clearing output folder"), std::string::npos);
 }
 
 TEST(RunIPCSimCliGTest, FloorEnabledLogPrintsFloorParameters)
@@ -472,7 +587,7 @@ TEST(RunIPCSimCliGTest, FloorEnabledLogPrintsFloorParameters)
 
   ScopedTempDir tempDir;
   const fs::path configPath = tempDir.path() / "shell-ipc-floor.json";
-  const fs::path logPath = tempDir.path() / "shell-ipc-floor.log";
+  const fs::path logPath = tempDir.path() / "shell-output" / "runIPCSim.log";
 
   writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "info", true, "y", -0.15, 4321.0));
 
@@ -484,9 +599,7 @@ TEST(RunIPCSimCliGTest, FloorEnabledLogPrintsFloorParameters)
   ASSERT_EQ(runCommand(command.str()), 0);
   ASSERT_TRUE(fs::exists(logPath));
 
-  std::ifstream in(logPath);
-  ASSERT_TRUE(in.is_open());
-  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  const std::string contents = readTextFile(logPath);
   EXPECT_NE(contents.find("use-floor=true"), std::string::npos);
   EXPECT_NE(contents.find("floor-axis=y"), std::string::npos);
   EXPECT_NE(contents.find("floor-height=-0.15"), std::string::npos);
@@ -501,7 +614,7 @@ TEST(RunIPCSimCliGTest, DebugLogLevelPrintsFullMaxStepSummary)
 
   ScopedTempDir tempDir;
   const fs::path configPath = tempDir.path() / "shell-ipc-debug.json";
-  const fs::path logPath = tempDir.path() / "shell-ipc-debug.log";
+  const fs::path logPath = tempDir.path() / "shell-output" / "runIPCSim.log";
 
   writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "debug"));
 
@@ -513,9 +626,7 @@ TEST(RunIPCSimCliGTest, DebugLogLevelPrintsFullMaxStepSummary)
   ASSERT_EQ(runCommand(command.str()), 0);
   ASSERT_TRUE(fs::exists(logPath));
 
-  std::ifstream in(logPath);
-  ASSERT_TRUE(in.is_open());
-  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  const std::string contents = readTextFile(logPath);
   EXPECT_NE(contents.find("max-step summary"), std::string::npos);
   EXPECT_NE(contents.find("minMaterialFeasibleAlphaThisSolve"), std::string::npos);
   EXPECT_NE(contents.find("minContactFeasibleAlphaThisSolve"), std::string::npos);
@@ -541,7 +652,7 @@ TEST(RunIPCSimCliGTest, DebugLogLevelPrintsClampedFeasibleAlphaBreakdownForCubic
 
   ScopedTempDir tempDir;
   const fs::path configPath = tempDir.path() / "cubic-squash-ipc-debug.json";
-  const fs::path logPath = tempDir.path() / "cubic-squash-ipc-debug.log";
+  const fs::path logPath = tempDir.path() / "cubic-squash-output" / "runIPCSim.log";
 
   writeTextFile(configPath, makeCubicSquashIPCConfig(tempDir.path(), 3, "debug"));
 
@@ -553,9 +664,7 @@ TEST(RunIPCSimCliGTest, DebugLogLevelPrintsClampedFeasibleAlphaBreakdownForCubic
   ASSERT_EQ(runCommand(command.str()), 0);
   ASSERT_TRUE(fs::exists(logPath));
 
-  std::ifstream in(logPath);
-  ASSERT_TRUE(in.is_open());
-  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  const std::string contents = readTextFile(logPath);
   EXPECT_NE(contents.find("feasible alpha clamped: material:"), std::string::npos);
   EXPECT_NE(contents.find("contact:"), std::string::npos);
 }
@@ -568,7 +677,7 @@ TEST(RunIPCSimCliGTest, WarnLogLevelSuppressesMaxStepSummary)
 
   ScopedTempDir tempDir;
   const fs::path configPath = tempDir.path() / "shell-ipc-warn.json";
-  const fs::path logPath = tempDir.path() / "shell-ipc-warn.log";
+  const fs::path logPath = tempDir.path() / "shell-output" / "runIPCSim.log";
 
   writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "warn"));
 
@@ -580,9 +689,7 @@ TEST(RunIPCSimCliGTest, WarnLogLevelSuppressesMaxStepSummary)
   ASSERT_EQ(runCommand(command.str()), 0);
   ASSERT_TRUE(fs::exists(logPath));
 
-  std::ifstream in(logPath);
-  ASSERT_TRUE(in.is_open());
-  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  const std::string contents = readTextFile(logPath);
   EXPECT_EQ(contents.find("max-step summary"), std::string::npos);
 }
 
@@ -715,7 +822,7 @@ TEST(RunIPCSimCliGTest, HeuristicOverridesExplicitIPCFieldsInLog)
 
   ScopedTempDir tempDir;
   const fs::path configPath = tempDir.path() / "shell-ipc-heuristic-override.json";
-  const fs::path logPath = tempDir.path() / "shell-ipc-heuristic-override.log";
+  const fs::path logPath = tempDir.path() / "shell-output" / "runIPCSim.log";
 
   writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0, true, true, 9.0, 42.0));
 
@@ -727,9 +834,7 @@ TEST(RunIPCSimCliGTest, HeuristicOverridesExplicitIPCFieldsInLog)
   ASSERT_EQ(runCommand(command.str()), 0);
   ASSERT_TRUE(fs::exists(logPath));
 
-  std::ifstream in(logPath);
-  ASSERT_TRUE(in.is_open());
-  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  const std::string contents = readTextFile(logPath);
   EXPECT_NE(contents.find("ipc-heuristic=true"), std::string::npos);
   EXPECT_NE(contents.find("source=heuristic"), std::string::npos);
   EXPECT_NE(contents.find("ipc-dhat=0.00141421"), std::string::npos);

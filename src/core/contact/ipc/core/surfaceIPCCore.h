@@ -57,6 +57,13 @@ public:
   void computeGradient(EigenSupport::ConstRefVecXd x_surf, EigenSupport::RefVecXd g_surf) const;
   void computeHessian(EigenSupport::ConstRefVecXd x_surf, EigenSupport::SpMatD &H_surf) const;
   void computeAll(EigenSupport::ConstRefVecXd x_surf, double &energy, VXd &g_surf, SpMatD &H_surf) const;
+  void prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_surf) const;
+  bool isPreparedFor(EigenSupport::ConstRefVecXd x_surf) const;
+  void invalidatePreparedState() const;
+  double computeEnergyWithPreparedPairs() const;
+  void computeGradientWithPreparedPairs(EigenSupport::RefVecXd g_surf) const;
+  void computeHessianWithPreparedPairs(EigenSupport::SpMatD &H_surf) const;
+  void computeAllWithPreparedPairs(double &energy, VXd &g_surf, SpMatD &H_surf) const;
   double computeMaxStepSize(EigenSupport::ConstRefVecXd x_surf, EigenSupport::ConstRefVecXd dx_surf) const;
   std::int64_t getContactClampCount() const { return contactClampCount_.load(std::memory_order_relaxed); }
   double getMinContactFeasibleAlphaThisSolve() const { return minContactFeasibleAlphaThisSolve_.load(std::memory_order_relaxed); }
@@ -70,6 +77,7 @@ public:
 
 private:
   void findCollisionPairs(const VXd &positions) const;
+  void requirePreparedState() const;
 
   static V3d vtx(const VXd &x, int i)
   {
@@ -85,6 +93,8 @@ private:
   mutable std::atomic<double> minContactFeasibleAlphaThisSolve_{1.0};
   mutable std::vector<PTPair> ptPairs_;
   mutable std::vector<EEPair> eePairs_;
+  mutable bool hasPreparedState_ = false;
+  mutable VXd preparedPositions_;
 };
 
 }  // namespace CIPC

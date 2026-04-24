@@ -32,23 +32,33 @@ EmbeddedSurfaceIPCPotentialEnergy::EmbeddedSurfaceIPCPotentialEnergy(
   surfaceIPCCore_.setMesh(surfaceRestVertices, surfaceTriangles);
 }
 
+void EmbeddedSurfaceIPCPotentialEnergy::ensurePreparedForSurfacePositions(
+  EigenSupport::ConstRefVecXd surfacePositions) const
+{
+  if (!surfaceIPCCore_.isPreparedFor(surfacePositions))
+    surfaceIPCCore_.prepareForSurfacePositions(surfacePositions);
+}
+
 double EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const
 {
-  return surfaceIPCCore_.computeEnergy(surfacePositions);
+  ensurePreparedForSurfacePositions(surfacePositions);
+  return surfaceIPCCore_.computeEnergyWithPreparedPairs();
 }
 
 void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceGradient(
   EigenSupport::ConstRefVecXd surfacePositions,
   EigenSupport::RefVecXd surfaceGradient) const
 {
-  surfaceIPCCore_.computeGradient(surfacePositions, surfaceGradient);
+  ensurePreparedForSurfacePositions(surfacePositions);
+  surfaceIPCCore_.computeGradientWithPreparedPairs(surfaceGradient);
 }
 
 void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceHessian(
   EigenSupport::ConstRefVecXd surfacePositions,
   EigenSupport::SpMatD &surfaceHessian) const
 {
-  surfaceIPCCore_.computeHessian(surfacePositions, surfaceHessian);
+  ensurePreparedForSurfacePositions(surfacePositions);
+  surfaceIPCCore_.computeHessianWithPreparedPairs(surfaceHessian);
 }
 
 double EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceMaxStepSize(

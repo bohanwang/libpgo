@@ -17,6 +17,7 @@ copyright to Bohan Wang
 #include <atomic>
 #include <algorithm>
 #include <cstdint>
+#include <stdexcept>
 
 namespace pgo {
 namespace Contact {
@@ -39,7 +40,9 @@ SurfaceIPCCore::SurfaceIPCCore(const SurfaceIPCCore &other):
   contactClampCount_(other.contactClampCount_.load(std::memory_order_relaxed)),
   minContactFeasibleAlphaThisSolve_(other.minContactFeasibleAlphaThisSolve_.load(std::memory_order_relaxed)),
   ptPairs_(other.ptPairs_),
-  eePairs_(other.eePairs_)
+  eePairs_(other.eePairs_),
+  hasPreparedState_(other.hasPreparedState_),
+  preparedPositions_(other.preparedPositions_)
 {
 }
 
@@ -57,6 +60,8 @@ SurfaceIPCCore &SurfaceIPCCore::operator=(const SurfaceIPCCore &other)
   minContactFeasibleAlphaThisSolve_.store(other.minContactFeasibleAlphaThisSolve_.load(std::memory_order_relaxed), std::memory_order_relaxed);
   ptPairs_ = other.ptPairs_;
   eePairs_ = other.eePairs_;
+  hasPreparedState_ = other.hasPreparedState_;
+  preparedPositions_ = other.preparedPositions_;
   return *this;
 }
 
@@ -66,6 +71,7 @@ void SurfaceIPCCore::setParameters(const Parameters &params)
   kappa = params.kappa;
   eps_ee = params.eps_ee;
   slackness = params.slackness;
+  invalidatePreparedState();
 }
 
 SurfaceIPCCore::Parameters SurfaceIPCCore::getParameters() const
@@ -91,6 +97,7 @@ void SurfaceIPCCore::resetContactMaxStepStats() const
 void SurfaceIPCCore::setMesh(const MXd &V, const MXi &F)
 {
   topology_.setMesh(V, F);
+  invalidatePreparedState();
 }
 
 // =========================================================================
@@ -104,6 +111,35 @@ void SurfaceIPCCore::setMesh(const MXd &V, const MXi &F)
 void SurfaceIPCCore::findCollisionPairs(const VXd &positions) const
 {
   SurfaceIPCSelfBroadPhase().buildPairs(topology_, positions, dhat, ptPairs_, eePairs_);
+}
+
+void SurfaceIPCCore::invalidatePreparedState() const
+{
+  hasPreparedState_ = false;
+  preparedPositions_.resize(0);
+  ptPairs_.clear();
+  eePairs_.clear();
+}
+
+bool SurfaceIPCCore::isPreparedFor(EigenSupport::ConstRefVecXd x_surf) const
+{
+  return hasPreparedState_ &&
+    preparedPositions_.size() == x_surf.size() &&
+    (preparedPositions_.array() == x_surf.array()).all();
+}
+
+void SurfaceIPCCore::prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_surf) const
+{
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPrepareActivePairs);
+  preparedPositions_ = x_surf;
+  findCollisionPairs(preparedPositions_);
+  hasPreparedState_ = true;
+}
+
+void SurfaceIPCCore::requirePreparedState() const
+{
+  if (!hasPreparedState_)
+    throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
 }
 
 // =========================================================================
@@ -140,8 +176,15 @@ double SurfaceIPCCore::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSu
 double SurfaceIPCCore::computeEnergy(EigenSupport::ConstRefVecXd pos) const
 {
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kEnergy);
-  findCollisionPairs(VXd(pos));
-  return SurfaceIPCBarrierAssembler().computeEnergy(pos, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee);
+  prepareForSurfacePositions(pos);
+  return computeEnergyWithPreparedPairs();
+}
+
+double SurfaceIPCCore::computeEnergyWithPreparedPairs() const
+{
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedEnergy);
+  requirePreparedState();
+  return SurfaceIPCBarrierAssembler().computeEnergy(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee);
 }
 
 // =========================================================================
@@ -150,8 +193,15 @@ double SurfaceIPCCore::computeEnergy(EigenSupport::ConstRefVecXd pos) const
 void SurfaceIPCCore::computeGradient(EigenSupport::ConstRefVecXd pos, EigenSupport::RefVecXd grad) const
 {
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kGradient);
-  findCollisionPairs(VXd(pos));
-  SurfaceIPCBarrierAssembler().computeGradient(pos, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, grad);
+  prepareForSurfacePositions(pos);
+  computeGradientWithPreparedPairs(grad);
+}
+
+void SurfaceIPCCore::computeGradientWithPreparedPairs(EigenSupport::RefVecXd grad) const
+{
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedGradient);
+  requirePreparedState();
+  SurfaceIPCBarrierAssembler().computeGradient(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, grad);
 }
 
 // =========================================================================
@@ -160,8 +210,15 @@ void SurfaceIPCCore::computeGradient(EigenSupport::ConstRefVecXd pos, EigenSuppo
 void SurfaceIPCCore::computeHessian(EigenSupport::ConstRefVecXd pos, SpMatD &hess) const
 {
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kHessian);
-  findCollisionPairs(VXd(pos));
-  SurfaceIPCBarrierAssembler().computeHessian(pos, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, hess);
+  prepareForSurfacePositions(pos);
+  computeHessianWithPreparedPairs(hess);
+}
+
+void SurfaceIPCCore::computeHessianWithPreparedPairs(SpMatD &hess) const
+{
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedHessian);
+  requirePreparedState();
+  SurfaceIPCBarrierAssembler().computeHessian(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, hess);
 }
 
 // =========================================================================
@@ -171,8 +228,14 @@ void SurfaceIPCCore::computeAll(EigenSupport::ConstRefVecXd x,
   double &energy, VXd &grad, SpMatD &hess) const
 {
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kCombined);
-  findCollisionPairs(x);
-  SurfaceIPCBarrierAssembler().computeAll(x, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, energy, grad, hess);
+  prepareForSurfacePositions(x);
+  computeAllWithPreparedPairs(energy, grad, hess);
+}
+
+void SurfaceIPCCore::computeAllWithPreparedPairs(double &energy, VXd &grad, SpMatD &hess) const
+{
+  requirePreparedState();
+  SurfaceIPCBarrierAssembler().computeAll(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, energy, grad, hess);
 }
 
 }  // namespace CIPC

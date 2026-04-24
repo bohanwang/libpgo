@@ -5,6 +5,8 @@
 
 #include "testCIPCHelpers.h"
 
+#include <stdexcept>
+
 namespace
 {
 namespace ES = pgo::EigenSupport;
@@ -181,4 +183,36 @@ TEST(SurfaceIPCCoreGTest, PairAccessorsRemainReadableAcrossComputes)
   core.computeHessian(x, H);
   EXPECT_EQ(core.getPTPairs().size(), ptCount);
   EXPECT_EQ(core.getEEPairs().size(), eeCount);
+}
+
+TEST(SurfaceIPCCoreGTest, PreparedPairsMatchDirectEnergyGradientHessian)
+{
+  SurfaceIPCCore core = makeConfiguredCore();
+  const auto [V, _] = makeTwoTriangleMesh();
+  const ES::VXd x = flattenPositions(V);
+
+  const double directEnergy = core.computeEnergy(x);
+  ES::VXd directGradient = ES::VXd::Zero(x.size());
+  core.computeGradient(x, directGradient);
+  ES::SpMatD directHessian;
+  core.computeHessian(x, directHessian);
+
+  core.prepareForSurfacePositions(x);
+  EXPECT_TRUE(core.isPreparedFor(x));
+
+  const double preparedEnergy = core.computeEnergyWithPreparedPairs();
+  ES::VXd preparedGradient = ES::VXd::Zero(x.size());
+  core.computeGradientWithPreparedPairs(preparedGradient);
+  ES::SpMatD preparedHessian;
+  core.computeHessianWithPreparedPairs(preparedHessian);
+
+  EXPECT_NEAR(preparedEnergy, directEnergy, 1e-12);
+  EXPECT_LT(relativeError(preparedGradient, directGradient), 1e-12);
+  EXPECT_LT(relativeError(sparseToDense(preparedHessian), sparseToDense(directHessian)), 1e-12);
+}
+
+TEST(SurfaceIPCCoreGTest, PreparedPairConsumersRequirePreparedState)
+{
+  SurfaceIPCCore core = makeConfiguredCore();
+  EXPECT_THROW(core.computeEnergyWithPreparedPairs(), std::logic_error);
 }

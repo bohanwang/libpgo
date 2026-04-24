@@ -52,8 +52,9 @@ TEST(CIPCProfilingGTest, FuncRecordsWrapperSyncAndSurfaceSectionsWithoutFloorPos
 
   const auto stats = pgo::Profiling::snapshotProfileStatistics();
   EXPECT_NE(findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kWrapperSync), nullptr);
+  EXPECT_NE(findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kPrepareActivePairs), nullptr);
   EXPECT_NE(findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kPairBuildStatic), nullptr);
-  EXPECT_NE(findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kEnergy), nullptr);
+  EXPECT_NE(findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kPreparedEnergy), nullptr);
   EXPECT_EQ(findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kFloorPostPass), nullptr);
 
   pgo::Profiling::setProfilingEnabled(false);
@@ -91,8 +92,9 @@ TEST(CIPCProfilingGTest, FuncRecordsFloorPostPassWhenFloorIsActive)
 
   const auto stats = pgo::Profiling::snapshotProfileStatistics();
   EXPECT_NE(findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kWrapperSync), nullptr);
+  EXPECT_NE(findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kPrepareActivePairs), nullptr);
   EXPECT_NE(findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kPairBuildStatic), nullptr);
-  EXPECT_NE(findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kEnergy), nullptr);
+  EXPECT_NE(findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kPreparedEnergy), nullptr);
   EXPECT_NE(findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kFloorPostPass), nullptr);
 
   pgo::Profiling::setProfilingEnabled(false);

@@ -43,6 +43,8 @@ private:
     EigenSupport::ConstRefVecXd surfacePositions,
     EigenSupport::ConstRefVecXd surfaceDisplacements) const override;
 
+  void ensurePreparedForSurfacePositions(EigenSupport::ConstRefVecXd surfacePositions) const;
+
   SurfaceIPCCore surfaceIPCCore_;
 };
 
