@@ -42,6 +42,7 @@ public:
   virtual int getNumVertices() const override { return 8; }
   virtual int getNumDOFs() const override { return 24; }
   virtual int getNumMaterialLocations() const override { return 8; }
+  virtual LocalMaxStepResult computeLocalMaxStepSize(const double *x_local, const double *dx_local) const override;
 
   void computeF(const double *x, int materialLocationID, double F[9]) const;
   void computeFe(const CacheData *cacheData, int materialLocationID, double F[9]) const;

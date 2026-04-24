@@ -213,6 +213,7 @@ void TRBDF2TimeIntegrator::updateb2()
 void TRBDF2TimeIntegrator::solve(ES::VXd &x, std::shared_ptr<TRBDF2TimeIntegratorEnergy> eng, int verbose, int printResidual)
 {
   bool needRenew = (constraintsChanged || generalForceModelChanged);
+  eng->resetSolveMaxStepStats();
   solverRet = solver[stage]->solve(needRenew, x, g, lambda, uRangeLow, uRangeHi,
     constraintsRangeLow, constraintsRangeHi, eng, constraints,
     nIter, eps, verbose, solverConfigFilename.length() ? solverConfigFilename.c_str() : nullptr,

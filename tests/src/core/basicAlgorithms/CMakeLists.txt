@@ -1,0 +1,4 @@
+add_executable(polynomialRootUtils_gtest polynomialRootUtils_gtest.cpp)
+target_link_libraries(polynomialRootUtils_gtest PRIVATE GTest::gtest_main basicAlgorithms)
+set_property(TARGET polynomialRootUtils_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(polynomialRootUtils_gtest)

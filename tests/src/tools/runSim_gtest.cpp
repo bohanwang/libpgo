@@ -20,11 +20,14 @@
 #include "triMeshGeo.h"
 #include "volumetricMesh.h"
 
+#include <chrono>
 #include <filesystem>
-#include <fstream>
+#include <cstdlib>
 #include <cmath>
+#include <fstream>
 #include <functional>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -42,6 +45,64 @@ constexpr const char *kTetBoxVegPath = LIBPGO_TEST_TET_BOX_VEG;
 constexpr const char *kTetBoxObjPath = LIBPGO_TEST_TET_BOX_OBJ;
 constexpr const char *kCubicBoxVegPath = LIBPGO_TEST_CUBIC_BOX_VEG;
 constexpr const char *kCubicBoxObjPath = LIBPGO_TEST_CUBIC_BOX_OBJ;
+constexpr const char *kShellJsonPath = LIBPGO_TEST_SHELL_JSON;
+
+std::string quotePath(const fs::path &path)
+{
+  return "\"" + path.string() + "\"";
+}
+
+std::string shellExecutable(const fs::path &path)
+{
+#ifdef _WIN32
+  return "call " + quotePath(path);
+#else
+  return quotePath(path);
+#endif
+}
+
+int runCommand(const std::string &command)
+{
+  return std::system(command.c_str());
+}
+
+class ScopedTempDir
+{
+public:
+  ScopedTempDir()
+  {
+    const auto base = fs::temp_directory_path();
+    for (int attempt = 0; attempt < 32; ++attempt) {
+      const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+      path_ = base / ("libpgo-runSim-gtest-" + std::to_string(stamp) + "-" + std::to_string(std::rand()) + "-" + std::to_string(attempt));
+
+      std::error_code ec;
+      if (fs::create_directories(path_, ec))
+        return;
+    }
+
+    throw std::runtime_error("Failed to create a unique temporary directory");
+  }
+
+  ~ScopedTempDir()
+  {
+    std::error_code ec;
+    fs::remove_all(path_, ec);
+  }
+
+  const fs::path &path() const { return path_; }
+
+private:
+  fs::path path_;
+};
+
+void writeTextFile(const fs::path &path, const std::string &contents)
+{
+  fs::create_directories(path.parent_path());
+  std::ofstream out(path);
+  ASSERT_TRUE(out.is_open());
+  out << contents;
+}
 
 fs::path tetExampleDir()
 {
@@ -61,6 +122,53 @@ std::string tetConfigPath()
 std::string cubicConfigPath()
 {
   return (cubicExampleDir() / "box.json").string();
+}
+
+fs::path shellExampleDir()
+{
+  return fs::path(kShellJsonPath).parent_path();
+}
+
+fs::path runShellSimBinaryPath()
+{
+  if (std::string(PGO_TEST_RUN_SHELL_SIM_BIN).empty())
+    return {};
+
+  return fs::path(PGO_TEST_RUN_SHELL_SIM_BIN);
+}
+
+std::string makeShellSimConfig(const fs::path &surfaceMeshPath, const fs::path &fixedVerticesPath,
+  const fs::path &outputDir, int numTimesteps, int dumpInterval, double contactStiffness = 0.0)
+{
+  std::ostringstream json;
+  json << "{\n"
+       << "  \"surface-mesh\": " << quotePath(surfaceMeshPath) << ",\n"
+       << "  \"fixed-vertices\": [\n"
+       << "    {\n"
+       << "      \"filename\": " << quotePath(fixedVerticesPath) << ",\n"
+       << "      \"movement\": [0, 0, 0],\n"
+       << "      \"coeff\": 1e5\n"
+       << "    }\n"
+       << "  ],\n"
+       << "  \"g\": [0, -9.81, 0],\n"
+       << "  \"init-vel\": [0, 0, 0],\n"
+       << "  \"init-disp\": [0, 0, 0],\n"
+       << "  \"scale\": 1.0,\n"
+       << "  \"timestep\": 0.001,\n"
+       << "  \"num-timestep\": " << numTimesteps << ",\n"
+       << "  \"damping-params\": [0, 0],\n"
+       << "  \"sim-type\": \"dynamic\",\n"
+       << "  \"contact-stiffness\": " << contactStiffness << ",\n"
+       << "  \"contact-samples\": 1,\n"
+       << "  \"contact-friction-coeff\": 0.0,\n"
+       << "  \"contact-vel-eps\": 1e-5,\n"
+       << "  \"solver-eps\": 1e-4,\n"
+       << "  \"solver-max-iter\": 5,\n"
+       << "  \"elastic-material\": \"koiter-stvk\",\n"
+       << "  \"dump-interval\": " << dumpInterval << ",\n"
+       << "  \"output\": " << quotePath(outputDir) << "\n"
+       << "}";
+  return json.str();
 }
 
 VolumeMeshInputConfig parseConfig(const char *key, const char *filename, const std::string &configFilename)
@@ -364,6 +472,90 @@ TEST(RunSimCliLoggingGTest, RedirectsStdoutAndStderrToLogFile)
   EXPECT_EQ(afterContents.find("stderr restored check"), std::string::npos);
 }
 
+TEST(RunShellSimCliLoggingGTest, LogFlagWritesCliOutputNextToConfig)
+{
+  const fs::path binary = runShellSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-log-test.json";
+  const fs::path logPath = tempDir.path() / "shell-log-test.log";
+  const fs::path outputDir = tempDir.path() / "shell-output";
+  const fs::path surfaceMeshPath = shellExampleDir() / "shell.obj";
+  const fs::path fixedVerticesPath = shellExampleDir() / "shell-fixed.txt";
+
+  writeTextFile(configPath, makeShellSimConfig(surfaceMeshPath, fixedVerticesPath, outputDir, 0, 1));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " --log "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  ASSERT_TRUE(fs::exists(logPath));
+
+  std::ifstream in(logPath);
+  ASSERT_TRUE(in.is_open());
+  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  EXPECT_NE(contents.find("No restart state found"), std::string::npos);
+}
+
+TEST(RunSimCliLoggingGTest, ResolveConfiguredLogLevelDefaultsToInfo)
+{
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "loglevel-default.json";
+  writeTextFile(configPath, "{\n  \"output\": \"ret\"\n}\n");
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  EXPECT_EQ(pgo::RunSim::resolveConfiguredLogLevel(config), spdlog::level::info);
+}
+
+TEST(RunSimCliLoggingGTest, ResolveConfiguredLogLevelParsesTraceAndWarn)
+{
+  ScopedTempDir tempDir;
+  const fs::path traceConfigPath = tempDir.path() / "loglevel-trace.json";
+  writeTextFile(traceConfigPath, "{\n  \"loglevel\": \"trace\",\n  \"output\": \"ret\"\n}\n");
+
+  pgo::ConfigFileJSON traceConfig;
+  ASSERT_TRUE(traceConfig.open(traceConfigPath.string().c_str()));
+  EXPECT_EQ(pgo::RunSim::resolveConfiguredLogLevel(traceConfig), spdlog::level::trace);
+
+  const fs::path warnConfigPath = tempDir.path() / "loglevel-warn.json";
+  writeTextFile(warnConfigPath, "{\n  \"loglevel\": \"warn\",\n  \"output\": \"ret\"\n}\n");
+
+  pgo::ConfigFileJSON warnConfig;
+  ASSERT_TRUE(warnConfig.open(warnConfigPath.string().c_str()));
+  EXPECT_EQ(pgo::RunSim::resolveConfiguredLogLevel(warnConfig), spdlog::level::warn);
+}
+
+TEST(RunShellSimCliLoggingGTest, DeformStateIsWrittenEveryTimestep)
+{
+  const fs::path binary = runShellSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-deform-every-step.json";
+  const fs::path outputDir = tempDir.path() / "shell-output";
+  const fs::path surfaceMeshPath = shellExampleDir() / "shell.obj";
+  const fs::path fixedVerticesPath = shellExampleDir() / "shell-fixed.txt";
+
+  writeTextFile(configPath, makeShellSimConfig(surfaceMeshPath, fixedVerticesPath, outputDir, 2, 10));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  EXPECT_TRUE(fs::exists(outputDir / "deform0000.u"));
+  EXPECT_TRUE(fs::exists(outputDir / "deform0001.u"));
+  EXPECT_TRUE(fs::exists(outputDir / "ret0000.obj"));
+  EXPECT_FALSE(fs::exists(outputDir / "ret0001.obj"));
+}
+
 TEST(RunSimVolumeMeshIOGTest, BuildsCommonPreprocessingForTetAndCubic)
 {
   expectCommonPreprocessingWorks(tetConfigPath(), "tet-mesh", "box.veg", "box.obj", VolumetricMesh::TET);
@@ -413,6 +605,27 @@ TEST(RunSimVolumeMeshIOGTest, InitializesCubicRuntimeMainPath)
   initialized.assembler->computeGradient(initialized.restPosition.data(), initialized.plasticity.data(), nullptr, grad.data());
   EXPECT_EQ(grad.size(), initialized.assembler->getNumDOFs());
   expectAllFinite(grad);
+}
+
+TEST(RunSimVolumeMeshIOGTest, InitializeVolumetricSimulationCanDisableMaterialMaxStep)
+{
+  pgo::Logging::init();
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(tetConfigPath().c_str()));
+
+  const VolumeMeshInputConfig meshConfig = pgo::RunSim::parseVolumeMeshInputConfig(config);
+  std::unique_ptr<VolumetricMesh> volumetricMesh = pgo::RunSim::loadValidatedVolumeMesh(meshConfig, config.getDouble("scale", 1));
+  ASSERT_NE(volumetricMesh, nullptr);
+
+  const auto initialized = pgo::RunSim::initializeVolumetricSimulation(
+    *volumetricMesh,
+    pgo::SolidDeformationModel::DeformationModelElasticMaterial::STABLE_NEO,
+    pgo::SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6,
+    false);
+
+  ASSERT_NE(initialized.elasticEnergy, nullptr);
+  EXPECT_FALSE(initialized.elasticEnergy->isMaterialMaxStepEnabled());
 }
 
 TEST(RunSimVolumeMeshIOGTest, TetExternalContactEmbeddingMatchesBarycentricInterpolation)
