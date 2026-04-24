@@ -81,3 +81,13 @@ target_compile_definitions(runIPCSim_gtest PRIVATE
 add_dependencies(runIPCSim_gtest runIPCSim)
 set_property(TARGET runIPCSim_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(runIPCSim_gtest)
+
+if(TARGET generateFBMSUnionSurface)
+  add_executable(generateFBMSUnionSurface_gtest generateFBMSUnionSurface_gtest.cpp)
+  target_link_libraries(generateFBMSUnionSurface_gtest PRIVATE GTest::gtest_main mesh)
+  add_dependencies(generateFBMSUnionSurface_gtest generateFBMSUnionSurface)
+  target_compile_definitions(generateFBMSUnionSurface_gtest PRIVATE
+    PGO_TEST_GENERATE_FBMS_UNION_SURFACE_BIN="$<TARGET_FILE:generateFBMSUnionSurface>")
+  set_property(TARGET generateFBMSUnionSurface_gtest PROPERTY FOLDER "tests/gtest")
+  gtest_discover_tests(generateFBMSUnionSurface_gtest)
+endif()

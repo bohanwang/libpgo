@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - master
-      - origin/*
+      - original/*
   pull_request:
   workflow_dispatch:
 
