@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Unit tests for the IPC batch runner."""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+RUNNER_PATH = REPO_ROOT / "examples" / "ipc" / "run_ipc_batch.py"
+
+
+def load_runner_module():
+    spec = importlib.util.spec_from_file_location("run_ipc_batch", RUNNER_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"could not load {RUNNER_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+class IpcBatchRunnerTest(unittest.TestCase):
+    def test_load_config_applies_defaults_and_builds_commands(self) -> None:
+        runner = load_runner_module()
+        build_dir, cases, jobs = runner.load_config(REPO_ROOT / "examples" / "ipc" / "ipc_batch.json")
+
+        case = cases["cubic_box_squash"]
+
+        self.assertEqual(build_dir, REPO_ROOT / "build" / "base_no_mkl")
+        self.assertEqual(
+            case.sim_config,
+            REPO_ROOT / "examples" / "ipc" / "cubic" / "box-squash" / "box-ipc.json",
+        )
+        self.assertEqual(
+            case.anim_config,
+            REPO_ROOT / "examples" / "ipc" / "cubic" / "box-squash" / "anim.json",
+        )
+        self.assertTrue(case.log)
+        self.assertEqual(jobs["squash_regression"].cases, ("tet_box_squash", "cubic_box_squash"))
+
+        commands = runner.build_commands(build_dir, case, run_sim=True, run_convert=True)
+        self.assertEqual(commands[0].label, "sim")
+        self.assertEqual(
+            commands[0].argv,
+            [
+                str(REPO_ROOT / "build" / "base_no_mkl" / "bin" / "runIPCSim"),
+                str(case.sim_config),
+                "--log",
+            ],
+        )
+        self.assertEqual(commands[1].label, "convert")
+        self.assertEqual(
+            commands[1].argv,
+            [
+                str(REPO_ROOT / "build" / "base_no_mkl" / "bin" / "convertAnimation"),
+                str(case.anim_config),
+            ],
+        )
+
+    def test_sim_output_dir_comes_from_sim_config(self) -> None:
+        runner = load_runner_module()
+        _, cases, _ = runner.load_config(REPO_ROOT / "examples" / "ipc" / "ipc_batch.json")
+
+        self.assertEqual(
+            runner.sim_output_dir(cases["tet_box_squash"]),
+            REPO_ROOT / "examples" / "ipc" / "tet" / "box-squash" / "ret-box-squash-ipc",
+        )
+
+    def test_load_config_rejects_unknown_job_case(self) -> None:
+        runner = load_runner_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = Path(tmpdir) / "bad.json"
+            config.write_text(
+                """
+{
+  "cases": {
+    "known": {
+      "sim_config": "examples/ipc/shell/shell-ipc.json"
+    }
+  },
+  "jobs": [
+    {
+      "name": "broken",
+      "cases": ["missing"]
+    }
+  ]
+}
+""",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "unknown cases"):
+                runner.load_config(config)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,59 @@
+{
+  "build_dir": "build/base_no_mkl",
+  "defaults": {
+    "anim_config": "anim.json",
+    "log": true
+  },
+  "cases": {
+    "shell": {
+      "sim_config": "examples/ipc/shell/shell-ipc.json"
+    },
+    "tet_box_hang": {
+      "sim_config": "examples/ipc/tet/box-hang/box-ipc.json"
+    },
+    "tet_box_squash": {
+      "sim_config": "examples/ipc/tet/box-squash/box-ipc.json"
+    },
+    "cubic_box_hang": {
+      "sim_config": "examples/ipc/cubic/box-hang/box-ipc.json"
+    },
+    "cubic_box_squash": {
+      "sim_config": "examples/ipc/cubic/box-squash/box-ipc.json"
+    },
+    "cubic_box_with_sphere": {
+      "sim_config": "examples/ipc/cubic/box-with-sphere/box-ipc.json"
+    }
+  },
+  "jobs": [
+    {
+      "name": "shell",
+      "cases": ["shell"]
+    },
+    {
+      "name": "hanging_boxes",
+      "cases": ["tet_box_hang", "cubic_box_hang"]
+    },
+    {
+      "name": "squash_regression",
+      "cases": ["tet_box_squash", "cubic_box_squash"]
+    },
+    {
+      "name": "cubic_cases",
+      "cases": ["cubic_box_hang", "cubic_box_squash", "cubic_box_with_sphere"]
+    },
+    {
+      "name": "volume_cases",
+      "cases": [
+        "tet_box_hang",
+        "tet_box_squash",
+        "cubic_box_hang",
+        "cubic_box_squash",
+        "cubic_box_with_sphere"
+      ]
+    },
+    {
+      "name": "all_ipc",
+      "cases": "all"
+    }
+  ]
+}

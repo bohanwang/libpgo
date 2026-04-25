@@ -5,12 +5,12 @@
     {
       "filename": "box-zmin-fixed.txt",
       "movement": [0, 0, 0],
-      "coeff": 1e4
+      "coeff": 5e4
     },
     {
       "filename": "box-zmax-push.txt",
-      "movement": [0, 0, -2.55],
-      "coeff": 1e4
+      "movement": [0, 0, -10.00],
+      "coeff": 5e4
     }
   ],
   "g": [0, 0, 0],

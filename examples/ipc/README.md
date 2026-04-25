@@ -42,6 +42,69 @@ build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-with-sphere/
 
 The JSON configs use paths relative to the config file, so they can be launched from the repo root without first changing into the case directory.
 
+## Batch Runner
+
+Use `ipc_batch.json` to define named IPC case groups. The script command line is only for execution control: selecting jobs, dry-run mode, and overwrite/skip behavior.
+
+Preview the squash regression batch without running the tools:
+
+```bash
+examples/ipc/run_ipc_batch.py \
+  --job squash_regression \
+  --dry-run
+```
+
+Run the squash regression batch, skipping cases whose `runIPCSim` output folder already exists:
+
+```bash
+examples/ipc/run_ipc_batch.py \
+  --job squash_regression \
+  --skip-existing
+```
+
+Run all configured IPC cases explicitly:
+
+```bash
+examples/ipc/run_ipc_batch.py \
+  --job all_ipc \
+  --skip-existing
+```
+
+Regenerate Alembic caches from existing frame dumps without rerunning simulation:
+
+```bash
+examples/ipc/run_ipc_batch.py \
+  --job all_ipc \
+  --convert-only
+```
+
+The default batch config uses `build/base_no_mkl`. Edit `ipc_batch.json` if you want to use another build directory such as `build/base_no_mkl_debug`.
+
+Each case entry references its `runIPCSim` config. The per-case `anim_config` defaults to `anim.json` next to that simulation config:
+
+```json
+{
+  "build_dir": "build/base_no_mkl",
+  "defaults": {
+    "anim_config": "anim.json",
+    "log": true
+  },
+  "cases": {
+    "cubic_box_squash": {
+      "sim_config": "examples/ipc/cubic/box-squash/box-ipc.json"
+    }
+  },
+  "jobs": [
+    {
+      "name": "squash_regression",
+      "cases": ["tet_box_squash", "cubic_box_squash"]
+    }
+  ]
+}
+```
+
+`run_ipc_batch.py` reads the `output` field from each simulation config to apply `--skip-existing` and `--overwrite`. Without either flag, it stops before running `runIPCSim` if that output folder already exists, because `runIPCSim` clears the output folder unless `restart-from-u` is enabled.
+
 ## What Each Case Contains
 
 The directory currently ships six runnable IPC inputs:
