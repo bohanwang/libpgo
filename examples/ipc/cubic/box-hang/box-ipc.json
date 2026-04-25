@@ -17,7 +17,7 @@
   "damping-params": [0, 0],
   "sim-type": "dynamic",
   "solver-eps": 1e-4,
-  "solver-max-iter": 5,
+  "solver-max-iter": 20,
   "elastic-material": "stable-neo",
   "dump-interval": 10,
   "output": "ret-box-ipc",

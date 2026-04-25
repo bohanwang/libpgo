@@ -91,6 +91,7 @@ public:
 
   void resetTimestepID() { timestepID = 0; }
   void setTimestepID(int id) { timestepID = id; }
+  uint64_t getTimestepID() const { return timestepID; }
 
   virtual std::shared_ptr<const NonlinearOptimization::PotentialEnergy> getInternalEnergy() const = 0;
   virtual void computeInternalForces(const double *u, double *fint) const;

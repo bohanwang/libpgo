@@ -1,5 +1,6 @@
 #include "implicitBackwardEulerTimeIntegrator.h"
 #include "implicitBackwardEulerTimeIntegratorHelper.h"
+#include "NewtonSolver.h"
 #include "timeIntegratorSolver.h"
 
 #include "potentialEnergies.h"
@@ -9,6 +10,8 @@
 
 #include <numeric>
 #include <iostream>
+#include <stdexcept>
+#include <string>
 
 using namespace pgo;
 using namespace pgo::NonlinearOptimization;
@@ -45,6 +48,15 @@ std::shared_ptr<const NonlinearOptimization::PotentialEnergy> ImplicitBackwardEu
 
 void ImplicitBackwardEulerTimeIntegrator::doTimestep(int updateq, int verbose, int printResidual)
 {
+  const int ret = tryTimestep(updateq, verbose, printResidual);
+  if (ret != 0) {
+    throw std::runtime_error(std::string("ImplicitBackwardEulerTimeIntegrator timestep failed with solverRet=") +
+      NewtonSolver::solveStatusToString(ret));
+  }
+}
+
+int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, int printResidual)
+{
   assembleImplicitModels();
 
   updateD();
@@ -71,20 +83,63 @@ void ImplicitBackwardEulerTimeIntegrator::doTimestep(int updateq, int verbose, i
 
   bool needRenew = (constraintsChanged || generalForceModelChanged);
   eulerEnergy->resetSolveMaxStepStats();
+
+  if (verbose) {
+    std::cout << "ImplicitBackwardEuler timestep begin: T" << timestepID
+              << " dt=" << timestep << std::endl;
+  }
+
   solverRet = solver->solve(needRenew, z, g, lambda, uRangeLow, uRangeHi,
     constraintsRangeLow, constraintsRangeHi, eulerEnergy, constraints,
     nIter, eps, verbose, solverConfigFilename.length() ? solverConfigFilename.c_str() : nullptr,
     solverOption);
 
-  if (printResidual) {
-    ES::VXd residual(n3), rhs = ES::VXd::Zero(n3 - fixedDOFs.size());
+  double residualNorm = 0.0;
+  double residualMaxNorm = 0.0;
+  ES::VXd residual(n3), rhs = ES::VXd::Zero(n3 - fixedDOFs.size());
+  if (printResidual || verbose || solverRet != 0) {
+    residual.setZero();
     eulerEnergy->gradient(z, residual);
-
     ES::transferBigToSmall(residual, rhs, rhsb2s);
-    std::cout << "    T" << timestepID << ": ||g||=" << rhs.norm() << "; Solver Ret: " << solverRet << std::endl;
+    residualNorm = rhs.norm();
+    residualMaxNorm = rhs.cwiseAbs().maxCoeff();
+  }
+
+  constexpr double nearConvergedStalledRatio = 2.0;
+  const bool acceptedNearConvergedStalled =
+    solverRet == static_cast<int>(NewtonSolver::SolveStatus::StepTooSmall) &&
+    residualMaxNorm <= eps * nearConvergedStalledRatio;
+  const bool acceptedTimestep = solverRet == 0 || acceptedNearConvergedStalled;
+
+  if (verbose) {
+    std::cout << "ImplicitBackwardEuler timestep end: T" << timestepID
+              << " solverRet=" << NewtonSolver::solveStatusToString(solverRet)
+              << " residual=" << residualNorm
+              << " residualMax=" << residualMaxNorm
+              << " accepted=" << (acceptedTimestep ? "true" : "false")
+              << std::endl;
+    if (acceptedNearConvergedStalled) {
+      std::cout << "ImplicitBackwardEuler near-converged stalled solve accepted: T" << timestepID
+                << " solverRet=" << NewtonSolver::solveStatusToString(solverRet)
+                << " residualMax=" << residualMaxNorm
+                << " eps=" << eps
+                << " ratio=" << nearConvergedStalledRatio
+                << std::endl;
+    }
+  }
+
+  if (printResidual) {
+    std::cout << "    T" << timestepID << ": ||g||=" << residualNorm
+              << "; Solver Ret: " << solverRet
+              << " (" << NewtonSolver::solveStatusToString(solverRet) << ")" << std::endl;
 
     std::cout << "    Energy components:\n";
     eulerEnergy->printImplicitEnergy(z);
+  }
+
+  if (!acceptedTimestep) {
+    TimeIntegrator::doTimestep(0, verbose, printResidual);
+    return solverRet;
   }
 
   if (finiteDifferenceTestFlag)
@@ -107,6 +162,7 @@ void ImplicitBackwardEulerTimeIntegrator::doTimestep(int updateq, int verbose, i
   }
 
   TimeIntegrator::doTimestep(updateq, verbose, printResidual);
+  return 0;
 }
 
 void ImplicitBackwardEulerTimeIntegrator::setSolution(ES::ConstRefVecXd newz)
