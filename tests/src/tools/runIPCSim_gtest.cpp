@@ -9,10 +9,14 @@
 #include "runIPCSimSetup.h"
 #include "runSimCliLogging.h"
 #include "runSimVolumeMeshIO.h"
+#include "tetMesh.h"
 #include "triMeshGeo.h"
 #include "volumetricMesh.h"
 
+#include <nlohmann/json.hpp>
+
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -21,6 +25,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -43,6 +48,28 @@ std::string shellExecutable(const fs::path &path)
 #else
   return quotePath(path);
 #endif
+}
+
+std::string frameFilename(const char *prefix, int frame, const char *extension)
+{
+  std::ostringstream filename;
+  filename << prefix << std::setfill('0') << std::setw(4) << frame << extension;
+  return filename.str();
+}
+
+fs::path statePath(const fs::path &outputDir, int frame)
+{
+  return outputDir / "states" / frameFilename("deform", frame, ".u");
+}
+
+fs::path surfacePath(const fs::path &outputDir, int frame)
+{
+  return outputDir / "surface" / frameFilename("ret", frame, ".obj");
+}
+
+fs::path stressPath(const fs::path &outputDir, int frame)
+{
+  return outputDir / "stress" / frameFilename("von_mises", frame, ".json");
 }
 
 int runCommand(const std::string &command)
@@ -95,6 +122,15 @@ std::string readTextFile(const fs::path &path)
   return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
+nlohmann::json readJsonFile(const fs::path &path)
+{
+  std::ifstream in(path);
+  EXPECT_TRUE(in.is_open());
+  nlohmann::json json;
+  in >> json;
+  return json;
+}
+
 std::string addBoolConfigField(std::string json, const std::string &name, bool value)
 {
   const std::string marker = "\n}\n";
@@ -111,11 +147,9 @@ void writeZeroShellRestartState(const fs::path &outputDir, int frame)
   pgo::Mesh::TriMeshGeo mesh;
   ASSERT_TRUE(mesh.load((fs::path(kShellExampleDir) / "shell.obj").string()));
 
-  fs::create_directories(outputDir);
+  fs::create_directories(outputDir / "states");
   ES::MXd restartState = ES::MXd::Zero(mesh.numVertices() * 3, 3);
-  std::ostringstream filename;
-  filename << "deform" << std::setfill('0') << std::setw(4) << frame << ".u";
-  ASSERT_EQ(ES::writeMatrix((outputDir / filename.str()).string().c_str(), restartState), 0);
+  ASSERT_EQ(ES::writeMatrix(statePath(outputDir, frame).string().c_str(), restartState), 0);
 }
 
 void appendFloorFields(std::ostringstream &json, bool useFloor,
@@ -572,7 +606,7 @@ TEST(RunIPCSimCliGTest, RestartFromUTrueKeepsExistingDeformState)
 
   ASSERT_EQ(runCommand(command.str()), 0);
   ASSERT_TRUE(fs::exists(logPath));
-  EXPECT_TRUE(fs::exists(outputDir / "deform0001.u"));
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 1)));
 
   const std::string contents = readTextFile(logPath);
   EXPECT_NE(contents.find("Restarting from frame 0"), std::string::npos);
@@ -768,8 +802,11 @@ TEST(RunIPCSimCliGTest, OneTimestepShellFloorSmokeSucceeds)
           << quotePath(configPath);
 
   ASSERT_EQ(runCommand(command.str()), 0);
-  EXPECT_TRUE(fs::exists(tempDir.path() / "shell-output" / "deform0000.u"));
-  EXPECT_TRUE(fs::exists(tempDir.path() / "shell-output" / "ret0000.obj"));
+  const fs::path outputDir = tempDir.path() / "shell-output";
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_FALSE(fs::exists(outputDir / "deform0000.u"));
+  EXPECT_FALSE(fs::exists(outputDir / "ret0000.obj"));
 }
 
 TEST(RunIPCSimCliGTest, DeformStateIsWrittenEveryTimestep)
@@ -789,10 +826,13 @@ TEST(RunIPCSimCliGTest, DeformStateIsWrittenEveryTimestep)
           << quotePath(configPath);
 
   ASSERT_EQ(runCommand(command.str()), 0);
-  EXPECT_TRUE(fs::exists(tempDir.path() / "shell-output" / "deform0000.u"));
-  EXPECT_TRUE(fs::exists(tempDir.path() / "shell-output" / "deform0001.u"));
-  EXPECT_TRUE(fs::exists(tempDir.path() / "shell-output" / "ret0000.obj"));
-  EXPECT_FALSE(fs::exists(tempDir.path() / "shell-output" / "ret0001.obj"));
+  const fs::path outputDir = tempDir.path() / "shell-output";
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 1)));
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_FALSE(fs::exists(surfacePath(outputDir, 1)));
+  EXPECT_FALSE(fs::exists(outputDir / "deform0000.u"));
+  EXPECT_FALSE(fs::exists(outputDir / "ret0000.obj"));
 }
 
 TEST(RunIPCSimCliGTest, LegacyContactFieldsAreIgnoredWhenPresent)
@@ -861,6 +901,12 @@ TEST(RunIPCSimCliGTest, TetZeroTimestepSmokeCreatesNoOutputs)
 
   ASSERT_EQ(runCommand(command.str()), 0);
   EXPECT_TRUE(fs::exists(tempDir.path() / "tet-output"));
+  EXPECT_TRUE(fs::exists(tempDir.path() / "tet-output" / "states"));
+  EXPECT_TRUE(fs::exists(tempDir.path() / "tet-output" / "surface"));
+  EXPECT_TRUE(fs::exists(tempDir.path() / "tet-output" / "stress"));
+  EXPECT_FALSE(fs::exists(statePath(tempDir.path() / "tet-output", 0)));
+  EXPECT_FALSE(fs::exists(surfacePath(tempDir.path() / "tet-output", 0)));
+  EXPECT_FALSE(fs::exists(stressPath(tempDir.path() / "tet-output", 0)));
   EXPECT_FALSE(fs::exists(tempDir.path() / "tet-output" / "deform0000.u"));
   EXPECT_FALSE(fs::exists(tempDir.path() / "tet-output" / "ret0000.obj"));
 }
@@ -882,8 +928,46 @@ TEST(RunIPCSimCliGTest, TetOneTimestepSmokeWritesDeformAndRet)
           << quotePath(configPath);
 
   ASSERT_EQ(runCommand(command.str()), 0);
-  EXPECT_TRUE(fs::exists(tempDir.path() / "tet-output" / "deform0000.u"));
-  EXPECT_TRUE(fs::exists(tempDir.path() / "tet-output" / "ret0000.obj"));
+  const fs::path outputDir = tempDir.path() / "tet-output";
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_FALSE(fs::exists(outputDir / "deform0000.u"));
+  EXPECT_FALSE(fs::exists(outputDir / "ret0000.obj"));
+}
+
+TEST(RunIPCSimCliGTest, TetVonMisesOutputWritesElementStressJson)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-ipc-von-mises.json";
+  const fs::path outputDir = tempDir.path() / "tet-output";
+
+  writeTextFile(configPath, addBoolConfigField(makeTetIPCConfig(tempDir.path(), 1), "output-von-mises", true));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  ASSERT_TRUE(fs::exists(stressPath(outputDir, 0)));
+
+  const nlohmann::json stressJson = readJsonFile(stressPath(outputDir, 0));
+  EXPECT_EQ(stressJson.at("frame").get<int>(), 0);
+  EXPECT_DOUBLE_EQ(stressJson.at("time").get<double>(), 0.0);
+  EXPECT_EQ(stressJson.at("stress_type").get<std::string>(), "von_mises");
+  EXPECT_EQ(stressJson.at("location").get<std::string>(), "tet_element");
+
+  const pgo::VolumetricMeshes::TetMesh tetMesh((tetIPCExampleDir() / "box.veg").string().c_str());
+  const auto values = stressJson.at("values").get<std::vector<double>>();
+  ASSERT_EQ(values.size(), static_cast<std::size_t>(tetMesh.getNumElements()));
+  for (double value : values) {
+    EXPECT_TRUE(std::isfinite(value));
+    EXPECT_GE(value, 0.0);
+  }
 }
 
 TEST(RunIPCSimCliGTest, CubicOneTimestepSmokeWritesDeformAndRet)
@@ -903,8 +987,11 @@ TEST(RunIPCSimCliGTest, CubicOneTimestepSmokeWritesDeformAndRet)
           << quotePath(configPath);
 
   ASSERT_EQ(runCommand(command.str()), 0);
-  EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "deform0000.u"));
-  EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "ret0000.obj"));
+  const fs::path outputDir = tempDir.path() / "cubic-output";
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_FALSE(fs::exists(outputDir / "deform0000.u"));
+  EXPECT_FALSE(fs::exists(outputDir / "ret0000.obj"));
 }
 
 TEST(RunIPCSimCliGTest, CubicOneTimestepFloorSmokeWritesDeformAndRet)
@@ -924,8 +1011,11 @@ TEST(RunIPCSimCliGTest, CubicOneTimestepFloorSmokeWritesDeformAndRet)
           << quotePath(configPath);
 
   ASSERT_EQ(runCommand(command.str()), 0);
-  EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "deform0000.u"));
-  EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "ret0000.obj"));
+  const fs::path outputDir = tempDir.path() / "cubic-output";
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_FALSE(fs::exists(outputDir / "deform0000.u"));
+  EXPECT_FALSE(fs::exists(outputDir / "ret0000.obj"));
 }
 
 TEST(RunIPCSimCliGTest, TetRejectsIPCHeuristic)
@@ -1002,8 +1092,11 @@ TEST(RunIPCSimCliGTest, TetNonUnitScaleSmokeSucceeds)
           << quotePath(configPath);
 
   ASSERT_EQ(runCommand(command.str()), 0);
-  EXPECT_TRUE(fs::exists(tempDir.path() / "tet-output" / "deform0000.u"));
-  EXPECT_TRUE(fs::exists(tempDir.path() / "tet-output" / "ret0000.obj"));
+  const fs::path outputDir = tempDir.path() / "tet-output";
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_FALSE(fs::exists(outputDir / "deform0000.u"));
+  EXPECT_FALSE(fs::exists(outputDir / "ret0000.obj"));
 }
 
 TEST(RunIPCSimCliGTest, CubicNonUnitScaleSmokeSucceeds)
@@ -1023,8 +1116,11 @@ TEST(RunIPCSimCliGTest, CubicNonUnitScaleSmokeSucceeds)
           << quotePath(configPath);
 
   ASSERT_EQ(runCommand(command.str()), 0);
-  EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "deform0000.u"));
-  EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "ret0000.obj"));
+  const fs::path outputDir = tempDir.path() / "cubic-output";
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_FALSE(fs::exists(outputDir / "deform0000.u"));
+  EXPECT_FALSE(fs::exists(outputDir / "ret0000.obj"));
 }
 
 TEST(RunIPCSimSetupGTest, TetEmbeddingMatrixMatchesBarycentricBaseline)

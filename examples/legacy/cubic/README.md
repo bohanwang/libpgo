@@ -21,22 +21,22 @@ cmake --build build/base_no_mkl --target cubicMesher runSim convertAnimation
 Run the smallest example from the repo root:
 
 ```bash
-build/base_no_mkl/bin/runSim examples/cubic/box/box.json
+build/base_no_mkl/bin/runSim examples/legacy/cubic/box/box.json
 ```
 
-This writes the output frame sequence to `examples/cubic/box/ret-cubic-box/`.
+This writes the output frame sequence to `examples/legacy/cubic/box/ret-cubic-box/`.
 
 Convert the dumped frames into Alembic:
 
 ```bash
-build/base_no_mkl/bin/convertAnimation examples/cubic/box/anim.json
+build/base_no_mkl/bin/convertAnimation examples/legacy/cubic/box/anim.json
 ```
 
 The JSON configs use paths relative to the config file, so they can be launched from the repo root without first changing into the case directory.
 
 ## What Each Case Contains
 
-Each case lives under `examples/cubic/<case>/` and usually contains:
+Each case lives under `examples/legacy/cubic/<case>/` and usually contains:
 
 - the original triangle surface mesh: `<case>.obj`
 - the generated cubic volumetric mesh: `<case>.veg`
@@ -45,7 +45,7 @@ Each case lives under `examples/cubic/<case>/` and usually contains:
 - the animation conversion config for `convertAnimation`: `anim.json` or `anim-xlite.json`
 - the dumped frame sequence directory written by `runSim`: `ret-cubic-*`
 
-Shared collision geometry used by multiple cases lives directly under `examples/cubic/`:
+Shared collision geometry used by multiple cases lives directly under `examples/legacy/cubic/`:
 
 - `bottom.obj`
 - `bottom.1.obj`
@@ -58,7 +58,7 @@ Current config convention:
 
 ## Previews
 
-Recorded previews under `examples/cubic/media/`:
+Recorded previews under `examples/legacy/cubic/media/`:
 
 | Case | Preview |
 | --- | --- |
@@ -80,8 +80,8 @@ Minimal sanity-check case for the cubic pipeline. This is the smallest mesh here
 - files: `box.obj`, `box.veg`, `box-surface.obj`, `box.json`, `anim.json`
 - mesher params: `resolution=4`, `E=10000000`, `nu=0.45`, `density=1000`
 - observed mesh size: `125` vertices, `64` elements
-- run: `build/base_no_mkl/bin/runSim examples/cubic/box/box.json`
-- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/box/anim.json`
+- run: `build/base_no_mkl/bin/runSim examples/legacy/cubic/box/box.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/legacy/cubic/box/anim.json`
 
 ### `box-hang`
 
@@ -90,8 +90,8 @@ Hanging variant of the cubic box setup. This case reuses the same cubic box mesh
 - files: `box.obj`, `box.veg`, `box-surface.obj`, `box-fixed.txt`, `box.json`, `anim.json`
 - mesher params: `resolution=4`, `E=10000000`, `nu=0.45`, `density=1000`
 - observed mesh size: `125` vertices, `64` elements
-- run: `build/base_no_mkl/bin/runSim examples/cubic/box-hang/box.json`
-- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/box-hang/anim.json`
+- run: `build/base_no_mkl/bin/runSim examples/legacy/cubic/box-hang/box.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/legacy/cubic/box-hang/anim.json`
 
 ### `box-squash`
 
@@ -100,8 +100,8 @@ Material max-step regression variant of the cubic box setup. This case fixes one
 - files: `box.obj`, `box.veg`, `box-surface.obj`, `box-zmin-fixed.txt`, `box-zmax-push.txt`, `box.json`, `anim.json`
 - mesher params: reuses the same cubic mesh asset as `box-hang`
 - observed mesh size: `126` vertices, `64` elements
-- run: `build/base_no_mkl/bin/runSim examples/cubic/box-squash/box.json`
-- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/box-squash/anim.json`
+- run: `build/base_no_mkl/bin/runSim examples/legacy/cubic/box-squash/box.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/legacy/cubic/box-squash/anim.json`
 
 ### `bunny`
 
@@ -110,8 +110,8 @@ Medium-size single-body drop test. This case is useful when you want a more inte
 - files: `bunny.obj`, `bunny.veg`, `bunny-surface.obj`, `bunny.json`, `anim.json`
 - mesher params: `resolution=20`, `E=100000`, `nu=0.45`, `density=1000`
 - observed mesh size: `6084` vertices, `4695` elements
-- run: `build/base_no_mkl/bin/runSim examples/cubic/bunny/bunny.json`
-- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/bunny/anim.json`
+- run: `build/base_no_mkl/bin/runSim examples/legacy/cubic/bunny/bunny.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/legacy/cubic/bunny/anim.json`
 
 ### `dragon-dyn`
 
@@ -120,8 +120,8 @@ Larger dynamic drop example with a longer recorded animation range. Use this whe
 - files: `dragon.obj`, `dragon.veg`, `dragon-surface.obj`, `dragon.json`, `anim.json`
 - mesher params: `resolution=20`, `E=1000000`, `nu=0.45`, `density=1000`
 - observed mesh size: `10495` vertices, `7503` elements
-- run: `build/base_no_mkl/bin/runSim examples/cubic/dragon-dyn/dragon.json`
-- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/dragon-dyn/anim.json`
+- run: `build/base_no_mkl/bin/runSim examples/legacy/cubic/dragon-dyn/dragon.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/legacy/cubic/dragon-dyn/anim.json`
 
 ### `box-with-sphere`
 
@@ -131,9 +131,9 @@ Full-resolution two-component example generated from the box-plus-sphere input s
 - mesher params: `resolution=50`, `E=1000000`, `nu=0.45`, `density=1000`
 - runtime note: `contact-stiffness` has been increased to `1e5` in the cubic case
 - observed mesh size: `57366` vertices, `51845` elements
-- run: `build/base_no_mkl/bin/runSim examples/cubic/box-with-sphere/box-with-sphere.json`
-- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/box-with-sphere/anim.json`
-- note: the full-resolution GIF has not been committed under `examples/cubic/media/` yet
+- run: `build/base_no_mkl/bin/runSim examples/legacy/cubic/box-with-sphere/box-with-sphere.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/legacy/cubic/box-with-sphere/anim.json`
+- note: the full-resolution GIF has not been committed under `examples/legacy/cubic/media/` yet
 
 ### `box-with-sphere-xlite`
 
@@ -142,8 +142,8 @@ Ultra-lightweight version of the same two-component setup. This is the best case
 - files: `box-with-sphere.obj`, `box-with-sphere-xlite.veg`, `box-with-sphere-xlite-surface.obj`, `box-with-sphere-xlite.json`, `anim-xlite.json`
 - mesher params: `resolution=5`, `E=1000000`, `nu=0.45`, `density=1000`
 - observed mesh size: `174` vertices, `80` elements
-- run: `build/base_no_mkl/bin/runSim examples/cubic/box-with-sphere-xlite/box-with-sphere-xlite.json`
-- animation: `build/base_no_mkl/bin/convertAnimation examples/cubic/box-with-sphere-xlite/anim-xlite.json`
+- run: `build/base_no_mkl/bin/runSim examples/legacy/cubic/box-with-sphere-xlite/box-with-sphere-xlite.json`
+- animation: `build/base_no_mkl/bin/convertAnimation examples/legacy/cubic/box-with-sphere-xlite/anim-xlite.json`
 - note: the committed `box-with-sphere` preview GIF currently corresponds to this lightweight case
 
 ## Regenerating the Cubic Mesh Assets
@@ -168,10 +168,10 @@ Main arguments:
 
 ```bash
 build/base_no_mkl/bin/cubicMesher \
-  --input-mesh examples/cubic/box/box.obj \
+  --input-mesh examples/legacy/cubic/box/box.obj \
   --resolution 4 \
-  --output-mesh examples/cubic/box/box.veg \
-  --output-surface examples/cubic/box/box-surface.obj \
+  --output-mesh examples/legacy/cubic/box/box.veg \
+  --output-surface examples/legacy/cubic/box/box-surface.obj \
   --E 10000000 \
   --nu 0.45 \
   --density 1000
@@ -183,10 +183,10 @@ build/base_no_mkl/bin/cubicMesher \
 
 ```bash
 build/base_no_mkl/bin/cubicMesher \
-  --input-mesh examples/cubic/box-hang/box.obj \
+  --input-mesh examples/legacy/cubic/box-hang/box.obj \
   --resolution 4 \
-  --output-mesh examples/cubic/box-hang/box.veg \
-  --output-surface examples/cubic/box-hang/box-surface.obj \
+  --output-mesh examples/legacy/cubic/box-hang/box.veg \
+  --output-surface examples/legacy/cubic/box-hang/box-surface.obj \
   --E 10000000 \
   --nu 0.45 \
   --density 1000
@@ -196,10 +196,10 @@ build/base_no_mkl/bin/cubicMesher \
 
 ```bash
 build/base_no_mkl/bin/cubicMesher \
-  --input-mesh examples/cubic/bunny/bunny.obj \
+  --input-mesh examples/legacy/cubic/bunny/bunny.obj \
   --resolution 20 \
-  --output-mesh examples/cubic/bunny/bunny.veg \
-  --output-surface examples/cubic/bunny/bunny-surface.obj \
+  --output-mesh examples/legacy/cubic/bunny/bunny.veg \
+  --output-surface examples/legacy/cubic/bunny/bunny-surface.obj \
   --E 100000 \
   --nu 0.45 \
   --density 1000
@@ -209,10 +209,10 @@ build/base_no_mkl/bin/cubicMesher \
 
 ```bash
 build/base_no_mkl/bin/cubicMesher \
-  --input-mesh examples/cubic/dragon-dyn/dragon.obj \
+  --input-mesh examples/legacy/cubic/dragon-dyn/dragon.obj \
   --resolution 20 \
-  --output-mesh examples/cubic/dragon-dyn/dragon.veg \
-  --output-surface examples/cubic/dragon-dyn/dragon-surface.obj \
+  --output-mesh examples/legacy/cubic/dragon-dyn/dragon.veg \
+  --output-surface examples/legacy/cubic/dragon-dyn/dragon-surface.obj \
   --E 1000000 \
   --nu 0.45 \
   --density 1000
@@ -222,10 +222,10 @@ build/base_no_mkl/bin/cubicMesher \
 
 ```bash
 build/base_no_mkl/bin/cubicMesher \
-  --input-mesh examples/cubic/box-with-sphere/box-with-sphere.obj \
+  --input-mesh examples/legacy/cubic/box-with-sphere/box-with-sphere.obj \
   --resolution 50 \
-  --output-mesh examples/cubic/box-with-sphere/box-with-sphere.veg \
-  --output-surface examples/cubic/box-with-sphere/box-with-sphere-surface.obj \
+  --output-mesh examples/legacy/cubic/box-with-sphere/box-with-sphere.veg \
+  --output-surface examples/legacy/cubic/box-with-sphere/box-with-sphere-surface.obj \
   --E 1000000 \
   --nu 0.45 \
   --density 1000
@@ -235,10 +235,10 @@ build/base_no_mkl/bin/cubicMesher \
 
 ```bash
 build/base_no_mkl/bin/cubicMesher \
-  --input-mesh examples/cubic/box-with-sphere-xlite/box-with-sphere.obj \
+  --input-mesh examples/legacy/cubic/box-with-sphere-xlite/box-with-sphere.obj \
   --resolution 5 \
-  --output-mesh examples/cubic/box-with-sphere-xlite/box-with-sphere-xlite.veg \
-  --output-surface examples/cubic/box-with-sphere-xlite/box-with-sphere-xlite-surface.obj \
+  --output-mesh examples/legacy/cubic/box-with-sphere-xlite/box-with-sphere-xlite.veg \
+  --output-surface examples/legacy/cubic/box-with-sphere-xlite/box-with-sphere-xlite-surface.obj \
   --E 1000000 \
   --nu 0.45 \
   --density 1000
@@ -249,13 +249,13 @@ build/base_no_mkl/bin/cubicMesher \
 After `runSim` dumps the OBJ sequence, use the per-case animation config to convert it:
 
 ```bash
-build/base_no_mkl/bin/convertAnimation examples/cubic/<case>/anim.json
+build/base_no_mkl/bin/convertAnimation examples/legacy/cubic/<case>/anim.json
 ```
 
 For the lightweight box-with-sphere case, use:
 
 ```bash
-build/base_no_mkl/bin/convertAnimation examples/cubic/box-with-sphere-xlite/anim-xlite.json
+build/base_no_mkl/bin/convertAnimation examples/legacy/cubic/box-with-sphere-xlite/anim-xlite.json
 ```
 
 If the optional output path is omitted, `convertAnimation` writes the `.abc` file next to the animation config and uses the mesh `name` field from that config as the output filename stem.

@@ -28,5 +28,6 @@
   "output": "ret-box-squash-ipc",
   "ipc-dhat": 0.002,
   "ipc-kappa": 3000.0,
-  "enable-material-max-step": true
+  "enable-material-max-step": true,
+  "output-von-mises": true
 }

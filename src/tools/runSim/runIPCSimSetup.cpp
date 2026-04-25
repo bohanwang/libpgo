@@ -369,6 +369,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   context.M = std::move(M);
   context.simulationRestPosition = std::move(simulationRestPosition);
   context.surfaceRestPositions = std::move(surfaceRestPositions);
+  context.elasticParams = std::move(elasticParams);
   context.surfaceFromSimulationDispMap = W;
   context.simulationMeshOwner = simMesh;
   context.deformationModelManagerOwner = dmm;
@@ -464,6 +465,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   context.M = std::move(M);
   context.simulationRestPosition = std::move(initialized.restPosition);
   context.surfaceRestPositions = std::move(surfaceRestPositions);
+  context.plasticParams = std::move(initialized.plasticity);
   context.surfaceFromSimulationDispMap = std::move(W);
   context.simulationMeshOwner = initialized.simMesh;
   context.deformationModelManagerOwner = initialized.dmm;

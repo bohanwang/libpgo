@@ -48,6 +48,17 @@ ES::VXd makePerturbedRestPositions(const SimulationMesh &mesh)
   return x;
 }
 
+ES::VXd makeRestPositions(const SimulationMesh &mesh)
+{
+  ES::VXd x(mesh.getNumVertices() * 3);
+  for (int vi = 0; vi < mesh.getNumVertices(); vi++) {
+    double p[3];
+    mesh.getVertex(vi, p);
+    x.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
+  }
+  return x;
+}
+
 void expectAllFinite(const ES::VXd &v)
 {
   for (Eigen::Index i = 0; i < v.size(); i++) {
@@ -132,6 +143,50 @@ TEST(DeformationModelAssemblerGTest, TetAssemblerRegression)
   EXPECT_EQ(dfda.rows(), assembler->getNumDOFs());
   EXPECT_EQ(dfda.cols(), mesh->getNumElements() * dmm->getNumPlasticParameters());
   expectAllFinite(dfda);
+}
+
+TEST(DeformationModelAssemblerGTest, TetVonMisesStressIsZeroAtRestAndNonzeroUnderStretch)
+{
+  pgo::Logging::init();
+
+  pgo::VolumetricMeshes::TetMesh tetMesh(kTorusVegPath);
+  std::shared_ptr<SimulationMesh> mesh(pgo::SolidDeformationModel::loadTetMesh(&tetMesh));
+  ASSERT_NE(mesh, nullptr);
+
+  auto dmm = std::make_shared<DeformationModelManager>();
+  dmm->setMesh(mesh.get());
+  dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
+
+  auto assembler = std::make_shared<DeformationModelAssembler>(dmm, nullptr);
+
+  ES::VXd plasticParams(dmm->getNumPlasticParameters() * mesh->getNumElements());
+  ES::VXd elasticParams(dmm->getNumElasticParameters() * mesh->getNumElements());
+  elasticParams.setZero();
+
+  const auto *plasticModel = dynamic_cast<const PlasticModel3DDeformationGradient *>(
+    dmm->getDeformationModel(0)->getPlasticModel());
+  ASSERT_NE(plasticModel, nullptr);
+
+  ES::M3d identity = ES::M3d::Identity();
+  for (int ei = 0; ei < mesh->getNumElements(); ei++) {
+    plasticModel->toParam(identity.data(), plasticParams.data() + ei * dmm->getNumPlasticParameters());
+  }
+
+  ES::VXd rest = makeRestPositions(*mesh);
+  ES::VXd stresses = ES::VXd::Constant(mesh->getNumElements(), -1.0);
+  assembler->computeVonMisesStresses(rest.data(), dataOrNull(plasticParams), dataOrNull(elasticParams), stresses.data());
+  expectAllFinite(stresses);
+  EXPECT_LE(stresses.cwiseAbs().maxCoeff(), 1e-8);
+
+  ES::VXd stretched = rest;
+  for (int vi = 0; vi < mesh->getNumVertices(); vi++) {
+    stretched[vi * 3] *= 1.01;
+  }
+  stresses.setConstant(-1.0);
+  assembler->computeVonMisesStresses(stretched.data(), dataOrNull(plasticParams), dataOrNull(elasticParams), stresses.data());
+  expectAllFinite(stresses);
+  EXPECT_GE(stresses.minCoeff(), 0.0);
+  EXPECT_GT(stresses.maxCoeff(), 1e-8);
 }
 
 TEST(DeformationModelAssemblerGTest, ShellAssemblerRegression)

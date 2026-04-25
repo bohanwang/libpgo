@@ -43,6 +43,8 @@ struct IpcSimulationContext
   EigenSupport::SpMatD M;
   EigenSupport::VXd simulationRestPosition;
   EigenSupport::VXd surfaceRestPositions;
+  EigenSupport::VXd plasticParams;
+  EigenSupport::VXd elasticParams;
   EigenSupport::SpMatD surfaceFromSimulationDispMap;
   std::shared_ptr<SolidDeformationModel::SimulationMesh> simulationMeshOwner;
   std::shared_ptr<SolidDeformationModel::DeformationModelManager> deformationModelManagerOwner;
