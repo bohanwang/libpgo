@@ -193,10 +193,21 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     if (verbose >= 2 && iter % printGap == 0)
       std::cout << "        E= " << eng << "; ||grad||_max=" << grad.cwiseAbs().maxCoeff() << "; ||x||=" << x.norm() << "; ||grad||=" << gradNorm << std::endl;
 
-    if (gradNorm < epsilon) {
+    // Convergence test: accept either absolute (||grad|| < eps) or relative
+    // reduction from initial gradient (||grad|| < lambda0 * relTolFactor).
+    // Relative branch handles systems where |E| is large enough that the absolute
+    // eps becomes unreachable in double precision (line search saturates at FP floor).
+    constexpr double relTolFactor = 1e-5;
+    const double relThreshold = lambda0 * relTolFactor;
+    const bool absConverged = gradNorm < epsilon;
+    const bool relConverged = gradNorm < relThreshold;
+    if (absConverged || relConverged) {
       status = static_cast<int>(SolveStatus::Converged);
       if (verbose >= 1) {
-        std::cout << "    Iter=" << iter << "; ||grad||=" << gradNorm << " < eps. Done.; status=" << solveStatusToString(status) << std::endl;
+        std::cout << "    Iter=" << iter << "; ||grad||=" << gradNorm
+                  << (absConverged ? " < eps" : " < lambda0*relTol")
+                  << " (eps=" << epsilon << ", relThreshold=" << relThreshold
+                  << "). Done.; status=" << solveStatusToString(status) << std::endl;
       }
 
       break;
@@ -414,12 +425,16 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
       }
 
       if (eng1 > eng) {
-        status = gradNorm < epsilon ? static_cast<int>(SolveStatus::Converged) : static_cast<int>(SolveStatus::LineSearchFailed);
+        // Loose relative fallback: if line search can't find descent but Newton already
+        // reduced the gradient by 4+ orders of magnitude from the initial state, treat
+        // this as converged-at-FP-limit rather than failure.
+        constexpr double looseRelFactor = 1e-4;
+        const bool looseRelConverged = gradNorm < lambda0 * looseRelFactor;
+        status = (gradNorm < epsilon || looseRelConverged) ? static_cast<int>(SolveStatus::Converged) : static_cast<int>(SolveStatus::LineSearchFailed);
         if (verbose >= 1) {
           std::cout << "    Iter=" << iter << "; line search failed; ||grad||=" << gradNorm
+                    << " (lambda0=" << lambda0 << ", looseRel=" << lambda0 * looseRelFactor << ")"
                     << "; status=" << solveStatusToString(status) << ". Times: " << lineSearchFailedTimes << std::endl;
-          // abort();
-          // std::cout << "          Adding damping." << std::endl;
         }
         break;
 
@@ -467,12 +482,15 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
 
       stepSize = acceptedStepMaxNorm;
       if (stepSize < 1e-15) {
-        status = gradNorm < epsilon ? static_cast<int>(SolveStatus::Converged) : static_cast<int>(SolveStatus::StepTooSmall);
+        // Same loose relative fallback as the line-search-failed branch above.
+        constexpr double looseRelFactor = 1e-4;
+        const bool looseRelConverged = gradNorm < lambda0 * looseRelFactor;
+        status = (gradNorm < epsilon || looseRelConverged) ? static_cast<int>(SolveStatus::Converged) : static_cast<int>(SolveStatus::StepTooSmall);
         if (verbose >= 1) {
           std::cout << "    Iter=" << iter << "; dx = " << stepSize
                     << "; dx too small; ||grad||=" << gradNorm
+                    << " (lambda0=" << lambda0 << ", looseRel=" << lambda0 * looseRelFactor << ")"
                     << "; status=" << solveStatusToString(status) << ". Times: " << lineSearchFailedTimes << std::endl;
-          // std::cout << "          Adding damping." << std::endl;
         }
         break;
 

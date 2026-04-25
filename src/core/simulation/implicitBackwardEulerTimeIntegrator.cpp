@@ -105,11 +105,7 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
     residualMaxNorm = rhs.cwiseAbs().maxCoeff();
   }
 
-  constexpr double nearConvergedStalledRatio = 2.0;
-  const bool acceptedNearConvergedStalled =
-    solverRet == static_cast<int>(NewtonSolver::SolveStatus::StepTooSmall) &&
-    residualMaxNorm <= eps * nearConvergedStalledRatio;
-  const bool acceptedTimestep = solverRet == 0 || acceptedNearConvergedStalled;
+  const bool acceptedTimestep = solverRet == 0;
 
   if (verbose) {
     std::cout << "ImplicitBackwardEuler timestep end: T" << timestepID
@@ -118,14 +114,6 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
               << " residualMax=" << residualMaxNorm
               << " accepted=" << (acceptedTimestep ? "true" : "false")
               << std::endl;
-    if (acceptedNearConvergedStalled) {
-      std::cout << "ImplicitBackwardEuler near-converged stalled solve accepted: T" << timestepID
-                << " solverRet=" << NewtonSolver::solveStatusToString(solverRet)
-                << " residualMax=" << residualMaxNorm
-                << " eps=" << eps
-                << " ratio=" << nearConvergedStalledRatio
-                << std::endl;
-    }
   }
 
   if (printResidual) {

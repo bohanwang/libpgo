@@ -50,7 +50,7 @@ public:
   {
     double alpha = 0.5;
     SolverSubiterationType sst = SST_SUBITERATION_LINE_SEARCH;
-    LineSearchMethod lsm = LSM_SIMPLE;
+    LineSearchMethod lsm = LSM_BACKTRACK;
     int stopAfterIncrease = 1;
     int addDamping = 0;
   };

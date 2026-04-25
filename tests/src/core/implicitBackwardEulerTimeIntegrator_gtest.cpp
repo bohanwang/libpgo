@@ -119,26 +119,3 @@ TEST(ImplicitBackwardEulerTimeIntegratorGTest, DoTimestepThrowsOnFailedNewtonSol
 
   EXPECT_THROW(integrator.doTimestep(1, 0, 0), std::runtime_error);
 }
-
-TEST(ImplicitBackwardEulerTimeIntegratorGTest, TryTimestepAcceptsNearConvergedStepTooSmallWithWarning)
-{
-  initializeLogging();
-
-  auto energy = std::make_shared<TestQuadraticEnergy>(1, 0.0);
-  ImplicitBackwardEulerTimeIntegrator integrator(identityMass(1), energy, 0.0, 0.0, 0.1, 8, 1e-8);
-  integrator.setTimestepID(11);
-
-  const double force[1] = { 1.5e-8 };
-  integrator.setExternalForce(force);
-
-  testing::internal::CaptureStdout();
-  const int ret = integrator.tryTimestep(1, 1, 0);
-  const std::string output = testing::internal::GetCapturedStdout();
-
-  EXPECT_EQ(ret, 0);
-  EXPECT_EQ(integrator.getSolverReturn(), static_cast<int>(NewtonSolver::SolveStatus::StepTooSmall));
-  EXPECT_EQ(integrator.getTimestepID(), 12u);
-  EXPECT_NE(output.find("solverRet=StepTooSmall"), std::string::npos);
-  EXPECT_NE(output.find("accepted=true"), std::string::npos);
-  EXPECT_NE(output.find("near-converged stalled solve accepted"), std::string::npos);
-}
