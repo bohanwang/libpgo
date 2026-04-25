@@ -7,6 +7,15 @@ target_compile_definitions(cubicMesher_gtest PRIVATE
 set_property(TARGET cubicMesher_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(cubicMesher_gtest)
 
+add_executable(tetMesher_gtest tetMesher_gtest.cpp)
+target_link_libraries(tetMesher_gtest PRIVATE GTest::gtest_main volumetricMesh mesh)
+add_dependencies(tetMesher_gtest tetMesher)
+target_compile_definitions(tetMesher_gtest PRIVATE
+  PGO_TEST_TET_MESHER_BIN="$<TARGET_FILE:tetMesher>"
+  PGO_TEST_TET_MESHER_HAS_TET_WILD=$<BOOL:${PGO_TET_MESHER_USE_TET_WILD}>)
+set_property(TARGET tetMesher_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(tetMesher_gtest)
+
 if(TARGET convertAnimation)
   add_executable(convertAnimation_gtest convertAnimation_gtest.cpp)
   target_link_libraries(convertAnimation_gtest PRIVATE GTest::gtest_main)

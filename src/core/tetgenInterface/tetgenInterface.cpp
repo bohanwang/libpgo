@@ -6,9 +6,103 @@
 
 #include <fmt/format.h>
 
+#include <cmath>
+#include <limits>
 #include <tuple>
 #include <vector>
 #include <chrono>
+
+namespace
+{
+
+std::vector<pgo::EigenSupport::V3d> computePLCComponentHolePoints(const pgo::Mesh::TriMeshGeo &mesh)
+{
+  std::vector<std::vector<int>> incidentFaces(mesh.numVertices());
+  for (int triID = 0; triID < mesh.numTriangles(); ++triID) {
+    const pgo::Vec3i &tri = mesh.tri(triID);
+    for (int i = 0; i < 3; ++i)
+      incidentFaces[tri[i]].push_back(triID);
+  }
+
+  std::vector<char> visited(mesh.numTriangles(), 0);
+  std::vector<pgo::EigenSupport::V3d> holePoints;
+  std::vector<int> stack;
+
+  for (int seedTriID = 0; seedTriID < mesh.numTriangles(); ++seedTriID) {
+    if (visited[seedTriID])
+      continue;
+
+    double signedVolume = 0.0;
+    double maxArea = 0.0;
+    double componentDiag2 = 0.0;
+    pgo::EigenSupport::V3d componentMin(
+      std::numeric_limits<double>::max(),
+      std::numeric_limits<double>::max(),
+      std::numeric_limits<double>::max());
+    pgo::EigenSupport::V3d componentMax(
+      -std::numeric_limits<double>::max(),
+      -std::numeric_limits<double>::max(),
+      -std::numeric_limits<double>::max());
+    pgo::EigenSupport::V3d bestFaceCentroid(0.0, 0.0, 0.0);
+    pgo::EigenSupport::V3d bestFaceNormal(0.0, 0.0, 0.0);
+    pgo::EigenSupport::V3d averagePosition(0.0, 0.0, 0.0);
+    int averagePositionCount = 0;
+
+    visited[seedTriID] = 1;
+    stack.push_back(seedTriID);
+    while (stack.empty() == false) {
+      const int triID = stack.back();
+      stack.pop_back();
+
+      const pgo::Vec3i &tri = mesh.tri(triID);
+      const pgo::EigenSupport::V3d &a = mesh.pos(tri[0]);
+      const pgo::EigenSupport::V3d &b = mesh.pos(tri[1]);
+      const pgo::EigenSupport::V3d &c = mesh.pos(tri[2]);
+      const pgo::EigenSupport::V3d faceNormal = (b - a).cross(c - a);
+      const double tetraVolume = a.dot(b.cross(c)) / 6.0;
+      const double faceArea = faceNormal.norm() * 0.5;
+      signedVolume += tetraVolume;
+
+      if (faceArea > maxArea) {
+        maxArea = faceArea;
+        bestFaceCentroid = (a + b + c) / 3.0;
+        bestFaceNormal = faceNormal;
+      }
+
+      for (int i = 0; i < 3; ++i) {
+        const pgo::EigenSupport::V3d &p = mesh.pos(tri[i]);
+        averagePosition += p;
+        averagePositionCount++;
+        componentMin = componentMin.cwiseMin(p);
+        componentMax = componentMax.cwiseMax(p);
+
+        for (int adjacentTriID : incidentFaces[tri[i]]) {
+          if (visited[adjacentTriID])
+            continue;
+
+          visited[adjacentTriID] = 1;
+          stack.push_back(adjacentTriID);
+        }
+      }
+    }
+
+    componentDiag2 = (componentMax - componentMin).squaredNorm();
+    if (signedVolume < -1e-12) {
+      if (maxArea > 0.0 && componentDiag2 > 0.0) {
+        // TetGen requires one point inside each cavity; negative components are inward-oriented hole boundaries.
+        const double offset = std::sqrt(componentDiag2) * 1e-5;
+        holePoints.push_back(bestFaceCentroid + bestFaceNormal.normalized() * offset);
+      }
+      else if (averagePositionCount > 0) {
+        holePoints.push_back(averagePosition / static_cast<double>(averagePositionCount));
+      }
+    }
+  }
+
+  return holePoints;
+}
+
+}  // namespace
 
 int pgo::TetgenInterface::computeVoronoiDiagram(const std::vector<EigenSupport::V3d> &points, VoronoiDiagram &vd)
 {
@@ -90,6 +184,8 @@ int pgo::TetgenInterface::computeVoronoiDiagram(const std::vector<EigenSupport::
 
 int pgo::TetgenInterface::computeTetMesh(const Mesh::TriMeshGeo &mesh, const std::string &switcher, EigenSupport::MXd &vtx, EigenSupport::MXi &tet)
 {
+  const std::vector<EigenSupport::V3d> holePoints = computePLCComponentHolePoints(mesh);
+
   // assign vertices;
   tetgenio tin, tout, taddin;
 
@@ -120,6 +216,16 @@ int pgo::TetgenInterface::computeTetMesh(const Mesh::TriMeshGeo &mesh, const std
     poly->vertexlist[0] = tri[0];
     poly->vertexlist[1] = tri[1];
     poly->vertexlist[2] = tri[2];
+  }
+
+  tin.numberofholes = static_cast<int>(holePoints.size());
+  if (tin.numberofholes > 0) {
+    tin.holelist = new double[tin.numberofholes * 3];
+    for (int i = 0; i < tin.numberofholes; ++i) {
+      tin.holelist[i * 3] = holePoints[i][0];
+      tin.holelist[i * 3 + 1] = holePoints[i][1];
+      tin.holelist[i * 3 + 2] = holePoints[i][2];
+    }
   }
 
   std::vector<char> sw;

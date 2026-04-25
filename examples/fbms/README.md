@@ -117,6 +117,79 @@ build/base_no_mkl/bin/remeshSurface cgal_iso \
 
 `remeshSurface cgal_iso --edge-length` is a scale relative to the input average edge length. The value `0.75` slightly refines the marching-cubes mesh.
 
+## Tet Simulation Meshes
+
+`tetMesher` converts a closed surface mesh into a `.veg` tetrahedral simulation mesh from a JSON job config. Put the tet meshing config in the generated job folder so `input_mesh`, `output_mesh`, and `output_surface` can use short paths relative to that folder.
+
+```bash
+build/base_no_mkl/bin/tetMesher --config examples/fbms/generated/r128_default/g0_b8/tetmesh.json
+```
+
+The optional `output_surface` field writes the boundary surface extracted from the generated tetrahedral mesh, not a copy of the input OBJ.
+
+Build `tetMesher` in the default no-MKL preset:
+
+```bash
+cmake -S . -B build/base_no_mkl
+cmake --build build/base_no_mkl --target tetMesher -j 4
+```
+
+Build the fTetWild backend in the same preset build tree. The main macOS/Linux presets enable `PGO_TET_MESHER_USE_TET_WILD` by default, so fTetWild is fetched and built under the preset `_deps` folder.
+
+```bash
+cmake --preset base_no_mkl
+cmake --build --preset base_no_mkl_release --target tetMesher
+```
+
+TetWild config for `generated/r128_default/g0_b3/tetmesh.json`:
+
+```json
+{
+  "version": 1,
+  "backend": "tetwild",
+  "input_mesh": "union_shell_remesh.obj",
+  "output_mesh": "union_shell.veg",
+  "output_surface": "union_shell_tet_surface.obj",
+  "print_stats": true,
+  "quiet": true,
+  "tetwild": {
+    "lr": 0.05,
+    "epsr": 0.001,
+    "stop_energy": 10,
+    "max_threads": 8
+  }
+}
+```
+
+Use the same config body in `generated/r128_default/g0_b8/tetmesh.json`, then run:
+
+```bash
+build/base_no_mkl/bin/tetMesher --config examples/fbms/generated/r128_default/g0_b3/tetmesh.json
+build/base_no_mkl/bin/tetMesher --config examples/fbms/generated/r128_default/g0_b8/tetmesh.json
+```
+
+For fTetWild, `lr` is the target edge length relative to the input bounding-box diagonal, and `epsr` is the relative envelope tolerance. Use `la` instead of `lr` when an absolute target edge length is easier to reason about.
+
+TetGen remains available in the default build. Example `tetmesh_tetgen.json`:
+
+```json
+{
+  "version": 1,
+  "backend": "tetgen",
+  "input_mesh": "union_shell_remesh.obj",
+  "output_mesh": "union_shell_tetgen.veg",
+  "output_surface": "union_shell_tetgen_surface.obj",
+  "print_stats": true,
+  "tetgen": {
+    "command": "pq1.414a0.01"
+  }
+}
+```
+
+```bash
+build/base_no_mkl/bin/tetMesher --config examples/fbms/generated/r128_default/g0_b3/tetmesh_tetgen.json
+```
+
 ## Additional Resolutions
 
 Resolution-specific assets use a filename suffix:

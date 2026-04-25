@@ -221,6 +221,80 @@ Main arguments:
 
 Generated sample cubic assets are stored under `examples/cubic/`. See [`examples/cubic/README.md`](./examples/cubic/README.md) for the exact commands and parameters used for `box`, `box-hang`, `bunny`, `dragon-dyn`, and `box-with-sphere`.
 
+### Tet Mesher
+
+`tetMesher` converts a closed triangle surface mesh into a tetrahedral `.veg` simulation mesh from a JSON job config. The JSON selects the backend, backend parameters, input/output paths, and optional generated boundary surface export. Paths inside the config are resolved relative to the config file.
+
+Build `tetMesher` in the default no-MKL preset:
+
+```bash
+    cmake --preset base_no_mkl
+    cmake --build build/base_no_mkl --target tetMesher
+```
+
+Run a tet meshing job:
+
+```bash
+    build/base_no_mkl/bin/tetMesher --config path/to/tetmesh.json
+```
+
+Basic TetGen config:
+
+```json
+{
+  "version": 1,
+  "backend": "tetgen",
+  "input_mesh": "union_shell_remesh.obj",
+  "output_mesh": "union_shell_tetgen.veg",
+  "output_surface": "union_shell_tetgen_surface.obj",
+  "print_stats": true,
+  "tetgen": {
+    "command": "pq1.414a0.01"
+  }
+}
+```
+
+The fTetWild backend is enabled by default in the main presets on macOS/Linux. Build it in the preset build tree:
+
+```bash
+    cmake --preset base_no_mkl
+    cmake --build --preset base_no_mkl_release --target tetMesher
+```
+
+Basic fTetWild config:
+
+```json
+{
+  "version": 1,
+  "backend": "tetwild",
+  "input_mesh": "union_shell_remesh.obj",
+  "output_mesh": "union_shell.veg",
+  "output_surface": "union_shell_tet_surface.obj",
+  "print_stats": true,
+  "quiet": true,
+  "tetwild": {
+    "lr": 0.05,
+    "epsr": 0.001,
+    "stop_energy": 10,
+    "max_threads": 8
+  }
+}
+```
+
+Config fields:
+
+- `backend`: `tetgen` or `tetwild`
+- `input_mesh`: input closed triangle mesh, typically `.obj`
+- `output_mesh`: output tetrahedral `.veg`
+- `output_surface`: optional generated tet boundary surface `.obj`
+- `print_stats`, `quiet`: optional shared booleans
+- `tetgen.command`: TetGen command string
+- `tetwild.lr` / `tetwild.la`: relative or absolute fTetWild target edge length
+- `tetwild.epsr`: fTetWild relative envelope tolerance
+- `tetwild.stop_energy`, `tetwild.max_threads`: fTetWild optimization controls
+
+For FBMS shell asset commands and generated example stats, see [`examples/fbms/README.md`](./examples/fbms/README.md).
+
 ### Shell Simulation
 
 Build the shell simulation CLI:
