@@ -356,8 +356,6 @@ ParsedSurfacePressureForceConfig parseSurfacePressureForceConfig(const pgo::Conf
     throwConfigError("Missing required field `surface-pressure-force.center` when enabled.");
   if (!pressureJson.contains("pressure"))
     throwConfigError("Missing required field `surface-pressure-force.pressure` when enabled.");
-  if (!pressureJson.contains("ramp-steps"))
-    throwConfigError("Missing required field `surface-pressure-force.ramp-steps` when enabled.");
 
   const auto &centerJson = pressureJson.at("center");
   if (centerJson.is_string()) {
@@ -371,7 +369,8 @@ ParsedSurfacePressureForceConfig parseSurfacePressureForceConfig(const pgo::Conf
     pressureConfig.center = ES::V3d(center[0], center[1], center[2]);
   }
   pressureConfig.pressure = pressureJson.at("pressure").get<double>();
-  pressureConfig.rampSteps = pressureJson.at("ramp-steps").get<int>();
+  if (pressureJson.contains("ramp-steps"))
+    pressureConfig.rampSteps = pressureJson.at("ramp-steps").get<int>();
 
   if (!pressureConfig.autoCenter && (!std::isfinite(pressureConfig.center[0]) || !std::isfinite(pressureConfig.center[1]) || !std::isfinite(pressureConfig.center[2])))
     throwConfigError("`surface-pressure-force.center` entries must be finite.");

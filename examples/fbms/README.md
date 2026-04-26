@@ -369,7 +369,7 @@ contact.
 
 | Case | Config | What It Does |
 | --- | --- | --- |
-| `case1_pressure` | `g0_b*_case1_pressure-ipc.json` | Dynamic stable-Neo simulation with no gravity. A surface pressure force pushes inward toward `center: "auto"`, where the center is computed from the scaled surface mesh bounding box. Pressure ramps during the first 20 steps. |
+| `case1_pressure` | `g0_b*_case1_pressure-ipc.json` | Dynamic stable-Neo simulation with no gravity. A surface pressure force pushes inward toward `center: "auto"`, where the center is computed from the scaled surface mesh bounding box. The current configs omit `ramp-steps`, so the default is `1` and the pressure-derived external force is full strength from the first frame. |
 | `case2_squash_floor_prototype` | `g0_b*_case2_squash_floor-prototype-ipc.json` | Dynamic stable-Neo prototype squeezed between two moving debug floor energies along the x axis. The lower floor moves from `x=-1.05` to `x=-0.75`, and the upper floor moves from `x=1.05` to `x=0.75` over frames `[0, 100]`. |
 | `case3_wall_impact_floor_prototype` | `g0_b*_case3_wall_impact_floor-prototype-ipc.json` | Dynamic stable-Neo impact prototype. The shell starts with velocity `[50, 0, 0]` and hits an upper x-axis debug floor energy at `x=1.2`. |
 
@@ -380,8 +380,7 @@ contact.
   "surface-pressure-force": {
     "enabled": true,
     "center": "auto",
-    "pressure": 1000000.0,
-    "ramp-steps": 20
+    "pressure": 1000000.0
   }
 }
 ```
@@ -390,8 +389,9 @@ When enabled, this computes a per-surface-vertex force pointing from each rest
 surface vertex toward `center`, weighted by vertex surface area, then projects it
 to simulation DOFs. `center` can be a numeric `[x, y, z]` vector or `"auto"`.
 `"auto"` uses the scaled surface rest-position bounding-box center. `pressure`
-sets the force magnitude scale. `ramp-steps` linearly ramps the force from zero
-to full strength over the first frames.
+sets the force magnitude scale. `ramp-steps` is optional and defaults to `1`.
+When present, it must be positive and linearly ramps the force from zero to full
+strength over the first frames. `ramp-steps: 1` means full strength on frame 0.
 
 `floors` is used by cases 2 and 3:
 

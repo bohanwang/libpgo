@@ -142,7 +142,7 @@ std::string addBoolConfigField(std::string json, const std::string &name, bool v
   return json;
 }
 
-std::string addSurfacePressureForceConfig(std::string json, bool enabled, double pressure = 1000.0, int rampSteps = 20,
+std::string addSurfacePressureForceConfig(std::string json, bool enabled, double pressure = 1000.0, std::optional<int> rampSteps = 20,
   const std::string &centerField = "[0, 0, 0]")
 {
   const std::string marker = "\n}\n";
@@ -155,8 +155,12 @@ std::string addSurfacePressureForceConfig(std::string json, bool enabled, double
         << "  \"surface-pressure-force\": {\n"
         << "    \"enabled\": " << (enabled ? "true" : "false") << ",\n"
         << "    \"center\": " << centerField << ",\n"
-        << "    \"pressure\": " << pressure << ",\n"
-        << "    \"ramp-steps\": " << rampSteps << "\n"
+        << "    \"pressure\": " << pressure;
+  if (rampSteps.has_value()) {
+    field << ",\n"
+          << "    \"ramp-steps\": " << *rampSteps;
+  }
+  field << "\n"
         << "  }";
   json.insert(pos, field.str());
   return json;
@@ -1309,6 +1313,22 @@ TEST(RunIPCSimSetupGTest, VolumeSurfacePressureForceProjectsToSimulationDofs)
   EXPECT_EQ(context.surfacePressureRampSteps, 20);
   ASSERT_EQ(context.surfacePressureSimulationForce.size(), context.simulationRestPosition.size());
   EXPECT_GT(context.surfacePressureSimulationForce.norm(), 0.0);
+}
+
+TEST(RunIPCSimSetupGTest, VolumeSurfacePressureForceDefaultsRampStepsToOne)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-pressure-default-ramp.json";
+  writeTextFile(configPath, addSurfacePressureForceConfig(makeTetIPCConfig(tempDir.path(), 0), true, 1000.0, std::nullopt));
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+
+  const auto context = pgo::RunIPCSim::buildVolumeIpcSimulation(config);
+  EXPECT_TRUE(context.surfacePressureForceEnabled);
+  EXPECT_EQ(context.surfacePressureRampSteps, 1);
 }
 
 TEST(RunIPCSimSetupGTest, VolumeSurfacePressureForceAutoCenterMatchesSurfaceRestBoundingBoxCenter)

@@ -22,7 +22,6 @@
   "surface-pressure-force": {
     "enabled": true,
     "center": "auto",
-    "pressure": 1000000.0,
-    "ramp-steps": 20
+    "pressure": 1000000.0
   }
 }
