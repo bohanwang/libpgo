@@ -70,3 +70,6 @@ paper/*
 *.abc
 
 *_output
+
+examples/fbms/**/*.obj
+examples/fbms/**/*.veg
