@@ -197,6 +197,7 @@ struct ParsedFloorConfig
 struct ParsedSurfacePressureForceConfig
 {
   bool enabled = false;
+  bool autoCenter = false;
   ES::V3d center = ES::V3d::Zero();
   double pressure = 0.0;
   int rampSteps = 1;
@@ -358,12 +359,21 @@ ParsedSurfacePressureForceConfig parseSurfacePressureForceConfig(const pgo::Conf
   if (!pressureJson.contains("ramp-steps"))
     throwConfigError("Missing required field `surface-pressure-force.ramp-steps` when enabled.");
 
-  const std::array<double, 3> center = pressureJson.at("center").get<std::array<double, 3>>();
-  pressureConfig.center = ES::V3d(center[0], center[1], center[2]);
+  const auto &centerJson = pressureJson.at("center");
+  if (centerJson.is_string()) {
+    const std::string centerMode = centerJson.get<std::string>();
+    if (centerMode != "auto")
+      throwConfigError("`surface-pressure-force.center` string value must be `auto`.");
+    pressureConfig.autoCenter = true;
+  }
+  else {
+    const std::array<double, 3> center = centerJson.get<std::array<double, 3>>();
+    pressureConfig.center = ES::V3d(center[0], center[1], center[2]);
+  }
   pressureConfig.pressure = pressureJson.at("pressure").get<double>();
   pressureConfig.rampSteps = pressureJson.at("ramp-steps").get<int>();
 
-  if (!std::isfinite(pressureConfig.center[0]) || !std::isfinite(pressureConfig.center[1]) || !std::isfinite(pressureConfig.center[2]))
+  if (!pressureConfig.autoCenter && (!std::isfinite(pressureConfig.center[0]) || !std::isfinite(pressureConfig.center[1]) || !std::isfinite(pressureConfig.center[2])))
     throwConfigError("`surface-pressure-force.center` entries must be finite.");
   if (!std::isfinite(pressureConfig.pressure))
     throwConfigError("`surface-pressure-force.pressure` must be finite.");
@@ -371,6 +381,30 @@ ParsedSurfacePressureForceConfig parseSurfacePressureForceConfig(const pgo::Conf
     throwConfigError("`surface-pressure-force.ramp-steps` must be positive.");
 
   return pressureConfig;
+}
+
+ES::V3d computeSurfaceRestBoundingBoxCenter(const ES::VXd &surfaceRestPositions)
+{
+  if (surfaceRestPositions.size() < 3 || surfaceRestPositions.size() % 3 != 0)
+    throwConfigError("surface rest positions must contain 3D vertex coordinates.");
+
+  ES::V3d bmin = surfaceRestPositions.segment<3>(0);
+  ES::V3d bmax = bmin;
+  for (int vi = 1; vi < surfaceRestPositions.size() / 3; ++vi) {
+    const ES::V3d p = surfaceRestPositions.segment<3>(vi * 3);
+    bmin = bmin.cwiseMin(p);
+    bmax = bmax.cwiseMax(p);
+  }
+  return 0.5 * (bmin + bmax);
+}
+
+void resolveSurfacePressureAutoCenter(ParsedSurfacePressureForceConfig &pressureConfig, const ES::VXd &surfaceRestPositions)
+{
+  if (!pressureConfig.enabled || !pressureConfig.autoCenter)
+    return;
+
+  pressureConfig.center = computeSurfaceRestBoundingBoxCenter(surfaceRestPositions);
+  pressureConfig.autoCenter = false;
 }
 
 ES::VXd computeSurfacePressureSimulationForce(const pgo::Mesh::TriMeshGeo &surfaceMesh,
@@ -577,7 +611,17 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   const SolidDeformationModel::DeformationModelElasticMaterial elasticMat = parseVolumeElasticMaterial(jconfig);
   const bool enableMaterialMaxStep = parseEnableMaterialMaxStep(jconfig);
   const std::vector<ParsedFloorConfig> floorConfigs = parseFloorsConfig(jconfig);
-  const ParsedSurfacePressureForceConfig pressureConfig = parseSurfacePressureForceConfig(jconfig);
+  ParsedSurfacePressureForceConfig pressureConfig = parseSurfacePressureForceConfig(jconfig);
+
+  const RunSim::ResolvedRunSimPaths resolvedPaths = RunSim::resolveRunSimPaths(jconfig);
+  std::unique_ptr<VolumetricMeshes::VolumetricMesh> volumetricMesh =
+    RunSim::loadValidatedVolumeMesh(RunSim::parseVolumeMeshInputConfig(jconfig), scale);
+
+  pgo::Mesh::TriMeshGeo surfaceMesh;
+  ES::VXd surfaceRestPositions;
+  loadSurfaceMeshAndRestPositions(resolvedPaths.surfaceMeshFilename, scale, surfaceMesh, surfaceRestPositions);
+  const bool pressureCenterWasAuto = pressureConfig.autoCenter;
+  resolveSurfacePressureAutoCenter(pressureConfig, surfaceRestPositions);
 
   std::cout << "runIPCSim phase1D volume IPC parameters: "
             << "ipc-heuristic=false, "
@@ -605,17 +649,10 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   if (pressureConfig.enabled) {
     std::cout << ", pressure=" << pressureConfig.pressure
               << ", ramp-steps=" << pressureConfig.rampSteps
+              << ", center-mode=" << (pressureCenterWasAuto ? "auto" : "manual")
               << ", center=[" << pressureConfig.center.transpose() << "]";
   }
   std::cout << std::endl;
-
-  const RunSim::ResolvedRunSimPaths resolvedPaths = RunSim::resolveRunSimPaths(jconfig);
-  std::unique_ptr<VolumetricMeshes::VolumetricMesh> volumetricMesh =
-    RunSim::loadValidatedVolumeMesh(RunSim::parseVolumeMeshInputConfig(jconfig), scale);
-
-  pgo::Mesh::TriMeshGeo surfaceMesh;
-  ES::VXd surfaceRestPositions;
-  loadSurfaceMeshAndRestPositions(resolvedPaths.surfaceMeshFilename, scale, surfaceMesh, surfaceRestPositions);
 
   pgo::InterpolationCoordinates::BarycentricCoordinates bc(
     surfaceMesh.numVertices(), surfaceRestPositions.data(), volumetricMesh.get());

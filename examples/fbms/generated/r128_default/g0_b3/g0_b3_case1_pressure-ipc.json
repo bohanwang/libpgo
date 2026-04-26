@@ -21,7 +21,7 @@
   "output-von-mises": true,
   "surface-pressure-force": {
     "enabled": true,
-    "center": [0.0, 0.0, 0.0],
+    "center": "auto",
     "pressure": 1000000.0,
     "ramp-steps": 20
   }

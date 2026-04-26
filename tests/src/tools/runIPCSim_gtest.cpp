@@ -142,7 +142,8 @@ std::string addBoolConfigField(std::string json, const std::string &name, bool v
   return json;
 }
 
-std::string addSurfacePressureForceConfig(std::string json, bool enabled, double pressure = 1000.0, int rampSteps = 20)
+std::string addSurfacePressureForceConfig(std::string json, bool enabled, double pressure = 1000.0, int rampSteps = 20,
+  const std::string &centerField = "[0, 0, 0]")
 {
   const std::string marker = "\n}\n";
   const std::size_t pos = json.rfind(marker);
@@ -153,7 +154,7 @@ std::string addSurfacePressureForceConfig(std::string json, bool enabled, double
   field << ",\n"
         << "  \"surface-pressure-force\": {\n"
         << "    \"enabled\": " << (enabled ? "true" : "false") << ",\n"
-        << "    \"center\": [0, 0, 0],\n"
+        << "    \"center\": " << centerField << ",\n"
         << "    \"pressure\": " << pressure << ",\n"
         << "    \"ramp-steps\": " << rampSteps << "\n"
         << "  }";
@@ -530,6 +531,25 @@ void expectSparseMatrixNear(const ES::SpMatD &actual, const ES::SpMatD &expected
   const ES::MXd expectedDense(expected);
   const double maxDiff = (actualDense - expectedDense).cwiseAbs().maxCoeff();
   EXPECT_LE(maxDiff, tol);
+}
+
+std::string vec3Json(const ES::V3d &v)
+{
+  std::ostringstream out;
+  out << "[" << std::setprecision(17) << v[0] << ", " << v[1] << ", " << v[2] << "]";
+  return out.str();
+}
+
+ES::V3d surfaceRestBoundingBoxCenter(const ES::VXd &surfaceRestPositions)
+{
+  PGO_ALOG(surfaceRestPositions.size() >= 3 && surfaceRestPositions.size() % 3 == 0);
+  ES::V3d bmin = surfaceRestPositions.segment<3>(0);
+  ES::V3d bmax = bmin;
+  for (int vi = 1; vi < surfaceRestPositions.size() / 3; ++vi) {
+    bmin = bmin.cwiseMin(surfaceRestPositions.segment<3>(vi * 3));
+    bmax = bmax.cwiseMax(surfaceRestPositions.segment<3>(vi * 3));
+  }
+  return 0.5 * (bmin + bmax);
 }
 }  // namespace
 
@@ -1289,6 +1309,32 @@ TEST(RunIPCSimSetupGTest, VolumeSurfacePressureForceProjectsToSimulationDofs)
   EXPECT_EQ(context.surfacePressureRampSteps, 20);
   ASSERT_EQ(context.surfacePressureSimulationForce.size(), context.simulationRestPosition.size());
   EXPECT_GT(context.surfacePressureSimulationForce.norm(), 0.0);
+}
+
+TEST(RunIPCSimSetupGTest, VolumeSurfacePressureForceAutoCenterMatchesSurfaceRestBoundingBoxCenter)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path autoConfigPath = tempDir.path() / "tet-pressure-auto-center.json";
+  const fs::path explicitConfigPath = tempDir.path() / "tet-pressure-explicit-center.json";
+  writeTextFile(autoConfigPath, addSurfacePressureForceConfig(makeTetIPCConfig(tempDir.path(), 0, 2.0), true, 1000.0, 20, "\"auto\""));
+
+  pgo::ConfigFileJSON autoConfig;
+  ASSERT_TRUE(autoConfig.open(autoConfigPath.string().c_str()));
+
+  const auto autoContext = pgo::RunIPCSim::buildVolumeIpcSimulation(autoConfig);
+  const ES::V3d explicitCenter = surfaceRestBoundingBoxCenter(autoContext.surfaceRestPositions);
+  writeTextFile(explicitConfigPath,
+    addSurfacePressureForceConfig(makeTetIPCConfig(tempDir.path(), 0, 2.0), true, 1000.0, 20, vec3Json(explicitCenter)));
+
+  pgo::ConfigFileJSON explicitConfig;
+  ASSERT_TRUE(explicitConfig.open(explicitConfigPath.string().c_str()));
+
+  const auto explicitContext = pgo::RunIPCSim::buildVolumeIpcSimulation(explicitConfig);
+  ASSERT_EQ(autoContext.surfacePressureSimulationForce.size(), explicitContext.surfacePressureSimulationForce.size());
+  EXPECT_GT(autoContext.surfacePressureSimulationForce.norm(), 0.0);
+  EXPECT_NEAR((autoContext.surfacePressureSimulationForce - explicitContext.surfacePressureSimulationForce).norm(), 0.0, 1e-8);
 }
 
 TEST(RunIPCSimSetupGTest, SurfacePressureForceDisabledOrZeroPressureProducesNoContribution)
