@@ -1,0 +1,26 @@
+{
+  "job": "r128_default",
+  "case": "g0_b8",
+  "raw": {
+    "resolution": 128,
+    "fbms_thickness": 0.025,
+    "sphere_thickness": 0.025,
+    "padding_ratio": 0.08
+  },
+  "remesh": {
+    "edge_length": 0.75,
+    "sharp_edge_angle": 180.0
+  },
+  "assets": {
+    "raw": {
+      "path": "examples/fbms/generated/r128_default/g0_b8/union_shell_raw.obj",
+      "vertices": 142712,
+      "faces": 285440
+    },
+    "remesh": {
+      "path": "examples/fbms/generated/r128_default/g0_b8/union_shell_remesh.obj",
+      "vertices": 273894,
+      "faces": 547804
+    }
+  }
+}

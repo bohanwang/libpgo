@@ -1,0 +1,26 @@
+{
+  "job": "r64_thick",
+  "case": "g0_b3",
+  "raw": {
+    "resolution": 64,
+    "fbms_thickness": 0.05,
+    "sphere_thickness": 0.05,
+    "padding_ratio": 0.08
+  },
+  "remesh": {
+    "edge_length": 1.0,
+    "sharp_edge_angle": 180.0
+  },
+  "assets": {
+    "raw": {
+      "path": "examples/fbms/generated/r64_thick/g0_b3/union_shell_raw.obj",
+      "vertices": 29442,
+      "faces": 58880
+    },
+    "remesh": {
+      "path": "examples/fbms/generated/r64_thick/g0_b3/union_shell_remesh.obj",
+      "vertices": 30658,
+      "faces": 61312
+    }
+  }
+}

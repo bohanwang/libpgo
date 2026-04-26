@@ -1,0 +1,22 @@
+{
+  "build_dir": "build/base_no_mkl",
+  "defaults": {
+    "anim_config": "anim.json",
+    "log": true
+  },
+  "cases": {
+    "g0_b8_case1_pressure": {
+      "sim_config": "examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-ipc.json"
+    }
+  },
+  "jobs": [
+    {
+      "name": "case1_pressure",
+      "cases": ["g0_b8_case1_pressure"]
+    },
+    {
+      "name": "all_fbms",
+      "cases": "all"
+    }
+  ]
+}

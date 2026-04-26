@@ -56,6 +56,9 @@ struct IpcSimulationContext
   pgo::Mesh::TriMeshGeo surfaceMesh;
   std::shared_ptr<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy> collisionHandler;
   std::vector<std::shared_ptr<NonlinearOptimization::PotentialEnergy>> extraGeneralImplicitForceModels;
+  bool surfacePressureForceEnabled = false;
+  int surfacePressureRampSteps = 1;
+  EigenSupport::VXd surfacePressureSimulationForce;
 };
 
 IpcSimulationContext buildShellIpcSimulation(const ConfigFileJSON &jconfig);

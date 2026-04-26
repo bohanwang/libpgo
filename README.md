@@ -189,12 +189,12 @@ cmake --build --preset base_no_mkl_release --target runIPCSim convertAnimation
 Run named IPC batches from the JSON config:
 
 ```bash
-examples/ipc/run_ipc_batch.py --job squash_regression --dry-run
-examples/ipc/run_ipc_batch.py --job squash_regression --skip-existing
-examples/ipc/run_ipc_batch.py --job all_ipc --convert-only
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job squash_regression --dry-run
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job squash_regression --skip-existing
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job all_ipc --convert-only
 ```
 
-The batch runner reads [`examples/ipc/ipc_batch.json`](./examples/ipc/ipc_batch.json), runs `runIPCSim` with `--log`, and then runs `convertAnimation` with the matching per-case `anim.json`. Use [`examples/ipc/README.md`](./examples/ipc/README.md) for the full case list, job definitions, and output-overwrite policy.
+The generic batch runner reads [`examples/ipc/ipc_batch.json`](./examples/ipc/ipc_batch.json), runs `runIPCSim` with `--log`, and then runs `convertAnimation` with the matching per-case `anim.json`. Use [`examples/ipc/README.md`](./examples/ipc/README.md) for the full case list, job definitions, and output-overwrite policy.
 
 Run representative IPC cases from the repo root:
 

@@ -72,7 +72,7 @@ ES::SpMatD identityMass(int n)
 }
 }  // namespace
 
-TEST(ImplicitBackwardEulerTimeIntegratorGTest, TryTimestepRejectsFailedNewtonSolveWithoutAdvancingState)
+TEST(ImplicitBackwardEulerTimeIntegratorGTest, TryTimestepAcceptsMaxIterationsAndAdvancesTimestep)
 {
   initializeLogging();
 
@@ -83,32 +83,20 @@ TEST(ImplicitBackwardEulerTimeIntegratorGTest, TryTimestepRejectsFailedNewtonSol
   const double force[1] = { 1.0 };
   integrator.setExternalForce(force);
 
-  ES::VXd qBefore(1), qvelBefore(1), qaccBefore(1);
-  integrator.getq(qBefore);
-  integrator.getqvel(qvelBefore);
-  integrator.getqacc(qaccBefore);
-
   testing::internal::CaptureStdout();
   const int ret = integrator.tryTimestep(1, 1, 0);
   const std::string output = testing::internal::GetCapturedStdout();
 
-  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::MaxIterations));
-  EXPECT_EQ(integrator.getTimestepID(), 7u);
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(integrator.getSolverReturn(), static_cast<int>(NewtonSolver::SolveStatus::MaxIterations));
+  EXPECT_EQ(integrator.getTimestepID(), 8u);
 
-  ES::VXd qAfter(1), qvelAfter(1), qaccAfter(1);
-  integrator.getq(qAfter);
-  integrator.getqvel(qvelAfter);
-  integrator.getqacc(qaccAfter);
-
-  EXPECT_TRUE(qAfter.isApprox(qBefore));
-  EXPECT_TRUE(qvelAfter.isApprox(qvelBefore));
-  EXPECT_TRUE(qaccAfter.isApprox(qaccBefore));
   EXPECT_NE(output.find("ImplicitBackwardEuler timestep begin: T7"), std::string::npos);
   EXPECT_NE(output.find("solverRet=MaxIterations"), std::string::npos);
-  EXPECT_NE(output.find("accepted=false"), std::string::npos);
+  EXPECT_NE(output.find("accepted=true"), std::string::npos);
 }
 
-TEST(ImplicitBackwardEulerTimeIntegratorGTest, DoTimestepThrowsOnFailedNewtonSolve)
+TEST(ImplicitBackwardEulerTimeIntegratorGTest, DoTimestepDoesNotThrowOnAcceptedMaxIterations)
 {
   initializeLogging();
 
@@ -118,5 +106,7 @@ TEST(ImplicitBackwardEulerTimeIntegratorGTest, DoTimestepThrowsOnFailedNewtonSol
   const double force[1] = { 1.0 };
   integrator.setExternalForce(force);
 
-  EXPECT_THROW(integrator.doTimestep(1, 0, 0), std::runtime_error);
+  EXPECT_NO_THROW(integrator.doTimestep(1, 0, 0));
+  EXPECT_EQ(integrator.getSolverReturn(), static_cast<int>(NewtonSolver::SolveStatus::MaxIterations));
+  EXPECT_EQ(integrator.getTimestepID(), 1u);
 }

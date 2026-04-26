@@ -56,6 +56,46 @@ Edit `shell_assets.json` to change `resolution`, `fbms_thickness`, `sphere_thick
 
 The sections below document the existing flat assets and the equivalent manual commands. New experiment outputs should prefer the JSON job layout under `generated/`.
 
+## Simulation Batch Runner
+
+Use `fbms_batch.json` with the generic batch runner to launch FBMS `runIPCSim` cases and optional Alembic conversion from the repo root.
+
+Preview the current Case 1 pressure batch:
+
+```bash
+scripts/run_sim_batch.py \
+  --config examples/fbms/fbms_batch.json \
+  --job case1_pressure \
+  --dry-run
+```
+
+Run Case 1, skipping the simulation if its output folder already exists:
+
+```bash
+scripts/run_sim_batch.py \
+  --config examples/fbms/fbms_batch.json \
+  --job case1_pressure \
+  --skip-existing
+```
+
+Regenerate the Alembic cache from an existing Case 1 frame sequence:
+
+```bash
+scripts/run_sim_batch.py \
+  --config examples/fbms/fbms_batch.json \
+  --job case1_pressure \
+  --convert-only
+```
+
+The current FBMS batch points at:
+
+```text
+generated/r128_default/g0_b8/g0_b8_case1_pressure-ipc.json
+generated/r128_default/g0_b8/anim.json
+```
+
+The animation config uses `union_shell_remesh.obj` as the driving mesh and reads `case1_pressure_output/surface/retXXXX.obj` for frames `[0, 20)`.
+
 ## Inputs
 
 ```text

@@ -1,0 +1,28 @@
+{
+  "tet-mesh": "union_shell.veg",
+  "surface-mesh": "union_shell_remesh.obj",
+  "fixed-vertices": [],
+  "g": [0, 0, 0],
+  "init-vel": [0, 0, 0],
+  "init-disp": [0, 0, 0],
+  "scale": 1.0,
+  "timestep": 0.0005,
+  "num-timestep": 20,
+  "damping-params": [0.0, 0.0],
+  "sim-type": "dynamic",
+  "solver-eps": 1e-5,
+  "solver-max-iter": 30,
+  "elastic-material": "stable-neo",
+  "dump-interval": 1,
+  "output": "case1_pressure_output",
+  "ipc-dhat": 0.002,
+  "ipc-kappa": 3000.0,
+  "enable-material-max-step": true,
+  "output-von-mises": true,
+  "surface-pressure-force": {
+    "enabled": true,
+    "center": [0.0, 0.0, 0.0],
+    "pressure": 50000.0,
+    "ramp-steps": 20
+  }
+}

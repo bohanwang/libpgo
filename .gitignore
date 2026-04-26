@@ -69,4 +69,4 @@ paper/*
 *.log
 *.abc
 
-examples/fbms/generated
+*_output

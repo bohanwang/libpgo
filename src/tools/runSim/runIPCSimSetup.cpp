@@ -193,6 +193,14 @@ struct ParsedFloorConfig
   FloorPenaltyParameters params;
 };
 
+struct ParsedSurfacePressureForceConfig
+{
+  bool enabled = false;
+  ES::V3d center = ES::V3d::Zero();
+  double pressure = 0.0;
+  int rampSteps = 1;
+};
+
 FloorAxis parseFloorAxis(const std::string &axis)
 {
   if (axis == "x")
@@ -250,12 +258,92 @@ ParsedFloorConfig parseFloorConfig(const pgo::ConfigFileJSON &jconfig)
 
   return floorConfig;
 }
+
+ParsedSurfacePressureForceConfig parseSurfacePressureForceConfig(const pgo::ConfigFileJSON &jconfig)
+{
+  ParsedSurfacePressureForceConfig pressureConfig;
+  if (!jconfig.exist("surface-pressure-force"))
+    return pressureConfig;
+
+  const auto &pressureJson = jconfig.handle()["surface-pressure-force"];
+  if (!pressureJson.is_object())
+    throwConfigError("`surface-pressure-force` must be a JSON object.");
+
+  pressureConfig.enabled = pressureJson.contains("enabled")
+    ? pressureJson.at("enabled").get<bool>()
+    : false;
+  if (!pressureConfig.enabled)
+    return pressureConfig;
+
+  if (!pressureJson.contains("center"))
+    throwConfigError("Missing required field `surface-pressure-force.center` when enabled.");
+  if (!pressureJson.contains("pressure"))
+    throwConfigError("Missing required field `surface-pressure-force.pressure` when enabled.");
+  if (!pressureJson.contains("ramp-steps"))
+    throwConfigError("Missing required field `surface-pressure-force.ramp-steps` when enabled.");
+
+  const std::array<double, 3> center = pressureJson.at("center").get<std::array<double, 3>>();
+  pressureConfig.center = ES::V3d(center[0], center[1], center[2]);
+  pressureConfig.pressure = pressureJson.at("pressure").get<double>();
+  pressureConfig.rampSteps = pressureJson.at("ramp-steps").get<int>();
+
+  if (!std::isfinite(pressureConfig.center[0]) || !std::isfinite(pressureConfig.center[1]) || !std::isfinite(pressureConfig.center[2]))
+    throwConfigError("`surface-pressure-force.center` entries must be finite.");
+  if (!std::isfinite(pressureConfig.pressure))
+    throwConfigError("`surface-pressure-force.pressure` must be finite.");
+  if (pressureConfig.rampSteps <= 0)
+    throwConfigError("`surface-pressure-force.ramp-steps` must be positive.");
+
+  return pressureConfig;
+}
+
+ES::VXd computeSurfacePressureSimulationForce(const pgo::Mesh::TriMeshGeo &surfaceMesh,
+  const ES::VXd &surfaceRestPositions, const ES::SpMatD &surfaceFromSimulationDispMap,
+  const ParsedSurfacePressureForceConfig &pressureConfig, int simulationDofCount)
+{
+  if (!pressureConfig.enabled)
+    return {};
+
+  std::vector<double> vertexAreas(surfaceMesh.numVertices(), 0.0);
+  surfaceMesh.ref().computeVertexSurfaceAreas(vertexAreas.data());
+
+  ES::VXd surfaceForce = ES::VXd::Zero(surfaceMesh.numVertices() * 3);
+  int zeroDirectionCount = 0;
+  for (int vi = 0; vi < surfaceMesh.numVertices(); ++vi) {
+    const ES::V3d restPosition = surfaceRestPositions.segment<3>(vi * 3);
+    const ES::V3d centerDirection = pressureConfig.center - restPosition;
+    const double distanceToCenter = centerDirection.norm();
+    if (distanceToCenter < 1e-12) {
+      ++zeroDirectionCount;
+      continue;
+    }
+
+    surfaceForce.segment<3>(vi * 3) =
+      pressureConfig.pressure * vertexAreas[vi] * (centerDirection / distanceToCenter);
+  }
+
+  if (zeroDirectionCount > 0) {
+    SPDLOG_LOGGER_WARN(Logging::lgr(),
+      "surface-pressure-force skipped {} surface vertices closer than 1e-12 to the pressure center.",
+      zeroDirectionCount);
+  }
+
+  ES::VXd simulationForce(surfaceFromSimulationDispMap.cols());
+  ES::mv(surfaceFromSimulationDispMap, surfaceForce, simulationForce, 1);
+  if (simulationForce.size() != simulationDofCount)
+    throwConfigError("surface-pressure-force projected force has an unexpected simulation DOF count.");
+
+  return simulationForce;
+}
 }  // namespace
 
 IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
 {
   validateZeroInitialDisplacement(jconfig);
   rejectIfPresent(jconfig, "external-objects", "external contact is out of scope for phase1D.");
+  const ParsedSurfacePressureForceConfig pressureConfig = parseSurfacePressureForceConfig(jconfig);
+  if (pressureConfig.enabled)
+    throwConfigError("`surface-pressure-force` is only supported for runIPCSim volume simulations.");
 
   if (jconfig.exist("tet-mesh") || jconfig.exist("cubic-mesh")) {
     throwConfigError("runIPCSim phase1D shell setup cannot consume tet/cubic mesh inputs.");
@@ -401,6 +489,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   const SolidDeformationModel::DeformationModelElasticMaterial elasticMat = parseVolumeElasticMaterial(jconfig);
   const bool enableMaterialMaxStep = parseEnableMaterialMaxStep(jconfig);
   const ParsedFloorConfig floorConfig = parseFloorConfig(jconfig);
+  const ParsedSurfacePressureForceConfig pressureConfig = parseSurfacePressureForceConfig(jconfig);
 
   std::cout << "runIPCSim phase1D volume IPC parameters: "
             << "ipc-heuristic=false, "
@@ -415,6 +504,12 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
     std::cout << ", floor-axis=" << floorAxisToString(floorConfig.params.floorAxis)
               << ", floor-height=" << floorConfig.params.floorHeight
               << ", floor-kappa=" << floorConfig.params.floorKappa;
+  }
+  std::cout << ", surface-pressure-force=" << (pressureConfig.enabled ? "true" : "false");
+  if (pressureConfig.enabled) {
+    std::cout << ", pressure=" << pressureConfig.pressure
+              << ", ramp-steps=" << pressureConfig.rampSteps
+              << ", center=[" << pressureConfig.center.transpose() << "]";
   }
   std::cout << std::endl;
 
@@ -481,6 +576,11 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
     context.extraGeneralImplicitForceModels.push_back(
       std::make_shared<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params));
   }
+  context.surfacePressureForceEnabled = pressureConfig.enabled;
+  context.surfacePressureRampSteps = pressureConfig.rampSteps;
+  context.surfacePressureSimulationForce = computeSurfacePressureSimulationForce(
+    context.surfaceMesh, context.surfaceRestPositions, context.surfaceFromSimulationDispMap,
+    pressureConfig, static_cast<int>(context.simulationRestPosition.size()));
   return context;
 }
 }  // namespace pgo::RunIPCSim

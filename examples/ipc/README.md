@@ -44,12 +44,12 @@ The JSON configs use paths relative to the config file, so they can be launched 
 
 ## Batch Runner
 
-Use `ipc_batch.json` to define named IPC case groups. The script command line is only for execution control: selecting jobs, dry-run mode, and overwrite/skip behavior.
+Use `ipc_batch.json` with `scripts/run_sim_batch.py` to define named IPC case groups. The script command line is only for execution control: selecting jobs, dry-run mode, and overwrite/skip behavior.
 
 Preview the squash regression batch without running the tools:
 
 ```bash
-examples/ipc/run_ipc_batch.py \
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json \
   --job squash_regression \
   --dry-run
 ```
@@ -57,7 +57,7 @@ examples/ipc/run_ipc_batch.py \
 Run the squash regression batch, skipping cases whose `runIPCSim` output folder already exists:
 
 ```bash
-examples/ipc/run_ipc_batch.py \
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json \
   --job squash_regression \
   --skip-existing
 ```
@@ -65,7 +65,7 @@ examples/ipc/run_ipc_batch.py \
 Run all configured IPC cases explicitly:
 
 ```bash
-examples/ipc/run_ipc_batch.py \
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json \
   --job all_ipc \
   --skip-existing
 ```
@@ -73,7 +73,7 @@ examples/ipc/run_ipc_batch.py \
 Regenerate Alembic caches from existing frame dumps without rerunning simulation:
 
 ```bash
-examples/ipc/run_ipc_batch.py \
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json \
   --job all_ipc \
   --convert-only
 ```
@@ -103,7 +103,7 @@ Each case entry references its `runIPCSim` config. The per-case `anim_config` de
 }
 ```
 
-`run_ipc_batch.py` reads the `output` field from each simulation config to apply `--skip-existing` and `--overwrite`. Without either flag, it stops before running `runIPCSim` if that output folder already exists, because `runIPCSim` clears the output folder unless `restart-from-u` is enabled.
+`scripts/run_sim_batch.py` reads the `output` field from each simulation config to apply `--skip-existing` and `--overwrite`. Without either flag, it stops before running `runIPCSim` if that output folder already exists, because `runIPCSim` clears the output folder unless `restart-from-u` is enabled.
 
 ## What Each Case Contains
 

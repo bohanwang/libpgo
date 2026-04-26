@@ -263,8 +263,9 @@ int main(int argc, char *argv[])
     for (int vi = 0; vi < n; ++vi)
       g.segment<3>(vi * 3) = extAcc;
 
-    ES::VXd fext(n3);
-    ES::mv(context.M, g, fext);
+    ES::VXd gravityForce(n3);
+    ES::mv(context.M, g, gravityForce);
+    ES::VXd fext = gravityForce;
 
     std::shared_ptr<Simulation::ImplicitBackwardEulerTimeIntegrator> intg =
       std::make_shared<Simulation::ImplicitBackwardEulerTimeIntegrator>(context.M, context.elasticEnergy,
@@ -323,6 +324,11 @@ int main(int argc, char *argv[])
       intg->addGeneralImplicitForceModel(context.collisionHandler, 0, 0);
       for (const auto &forceModel : context.extraGeneralImplicitForceModels)
         intg->addGeneralImplicitForceModel(forceModel, 0, 0);
+      if (context.surfacePressureForceEnabled) {
+        const double ramp = std::min(1.0, static_cast<double>(framei + 1) / static_cast<double>(context.surfacePressureRampSteps));
+        fext.noalias() = gravityForce + ramp * context.surfacePressureSimulationForce;
+        intg->setExternalForce(fext.data());
+      }
       intg->setqState(u, uvel, uacc);
       intg->doTimestep(1, 3, 1);
       executedStep = true;

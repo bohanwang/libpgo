@@ -142,6 +142,25 @@ std::string addBoolConfigField(std::string json, const std::string &name, bool v
   return json;
 }
 
+std::string addSurfacePressureForceConfig(std::string json, bool enabled, double pressure = 1000.0, int rampSteps = 20)
+{
+  const std::string marker = "\n}\n";
+  const std::size_t pos = json.rfind(marker);
+  if (pos == std::string::npos)
+    throw std::runtime_error("Failed to add surface pressure force config to test JSON.");
+
+  std::ostringstream field;
+  field << ",\n"
+        << "  \"surface-pressure-force\": {\n"
+        << "    \"enabled\": " << (enabled ? "true" : "false") << ",\n"
+        << "    \"center\": [0, 0, 0],\n"
+        << "    \"pressure\": " << pressure << ",\n"
+        << "    \"ramp-steps\": " << rampSteps << "\n"
+        << "  }";
+  json.insert(pos, field.str());
+  return json;
+}
+
 void writeZeroShellRestartState(const fs::path &outputDir, int frame)
 {
   pgo::Mesh::TriMeshGeo mesh;
@@ -223,7 +242,8 @@ std::string makeShellIPCConfig(const fs::path &tempDir, int numTimesteps,
   bool useFloor = false,
   std::optional<std::string> floorAxis = std::nullopt,
   std::optional<double> floorHeight = std::nullopt,
-  std::optional<double> floorKappa = std::nullopt)
+  std::optional<double> floorKappa = std::nullopt,
+  int solverMaxIter = 5)
 {
   const fs::path shellDir = fs::path(kShellExampleDir);
   const fs::path outputDir = tempDir / "shell-output";
@@ -247,7 +267,7 @@ std::string makeShellIPCConfig(const fs::path &tempDir, int numTimesteps,
        << "  \"damping-params\": [0, 0],\n"
        << "  \"sim-type\": \"dynamic\",\n"
        << "  \"solver-eps\": 1e-4,\n"
-       << "  \"solver-max-iter\": 5,\n"
+      << "  \"solver-max-iter\": " << solverMaxIter << ",\n"
        << "  \"elastic-material\": \"koiter-stvk\",\n"
        << "  \"loglevel\": \"" << logLevel << "\",\n"
        << "  \"dump-interval\": " << dumpInterval << ",\n"
@@ -623,7 +643,7 @@ TEST(RunIPCSimCliGTest, FloorEnabledLogPrintsFloorParameters)
   const fs::path configPath = tempDir.path() / "shell-ipc-floor.json";
   const fs::path logPath = tempDir.path() / "shell-output" / "runIPCSim.log";
 
-  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "info", true, "y", -0.15, 4321.0));
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "info", true, "y", -0.15, 4321.0, 20));
 
   std::ostringstream command;
   command << shellExecutable(binary)
@@ -701,6 +721,7 @@ TEST(RunIPCSimCliGTest, DebugLogLevelPrintsClampedFeasibleAlphaBreakdownForCubic
   const std::string contents = readTextFile(logPath);
   EXPECT_NE(contents.find("feasible alpha clamped: material:"), std::string::npos);
   EXPECT_NE(contents.find("contact:"), std::string::npos);
+  EXPECT_NE(contents.find("accepted=true"), std::string::npos);
 }
 
 TEST(RunIPCSimCliGTest, WarnLogLevelSuppressesMaxStepSummary)
@@ -794,7 +815,7 @@ TEST(RunIPCSimCliGTest, OneTimestepShellFloorSmokeSucceeds)
   ScopedTempDir tempDir;
   const fs::path configPath = tempDir.path() / "shell-ipc-floor-step.json";
 
-  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "info", true, "y", -0.15, 4000.0));
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "info", true, "y", -0.15, 4000.0, 20));
 
   std::ostringstream command;
   command << shellExecutable(binary)
@@ -968,6 +989,41 @@ TEST(RunIPCSimCliGTest, TetVonMisesOutputWritesElementStressJson)
     EXPECT_TRUE(std::isfinite(value));
     EXPECT_GE(value, 0.0);
   }
+}
+
+TEST(RunIPCSimCliGTest, TetSurfacePressureForceOneStepWritesOutputsAndStress)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-ipc-pressure.json";
+  const fs::path outputDir = tempDir.path() / "tet-output";
+
+  writeTextFile(configPath,
+    addBoolConfigField(addSurfacePressureForceConfig(makeTetIPCConfig(tempDir.path(), 1), true), "output-von-mises", true));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  ASSERT_TRUE(fs::exists(stressPath(outputDir, 0)));
+
+  const nlohmann::json stressJson = readJsonFile(stressPath(outputDir, 0));
+  const auto values = stressJson.at("values").get<std::vector<double>>();
+  ASSERT_FALSE(values.empty());
+  bool hasNonzeroStress = false;
+  for (double value : values) {
+    EXPECT_TRUE(std::isfinite(value));
+    EXPECT_GE(value, 0.0);
+    hasNonzeroStress = hasNonzeroStress || value > 0.0;
+  }
+  EXPECT_TRUE(hasNonzeroStress);
 }
 
 TEST(RunIPCSimCliGTest, CubicOneTimestepSmokeWritesDeformAndRet)
@@ -1147,6 +1203,69 @@ TEST(RunIPCSimSetupGTest, CubicEmbeddingMatrixMatchesBarycentricBaseline)
   const ES::SpMatD expected = computeExpectedEmbeddingMatrix(cubicIPCConfigPath());
 
   expectSparseMatrixNear(context.surfaceFromSimulationDispMap, expected);
+}
+
+TEST(RunIPCSimSetupGTest, VolumeSurfacePressureForceProjectsToSimulationDofs)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-pressure-setup.json";
+  writeTextFile(configPath, addSurfacePressureForceConfig(makeTetIPCConfig(tempDir.path(), 0), true, 1000.0, 20));
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+
+  const auto context = pgo::RunIPCSim::buildVolumeIpcSimulation(config);
+  EXPECT_TRUE(context.surfacePressureForceEnabled);
+  EXPECT_EQ(context.surfacePressureRampSteps, 20);
+  ASSERT_EQ(context.surfacePressureSimulationForce.size(), context.simulationRestPosition.size());
+  EXPECT_GT(context.surfacePressureSimulationForce.norm(), 0.0);
+}
+
+TEST(RunIPCSimSetupGTest, SurfacePressureForceDisabledOrZeroPressureProducesNoContribution)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path disabledConfigPath = tempDir.path() / "tet-pressure-disabled.json";
+  const fs::path zeroConfigPath = tempDir.path() / "tet-pressure-zero.json";
+  writeTextFile(disabledConfigPath, addSurfacePressureForceConfig(makeTetIPCConfig(tempDir.path(), 0), false));
+  writeTextFile(zeroConfigPath, addSurfacePressureForceConfig(makeTetIPCConfig(tempDir.path(), 0), true, 0.0, 20));
+
+  pgo::ConfigFileJSON disabledConfig;
+  ASSERT_TRUE(disabledConfig.open(disabledConfigPath.string().c_str()));
+  const auto disabledContext = pgo::RunIPCSim::buildVolumeIpcSimulation(disabledConfig);
+  EXPECT_FALSE(disabledContext.surfacePressureForceEnabled);
+  EXPECT_EQ(disabledContext.surfacePressureSimulationForce.size(), 0);
+
+  pgo::ConfigFileJSON zeroConfig;
+  ASSERT_TRUE(zeroConfig.open(zeroConfigPath.string().c_str()));
+  const auto zeroContext = pgo::RunIPCSim::buildVolumeIpcSimulation(zeroConfig);
+  EXPECT_TRUE(zeroContext.surfacePressureForceEnabled);
+  ASSERT_EQ(zeroContext.surfacePressureSimulationForce.size(), zeroContext.simulationRestPosition.size());
+  EXPECT_DOUBLE_EQ(zeroContext.surfacePressureSimulationForce.norm(), 0.0);
+}
+
+TEST(RunIPCSimSetupGTest, ShellRejectsEnabledSurfacePressureForce)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-pressure-enabled.json";
+  writeTextFile(configPath, addSurfacePressureForceConfig(makeShellIPCConfig(tempDir.path(), 0), true));
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+
+  try {
+    (void)pgo::RunIPCSim::buildShellIpcSimulation(config);
+    FAIL() << "Expected enabled surface-pressure-force to be rejected on the shell path.";
+  }
+  catch (const std::invalid_argument &e) {
+    EXPECT_NE(std::string(e.what()).find("surface-pressure-force"), std::string::npos);
+    EXPECT_NE(std::string(e.what()).find("volume"), std::string::npos);
+  }
 }
 
 TEST(RunIPCSimSetupGTest, UseFloorRequiresExplicitAxisHeightAndKappa)
