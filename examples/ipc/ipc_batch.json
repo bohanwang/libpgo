@@ -54,6 +54,11 @@
     {
       "name": "all_ipc",
       "cases": "all"
+    },
+    {
+      "name": "all_ipc_abc",
+      "stages": ["abc"],
+      "cases": "all"
     }
   ]
 }

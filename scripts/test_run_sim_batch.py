@@ -41,9 +41,11 @@ class RunSimBatchRunnerTest(unittest.TestCase):
             REPO_ROOT / "examples" / "ipc" / "cubic" / "box-squash" / "anim.json",
         )
         self.assertTrue(case.log)
+        self.assertIsNone(case.vtu_config)
         self.assertEqual(jobs["squash_regression"].cases, ("tet_box_squash", "cubic_box_squash"))
+        self.assertEqual(jobs["squash_regression"].stages, ("sim", "abc"))
 
-        commands = runner.build_commands(build_dir, case, run_sim=True, run_convert=True)
+        commands = runner.build_commands(build_dir, case, jobs["squash_regression"].stages, overwrite=False)
         self.assertEqual(commands[0].label, "sim")
         self.assertEqual(
             commands[0].argv,
@@ -53,7 +55,7 @@ class RunSimBatchRunnerTest(unittest.TestCase):
                 "--log",
             ],
         )
-        self.assertEqual(commands[1].label, "convert")
+        self.assertEqual(commands[1].label, "abc")
         self.assertEqual(
             commands[1].argv,
             [
@@ -84,6 +86,17 @@ class RunSimBatchRunnerTest(unittest.TestCase):
             / "g0_b8_case1_pressure-anim.json",
         )
         self.assertTrue(case.log)
+        self.assertEqual(
+            case.vtu_config,
+            REPO_ROOT
+            / "examples"
+            / "fbms"
+            / "generated"
+            / "r128_default"
+            / "g0_b8"
+            / "g0_b8_case1_pressure-stress-vtu.json",
+        )
+        self.assertEqual(jobs["case1_pressure"].stages, ("sim", "abc", "vtu"))
         self.assertEqual(jobs["case1_pressure"].cases, ("g0_b8_case1_pressure", "g0_b3_case1_pressure"))
         self.assertEqual(
             jobs["g0_b8"].cases,
@@ -93,6 +106,9 @@ class RunSimBatchRunnerTest(unittest.TestCase):
                 "g0_b8_case3_wall_impact_floor_prototype",
             ),
         )
+        self.assertEqual(jobs["g0_b8"].stages, ("sim", "abc", "vtu"))
+        self.assertEqual(jobs["g0_b8_post"].stages, ("abc", "vtu"))
+        self.assertEqual(jobs["g0_b8_vtu"].stages, ("vtu",))
         self.assertEqual(
             jobs["g0_b3"].cases,
             (
@@ -110,6 +126,17 @@ class RunSimBatchRunnerTest(unittest.TestCase):
             / "r128_default"
             / "g0_b3"
             / "g0_b3_case2_squash_floor-prototype-anim.json",
+        )
+        commands = runner.build_commands(build_dir, case, jobs["g0_b8"].stages, overwrite=True)
+        self.assertEqual([command.label for command in commands], ["sim", "abc", "vtu"])
+        self.assertEqual(
+            commands[2].argv,
+            [
+                str(REPO_ROOT / "scripts" / "export_fbms_stress_vtu.py"),
+                "--config",
+                str(case.vtu_config),
+                "--overwrite",
+            ],
         )
 
     def test_sim_output_dir_comes_from_sim_config(self) -> None:
@@ -146,6 +173,40 @@ class RunSimBatchRunnerTest(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "unknown cases"):
                 runner.load_config(config)
+
+    def test_load_config_rejects_unknown_job_stage(self) -> None:
+        runner = load_runner_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = Path(tmpdir) / "bad-stage.json"
+            config.write_text(
+                """
+{
+  "cases": {
+    "known": {
+      "sim_config": "examples/ipc/shell/shell-ipc.json"
+    }
+  },
+  "jobs": [
+    {
+      "name": "broken",
+      "stages": ["sim", "movie"],
+      "cases": ["known"]
+    }
+  ]
+}
+""",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "unknown stages"):
+                runner.load_config(config)
+
+    def test_vtu_stage_requires_vtu_config(self) -> None:
+        runner = load_runner_module()
+        build_dir, cases, _ = runner.load_config(REPO_ROOT / "examples" / "ipc" / "ipc_batch.json")
+
+        with self.assertRaisesRegex(ValueError, "vtu_config"):
+            runner.build_commands(build_dir, cases["tet_box_squash"], ("vtu",), overwrite=False)
 
 
 if __name__ == "__main__":

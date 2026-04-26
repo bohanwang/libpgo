@@ -74,8 +74,7 @@ Regenerate Alembic caches from existing frame dumps without rerunning simulation
 
 ```bash
 scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json \
-  --job all_ipc \
-  --convert-only
+  --job all_ipc_abc
 ```
 
 The default batch config uses `build/base_no_mkl`. Edit `ipc_batch.json` if you want to use another build directory such as `build/base_no_mkl_debug`.
@@ -97,11 +96,14 @@ Each case entry references its `runIPCSim` config. The per-case `anim_config` de
   "jobs": [
     {
       "name": "squash_regression",
+      "stages": ["sim", "abc"],
       "cases": ["tet_box_squash", "cubic_box_squash"]
     }
   ]
 }
 ```
+
+If `stages` is omitted, the runner defaults to `["sim", "abc"]`. Use a job with `["abc"]` for Alembic-only postprocessing.
 
 `scripts/run_sim_batch.py` reads the `output` field from each simulation config to apply `--skip-existing` and `--overwrite`. Without either flag, it stops before running `runIPCSim` if that output folder already exists, because `runIPCSim` clears the output folder unless `restart-from-u` is enabled.
 

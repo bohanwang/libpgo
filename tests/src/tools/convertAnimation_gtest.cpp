@@ -166,3 +166,88 @@ TEST(ConvertAnimationCli, RespectsExplicitOutputFolder)
   ASSERT_TRUE(fs::exists(expectedAbcPath));
   ASSERT_GT(fs::file_size(expectedAbcPath), 0);
 }
+
+TEST(ConvertAnimationCli, UsesOutputFolderFromConfigWhenCliOutputFolderIsOmitted)
+{
+  const fs::path binary = getConvertAnimationBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configDir = tempDir.path() / "anim";
+  const fs::path outputDir = tempDir.path() / "abc-out";
+  const fs::path configPath = configDir / "anim.json";
+  const fs::path meshPath = configDir / "mesh.obj";
+  const fs::path frame0Path = configDir / "frames" / "frame0000.obj";
+  const fs::path frame1Path = configDir / "frames" / "frame0001.obj";
+  const fs::path expectedAbcPath = outputDir / "tri.abc";
+
+  writeTextFile(meshPath, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+  writeTextFile(frame0Path, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+  writeTextFile(frame1Path, "v 0 0 0\nv 1.2 0 0\nv 0 1 0\nf 1 2 3\n");
+  writeTextFile(configPath, R"({
+  "save-cache": 0,
+  "output-folder": "../abc-out",
+  "meshes": [
+    {
+      "name": "tri",
+      "driving-mesh": "mesh.obj",
+      "sequence": "frames/frame{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [0, 2]
+    }
+  ]
+})");
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " " << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  ASSERT_TRUE(fs::exists(expectedAbcPath));
+  ASSERT_GT(fs::file_size(expectedAbcPath), 0);
+}
+
+TEST(ConvertAnimationCli, CliOutputFolderOverridesConfigOutputFolder)
+{
+  const fs::path binary = getConvertAnimationBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configDir = tempDir.path() / "anim";
+  const fs::path configOutputDir = tempDir.path() / "config-abc-out";
+  const fs::path cliOutputDir = tempDir.path() / "cli-abc-out";
+  const fs::path configPath = configDir / "anim.json";
+  const fs::path meshPath = configDir / "mesh.obj";
+  const fs::path frame0Path = configDir / "frames" / "frame0000.obj";
+  const fs::path frame1Path = configDir / "frames" / "frame0001.obj";
+  const fs::path expectedAbcPath = cliOutputDir / "tri.abc";
+
+  writeTextFile(meshPath, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+  writeTextFile(frame0Path, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+  writeTextFile(frame1Path, "v 0 0 0\nv 1.2 0 0\nv 0 1 0\nf 1 2 3\n");
+  writeTextFile(configPath, R"({
+  "save-cache": 0,
+  "output-folder": "../config-abc-out",
+  "meshes": [
+    {
+      "name": "tri",
+      "driving-mesh": "mesh.obj",
+      "sequence": "frames/frame{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [0, 2]
+    }
+  ]
+})");
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " " << quotePath(configPath)
+          << " " << quotePath(cliOutputDir);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  ASSERT_TRUE(fs::exists(expectedAbcPath));
+  ASSERT_FALSE(fs::exists(configOutputDir / "tri.abc"));
+  ASSERT_GT(fs::file_size(expectedAbcPath), 0);
+}

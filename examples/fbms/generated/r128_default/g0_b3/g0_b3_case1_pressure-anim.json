@@ -1,4 +1,5 @@
 {
+  "output-folder": "case1_pressure_output/abc",
   "meshes": [
     {
       "name": "g0_b3_case1_pressure",

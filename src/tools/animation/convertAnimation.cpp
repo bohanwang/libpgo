@@ -1,4 +1,5 @@
 #include "animationLoader.h"
+#include "configFileJSON.h"
 #include "pgoLogging.h"
 #include "initPredicates.h"
 
@@ -15,10 +16,23 @@ int main(int argc, char *argv[])
     return 1;
   }
 
+  pgo::ConfigFileJSON config;
+  if (!config.open(argv[1])) {
+    return 1;
+  }
+
   const std::filesystem::path configPath(argv[1]);
   const std::filesystem::path outputFolder =
     (argc == 3) ? std::filesystem::path(argv[2]) :
-    (configPath.has_parent_path() ? configPath.parent_path() : std::filesystem::path("."));
+    (config.exist("output-folder") ? std::filesystem::path(config.getResolvedPath("output-folder", 1)) :
+                                     (configPath.has_parent_path() ? configPath.parent_path() : std::filesystem::path(".")));
+
+  std::error_code ec;
+  std::filesystem::create_directories(outputFolder, ec);
+  if (ec) {
+    std::cerr << "Failed to create output folder " << outputFolder << ": " << ec.message() << "\n";
+    return 1;
+  }
 
   pgo::AnimationIO::AnimationLoader loader;
   if (loader.load(argv[1]) != 0) {

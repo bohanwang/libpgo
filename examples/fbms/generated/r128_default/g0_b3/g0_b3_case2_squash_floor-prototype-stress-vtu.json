@@ -1,0 +1,8 @@
+{
+  "veg": "union_shell.veg",
+  "states": "case2_squash_floor_prototype_output/states",
+  "stress": "case2_squash_floor_prototype_output/stress",
+  "output": "case2_squash_floor_prototype_output/vtu",
+  "frame-start": 0,
+  "frame-end": 300
+}

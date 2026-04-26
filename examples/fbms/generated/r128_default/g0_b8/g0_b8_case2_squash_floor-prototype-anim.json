@@ -1,4 +1,5 @@
 {
+  "output-folder": "case2_squash_floor_prototype_output/abc",
   "meshes": [
     {
       "name": "g0_b8_case2_squash_floor_prototype",

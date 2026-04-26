@@ -191,10 +191,10 @@ Run named IPC batches from the JSON config:
 ```bash
 scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job squash_regression --dry-run
 scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job squash_regression --skip-existing
-scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job all_ipc --convert-only
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job all_ipc_abc
 ```
 
-The generic batch runner reads [`examples/ipc/ipc_batch.json`](./examples/ipc/ipc_batch.json), runs `runIPCSim` with `--log`, and then runs `convertAnimation` with the matching per-case `anim.json`. Use [`examples/ipc/README.md`](./examples/ipc/README.md) for the full case list, job definitions, and output-overwrite policy.
+The generic batch runner reads [`examples/ipc/ipc_batch.json`](./examples/ipc/ipc_batch.json), runs the stages declared by each job, and defaults jobs without a `stages` field to `runIPCSim` with `--log` followed by `convertAnimation` with the matching per-case `anim.json`. Use [`examples/ipc/README.md`](./examples/ipc/README.md) for the full case list, job definitions, and output-overwrite policy.
 
 Run representative IPC cases from the repo root:
 
