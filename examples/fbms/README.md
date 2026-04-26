@@ -359,11 +359,72 @@ runIPCSim.log                simulator log when --log is used
 
 The three current cases are:
 
+Important contact limitation: the `floors` entries below do not use external IPC
+contact yet. External IPC contact is not implemented in this runner path. The
+current floors are a simple debug-only quadratic floor energy on embedded surface
+vertices, implemented by `EmbeddedSurfaceFloorPotentialEnergy`. This is useful
+for prototype squeezing/impact tests, but it is not the final external-contact
+model. Future work should replace these debug floors with real external IPC
+contact.
+
 | Case | Config | What It Does |
 | --- | --- | --- |
 | `case1_pressure` | `g0_b*_case1_pressure-ipc.json` | Dynamic stable-Neo simulation with no gravity. A surface pressure force pushes inward toward `center: "auto"`, where the center is computed from the scaled surface mesh bounding box. Pressure ramps during the first 20 steps. |
-| `case2_squash_floor_prototype` | `g0_b*_case2_squash_floor-prototype-ipc.json` | Dynamic stable-Neo simulation squeezed between two moving IPC floors along the x axis. The lower floor moves from `x=-1.05` to `x=-0.75`, and the upper floor moves from `x=1.05` to `x=0.75` over frames `[0, 100]`. |
-| `case3_wall_impact_floor_prototype` | `g0_b*_case3_wall_impact_floor-prototype-ipc.json` | Dynamic stable-Neo impact prototype. The shell starts with velocity `[50, 0, 0]` and collides with an upper x-axis IPC wall/floor at `x=1.2`. |
+| `case2_squash_floor_prototype` | `g0_b*_case2_squash_floor-prototype-ipc.json` | Dynamic stable-Neo prototype squeezed between two moving debug floor energies along the x axis. The lower floor moves from `x=-1.05` to `x=-0.75`, and the upper floor moves from `x=1.05` to `x=0.75` over frames `[0, 100]`. |
+| `case3_wall_impact_floor_prototype` | `g0_b*_case3_wall_impact_floor-prototype-ipc.json` | Dynamic stable-Neo impact prototype. The shell starts with velocity `[50, 0, 0]` and hits an upper x-axis debug floor energy at `x=1.2`. |
+
+`surface-pressure-force` is used by case 1:
+
+```json
+{
+  "surface-pressure-force": {
+    "enabled": true,
+    "center": "auto",
+    "pressure": 1000000.0,
+    "ramp-steps": 20
+  }
+}
+```
+
+When enabled, this computes a per-surface-vertex force pointing from each rest
+surface vertex toward `center`, weighted by vertex surface area, then projects it
+to simulation DOFs. `center` can be a numeric `[x, y, z]` vector or `"auto"`.
+`"auto"` uses the scaled surface rest-position bounding-box center. `pressure`
+sets the force magnitude scale. `ramp-steps` linearly ramps the force from zero
+to full strength over the first frames.
+
+`floors` is used by cases 2 and 3:
+
+```json
+{
+  "floors": [
+    {
+      "axis": "x",
+      "side": "lower",
+      "kappa": 1000000.0,
+      "motion": {
+        "height-start": -1.05,
+        "height-end": -0.75,
+        "frame-start": 0,
+        "frame-end": 100
+      }
+    },
+    {
+      "axis": "x",
+      "side": "upper",
+      "kappa": 1000000.0,
+      "height": 1.2
+    }
+  ]
+}
+```
+
+Each floor entry requires `axis` and `kappa`, plus exactly one of `height` or
+`motion`. `axis` selects `x`, `y`, or `z`. `side: "lower"` penalizes vertices
+below `height` along that axis; `side: "upper"` penalizes vertices above
+`height`. `kappa` is the quadratic penalty stiffness. `height` creates a static
+floor. `motion` linearly interpolates the floor height from `height-start` to
+`height-end` over `[frame-start, frame-end]`, then keeps the endpoint value.
 
 ## 7. Dump Alembic Animation
 
