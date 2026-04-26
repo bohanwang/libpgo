@@ -60,41 +60,73 @@ The sections below document the existing flat assets and the equivalent manual c
 
 Use `fbms_batch.json` with the generic batch runner to launch FBMS `runIPCSim` cases and optional Alembic conversion from the repo root.
 
-Preview the current Case 1 pressure batch:
+Preview the current `g0_b8` batch:
 
 ```bash
 scripts/run_sim_batch.py \
   --config examples/fbms/fbms_batch.json \
-  --job case1_pressure \
+  --job g0_b8 \
   --dry-run
 ```
 
-Run Case 1, skipping the simulation if its output folder already exists:
+Run `g0_b3`, skipping simulations whose output folders already exist:
 
 ```bash
 scripts/run_sim_batch.py \
   --config examples/fbms/fbms_batch.json \
-  --job case1_pressure \
+  --job g0_b3 \
   --skip-existing
 ```
 
-Regenerate the Alembic cache from an existing Case 1 frame sequence:
+Regenerate Alembic caches from existing frame sequences:
 
 ```bash
 scripts/run_sim_batch.py \
   --config examples/fbms/fbms_batch.json \
-  --job case1_pressure \
+  --job g0_b8 \
   --convert-only
 ```
 
-The current FBMS batch points at:
+The current FBMS batch includes three simulation cases for both `g0_b8` and `g0_b3`:
 
 ```text
-generated/r128_default/g0_b8/g0_b8_case1_pressure-ipc.json
-generated/r128_default/g0_b8/anim.json
+case1_pressure
+case2_squash_floor_prototype
+case3_wall_impact_floor_prototype
 ```
 
-The animation config uses `union_shell_remesh.obj` as the driving mesh and reads `case1_pressure_output/surface/retXXXX.obj` for frames `[0, 20)`.
+Each animation config uses `union_shell_remesh.obj` as the driving mesh and reads the corresponding `*/surface/retXXXX.obj` sequence for frames `[0, 300)`.
+
+## Stress VTU Export
+
+Use `scripts/export_fbms_stress_vtu.py` to export tetrahedral von Mises stress frames to ParaView-readable `.vtu` files plus a `series.pvd` time-series file. The exporter is driven by a JSON config that lives next to a simulation output folder.
+
+Each VTU frame writes three cell-data arrays: raw `von_mises`, `von_mises_log10` for high dynamic ranges, and `von_mises_clamped_99` for quick visual inspection without letting a few extreme cells dominate the color map.
+
+Example `stress_vtu.json`:
+
+```json
+{
+  "veg": "../union_shell.veg",
+  "states": "states",
+  "stress": "stress",
+  "output": "vtu",
+  "frame-start": 10,
+  "frame-end": 20
+}
+```
+
+Relative paths resolve from the config file directory. `frame-end` is exclusive, so the example exports frames `10..19`.
+
+Export the current `g0_b8` squash-floor prototype stress window:
+
+```bash
+scripts/export_fbms_stress_vtu.py \
+  --config examples/fbms/generated/r128_default/g0_b8/case2_squash_floor_prototype_output/stress_vtu.json \
+  --overwrite
+```
+
+Open `examples/fbms/generated/r128_default/g0_b8/case2_squash_floor_prototype_output/vtu/series.pvd` in ParaView to scrub the frame sequence.
 
 ## Inputs
 

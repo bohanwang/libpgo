@@ -3,6 +3,7 @@
 #include "deformationModelAssembler.h"
 #include "deformationModelEnergy.h"
 #include "embeddedSurfaceIPCPotentialEnergy.h"
+#include "embeddedSurfaceFloorPotentialEnergy.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
 #include "implicitBackwardEulerTimeIntegratorHelper.h"
 #include "initPredicates.h"
@@ -169,6 +170,20 @@ void logProfileSummary()
       stat.name, stat.callCount, stat.totalSeconds, stat.maxSeconds);
   }
 }
+
+double floorHeightAtFrame(const pgo::RunIPCSim::IpcFloorMotionState &motion, int frame)
+{
+  if (!motion.hasMotion)
+    return motion.heightStart;
+  if (frame <= motion.frameStart)
+    return motion.heightStart;
+  if (frame >= motion.frameEnd)
+    return motion.heightEnd;
+
+  const double denom = static_cast<double>(motion.frameEnd - motion.frameStart);
+  const double alpha = denom > 0.0 ? static_cast<double>(frame - motion.frameStart) / denom : 1.0;
+  return motion.heightStart * (1.0 - alpha) + motion.heightEnd * alpha;
+}
 }
 
 int main(int argc, char *argv[])
@@ -322,6 +337,9 @@ int main(int argc, char *argv[])
       }
 
       intg->addGeneralImplicitForceModel(context.collisionHandler, 0, 0);
+      for (std::size_t fi = 0; fi < context.floorPotentialEnergies.size(); ++fi) {
+        context.floorPotentialEnergies[fi]->setFloorHeight(floorHeightAtFrame(context.floorMotionStates[fi], framei));
+      }
       for (const auto &forceModel : context.extraGeneralImplicitForceModels)
         intg->addGeneralImplicitForceModel(forceModel, 0, 0);
       if (context.surfacePressureForceEnabled) {

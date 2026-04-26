@@ -75,10 +75,42 @@ class RunSimBatchRunnerTest(unittest.TestCase):
         )
         self.assertEqual(
             case.anim_config,
-            REPO_ROOT / "examples" / "fbms" / "generated" / "r128_default" / "g0_b8" / "anim.json",
+            REPO_ROOT
+            / "examples"
+            / "fbms"
+            / "generated"
+            / "r128_default"
+            / "g0_b8"
+            / "g0_b8_case1_pressure-anim.json",
         )
         self.assertTrue(case.log)
-        self.assertEqual(jobs["case1_pressure"].cases, ("g0_b8_case1_pressure",))
+        self.assertEqual(jobs["case1_pressure"].cases, ("g0_b8_case1_pressure", "g0_b3_case1_pressure"))
+        self.assertEqual(
+            jobs["g0_b8"].cases,
+            (
+                "g0_b8_case1_pressure",
+                "g0_b8_case2_squash_floor_prototype",
+                "g0_b8_case3_wall_impact_floor_prototype",
+            ),
+        )
+        self.assertEqual(
+            jobs["g0_b3"].cases,
+            (
+                "g0_b3_case1_pressure",
+                "g0_b3_case2_squash_floor_prototype",
+                "g0_b3_case3_wall_impact_floor_prototype",
+            ),
+        )
+        self.assertEqual(
+            cases["g0_b3_case2_squash_floor_prototype"].anim_config,
+            REPO_ROOT
+            / "examples"
+            / "fbms"
+            / "generated"
+            / "r128_default"
+            / "g0_b3"
+            / "g0_b3_case2_squash_floor-prototype-anim.json",
+        )
 
     def test_sim_output_dir_comes_from_sim_config(self) -> None:
         runner = load_runner_module()

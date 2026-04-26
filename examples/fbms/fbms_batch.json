@@ -1,18 +1,71 @@
 {
   "build_dir": "build/base_no_mkl",
   "defaults": {
-    "anim_config": "anim.json",
     "log": true
   },
   "cases": {
     "g0_b8_case1_pressure": {
-      "sim_config": "examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-ipc.json"
+      "sim_config": "examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-ipc.json",
+      "anim_config": "g0_b8_case1_pressure-anim.json"
+    },
+    "g0_b8_case2_squash_floor_prototype": {
+      "sim_config": "examples/fbms/generated/r128_default/g0_b8/g0_b8_case2_squash_floor-prototype-ipc.json",
+      "anim_config": "g0_b8_case2_squash_floor-prototype-anim.json"
+    },
+    "g0_b8_case3_wall_impact_floor_prototype": {
+      "sim_config": "examples/fbms/generated/r128_default/g0_b8/g0_b8_case3_wall_impact_floor-prototype-ipc.json",
+      "anim_config": "g0_b8_case3_wall_impact_floor-prototype-anim.json"
+    },
+    "g0_b3_case1_pressure": {
+      "sim_config": "examples/fbms/generated/r128_default/g0_b3/g0_b3_case1_pressure-ipc.json",
+      "anim_config": "g0_b3_case1_pressure-anim.json"
+    },
+    "g0_b3_case2_squash_floor_prototype": {
+      "sim_config": "examples/fbms/generated/r128_default/g0_b3/g0_b3_case2_squash_floor-prototype-ipc.json",
+      "anim_config": "g0_b3_case2_squash_floor-prototype-anim.json"
+    },
+    "g0_b3_case3_wall_impact_floor_prototype": {
+      "sim_config": "examples/fbms/generated/r128_default/g0_b3/g0_b3_case3_wall_impact_floor-prototype-ipc.json",
+      "anim_config": "g0_b3_case3_wall_impact_floor-prototype-anim.json"
     }
   },
   "jobs": [
     {
       "name": "case1_pressure",
-      "cases": ["g0_b8_case1_pressure"]
+      "cases": [
+        "g0_b8_case1_pressure", 
+        "g0_b3_case1_pressure"
+      ]
+    },
+    {
+      "name": "case2_squash_floor_prototype",
+      "cases": [
+        "g0_b8_case2_squash_floor_prototype", 
+        "g0_b3_case2_squash_floor_prototype"
+      ]
+    },
+    {
+      "name": "case3_wall_impact_floor_prototype",
+      "cases": [
+        "g0_b8_case3_wall_impact_floor_prototype", 
+        "g0_b3_case3_wall_impact_floor_prototype"
+      ]
+    },
+    {
+      "name": "g0_b8",
+      "cases": [
+        "g0_b8_case1_pressure",
+        "g0_b8_case2_squash_floor_prototype",
+        "g0_b8_case3_wall_impact_floor_prototype"
+      ]
+    },
+    {
+      "name": "g0_b3",
+      "cases": [
+        "g0_b3_case1_pressure",
+        "g0_b3_case2_squash_floor_prototype",
+        "g0_b3_case3_wall_impact_floor_prototype"
+      ]
     },
     {
       "name": "all_fbms",

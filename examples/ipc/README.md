@@ -146,7 +146,7 @@ Current config convention:
 - tet uses `tet-mesh` together with `surface-mesh`
 - cubic uses `cubic-mesh` together with `surface-mesh`
 - tet and cubic provide explicit `ipc-dhat` and `ipc-kappa`
-- floor-enabled cases additionally provide `use-floor`, `floor-axis`, `floor-height`, and `floor-kappa`
+- floor-enabled cases additionally provide a `floors` array with `axis`, `side`, `height` or `motion`, and `kappa`
 - shell currently uses `ipc-heuristic: true`
 - in tet and cubic, `fixed-vertices` refers to volume simulation vertex indices, not surface vertex indices
 
@@ -223,7 +223,7 @@ Cubic unified IPC floor-contact example migrated from `examples/legacy/cubic/box
 - files: `box-with-sphere.obj`, `box-with-sphere.veg`, `box-ipc.json`, `anim.json`
 - material: `stable-neo`
 - IPC params: explicit `ipc-dhat = 0.002`, `ipc-kappa = 3000.0`
-- floor params: `use-floor = true`, `floor-axis = y`, `floor-height = -1.0`, `floor-kappa = 1000.0`
+- floor params: one lower `y` floor with `height = -1.0` and `kappa = 1000.0`
 - config note: restores the source-case gravity direction with `g = [0, -9.81, 0]`
 - run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc.json`
 - output: `examples/ipc/cubic/box-with-sphere/ret-box-with-sphere-ipc/`

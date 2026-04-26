@@ -23,9 +23,16 @@ enum class FloorAxis : int
   Z = 2
 };
 
+enum class FloorSide : int
+{
+  LOWER = 1,
+  UPPER = -1
+};
+
 struct FloorPenaltyParameters
 {
   FloorAxis floorAxis = FloorAxis::INVALID;
+  FloorSide floorSide = FloorSide::LOWER;
   double floorHeight = std::numeric_limits<double>::quiet_NaN();
   double floorKappa = std::numeric_limits<double>::quiet_NaN();
 };
@@ -37,6 +44,9 @@ public:
     const EigenSupport::MXd &surfaceRestVertices,
     const EigenSupport::SpMatD &surfaceFromSimulationDispMap,
     const FloorPenaltyParameters &params);
+
+  void setFloorHeight(double h);
+  double floorHeight() const;
 
 protected:
   virtual double computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const override;

@@ -32,12 +32,22 @@ namespace Contact
 {
 namespace CIPC
 {
+class EmbeddedSurfaceFloorPotentialEnergy;
 class EmbeddedSurfaceIPCPotentialEnergy;
 }
 }  // namespace Contact
 
 namespace RunIPCSim
 {
+struct IpcFloorMotionState
+{
+  bool hasMotion = false;
+  double heightStart = 0.0;
+  double heightEnd = 0.0;
+  int frameStart = 0;
+  int frameEnd = 0;
+};
+
 struct IpcSimulationContext
 {
   EigenSupport::SpMatD M;
@@ -56,6 +66,8 @@ struct IpcSimulationContext
   pgo::Mesh::TriMeshGeo surfaceMesh;
   std::shared_ptr<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy> collisionHandler;
   std::vector<std::shared_ptr<NonlinearOptimization::PotentialEnergy>> extraGeneralImplicitForceModels;
+  std::vector<std::shared_ptr<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>> floorPotentialEnergies;
+  std::vector<IpcFloorMotionState> floorMotionStates;
   bool surfacePressureForceEnabled = false;
   int surfacePressureRampSteps = 1;
   EigenSupport::VXd surfacePressureSimulationForce;

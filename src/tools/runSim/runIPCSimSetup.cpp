@@ -37,6 +37,7 @@ namespace
 namespace ES = pgo::EigenSupport;
 using pgo::Contact::CIPC::FloorAxis;
 using pgo::Contact::CIPC::FloorPenaltyParameters;
+using pgo::Contact::CIPC::FloorSide;
 
 [[noreturn]] void throwConfigError(const std::string &message)
 {
@@ -189,8 +190,8 @@ bool parseEnableMaterialMaxStep(const pgo::ConfigFileJSON &jconfig)
 
 struct ParsedFloorConfig
 {
-  bool useFloor = false;
   FloorPenaltyParameters params;
+  IpcFloorMotionState motionState;
 };
 
 struct ParsedSurfacePressureForceConfig
@@ -209,7 +210,7 @@ FloorAxis parseFloorAxis(const std::string &axis)
     return FloorAxis::Y;
   if (axis == "z")
     return FloorAxis::Z;
-  throwConfigError("`floor-axis` must be one of: x, y, z.");
+  throwConfigError("floor `axis` must be one of: x, y, z.");
 }
 
 const char *floorAxisToString(FloorAxis axis)
@@ -226,37 +227,112 @@ const char *floorAxisToString(FloorAxis axis)
   }
 }
 
-ParsedFloorConfig parseFloorConfig(const pgo::ConfigFileJSON &jconfig)
+FloorSide parseFloorSide(const std::string &side)
 {
-  ParsedFloorConfig floorConfig;
-  floorConfig.useFloor = jconfig.exist("use-floor")
-    ? jconfig.getValue<bool>("use-floor", 1)
-    : false;
+  if (side == "lower")
+    return FloorSide::LOWER;
+  if (side == "upper")
+    return FloorSide::UPPER;
+  throwConfigError("floor `side` must be `lower` or `upper`.");
+}
 
-  if (!floorConfig.useFloor) {
-    if (jconfig.exist("floor-axis") || jconfig.exist("floor-height") || jconfig.exist("floor-kappa")) {
-      SPDLOG_LOGGER_INFO(Logging::lgr(),
-        "runIPCSim floor config ignored because `use-floor=false`.");
-    }
-    return floorConfig;
+const char *floorSideToString(FloorSide side)
+{
+  switch (side) {
+    case FloorSide::LOWER:
+      return "lower";
+    case FloorSide::UPPER:
+      return "upper";
+    default:
+      return "invalid";
+  }
+}
+
+double floorHeightAtFrame(const IpcFloorMotionState &motion, int frame)
+{
+  if (!motion.hasMotion)
+    return motion.heightStart;
+
+  if (frame <= motion.frameStart)
+    return motion.heightStart;
+  if (frame >= motion.frameEnd)
+    return motion.heightEnd;
+
+  const double denom = static_cast<double>(motion.frameEnd - motion.frameStart);
+  const double alpha = denom > 0.0 ? static_cast<double>(frame - motion.frameStart) / denom : 1.0;
+  return motion.heightStart * (1.0 - alpha) + motion.heightEnd * alpha;
+}
+
+std::vector<ParsedFloorConfig> parseFloorsConfig(const pgo::ConfigFileJSON &jconfig)
+{
+  for (const char *legacyField : { "use-floor", "floor-axis", "floor-height", "floor-kappa" }) {
+    if (jconfig.exist(legacyField))
+      throwConfigError(std::string("runIPCSim floor config field `") + legacyField + "` has been replaced by `floors[]`.");
   }
 
-  if (!jconfig.exist("floor-axis"))
-    throwConfigError("Missing required field `floor-axis` when `use-floor=true`.");
-  if (!jconfig.exist("floor-height"))
-    throwConfigError("Missing required field `floor-height` when `use-floor=true`.");
-  if (!jconfig.exist("floor-kappa"))
-    throwConfigError("Missing required field `floor-kappa` when `use-floor=true`.");
+  std::vector<ParsedFloorConfig> floors;
+  if (!jconfig.exist("floors"))
+    return floors;
 
-  floorConfig.params.floorAxis = parseFloorAxis(jconfig.getString("floor-axis", 1));
-  floorConfig.params.floorHeight = jconfig.getDouble("floor-height", 1);
-  floorConfig.params.floorKappa = jconfig.getDouble("floor-kappa", 1);
-  if (!std::isfinite(floorConfig.params.floorHeight))
-    throwConfigError("`floor-height` must be finite.");
-  if (!std::isfinite(floorConfig.params.floorKappa))
-    throwConfigError("`floor-kappa` must be finite.");
+  const auto &floorsJson = jconfig.handle()["floors"];
+  if (!floorsJson.is_array())
+    throwConfigError("`floors` must be a JSON array.");
 
-  return floorConfig;
+  floors.reserve(floorsJson.size());
+  for (std::size_t floorIndex = 0; floorIndex < floorsJson.size(); ++floorIndex) {
+    const auto &floorJson = floorsJson.at(floorIndex);
+    if (!floorJson.is_object())
+      throwConfigError("Each `floors[]` entry must be a JSON object.");
+
+    if (!floorJson.contains("axis"))
+      throwConfigError("Missing required field `floors[].axis`.");
+    if (!floorJson.contains("kappa"))
+      throwConfigError("Missing required field `floors[].kappa`.");
+
+    const bool hasHeight = floorJson.contains("height");
+    const bool hasMotion = floorJson.contains("motion");
+    if (hasHeight == hasMotion)
+      throwConfigError("Each `floors[]` entry must provide exactly one of `height` or `motion`.");
+
+    ParsedFloorConfig floorConfig;
+    floorConfig.params.floorAxis = parseFloorAxis(floorJson.at("axis").get<std::string>());
+    floorConfig.params.floorSide = floorJson.contains("side") ? parseFloorSide(floorJson.at("side").get<std::string>()) : FloorSide::LOWER;
+    floorConfig.params.floorKappa = floorJson.at("kappa").get<double>();
+    if (!std::isfinite(floorConfig.params.floorKappa))
+      throwConfigError("`floors[].kappa` must be finite.");
+
+    if (hasHeight) {
+      floorConfig.params.floorHeight = floorJson.at("height").get<double>();
+      if (!std::isfinite(floorConfig.params.floorHeight))
+        throwConfigError("`floors[].height` must be finite.");
+      floorConfig.motionState.hasMotion = false;
+      floorConfig.motionState.heightStart = floorConfig.params.floorHeight;
+      floorConfig.motionState.heightEnd = floorConfig.params.floorHeight;
+    }
+    else {
+      const auto &motionJson = floorJson.at("motion");
+      if (!motionJson.is_object())
+        throwConfigError("`floors[].motion` must be a JSON object.");
+      for (const char *field : { "height-start", "height-end", "frame-start", "frame-end" }) {
+        if (!motionJson.contains(field))
+          throwConfigError(std::string("Missing required field `floors[].motion.") + field + "`.");
+      }
+      floorConfig.motionState.hasMotion = true;
+      floorConfig.motionState.heightStart = motionJson.at("height-start").get<double>();
+      floorConfig.motionState.heightEnd = motionJson.at("height-end").get<double>();
+      floorConfig.motionState.frameStart = motionJson.at("frame-start").get<int>();
+      floorConfig.motionState.frameEnd = motionJson.at("frame-end").get<int>();
+      if (!std::isfinite(floorConfig.motionState.heightStart) || !std::isfinite(floorConfig.motionState.heightEnd))
+        throwConfigError("`floors[].motion` heights must be finite.");
+      if (floorConfig.motionState.frameEnd < floorConfig.motionState.frameStart)
+        throwConfigError("`floors[].motion.frame-end` must be greater than or equal to `frame-start`.");
+      floorConfig.params.floorHeight = floorHeightAtFrame(floorConfig.motionState, 0);
+    }
+
+    floors.push_back(floorConfig);
+  }
+
+  return floors;
 }
 
 ParsedSurfacePressureForceConfig parseSurfacePressureForceConfig(const pgo::ConfigFileJSON &jconfig)
@@ -367,7 +443,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   const bool ipcHeuristic = jconfig.exist("ipc-heuristic") ? jconfig.getValue<bool>("ipc-heuristic", 1) : false;
   const bool enableMaterialMaxStep = parseEnableMaterialMaxStep(jconfig);
   const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeShellIPCParams(jconfig, surfaceBox);
-  const ParsedFloorConfig floorConfig = parseFloorConfig(jconfig);
+  const std::vector<ParsedFloorConfig> floorConfigs = parseFloorsConfig(jconfig);
 
   std::cout << "runIPCSim phase1D shell IPC parameters: "
             << "ipc-heuristic=" << (ipcHeuristic ? "true" : "false") << ", "
@@ -377,11 +453,19 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
             << "ipc-kappa=" << ipcParams.kappa << ", "
             << "eps_ee=" << ipcParams.eps_ee << ", "
             << "slackness=" << ipcParams.slackness << ", "
-            << "use-floor=" << (floorConfig.useFloor ? "true" : "false");
-  if (floorConfig.useFloor) {
-    std::cout << ", floor-axis=" << floorAxisToString(floorConfig.params.floorAxis)
-              << ", floor-height=" << floorConfig.params.floorHeight
-              << ", floor-kappa=" << floorConfig.params.floorKappa;
+            << "floors=" << floorConfigs.size();
+  for (std::size_t floorIndex = 0; floorIndex < floorConfigs.size(); ++floorIndex) {
+    const ParsedFloorConfig &floorConfig = floorConfigs[floorIndex];
+    std::cout << ", floor[" << floorIndex << "].axis=" << floorAxisToString(floorConfig.params.floorAxis)
+              << ", floor[" << floorIndex << "].side=" << floorSideToString(floorConfig.params.floorSide)
+              << ", floor[" << floorIndex << "].height=" << floorConfig.params.floorHeight
+              << ", floor[" << floorIndex << "].kappa=" << floorConfig.params.floorKappa;
+    if (floorConfig.motionState.hasMotion) {
+      std::cout << ", floor[" << floorIndex << "].motion=[" << floorConfig.motionState.heightStart
+                << "->" << floorConfig.motionState.heightEnd
+                << ", frames " << floorConfig.motionState.frameStart
+                << "->" << floorConfig.motionState.frameEnd << "]";
+    }
   }
   std::cout << std::endl;
 
@@ -469,9 +553,13 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   context.surfaceMesh = std::move(surfaceMesh);
   context.collisionHandler =
     std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(V, F, context.surfaceFromSimulationDispMap, ipcParams);
-  if (floorConfig.useFloor) {
+  for (const ParsedFloorConfig &floorConfig : floorConfigs) {
+    auto floorEnergy =
+      std::make_shared<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params);
+    context.floorPotentialEnergies.push_back(floorEnergy);
+    context.floorMotionStates.push_back(floorConfig.motionState);
     context.extraGeneralImplicitForceModels.push_back(
-      std::make_shared<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params));
+      std::move(floorEnergy));
   }
   return context;
 }
@@ -488,7 +576,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeVolumeIPCParams(jconfig);
   const SolidDeformationModel::DeformationModelElasticMaterial elasticMat = parseVolumeElasticMaterial(jconfig);
   const bool enableMaterialMaxStep = parseEnableMaterialMaxStep(jconfig);
-  const ParsedFloorConfig floorConfig = parseFloorConfig(jconfig);
+  const std::vector<ParsedFloorConfig> floorConfigs = parseFloorsConfig(jconfig);
   const ParsedSurfacePressureForceConfig pressureConfig = parseSurfacePressureForceConfig(jconfig);
 
   std::cout << "runIPCSim phase1D volume IPC parameters: "
@@ -499,11 +587,19 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
             << "ipc-kappa=" << ipcParams.kappa << ", "
             << "eps_ee=" << ipcParams.eps_ee << ", "
             << "slackness=" << ipcParams.slackness << ", "
-            << "use-floor=" << (floorConfig.useFloor ? "true" : "false");
-  if (floorConfig.useFloor) {
-    std::cout << ", floor-axis=" << floorAxisToString(floorConfig.params.floorAxis)
-              << ", floor-height=" << floorConfig.params.floorHeight
-              << ", floor-kappa=" << floorConfig.params.floorKappa;
+            << "floors=" << floorConfigs.size();
+  for (std::size_t floorIndex = 0; floorIndex < floorConfigs.size(); ++floorIndex) {
+    const ParsedFloorConfig &floorConfig = floorConfigs[floorIndex];
+    std::cout << ", floor[" << floorIndex << "].axis=" << floorAxisToString(floorConfig.params.floorAxis)
+              << ", floor[" << floorIndex << "].side=" << floorSideToString(floorConfig.params.floorSide)
+              << ", floor[" << floorIndex << "].height=" << floorConfig.params.floorHeight
+              << ", floor[" << floorIndex << "].kappa=" << floorConfig.params.floorKappa;
+    if (floorConfig.motionState.hasMotion) {
+      std::cout << ", floor[" << floorIndex << "].motion=[" << floorConfig.motionState.heightStart
+                << "->" << floorConfig.motionState.heightEnd
+                << ", frames " << floorConfig.motionState.frameStart
+                << "->" << floorConfig.motionState.frameEnd << "]";
+    }
   }
   std::cout << ", surface-pressure-force=" << (pressureConfig.enabled ? "true" : "false");
   if (pressureConfig.enabled) {
@@ -572,9 +668,13 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   context.surfaceMesh = std::move(surfaceMesh);
   context.collisionHandler =
     std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(V, F, context.surfaceFromSimulationDispMap, ipcParams);
-  if (floorConfig.useFloor) {
+  for (const ParsedFloorConfig &floorConfig : floorConfigs) {
+    auto floorEnergy =
+      std::make_shared<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params);
+    context.floorPotentialEnergies.push_back(floorEnergy);
+    context.floorMotionStates.push_back(floorConfig.motionState);
     context.extraGeneralImplicitForceModels.push_back(
-      std::make_shared<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params));
+      std::move(floorEnergy));
   }
   context.surfacePressureForceEnabled = pressureConfig.enabled;
   context.surfacePressureRampSteps = pressureConfig.rampSteps;

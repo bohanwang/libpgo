@@ -180,16 +180,53 @@ void appendFloorFields(std::ostringstream &json, bool useFloor,
     return;
 
   json << ",\n"
-       << "  \"use-floor\": " << (useFloor ? "true" : "false");
+       << "  \"floors\": [\n"
+       << "    {\n";
   if (floorAxis.has_value())
-    json << ",\n"
-         << "  \"floor-axis\": \"" << *floorAxis << "\"";
+    json << "      \"axis\": \"" << *floorAxis << "\"";
   if (floorHeight.has_value())
-    json << ",\n"
-         << "  \"floor-height\": " << *floorHeight;
+    json << (floorAxis.has_value() ? ",\n" : "")
+         << "      \"height\": " << *floorHeight;
   if (floorKappa.has_value())
-    json << ",\n"
-         << "  \"floor-kappa\": " << *floorKappa;
+    json << (floorAxis.has_value() || floorHeight.has_value() ? ",\n" : "")
+         << "      \"kappa\": " << *floorKappa;
+  json << "\n"
+       << "    }\n"
+       << "  ]";
+}
+
+std::string addTopLevelJsonField(std::string json, const std::string &field)
+{
+  const std::string marker = "\n}\n";
+  const std::size_t pos = json.rfind(marker);
+  if (pos == std::string::npos)
+    throw std::runtime_error("Failed to add config field to test JSON.");
+
+  json.insert(pos, ",\n" + field);
+  return json;
+}
+
+std::string addEmptyFloorsConfig(std::string json)
+{
+  return addTopLevelJsonField(std::move(json), "  \"floors\": []");
+}
+
+std::string addMovingUpperFloorConfig(std::string json)
+{
+  return addTopLevelJsonField(std::move(json),
+    "  \"floors\": [\n"
+    "    {\n"
+    "      \"axis\": \"y\",\n"
+    "      \"side\": \"upper\",\n"
+    "      \"kappa\": 4000.0,\n"
+    "      \"motion\": {\n"
+    "        \"height-start\": 1.0,\n"
+    "        \"height-end\": 0.75,\n"
+    "        \"frame-start\": 0,\n"
+    "        \"frame-end\": 1\n"
+    "      }\n"
+    "    }\n"
+    "  ]");
 }
 
 fs::path runIPCSimBinaryPath()
@@ -654,10 +691,11 @@ TEST(RunIPCSimCliGTest, FloorEnabledLogPrintsFloorParameters)
   ASSERT_TRUE(fs::exists(logPath));
 
   const std::string contents = readTextFile(logPath);
-  EXPECT_NE(contents.find("use-floor=true"), std::string::npos);
-  EXPECT_NE(contents.find("floor-axis=y"), std::string::npos);
-  EXPECT_NE(contents.find("floor-height=-0.15"), std::string::npos);
-  EXPECT_NE(contents.find("floor-kappa=4321"), std::string::npos);
+  EXPECT_NE(contents.find("floors=1"), std::string::npos);
+  EXPECT_NE(contents.find("floor[0].axis=y"), std::string::npos);
+  EXPECT_NE(contents.find("floor[0].side=lower"), std::string::npos);
+  EXPECT_NE(contents.find("floor[0].height=-0.15"), std::string::npos);
+  EXPECT_NE(contents.find("floor[0].kappa=4321"), std::string::npos);
 }
 
 TEST(RunIPCSimCliGTest, DebugLogLevelPrintsFullMaxStepSummary)
@@ -1074,6 +1112,36 @@ TEST(RunIPCSimCliGTest, CubicOneTimestepFloorSmokeWritesDeformAndRet)
   EXPECT_FALSE(fs::exists(outputDir / "ret0000.obj"));
 }
 
+TEST(RunIPCSimCliGTest, TetMovingUpperFloorSmokeWritesStress)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-ipc-moving-upper-floor.json";
+
+  writeTextFile(configPath, addBoolConfigField(addMovingUpperFloorConfig(makeTetIPCConfig(tempDir.path(), 2)), "output-von-mises", true));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  const fs::path outputDir = tempDir.path() / "tet-output";
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 1)));
+  EXPECT_TRUE(fs::exists(stressPath(outputDir, 1)));
+
+  const nlohmann::json stress = readJsonFile(stressPath(outputDir, 1));
+  ASSERT_TRUE(stress.contains("values"));
+  bool hasNonzeroStress = false;
+  for (const auto &value : stress["values"])
+    hasNonzeroStress = hasNonzeroStress || value.get<double>() > 0.0;
+  EXPECT_TRUE(hasNonzeroStress);
+}
+
 TEST(RunIPCSimCliGTest, TetRejectsIPCHeuristic)
 {
   const fs::path binary = runIPCSimBinaryPath();
@@ -1268,18 +1336,24 @@ TEST(RunIPCSimSetupGTest, ShellRejectsEnabledSurfacePressureForce)
   }
 }
 
-TEST(RunIPCSimSetupGTest, UseFloorRequiresExplicitAxisHeightAndKappa)
+TEST(RunIPCSimSetupGTest, FloorsArrayAcceptsEmptyArrayAndRequiresAxisHeightOrMotionAndKappa)
 {
   initializeRunIPCSimTestEnvironment();
 
   ScopedTempDir tempDir;
+  const fs::path emptyFloorsConfig = tempDir.path() / "shell-empty-floors.json";
   const fs::path missingAxisConfig = tempDir.path() / "shell-floor-missing-axis.json";
   const fs::path missingHeightConfig = tempDir.path() / "shell-floor-missing-height.json";
   const fs::path missingKappaConfig = tempDir.path() / "shell-floor-missing-kappa.json";
 
+  writeTextFile(emptyFloorsConfig, addEmptyFloorsConfig(makeShellIPCConfig(tempDir.path(), 0)));
   writeTextFile(missingAxisConfig, makeShellIPCConfig(tempDir.path(), 0, true, false, 0.002, 3000.0, 1, "info", true, std::nullopt, -0.1, 4000.0));
   writeTextFile(missingHeightConfig, makeShellIPCConfig(tempDir.path(), 0, true, false, 0.002, 3000.0, 1, "info", true, "y", std::nullopt, 4000.0));
   writeTextFile(missingKappaConfig, makeShellIPCConfig(tempDir.path(), 0, true, false, 0.002, 3000.0, 1, "info", true, "y", -0.1, std::nullopt));
+
+  pgo::ConfigFileJSON emptyFloors;
+  ASSERT_TRUE(emptyFloors.open(emptyFloorsConfig.string().c_str()));
+  EXPECT_EQ(pgo::RunIPCSim::buildShellIpcSimulation(emptyFloors).extraGeneralImplicitForceModels.size(), 0u);
 
   pgo::ConfigFileJSON missingAxis;
   ASSERT_TRUE(missingAxis.open(missingAxisConfig.string().c_str()));
@@ -1292,6 +1366,53 @@ TEST(RunIPCSimSetupGTest, UseFloorRequiresExplicitAxisHeightAndKappa)
   pgo::ConfigFileJSON missingKappa;
   ASSERT_TRUE(missingKappa.open(missingKappaConfig.string().c_str()));
   EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(missingKappa), std::invalid_argument);
+}
+
+TEST(RunIPCSimSetupGTest, FloorsArrayRejectsLegacyFieldsAndInvalidHeightMotionCombinations)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path legacyConfigPath = tempDir.path() / "shell-legacy-floor.json";
+  const fs::path heightAndMotionConfigPath = tempDir.path() / "shell-floor-height-and-motion.json";
+  const fs::path missingHeightAndMotionConfigPath = tempDir.path() / "shell-floor-missing-height-and-motion.json";
+
+  writeTextFile(legacyConfigPath, addBoolConfigField(makeShellIPCConfig(tempDir.path(), 0), "use-floor", true));
+  writeTextFile(heightAndMotionConfigPath, addTopLevelJsonField(makeShellIPCConfig(tempDir.path(), 0),
+    "  \"floors\": [\n"
+    "    {\n"
+    "      \"axis\": \"y\",\n"
+    "      \"side\": \"upper\",\n"
+    "      \"height\": -0.1,\n"
+    "      \"kappa\": 4000.0,\n"
+    "      \"motion\": {\n"
+    "        \"height-start\": 1.0,\n"
+    "        \"height-end\": 0.75,\n"
+    "        \"frame-start\": 0,\n"
+    "        \"frame-end\": 1\n"
+    "      }\n"
+    "    }\n"
+    "  ]"));
+  writeTextFile(missingHeightAndMotionConfigPath, addTopLevelJsonField(makeShellIPCConfig(tempDir.path(), 0),
+    "  \"floors\": [\n"
+    "    {\n"
+    "      \"axis\": \"y\",\n"
+    "      \"side\": \"upper\",\n"
+    "      \"kappa\": 4000.0\n"
+    "    }\n"
+    "  ]"));
+
+  pgo::ConfigFileJSON legacyConfig;
+  ASSERT_TRUE(legacyConfig.open(legacyConfigPath.string().c_str()));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(legacyConfig), std::invalid_argument);
+
+  pgo::ConfigFileJSON heightAndMotionConfig;
+  ASSERT_TRUE(heightAndMotionConfig.open(heightAndMotionConfigPath.string().c_str()));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(heightAndMotionConfig), std::invalid_argument);
+
+  pgo::ConfigFileJSON missingHeightAndMotionConfig;
+  ASSERT_TRUE(missingHeightAndMotionConfig.open(missingHeightAndMotionConfigPath.string().c_str()));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(missingHeightAndMotionConfig), std::invalid_argument);
 }
 
 TEST(RunIPCSimSetupGTest, FloorEnabledSetupCreatesExtraGeneralImplicitForceModel)
@@ -1307,4 +1428,27 @@ TEST(RunIPCSimSetupGTest, FloorEnabledSetupCreatesExtraGeneralImplicitForceModel
 
   const auto context = pgo::RunIPCSim::buildVolumeIpcSimulation(config);
   EXPECT_EQ(context.extraGeneralImplicitForceModels.size(), 1u);
+  EXPECT_EQ(context.floorPotentialEnergies.size(), 1u);
+  EXPECT_EQ(context.floorMotionStates.size(), 1u);
+}
+
+TEST(RunIPCSimSetupGTest, MultipleFloorsCreateMultipleForceModels)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "cubic-multi-floor-setup.json";
+  writeTextFile(configPath, addTopLevelJsonField(makeCubicIPCConfig(tempDir.path(), 0),
+    "  \"floors\": [\n"
+    "    { \"axis\": \"y\", \"side\": \"lower\", \"height\": 0.0, \"kappa\": 4000.0 },\n"
+    "    { \"axis\": \"y\", \"side\": \"upper\", \"height\": 0.8, \"kappa\": 4000.0 }\n"
+    "  ]"));
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+
+  const auto context = pgo::RunIPCSim::buildVolumeIpcSimulation(config);
+  EXPECT_EQ(context.extraGeneralImplicitForceModels.size(), 2u);
+  EXPECT_EQ(context.floorPotentialEnergies.size(), 2u);
+  EXPECT_EQ(context.floorMotionStates.size(), 2u);
 }

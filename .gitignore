@@ -69,4 +69,7 @@ paper/*
 *.log
 *.abc
 
-*_output
+*_output/
+!**/*_output/
+**/*_output/*
+!**/*_output/stress_vtu.json

@@ -1,0 +1,8 @@
+{
+  "veg": "../union_shell.veg",
+  "states": "states",
+  "stress": "stress",
+  "output": "vtu",
+  "frame-start": 10,
+  "frame-end": 20
+}
