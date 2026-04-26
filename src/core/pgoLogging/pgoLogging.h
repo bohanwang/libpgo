@@ -13,7 +13,7 @@ class Logging
 public:
   static void init(const char *filename = nullptr, spdlog::level::level_enum level = spdlog::level::info);
   static void setLevel(spdlog::level::level_enum level);
-  static inline std::shared_ptr<spdlog::logger> lgr() { return logger; }
+  static inline std::shared_ptr<spdlog::logger> lgr() { return logger ? logger : spdlog::default_logger(); }
 
 protected:
   static std::shared_ptr<spdlog::logger> logger;

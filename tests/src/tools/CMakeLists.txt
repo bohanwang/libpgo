@@ -43,11 +43,11 @@ target_include_directories(runSim_gtest PRIVATE
   ${CMAKE_SOURCE_DIR}/src/tools/runSim
   ${CMAKE_SOURCE_DIR}/src/core/solidDeformationModel)
 target_compile_definitions(runSim_gtest PRIVATE
-  LIBPGO_TEST_TET_BOX_VEG="${CMAKE_SOURCE_DIR}/examples/box/box.veg"
-  LIBPGO_TEST_TET_BOX_OBJ="${CMAKE_SOURCE_DIR}/examples/box/box.obj"
-  LIBPGO_TEST_CUBIC_BOX_VEG="${CMAKE_SOURCE_DIR}/examples/cubic/box/box.veg"
-  LIBPGO_TEST_CUBIC_BOX_OBJ="${CMAKE_SOURCE_DIR}/examples/cubic/box/box.obj"
-  LIBPGO_TEST_SHELL_JSON="${CMAKE_SOURCE_DIR}/examples/shell/shell.json"
+  LIBPGO_TEST_TET_BOX_VEG="${CMAKE_SOURCE_DIR}/examples/legacy/tet/box/box.veg"
+  LIBPGO_TEST_TET_BOX_OBJ="${CMAKE_SOURCE_DIR}/examples/legacy/tet/box/box.obj"
+  LIBPGO_TEST_CUBIC_BOX_VEG="${CMAKE_SOURCE_DIR}/examples/legacy/cubic/box/box.veg"
+  LIBPGO_TEST_CUBIC_BOX_OBJ="${CMAKE_SOURCE_DIR}/examples/legacy/cubic/box/box.obj"
+  LIBPGO_TEST_SHELL_JSON="${CMAKE_SOURCE_DIR}/examples/legacy/shell/shell.json"
   PGO_TEST_RUN_SHELL_SIM_BIN="$<TARGET_FILE:runShellSim>")
 add_dependencies(runSim_gtest runShellSim)
 set_property(TARGET runSim_gtest PROPERTY FOLDER "tests/gtest")
@@ -83,7 +83,7 @@ target_include_directories(runIPCSim_gtest PRIVATE
   ${CMAKE_SOURCE_DIR}/src/core/solidDeformationModel
   ${CMAKE_SOURCE_DIR}/src/core/volumetricMesh)
 target_compile_definitions(runIPCSim_gtest PRIVATE
-  LIBPGO_TEST_SHELL_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/shell"
+  LIBPGO_TEST_SHELL_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/legacy/shell"
   LIBPGO_TEST_IPC_TET_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/ipc/tet/box-hang"
   LIBPGO_TEST_IPC_CUBIC_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/ipc/cubic/box-hang"
   PGO_TEST_RUN_IPC_SIM_BIN="$<TARGET_FILE:runIPCSim>")

@@ -108,8 +108,7 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
     residualMaxNorm = rhs.cwiseAbs().maxCoeff();
   }
 
-  // const bool acceptedTimestep = solverRet == 0;
-  const bool acceptedTimestep = true;
+  const bool acceptedTimestep = solverRet == 0;
 
   if (solverRet != 0) {
     std::cout << "Warning: solverRet = " << NewtonSolver::solveStatusToString(solverRet) << "\n";
