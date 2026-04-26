@@ -11,6 +11,7 @@ namespace
 {
 namespace ES = pgo::EigenSupport;
 using pgo::NonlinearOptimization::NewtonSolver;
+using pgo::NonlinearOptimization::MaxStepResult;
 using pgo::NonlinearOptimization::PotentialEnergy;
 using pgo::Simulation::ImplicitBackwardEulerTimeIntegrator;
 
@@ -56,7 +57,7 @@ public:
   }
 
   int getNumDOFs() const override { return n; }
-  double computeMaxStepSize(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return maxStep; }
+  MaxStepResult computeMaxStepLimit(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return MaxStepResult::material(maxStep); }
 
 private:
   int n;

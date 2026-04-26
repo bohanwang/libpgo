@@ -33,7 +33,7 @@ public:
   virtual void hessianDirect(
     EigenSupport::ConstRefVecXd simulationDisplacements,
     EigenSupport::SpMatD &simulationHessian) const override;
-  virtual double computeMaxStepSize(
+  virtual NonlinearOptimization::MaxStepResult computeMaxStepLimit(
     EigenSupport::ConstRefVecXd simulationDisplacements,
     EigenSupport::ConstRefVecXd trialSimulationDisplacements) const override;
 
@@ -53,7 +53,7 @@ protected:
   virtual void computeSurfaceHessian(
     EigenSupport::ConstRefVecXd surfacePositions,
     EigenSupport::SpMatD &surfaceHessian) const = 0;
-  virtual double computeSurfaceMaxStepSize(
+  virtual NonlinearOptimization::MaxStepResult computeSurfaceMaxStepLimit(
     EigenSupport::ConstRefVecXd surfacePositions,
     EigenSupport::ConstRefVecXd surfaceDisplacements) const;
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "timeIntegrator.h"
+#include "solveDiagnostics.h"
 
 namespace pgo
 {
@@ -19,6 +20,7 @@ public:
   virtual void doTimestep(int updateq = 1, int verbose = 1, int printResidual = 0) override;
   int tryTimestep(int updateq = 1, int verbose = 1, int printResidual = 0);
   virtual std::shared_ptr<const NonlinearOptimization::PotentialEnergy> getInternalEnergy() const override;
+  const NonlinearOptimization::SolveDiagnostics &getLastSolveDiagnostics() const;
 
   const EigenSupport::VXd &getLastSolution() const { return z; }
   void setSolution(EigenSupport::ConstRefVecXd newz);

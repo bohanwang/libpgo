@@ -26,7 +26,7 @@ public:
   virtual void getDOFs(std::vector<int> &dofs) const override { dofs = allDOFs; }
   virtual int getNumDOFs() const override { return (int)allDOFs.size(); }
 
-  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override { return energy->computeMaxStepSize(x, dx); }
+  virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override { return energy->computeMaxStepLimit(x, dx); }
 
 protected:
   std::vector<int> allDOFs;

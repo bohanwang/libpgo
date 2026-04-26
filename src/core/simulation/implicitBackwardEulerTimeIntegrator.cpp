@@ -46,6 +46,11 @@ std::shared_ptr<const NonlinearOptimization::PotentialEnergy> ImplicitBackwardEu
   return eulerEnergy;
 }
 
+const NonlinearOptimization::SolveDiagnostics &ImplicitBackwardEulerTimeIntegrator::getLastSolveDiagnostics() const
+{
+  return solver->getLastSolveDiagnostics();
+}
+
 void ImplicitBackwardEulerTimeIntegrator::doTimestep(int updateq, int verbose, int printResidual)
 {
   const int ret = tryTimestep(updateq, verbose, printResidual);
@@ -82,8 +87,6 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
   }
 
   bool needRenew = (constraintsChanged || generalForceModelChanged);
-  eulerEnergy->resetSolveMaxStepStats();
-
   if (verbose) {
     std::cout << "ImplicitBackwardEuler timestep begin: T" << timestepID
               << " dt=" << timestep << std::endl;

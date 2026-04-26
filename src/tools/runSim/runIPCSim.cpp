@@ -29,13 +29,6 @@ namespace
 {
 namespace ES = pgo::EigenSupport;
 
-struct SolveMaxStepSummary
-{
-  double minFeasibleAlphaThisSolve = 1.0;
-  double minLineSearchAlphaThisSolve = 1.0;
-  double minEffectiveAlphaThisSolve = 1.0;
-};
-
 struct OutputDirectories
 {
   std::filesystem::path root;
@@ -91,26 +84,6 @@ const char *vonMisesStressLocation(const pgo::SolidDeformationModel::SimulationM
   }
 }
 
-SolveMaxStepSummary currentSolveMaxStepSummary(const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
-{
-  const auto internalEnergy = std::dynamic_pointer_cast<const pgo::Simulation::ImplicitBackwardEulerEnergy>(integrator->getInternalEnergy());
-  if (!internalEnergy)
-    return {};
-
-  return {
-    internalEnergy->getMinFeasibleAlphaThisSolve(),
-    internalEnergy->getMinLineSearchAlphaThisSolve(),
-    internalEnergy->getMinEffectiveAlphaThisSolve(),
-  };
-}
-
-void resetSolveMaxStepSummary(const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
-{
-  const auto internalEnergy = std::dynamic_pointer_cast<const pgo::Simulation::ImplicitBackwardEulerEnergy>(integrator->getInternalEnergy());
-  if (internalEnergy)
-    internalEnergy->resetSolveMaxStepStats();
-}
-
 void logRunIPCSimMaxStepSummary(
   const std::shared_ptr<pgo::SolidDeformationModel::DeformationModelEnergy> &elasticEnergy,
   const std::shared_ptr<pgo::Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy> &collisionHandler,
@@ -120,19 +93,19 @@ void logRunIPCSimMaxStepSummary(
   if (!logger)
     return;
 
-  const SolveMaxStepSummary summary = currentSolveMaxStepSummary(integrator);
-  const auto materialClampCount = elasticEnergy->getMaterialClampCount();
-  const auto contactClampCount = collisionHandler->getContactClampCount();
+  (void)elasticEnergy;
+  (void)collisionHandler;
+  const pgo::NonlinearOptimization::SolveDiagnostics &summary = integrator->getLastSolveDiagnostics();
 
   if (logger->should_log(spdlog::level::info)) {
     SPDLOG_LOGGER_INFO(logger,
       "runIPCSim max-step summary: materialClampCount={} contactClampCount={} minMaterialFeasibleAlphaThisSolve={} minContactFeasibleAlphaThisSolve={} minFeasibleAlphaThisSolve={} minLineSearchAlphaThisSolve={} minEffectiveAlphaThisSolve={}",
-      materialClampCount, contactClampCount,
-      elasticEnergy->getMinMaterialFeasibleAlphaThisSolve(),
-      collisionHandler->getMinContactFeasibleAlphaThisSolve(),
-      summary.minFeasibleAlphaThisSolve,
-      summary.minLineSearchAlphaThisSolve,
-      summary.minEffectiveAlphaThisSolve);
+      summary.materialClampCount, summary.contactClampCount,
+      summary.minMaterialFeasibleAlpha,
+      summary.minContactFeasibleAlpha,
+      summary.minFeasibleAlpha,
+      summary.minLineSearchAlpha,
+      summary.minEffectiveAlpha);
   }
 }
 
@@ -337,9 +310,6 @@ int main(int argc, char *argv[])
     const double ratioDenom = numSimSteps > 1 ? static_cast<double>(numSimSteps - 1) : 1.0;
 
     bool executedStep = false;
-    resetSolveMaxStepSummary(intg);
-    context.elasticEnergy->resetMaterialMaxStepStats();
-    context.collisionHandler->resetContactMaxStepStats();
     for (int framei = frameStart + 1; framei < numSimSteps; ++framei) {
       intg->clearGeneralImplicitForceModel();
 
@@ -350,8 +320,6 @@ int main(int argc, char *argv[])
         std::cout << "Frame " << framei << ", attachment " << pi << " target: " << curTgt.transpose().head(3) << std::endl;
       }
 
-      context.elasticEnergy->resetMaterialMaxStepStats();
-      context.collisionHandler->resetContactMaxStepStats();
       intg->addGeneralImplicitForceModel(context.collisionHandler, 0, 0);
       for (const auto &forceModel : context.extraGeneralImplicitForceModels)
         intg->addGeneralImplicitForceModel(forceModel, 0, 0);

@@ -46,10 +46,7 @@ public:
   virtual void createHessian(EigenSupport::SpMatD &hess) const override;
   virtual void getDOFs(std::vector<int> &dofs) const override { dofs = allDOFs_; }
   virtual int getNumDOFs() const override { return static_cast<int>(allDOFs_.size()); }
-  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override;
-  std::int64_t getContactClampCount() const { return core.getContactClampCount(); }
-  double getMinContactFeasibleAlphaThisSolve() const { return core.getMinContactFeasibleAlphaThisSolve(); }
-  void resetContactMaxStepStats() const { core.resetContactMaxStepStats(); }
+  virtual NonlinearOptimization::MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override;
 
   virtual int isHessianTopologyFixed() const override { return 0; }
   virtual void hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const override;

@@ -156,12 +156,12 @@ void CIPCPotentialEnergy::createHessian(EigenSupport::SpMatD &) const
   throw std::runtime_error("CIPCPotentialEnergy::createHessian() should not be called directly. Use hessianDirect() instead.");
 }
 
-double CIPCPotentialEnergy::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
+NonlinearOptimization::MaxStepResult CIPCPotentialEnergy::computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
 {
   syncCoreParametersFromWrapper();
   const VXd x_surf = toSurfacePositions(x);
   const VXd dx_surf = toSurfaceDisplacements(dx);
-  return core.computeMaxStepSize(x_surf, dx_surf);
+  return core.computeMaxStepLimit(x_surf, dx_surf);
 }
 
 void CIPCPotentialEnergy::hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const

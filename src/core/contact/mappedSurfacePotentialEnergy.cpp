@@ -108,21 +108,21 @@ void MappedSurfacePotentialEnergy::hessianDirect(
   }
 }
 
-double MappedSurfacePotentialEnergy::computeMaxStepSize(
+NonlinearOptimization::MaxStepResult MappedSurfacePotentialEnergy::computeMaxStepLimit(
   EigenSupport::ConstRefVecXd simulationDisplacements,
   EigenSupport::ConstRefVecXd trialSimulationDisplacements) const
 {
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kAdapterMaxStep);
   const VXd surfacePositions = computeSurfacePositionsFromSimulationDisplacements(simulationDisplacements);
   const VXd trialSurfaceDisplacements = computeSurfaceDisplacementsFromSimulationDisplacements(trialSimulationDisplacements);
-  return computeSurfaceMaxStepSize(surfacePositions, trialSurfaceDisplacements);
+  return computeSurfaceMaxStepLimit(surfacePositions, trialSurfaceDisplacements);
 }
 
-double MappedSurfacePotentialEnergy::computeSurfaceMaxStepSize(
+NonlinearOptimization::MaxStepResult MappedSurfacePotentialEnergy::computeSurfaceMaxStepLimit(
   EigenSupport::ConstRefVecXd,
   EigenSupport::ConstRefVecXd) const
 {
-  return 1.0;
+  return NonlinearOptimization::MaxStepResult::unconstrained();
 }
 
 }  // namespace CIPC

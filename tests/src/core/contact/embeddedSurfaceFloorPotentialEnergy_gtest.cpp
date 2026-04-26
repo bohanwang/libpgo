@@ -83,7 +83,7 @@ TEST(EmbeddedSurfaceFloorPotentialEnergyGTest, IdentityEmbeddingMatchesReference
     EXPECT_NEAR(energy.func(u), expectedEnergy, 1e-12);
     EXPECT_LT(relativeError(gradient, expectedGradient), 1e-12);
     EXPECT_LT(relativeError(sparseToDense(hessian), expectedHessian), 1e-12);
-    EXPECT_DOUBLE_EQ(energy.computeMaxStepSize(u, du), 1.0);
+    EXPECT_DOUBLE_EQ(energy.computeMaxStepLimit(u, du).alpha, 1.0);
   }
 }
 

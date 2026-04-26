@@ -67,6 +67,7 @@ public:
   void setStepFunc(StepFunc func) { stepFunc = func; }
 
   const EigenSupport::VXd &getx() const { return x; }
+  const SolveDiagnostics &getSolveDiagnostics() const { return solveDiagnostics; }
 
 protected:
   void filterVector(EigenSupport::VXd &v);
@@ -95,6 +96,7 @@ protected:
 
   EigenSupport::VXd historyx;
   double historyGradNormMin;
+  SolveDiagnostics solveDiagnostics;
 
   StepFunc stepFunc;
 };

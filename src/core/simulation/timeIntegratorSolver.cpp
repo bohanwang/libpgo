@@ -34,6 +34,7 @@ public:
 #endif
 
   std::shared_ptr<NewtonSolver> newtonSolver;
+  SolveDiagnostics lastSolveDiagnostics;
   std::vector<int> fixedDOFs;
   ES::VXd fixedValues;
 };
@@ -43,6 +44,11 @@ public:
 TimeIntegratorSolver::TimeIntegratorSolver()
 {
   da = std::make_shared<TimeIntegratorSolverData>();
+}
+
+const SolveDiagnostics &TimeIntegratorSolver::getLastSolveDiagnostics() const
+{
+  return da->lastSolveDiagnostics;
 }
 
 int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
@@ -100,6 +106,7 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
     }
 
     int solverRet = da->opt->solve();
+    da->lastSolveDiagnostics.reset();
 
     /*if (verbose == 0)
     da->opt->printInfo();*/
@@ -235,6 +242,7 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
       }
 
       int ret = da->newtonSolver->solve(x.data(), nIter, eps, verbose);
+      da->lastSolveDiagnostics = da->newtonSolver->getSolveDiagnostics();
 
       return ret;
     }

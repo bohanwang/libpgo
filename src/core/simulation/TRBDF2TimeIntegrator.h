@@ -2,6 +2,7 @@
 
 #include "timeIntegrator.h"
 #include "timeIntegratorSolver.h"
+#include "solveDiagnostics.h"
 
 namespace pgo
 {
@@ -24,6 +25,7 @@ public:
 
   virtual void doTimestep(int updateq = 1, int verbose = 0, int printResidual = 0) override;
   virtual std::shared_ptr<const NonlinearOptimization::PotentialEnergy> getInternalEnergy() const override;
+  const NonlinearOptimization::SolveDiagnostics &getLastSolveDiagnostics() const;
 
   const EigenSupport::VXd &getLastSolutionTR() const { return z1; }
   const EigenSupport::VXd &getLastSolutionBDF2() const { return z2; }

@@ -18,13 +18,6 @@ namespace ES = pgo::EigenSupport;
 
 namespace
 {
-void updateMinAtomic(std::atomic<double> &target, double value)
-{
-  double current = target.load(std::memory_order_relaxed);
-  while (value < current && !target.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
-  }
-}
-
 ES::VXd assembleAbsolutePositions(ES::ConstRefVecXd x, const ES::VXd &restPosition, int offset, int numDOFs)
 {
   if (restPosition.size())
@@ -110,16 +103,10 @@ void DeformationModelEnergy::createHessian(EigenSupport::SpMatD &hess) const
   hess = forceModelAssembler->getHessianTemplate();
 }
 
-void DeformationModelEnergy::resetMaterialMaxStepStats() const
-{
-  materialClampCount_.store(0, std::memory_order_relaxed);
-  minMaterialFeasibleAlphaThisSolve_.store(1.0, std::memory_order_relaxed);
-}
-
-double DeformationModelEnergy::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
+NonlinearOptimization::MaxStepResult DeformationModelEnergy::computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
 {
   if (!enableMaterialMaxStep_) {
-    return 1.0;
+    return NonlinearOptimization::MaxStepResult::unconstrained();
   }
 
   const int offset = allDOFs.empty() ? 0 : allDOFs[0];
@@ -127,44 +114,42 @@ double DeformationModelEnergy::computeMaxStepSize(EigenSupport::ConstRefVecXd x,
 
   const ES::VXd dxLocal = assembleDirectionSlice(dx, offset, numDOFs);
   if (dxLocal.size() == 0 || dxLocal.squaredNorm() == 0.0) {
-    return 1.0;
+    return NonlinearOptimization::MaxStepResult::unconstrained();
   }
 
   const ES::VXd absolutePositions = assembleAbsolutePositions(x, restPosition, offset, numDOFs);
   const auto observation = forceModelAssembler->computeMaxStepObservation(absolutePositions.data(), dxLocal.data());
   const double maxStepSize = observation.alpha;
-  updateMinAtomic(minMaterialFeasibleAlphaThisSolve_, maxStepSize);
 
   if (maxStepSize < 1.0) {
-    const std::int64_t clampCount = materialClampCount_.fetch_add(1, std::memory_order_relaxed) + 1;
     const auto meshType = forceModelAssembler->getDeformationModelManager()->getMesh()->getElementType();
 
     if (!observation.hasIllegalInitialState && maxStepSize > 0.0 && maxStepSize < 0.01) {
       if (observation.limitingLocationId >= 0) {
         SPDLOG_LOGGER_WARN(Logging::lgr(),
-          "Phase 1.5 material max step produced small materialFeasibleAlpha={} on meshType={} element={} location={} (materialClampCount={}).",
-          maxStepSize, meshTypeName(meshType), observation.limitingElementId, observation.limitingLocationId, clampCount);
+          "Phase 1.5 material max step produced small materialFeasibleAlpha={} on meshType={} element={} location={}.",
+          maxStepSize, meshTypeName(meshType), observation.limitingElementId, observation.limitingLocationId);
       }
       else {
         SPDLOG_LOGGER_WARN(Logging::lgr(),
-          "Phase 1.5 material max step produced small materialFeasibleAlpha={} on meshType={} element={} (materialClampCount={}).",
-          maxStepSize, meshTypeName(meshType), observation.limitingElementId, clampCount);
+          "Phase 1.5 material max step produced small materialFeasibleAlpha={} on meshType={} element={}.",
+          maxStepSize, meshTypeName(meshType), observation.limitingElementId);
       }
     }
 
     if (auto logger = Logging::lgr(); logger && logger->should_log(spdlog::level::trace)) {
       if (observation.limitingLocationId >= 0) {
         SPDLOG_LOGGER_TRACE(logger,
-          "Phase 1.5 material clamp: materialFeasibleAlpha={} materialClampCount={} meshType={} element={} location={}.",
-          maxStepSize, clampCount, meshTypeName(meshType), observation.limitingElementId, observation.limitingLocationId);
+          "Phase 1.5 material clamp: materialFeasibleAlpha={} meshType={} element={} location={}.",
+          maxStepSize, meshTypeName(meshType), observation.limitingElementId, observation.limitingLocationId);
       }
       else {
         SPDLOG_LOGGER_TRACE(logger,
-          "Phase 1.5 material clamp: materialFeasibleAlpha={} materialClampCount={} meshType={} element={}.",
-          maxStepSize, clampCount, meshTypeName(meshType), observation.limitingElementId);
+          "Phase 1.5 material clamp: materialFeasibleAlpha={} meshType={} element={}.",
+          maxStepSize, meshTypeName(meshType), observation.limitingElementId);
       }
     }
   }
 
-  return maxStepSize;
+  return NonlinearOptimization::MaxStepResult::material(maxStepSize);
 }

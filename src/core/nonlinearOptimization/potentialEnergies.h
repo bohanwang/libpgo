@@ -51,7 +51,7 @@ public:
   virtual int isHessianTopologyFixed() const override;
   virtual void hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const override;
 
-  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override;
+  virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override;
 
   void printEnergy(EigenSupport::ConstRefVecXd x) const;
 

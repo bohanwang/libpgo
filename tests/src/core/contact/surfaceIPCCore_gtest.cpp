@@ -20,6 +20,8 @@ using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
 using pgo::Contact::CIPCTest::relativeError;
 using pgo::Contact::CIPCTest::sparseToDense;
+using pgo::NonlinearOptimization::MaxStepResult;
+using pgo::NonlinearOptimization::SolveDiagnostics;
 
 constexpr double kFDStep = 1e-5;
 constexpr double kGradTol = 1e-4;
@@ -101,7 +103,7 @@ TEST(SurfaceIPCCoreGTest, ProjectedHessianRemainsSymmetricPSDAndTracksFiniteDiff
   EXPECT_LT(relativeError(symAnalyticH, symFdH), kProjectedHessFdTol);
 }
 
-TEST(SurfaceIPCCoreGTest, ComputeMaxStepSizeDetectsImpendingCollision)
+TEST(SurfaceIPCCoreGTest, ComputeMaxStepLimitDetectsImpendingCollision)
 {
   initializeLogging();
   SurfaceIPCCore core = makeConfiguredCore();
@@ -112,12 +114,15 @@ TEST(SurfaceIPCCoreGTest, ComputeMaxStepSizeDetectsImpendingCollision)
   for (int vi = 3; vi < 6; ++vi)
     dx[3 * vi + 2] = -0.1;
 
-  const double alpha = core.computeMaxStepSize(x, dx);
+  const MaxStepResult result = core.computeMaxStepLimit(x, dx);
+  const double alpha = result.alpha;
   EXPECT_GT(alpha, 0.0);
   EXPECT_LT(alpha, 1.0);
+  EXPECT_DOUBLE_EQ(result.contactAlpha, alpha);
+  EXPECT_TRUE(result.contactClamped);
 }
 
-TEST(SurfaceIPCCoreGTest, ComputeMaxStepSizeTracksClampCountAndSolveMinimumAlpha)
+TEST(SurfaceIPCCoreGTest, ComputeMaxStepLimitCanBeRecordedInDiagnostics)
 {
   initializeLogging();
   SurfaceIPCCore core = makeConfiguredCore();
@@ -128,14 +133,19 @@ TEST(SurfaceIPCCoreGTest, ComputeMaxStepSizeTracksClampCountAndSolveMinimumAlpha
   for (int vi = 3; vi < 6; ++vi)
     dx[3 * vi + 2] = -0.1;
 
-  const double alpha = core.computeMaxStepSize(x, dx);
+  const MaxStepResult result = core.computeMaxStepLimit(x, dx);
+  const double alpha = result.alpha;
   EXPECT_GT(alpha, 0.0);
   EXPECT_LT(alpha, 1.0);
-  EXPECT_EQ(core.getContactClampCount(), 1);
-  EXPECT_DOUBLE_EQ(core.getMinContactFeasibleAlphaThisSolve(), alpha);
+  EXPECT_TRUE(result.contactClamped);
+
+  SolveDiagnostics diagnostics;
+  diagnostics.recordMaxStep(result);
+  EXPECT_EQ(diagnostics.contactClampCount, 1);
+  EXPECT_DOUBLE_EQ(diagnostics.minContactFeasibleAlpha, alpha);
 }
 
-TEST(SurfaceIPCCoreGTest, SmallContactAlphaWarnsAndResetClearsStats)
+TEST(SurfaceIPCCoreGTest, SmallContactAlphaWarnsAndDiagnosticsResetClearsStats)
 {
   initializeLogging();
   SurfaceIPCCore core = makeConfiguredCore();
@@ -147,18 +157,23 @@ TEST(SurfaceIPCCoreGTest, SmallContactAlphaWarnsAndResetClearsStats)
     dx[3 * vi + 2] = -10.0;
 
   testing::internal::CaptureStdout();
-  const double alpha = core.computeMaxStepSize(x, dx);
+  const MaxStepResult result = core.computeMaxStepLimit(x, dx);
   const std::string logOutput = testing::internal::GetCapturedStdout();
 
+  const double alpha = result.alpha;
   EXPECT_GT(alpha, 0.0);
   EXPECT_LT(alpha, 0.01);
-  EXPECT_EQ(core.getContactClampCount(), 1);
-  EXPECT_DOUBLE_EQ(core.getMinContactFeasibleAlphaThisSolve(), alpha);
+  EXPECT_TRUE(result.contactClamped);
   EXPECT_NE(logOutput.find("contactFeasibleAlpha"), std::string::npos);
 
-  core.resetContactMaxStepStats();
-  EXPECT_EQ(core.getContactClampCount(), 0);
-  EXPECT_DOUBLE_EQ(core.getMinContactFeasibleAlphaThisSolve(), 1.0);
+  SolveDiagnostics diagnostics;
+  diagnostics.recordMaxStep(result);
+  ASSERT_EQ(diagnostics.contactClampCount, 1);
+  ASSERT_DOUBLE_EQ(diagnostics.minContactFeasibleAlpha, alpha);
+
+  diagnostics.reset();
+  EXPECT_EQ(diagnostics.contactClampCount, 0);
+  EXPECT_DOUBLE_EQ(diagnostics.minContactFeasibleAlpha, 1.0);
 }
 
 TEST(SurfaceIPCCoreGTest, PairAccessorsRemainReadableAcrossComputes)
