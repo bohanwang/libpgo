@@ -13,6 +13,7 @@ namespace ES = pgo::EigenSupport;
 using pgo::Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy;
 using pgo::Contact::CIPC::FloorAxis;
 using pgo::Contact::CIPC::FloorPenaltyParameters;
+using pgo::Contact::CIPC::FloorSide;
 using pgo::Contact::CIPCTest::computeFloorEnergy;
 using pgo::Contact::CIPCTest::computeFloorGradient;
 using pgo::Contact::CIPCTest::computeFloorHessian;
@@ -45,6 +46,42 @@ FloorPenaltyParameters makeFloorParams(FloorAxis axis = FloorAxis::Z)
   params.floorKappa = 7.5;
   params.floorAxis = axis;
   return params;
+}
+
+double computeSidedFloorEnergy(const ES::VXd &x, double floorHeight, double floorKappa, int floorAxis, FloorSide floorSide)
+{
+  const double sideSign = static_cast<double>(floorSide);
+  double energy = 0.0;
+  for (int vi = 0; vi < x.size() / 3; ++vi) {
+    const double dzEff = sideSign * (x[3 * vi + floorAxis] - floorHeight);
+    if (dzEff < 0.0)
+      energy += 0.5 * floorKappa * dzEff * dzEff;
+  }
+  return energy;
+}
+
+ES::VXd computeSidedFloorGradient(const ES::VXd &x, double floorHeight, double floorKappa, int floorAxis, FloorSide floorSide)
+{
+  const double sideSign = static_cast<double>(floorSide);
+  ES::VXd g = ES::VXd::Zero(x.size());
+  for (int vi = 0; vi < x.size() / 3; ++vi) {
+    const double dzEff = sideSign * (x[3 * vi + floorAxis] - floorHeight);
+    if (dzEff < 0.0)
+      g[3 * vi + floorAxis] = floorKappa * dzEff * sideSign;
+  }
+  return g;
+}
+
+ES::MXd computeSidedFloorHessian(const ES::VXd &x, double floorHeight, double floorKappa, int floorAxis, FloorSide floorSide)
+{
+  const double sideSign = static_cast<double>(floorSide);
+  ES::MXd H = ES::MXd::Zero(x.size(), x.size());
+  for (int vi = 0; vi < x.size() / 3; ++vi) {
+    const double dzEff = sideSign * (x[3 * vi + floorAxis] - floorHeight);
+    if (dzEff < 0.0)
+      H(3 * vi + floorAxis, 3 * vi + floorAxis) = floorKappa;
+  }
+  return H;
 }
 }  // namespace
 
@@ -83,7 +120,7 @@ TEST(EmbeddedSurfaceFloorPotentialEnergyGTest, IdentityEmbeddingMatchesReference
     EXPECT_NEAR(energy.func(u), expectedEnergy, 1e-12);
     EXPECT_LT(relativeError(gradient, expectedGradient), 1e-12);
     EXPECT_LT(relativeError(sparseToDense(hessian), expectedHessian), 1e-12);
-    EXPECT_DOUBLE_EQ(energy.computeMaxStepSize(u, du), 1.0);
+    EXPECT_DOUBLE_EQ(energy.computeMaxStepLimit(u, du).alpha, 1.0);
   }
 }
 
@@ -144,6 +181,57 @@ TEST(EmbeddedSurfaceFloorPotentialEnergyGTest, SparseEmbeddingPullsBackGradientA
   EXPECT_LT(relativeError(sparseToDense(simulationHessian), expectedHessian), 1e-12);
 }
 
+TEST(EmbeddedSurfaceFloorPotentialEnergyGTest, UpperSidePenalizesPointsAboveHeightAndPushesTowardNegativeAxis)
+{
+  const auto [V, F] = makeTwoTriangleMesh();
+  (void)F;
+  const ES::VXd rest = flattenPositions(V);
+
+  ES::VXd u = ES::VXd::Zero(rest.size());
+  u[0 * 3 + 0] = 0.04;
+  u[1 * 3 + 0] = 0.12;
+  u[2 * 3 + 0] = -0.05;
+  u[4 * 3 + 0] = 0.08;
+
+  FloorPenaltyParameters params = makeFloorParams(FloorAxis::X);
+  params.floorHeight = 0.05;
+  params.floorSide = FloorSide::UPPER;
+  EmbeddedSurfaceFloorPotentialEnergy energy(V, makeIdentityEmbedding(rest.size()), params);
+
+  const ES::VXd surfacePositions = rest + u;
+  const double expectedEnergy = computeSidedFloorEnergy(surfacePositions, params.floorHeight, params.floorKappa, 0, params.floorSide);
+  const ES::VXd expectedGradient = computeSidedFloorGradient(surfacePositions, params.floorHeight, params.floorKappa, 0, params.floorSide);
+  const ES::MXd expectedHessian = computeSidedFloorHessian(surfacePositions, params.floorHeight, params.floorKappa, 0, params.floorSide);
+
+  ES::VXd gradient(energy.getNumDOFs());
+  energy.gradient(u, gradient);
+  ES::SpMatD hessian;
+  energy.hessianDirect(u, hessian);
+
+  EXPECT_NEAR(energy.func(u), expectedEnergy, 1e-12);
+  EXPECT_LT(relativeError(gradient, expectedGradient), 1e-12);
+  EXPECT_LT(relativeError(sparseToDense(hessian), expectedHessian), 1e-12);
+  EXPECT_GT(gradient[1 * 3 + 0], 0.0);
+}
+
+TEST(EmbeddedSurfaceFloorPotentialEnergyGTest, SetFloorHeightChangesNextEvaluation)
+{
+  const auto [V, F] = makeTwoTriangleMesh();
+  (void)F;
+  const ES::VXd rest = flattenPositions(V);
+
+  FloorPenaltyParameters params = makeFloorParams(FloorAxis::Z);
+  params.floorHeight = -0.05;
+  EmbeddedSurfaceFloorPotentialEnergy energy(V, makeIdentityEmbedding(rest.size()), params);
+
+  const ES::VXd u = ES::VXd::Zero(rest.size());
+  const double initialEnergy = energy.func(u);
+  energy.setFloorHeight(0.20);
+
+  EXPECT_DOUBLE_EQ(energy.floorHeight(), 0.20);
+  EXPECT_GT(energy.func(u), initialEnergy);
+}
+
 TEST(EmbeddedSurfaceFloorPotentialEnergyGTest, NonFiniteParametersThrow)
 {
   const auto [V, F] = makeTwoTriangleMesh();
@@ -159,6 +247,10 @@ TEST(EmbeddedSurfaceFloorPotentialEnergyGTest, NonFiniteParametersThrow)
   missingKappa.floorHeight = 0.0;
   missingKappa.floorKappa = std::numeric_limits<double>::quiet_NaN();
   EXPECT_THROW(EmbeddedSurfaceFloorPotentialEnergy(V, W, missingKappa), std::invalid_argument);
+
+  FloorPenaltyParameters nonFiniteSetter = makeFloorParams();
+  EmbeddedSurfaceFloorPotentialEnergy energy(V, W, nonFiniteSetter);
+  EXPECT_THROW(energy.setFloorHeight(std::numeric_limits<double>::quiet_NaN()), std::invalid_argument);
 }
 
 TEST(EmbeddedSurfaceFloorPotentialEnergyGTest, InvalidAxisThrows)
@@ -170,4 +262,8 @@ TEST(EmbeddedSurfaceFloorPotentialEnergyGTest, InvalidAxisThrows)
   FloorPenaltyParameters invalidAxis = makeFloorParams();
   invalidAxis.floorAxis = static_cast<FloorAxis>(3);
   EXPECT_THROW(EmbeddedSurfaceFloorPotentialEnergy(V, W, invalidAxis), std::invalid_argument);
+
+  FloorPenaltyParameters invalidSide = makeFloorParams();
+  invalidSide.floorSide = static_cast<FloorSide>(0);
+  EXPECT_THROW(EmbeddedSurfaceFloorPotentialEnergy(V, W, invalidSide), std::invalid_argument);
 }

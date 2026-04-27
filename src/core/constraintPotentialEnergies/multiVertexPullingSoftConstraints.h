@@ -20,7 +20,7 @@ public:
   virtual void gradient(EigenSupport::ConstRefVecXd u, EigenSupport::RefVecXd grad) const override;
   virtual void hessian(EigenSupport::ConstRefVecXd, EigenSupport::SpMatD &hess) const override;
 
-  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override { return 1.0; }
+  virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd, EigenSupport::ConstRefVecXd) const override { return MaxStepResult::unconstrained(); }
 
   void setCoeff(double v) { coeffAll = v; }
   void setCoeff(const double *v);

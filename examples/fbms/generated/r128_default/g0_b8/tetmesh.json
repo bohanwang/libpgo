@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "backend": "tetwild",
+  "input_mesh": "union_shell_remesh.obj",
+  "output_mesh": "union_shell.veg",
+  "output_surface": "union_shell_tet_surface.obj",
+  "print_stats": true,
+  "quiet": true,
+  "tetwild": {
+    "lr": 0.05,
+    "epsr": 0.001,
+    "stop_energy": 10,
+    "max_threads": 8
+  }
+}

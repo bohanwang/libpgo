@@ -33,7 +33,7 @@ public:
   virtual void getDOFs(std::vector<int> &adofs) const final { adofs = allDOFs; }
   virtual int getNumDOFs() const final { return (int)allDOFs.size(); }
 
-  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override = 0;
+  virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override = 0;
 
 protected:
   const EigenSupport::SpMatD &hessianBase;

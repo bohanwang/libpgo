@@ -280,15 +280,13 @@ void PotentialEnergies::hessianDirect(EigenSupport::ConstRefVecXd x, EigenSuppor
   }
 }
 
-double PotentialEnergies::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
+MaxStepResult PotentialEnergies::computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
 {
-  double maxStepSize = 1.0;
+  MaxStepResult result = MaxStepResult::unconstrained();
   for (size_t i = 0; i < potentialEnergies.size(); i++) {
     mapx(x, energyDOFs[i], buffer->xlocals[i]);
     mapx(dx, energyDOFs[i], buffer->vecs[i]);
-    double s = potentialEnergies[i]->computeMaxStepSize(buffer->xlocals[i], buffer->vecs[i]);
-    if (s < maxStepSize)
-      maxStepSize = s;
+    result = mergeMaxStepResults(result, potentialEnergies[i]->computeMaxStepLimit(buffer->xlocals[i], buffer->vecs[i]));
   }
-  return maxStepSize;
+  return result;
 }

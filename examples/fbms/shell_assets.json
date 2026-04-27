@@ -1,0 +1,54 @@
+{
+  "build_dir": "build/base_no_mkl",
+  "defaults": {
+    "cases": "all",
+    "output_dir": "generated/{job}/{case}",
+    "raw_filename": "union_shell_raw.obj",
+    "remesh_filename": "union_shell_remesh.obj",
+    "stats_filename": "stats.json",
+    "raw": {
+      "padding_ratio": 0.08
+    },
+    "remesh": {
+      "edge_length": 0.75,
+      "sharp_edge_angle": 180.0
+    }
+  },
+  "jobs": [
+    {
+      "name": "r64_thick",
+      "raw": {
+        "resolution": 64,
+        "fbms_thickness": 0.05,
+        "sphere_thickness": 0.05
+      },
+      "remesh": {
+        "edge_length": 1.0
+      }
+    },
+    {
+      "name": "r64_default",
+      "raw": {
+        "resolution": 64,
+        "fbms_thickness": 0.02,
+        "sphere_thickness": 0.02
+      }
+    },
+    {
+      "name": "r128_default",
+      "raw": {
+        "resolution": 128,
+        "fbms_thickness": 0.025,
+        "sphere_thickness": 0.025
+      }
+    },
+    {
+      "name": "r256_default",
+      "raw": {
+        "resolution": 256,
+        "fbms_thickness": 0.02,
+        "sphere_thickness": 0.02
+      }
+    }
+  ]
+}

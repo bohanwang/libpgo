@@ -68,3 +68,8 @@ paper/*
 *.pdf
 *.log
 *.abc
+
+*_output
+
+examples/fbms/**/*.obj
+examples/fbms/**/*.veg

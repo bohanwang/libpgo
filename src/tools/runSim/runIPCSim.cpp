@@ -1,7 +1,9 @@
 #include "configFileJSON.h"
 #include "EigenSupport.h"
+#include "deformationModelAssembler.h"
 #include "deformationModelEnergy.h"
 #include "embeddedSurfaceIPCPotentialEnergy.h"
+#include "embeddedSurfaceFloorPotentialEnergy.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
 #include "implicitBackwardEulerTimeIntegratorHelper.h"
 #include "initPredicates.h"
@@ -10,12 +12,15 @@
 #include "runIPCSimSetup.h"
 #include "runSimCliLogging.h"
 #include "scopedProfileSection.h"
+#include "simulationMesh.h"
 
 #include <argparse/argparse.hpp>
 #include <fmt/format.h>
+#include <nlohmann/json.hpp>
 
 #include <array>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -25,31 +30,59 @@ namespace
 {
 namespace ES = pgo::EigenSupport;
 
-struct SolveMaxStepSummary
+struct OutputDirectories
 {
-  double minFeasibleAlphaThisSolve = 1.0;
-  double minLineSearchAlphaThisSolve = 1.0;
-  double minEffectiveAlphaThisSolve = 1.0;
+  std::filesystem::path root;
+  std::filesystem::path states;
+  std::filesystem::path surface;
+  std::filesystem::path stress;
 };
 
-SolveMaxStepSummary currentSolveMaxStepSummary(const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
+const double *dataOrNull(const ES::VXd &values)
 {
-  const auto internalEnergy = std::dynamic_pointer_cast<const pgo::Simulation::ImplicitBackwardEulerEnergy>(integrator->getInternalEnergy());
-  if (!internalEnergy)
-    return {};
+  return values.size() > 0 ? values.data() : nullptr;
+}
 
+OutputDirectories makeOutputDirectories(const std::filesystem::path &outputFolder)
+{
   return {
-    internalEnergy->getMinFeasibleAlphaThisSolve(),
-    internalEnergy->getMinLineSearchAlphaThisSolve(),
-    internalEnergy->getMinEffectiveAlphaThisSolve(),
+    outputFolder,
+    outputFolder / "states",
+    outputFolder / "surface",
+    outputFolder / "stress",
   };
 }
 
-void resetSolveMaxStepSummary(const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
+std::filesystem::path framePath(const std::filesystem::path &dir, const char *prefix, int frame, const char *extension)
 {
-  const auto internalEnergy = std::dynamic_pointer_cast<const pgo::Simulation::ImplicitBackwardEulerEnergy>(integrator->getInternalEnergy());
-  if (internalEnergy)
-    internalEnergy->resetSolveMaxStepStats();
+  return dir / fmt::format("{}{:04d}{}", prefix, frame, extension);
+}
+
+void createOutputSubdirectories(const OutputDirectories &outputDirs)
+{
+  std::error_code ec;
+  std::filesystem::create_directories(outputDirs.root, ec);
+  if (ec)
+    throw std::runtime_error("Failed to create output folder `" + outputDirs.root.string() + "`: " + ec.message());
+
+  for (const auto &dir : { outputDirs.states, outputDirs.surface, outputDirs.stress }) {
+    std::filesystem::create_directories(dir, ec);
+    if (ec)
+      throw std::runtime_error("Failed to create output subfolder `" + dir.string() + "`: " + ec.message());
+  }
+}
+
+const char *vonMisesStressLocation(const pgo::SolidDeformationModel::SimulationMesh &mesh)
+{
+  using pgo::SolidDeformationModel::SimulationMeshType;
+  switch (mesh.getElementType()) {
+    case SimulationMeshType::TET:
+      return "tet_element";
+    case SimulationMeshType::CUBIC:
+      return "cubic_element";
+    default:
+      return "element";
+  }
 }
 
 void logRunIPCSimMaxStepSummary(
@@ -61,19 +94,19 @@ void logRunIPCSimMaxStepSummary(
   if (!logger)
     return;
 
-  const SolveMaxStepSummary summary = currentSolveMaxStepSummary(integrator);
-  const auto materialClampCount = elasticEnergy->getMaterialClampCount();
-  const auto contactClampCount = collisionHandler->getContactClampCount();
+  (void)elasticEnergy;
+  (void)collisionHandler;
+  const pgo::NonlinearOptimization::SolveDiagnostics &summary = integrator->getLastSolveDiagnostics();
 
   if (logger->should_log(spdlog::level::info)) {
     SPDLOG_LOGGER_INFO(logger,
       "runIPCSim max-step summary: materialClampCount={} contactClampCount={} minMaterialFeasibleAlphaThisSolve={} minContactFeasibleAlphaThisSolve={} minFeasibleAlphaThisSolve={} minLineSearchAlphaThisSolve={} minEffectiveAlphaThisSolve={}",
-      materialClampCount, contactClampCount,
-      elasticEnergy->getMinMaterialFeasibleAlphaThisSolve(),
-      collisionHandler->getMinContactFeasibleAlphaThisSolve(),
-      summary.minFeasibleAlphaThisSolve,
-      summary.minLineSearchAlphaThisSolve,
-      summary.minEffectiveAlphaThisSolve);
+      summary.materialClampCount, summary.contactClampCount,
+      summary.minMaterialFeasibleAlpha,
+      summary.minContactFeasibleAlpha,
+      summary.minFeasibleAlpha,
+      summary.minLineSearchAlpha,
+      summary.minEffectiveAlpha);
   }
 }
 
@@ -94,6 +127,35 @@ void clearOutputDirectory(const std::filesystem::path &outputFolder)
     throw std::runtime_error("Failed to create output folder `" + outputFolder.string() + "`: " + ec.message());
 }
 
+void writeVonMisesStressJson(const OutputDirectories &outputDirs, int frame, double timestep,
+  const pgo::RunIPCSim::IpcSimulationContext &context, const ES::VXd &displacement)
+{
+  if (!context.deformationModelAssemblerOwner || !context.simulationMeshOwner)
+    throw std::runtime_error("runIPCSim cannot output von Mises stresses without a simulation mesh and assembler.");
+
+  const int elementCount = context.simulationMeshOwner->getNumElements();
+  std::vector<double> elementStresses(elementCount, 0.0);
+  const ES::VXd absolutePositions = context.simulationRestPosition + displacement;
+  context.deformationModelAssemblerOwner->computeVonMisesStresses(
+    absolutePositions.data(),
+    dataOrNull(context.plasticParams),
+    dataOrNull(context.elasticParams),
+    elementStresses.data());
+
+  nlohmann::json stressJson;
+  stressJson["frame"] = frame;
+  stressJson["time"] = static_cast<double>(frame) * timestep;
+  stressJson["stress_type"] = "von_mises";
+  stressJson["location"] = vonMisesStressLocation(*context.simulationMeshOwner);
+  stressJson["values"] = elementStresses;
+
+  const std::filesystem::path outputPath = framePath(outputDirs.stress, "von_mises", frame, ".json");
+  std::ofstream out(outputPath);
+  if (!out.is_open())
+    throw std::runtime_error("Failed to write von Mises stress JSON: " + outputPath.string());
+  out << stressJson.dump(2) << '\n';
+}
+
 void logProfileSummary()
 {
   auto logger = pgo::Logging::lgr();
@@ -107,6 +169,20 @@ void logProfileSummary()
       "profile name={} callCount={} totalSeconds={} maxSeconds={}",
       stat.name, stat.callCount, stat.totalSeconds, stat.maxSeconds);
   }
+}
+
+double floorHeightAtFrame(const pgo::RunIPCSim::IpcFloorMotionState &motion, int frame)
+{
+  if (!motion.hasMotion)
+    return motion.heightStart;
+  if (frame <= motion.frameStart)
+    return motion.heightStart;
+  if (frame >= motion.frameEnd)
+    return motion.heightEnd;
+
+  const double denom = static_cast<double>(motion.frameEnd - motion.frameStart);
+  const double alpha = denom > 0.0 ? static_cast<double>(frame - motion.frameStart) / denom : 1.0;
+  return motion.heightStart * (1.0 - alpha) + motion.heightEnd * alpha;
 }
 }
 
@@ -156,14 +232,17 @@ int main(int argc, char *argv[])
     if (simType != "dynamic")
       throw std::invalid_argument("runIPCSim phase1D only supports `sim-type = dynamic`.");
     const std::filesystem::path outputFolder = jconfig.getResolvedPath("output", 1);
+    const OutputDirectories outputDirs = makeOutputDirectories(outputFolder);
     const bool restartFromU = jconfig.exist("restart-from-u") ? jconfig.getValue<bool>("restart-from-u", 1) : false;
+    const bool outputVonMises = jconfig.exist("output-von-mises") ? jconfig.getValue<bool>("output-von-mises", 1) : false;
     enableProfiling = jconfig.exist("profiling") ? jconfig.getValue<bool>("profiling", 1) : false;
 
     if (restartFromU) {
-      std::filesystem::create_directories(outputFolder);
+      createOutputSubdirectories(outputDirs);
     }
     else {
       clearOutputDirectory(outputFolder);
+      createOutputSubdirectories(outputDirs);
     }
 
     if (enableCliLog) {
@@ -184,6 +263,8 @@ int main(int argc, char *argv[])
     const bool hasTetMesh = jconfig.exist("tet-mesh");
     const bool hasCubicMesh = jconfig.exist("cubic-mesh");
     const bool useVolumePath = hasTetMesh || hasCubicMesh;
+    if (outputVonMises && !useVolumePath)
+      throw std::invalid_argument("runIPCSim `output-von-mises` requires `tet-mesh` or `cubic-mesh`.");
 
     RunIPCSim::IpcSimulationContext context = useVolumePath
       ? RunIPCSim::buildVolumeIpcSimulation(jconfig)
@@ -197,8 +278,9 @@ int main(int argc, char *argv[])
     for (int vi = 0; vi < n; ++vi)
       g.segment<3>(vi * 3) = extAcc;
 
-    ES::VXd fext(n3);
-    ES::mv(context.M, g, fext);
+    ES::VXd gravityForce(n3);
+    ES::mv(context.M, g, gravityForce);
+    ES::VXd fext = gravityForce;
 
     std::shared_ptr<Simulation::ImplicitBackwardEulerTimeIntegrator> intg =
       std::make_shared<Simulation::ImplicitBackwardEulerTimeIntegrator>(context.M, context.elasticEnergy,
@@ -220,12 +302,12 @@ int main(int argc, char *argv[])
     int frameStart = -1;
     if (restartFromU) {
       for (int framei = numSimSteps - 1; framei >= 0; --framei) {
-        const std::string deformFilename = fmt::format("{}/deform{:04d}.u", outputFolder.string(), framei);
+        const std::filesystem::path deformFilename = framePath(outputDirs.states, "deform", framei, ".u");
         if (!std::filesystem::exists(deformFilename))
           continue;
 
         ES::MXd uMat(n3, 3);
-        if (ES::readMatrix(deformFilename.c_str(), uMat) == 0) {
+        if (ES::readMatrix(deformFilename.string().c_str(), uMat) == 0) {
           frameStart = framei;
           u.noalias() = uMat.col(0);
           uvel.noalias() = uMat.col(1);
@@ -237,16 +319,13 @@ int main(int argc, char *argv[])
     }
 
     if (frameStart < 0 && restartFromU)
-      std::cout << "No restart state found in " << outputFolder << ". Starting from frame 0." << std::endl;
+      std::cout << "No restart state found in " << outputDirs.states << ". Starting from frame 0." << std::endl;
     else if (frameStart < 0)
       std::cout << "Starting from frame 0." << std::endl;
 
     const double ratioDenom = numSimSteps > 1 ? static_cast<double>(numSimSteps - 1) : 1.0;
 
     bool executedStep = false;
-    resetSolveMaxStepSummary(intg);
-    context.elasticEnergy->resetMaterialMaxStepStats();
-    context.collisionHandler->resetContactMaxStepStats();
     for (int framei = frameStart + 1; framei < numSimSteps; ++framei) {
       intg->clearGeneralImplicitForceModel();
 
@@ -257,11 +336,17 @@ int main(int argc, char *argv[])
         std::cout << "Frame " << framei << ", attachment " << pi << " target: " << curTgt.transpose().head(3) << std::endl;
       }
 
-      context.elasticEnergy->resetMaterialMaxStepStats();
-      context.collisionHandler->resetContactMaxStepStats();
       intg->addGeneralImplicitForceModel(context.collisionHandler, 0, 0);
+      for (std::size_t fi = 0; fi < context.floorPotentialEnergies.size(); ++fi) {
+        context.floorPotentialEnergies[fi]->setFloorHeight(floorHeightAtFrame(context.floorMotionStates[fi], framei));
+      }
       for (const auto &forceModel : context.extraGeneralImplicitForceModels)
         intg->addGeneralImplicitForceModel(forceModel, 0, 0);
+      if (context.surfacePressureForceEnabled) {
+        const double ramp = std::min(1.0, static_cast<double>(framei + 1) / static_cast<double>(context.surfacePressureRampSteps));
+        fext.noalias() = gravityForce + ramp * context.surfacePressureSimulationForce;
+        intg->setExternalForce(fext.data());
+      }
       intg->setqState(u, uvel, uacc);
       intg->doTimestep(1, 3, 1);
       executedStep = true;
@@ -274,7 +359,11 @@ int main(int argc, char *argv[])
       uMat.col(0) = u;
       uMat.col(1) = uvel;
       uMat.col(2) = uacc;
-      ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder.string(), framei).c_str(), uMat);
+      ES::writeMatrix(framePath(outputDirs.states, "deform", framei, ".u").string().c_str(), uMat);
+
+      if (outputVonMises) {
+        writeVonMisesStressJson(outputDirs, framei, timestep, context, u);
+      }
 
       if (framei % frameGap == 0) {
         Mesh::TriMeshGeo mesh = context.surfaceMesh;
@@ -282,7 +371,7 @@ int main(int argc, char *argv[])
         const ES::VXd psurf = context.surfaceRestPositions + usurf;
         for (int vi = 0; vi < mesh.numVertices(); ++vi)
           mesh.pos(vi) = psurf.segment<3>(vi * 3) / scale;
-        mesh.save(fmt::format("{}/ret{:04d}.obj", outputFolder.string(), framei / frameGap));
+        mesh.save(framePath(outputDirs.surface, "ret", framei / frameGap, ".obj").string());
       }
     }
 

@@ -2,10 +2,14 @@
   "cubic-mesh": "box-with-sphere.veg",
   "surface-mesh": "box-with-sphere.obj",
   "fixed-vertices": [],
-  "use-floor": true,
-  "floor-axis": "y",
-  "floor-height": -1.0,
-  "floor-kappa": 1000.0,
+  "floors": [
+    {
+      "axis": "y",
+      "side": "lower",
+      "height": -1.0,
+      "kappa": 1000.0
+    }
+  ],
   "g": [0, -9.81, 0],
   "init-vel": [0, 0, 0],
   "init-disp": [0, 0, 0],

@@ -42,6 +42,71 @@ build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-with-sphere/
 
 The JSON configs use paths relative to the config file, so they can be launched from the repo root without first changing into the case directory.
 
+## Batch Runner
+
+Use `ipc_batch.json` with `scripts/run_sim_batch.py` to define named IPC case groups. The script command line is only for execution control: selecting jobs, dry-run mode, and overwrite/skip behavior.
+
+Preview the squash regression batch without running the tools:
+
+```bash
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json \
+  --job squash_regression \
+  --dry-run
+```
+
+Run the squash regression batch, skipping cases whose `runIPCSim` output folder already exists:
+
+```bash
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json \
+  --job squash_regression \
+  --skip-existing
+```
+
+Run all configured IPC cases explicitly:
+
+```bash
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json \
+  --job all_ipc \
+  --skip-existing
+```
+
+Regenerate Alembic caches from existing frame dumps without rerunning simulation:
+
+```bash
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json \
+  --job all_ipc_abc
+```
+
+The default batch config uses `build/base_no_mkl`. Edit `ipc_batch.json` if you want to use another build directory such as `build/base_no_mkl_debug`.
+
+Each case entry references its `runIPCSim` config. The per-case `anim_config` defaults to `anim.json` next to that simulation config:
+
+```json
+{
+  "build_dir": "build/base_no_mkl",
+  "defaults": {
+    "anim_config": "anim.json",
+    "log": true
+  },
+  "cases": {
+    "cubic_box_squash": {
+      "sim_config": "examples/ipc/cubic/box-squash/box-ipc.json"
+    }
+  },
+  "jobs": [
+    {
+      "name": "squash_regression",
+      "stages": ["sim", "abc"],
+      "cases": ["tet_box_squash", "cubic_box_squash"]
+    }
+  ]
+}
+```
+
+If `stages` is omitted, the runner defaults to `["sim", "abc"]`. Use a job with `["abc"]` for Alembic-only postprocessing.
+
+`scripts/run_sim_batch.py` reads the `output` field from each simulation config to apply `--skip-existing` and `--overwrite`. Without either flag, it stops before running `runIPCSim` if that output folder already exists, because `runIPCSim` clears the output folder unless `restart-from-u` is enabled.
+
 ## What Each Case Contains
 
 The directory currently ships six runnable IPC inputs:
@@ -83,7 +148,7 @@ Current config convention:
 - tet uses `tet-mesh` together with `surface-mesh`
 - cubic uses `cubic-mesh` together with `surface-mesh`
 - tet and cubic provide explicit `ipc-dhat` and `ipc-kappa`
-- floor-enabled cases additionally provide `use-floor`, `floor-axis`, `floor-height`, and `floor-kappa`
+- floor-enabled cases additionally provide a `floors` array with `axis`, `side`, `height` or `motion`, and `kappa`
 - shell currently uses `ipc-heuristic: true`
 - in tet and cubic, `fixed-vertices` refers to volume simulation vertex indices, not surface vertex indices
 
@@ -155,12 +220,12 @@ Cubic unified IPC material max-step regression case. This mirrors the tet squash
 
 ### `cubic/box-with-sphere`
 
-Cubic unified IPC floor-contact example migrated from `examples/cubic/box-with-sphere-xlite`. This case removes the legacy external obstacle mesh and replaces it with the mapped-surface floor penalty path in `runIPCSim`.
+Cubic unified IPC floor-contact example migrated from `examples/legacy/cubic/box-with-sphere-xlite`. This case removes the legacy external obstacle mesh and replaces it with the mapped-surface floor penalty path in `runIPCSim`.
 
 - files: `box-with-sphere.obj`, `box-with-sphere.veg`, `box-ipc.json`, `anim.json`
 - material: `stable-neo`
 - IPC params: explicit `ipc-dhat = 0.002`, `ipc-kappa = 3000.0`
-- floor params: `use-floor = true`, `floor-axis = y`, `floor-height = -1.0`, `floor-kappa = 1000.0`
+- floor params: one lower `y` floor with `height = -1.0` and `kappa = 1000.0`
 - config note: restores the source-case gravity direction with `g = [0, -9.81, 0]`
 - run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc.json`
 - output: `examples/ipc/cubic/box-with-sphere/ret-box-with-sphere-ipc/`

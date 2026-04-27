@@ -1,7 +1,10 @@
 import pypgo
 import numpy as np
+from pathlib import Path
 
-tetmesh = pypgo.create_tetmeshgeo_from_file("torus.veg")
+TORUS_VEG = Path(__file__).resolve().parents[3] / "examples" / "legacy" / "tet" / "torus.veg"
+
+tetmesh = pypgo.create_tetmeshgeo_from_file(str(TORUS_VEG))
 v_load = pypgo.tetmeshgeo_get_vertices(tetmesh)
 t_load = pypgo.tetmeshgeo_get_tets(tetmesh)
 pypgo.destroy_tetmeshgeo(tetmesh)

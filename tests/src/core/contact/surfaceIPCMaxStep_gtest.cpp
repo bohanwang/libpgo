@@ -37,7 +37,7 @@ TEST(SurfaceIPCMaxStepGTest, HelperMatchesSurfaceIPCCoreMaxStep)
   core.setMesh(V, F);
 
   const double helperAlpha = SurfaceIPCMaxStep().compute(topology, x, dx, params.dhat, params.slackness);
-  const double coreAlpha = core.computeMaxStepSize(x, dx);
+  const double coreAlpha = core.computeMaxStepLimit(x, dx).alpha;
 
   EXPECT_GT(helperAlpha, 0.0);
   EXPECT_LT(helperAlpha, 1.0);

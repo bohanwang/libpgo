@@ -5,12 +5,12 @@
     {
       "filename": "box-zmin-fixed.txt",
       "movement": [0, 0, 0],
-      "coeff": 1e5
+      "coeff": 5e4
     },
     {
       "filename": "box-zmax-push.txt",
-      "movement": [0, 0, -2.55],
-      "coeff": 1e5
+      "movement": [0, 0, -10.00],
+      "coeff": 5e4
     }
   ],
   "g": [0, 0, 0],
@@ -22,11 +22,12 @@
   "damping-params": [0, 0],
   "sim-type": "dynamic",
   "solver-eps": 1e-5,
-  "solver-max-iter": 20,
+  "solver-max-iter": 200,
   "elastic-material": "stable-neo",
   "dump-interval": 1,
   "output": "ret-box-squash-ipc",
   "ipc-dhat": 0.002,
   "ipc-kappa": 3000.0,
-  "enable-material-max-step": true
+  "enable-material-max-step": true,
+  "output-von-mises": true
 }

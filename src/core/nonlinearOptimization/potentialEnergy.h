@@ -6,6 +6,7 @@ copyright to USC
 #pragma once
 
 #include "EigenDef.h"
+#include "solveDiagnostics.h"
 
 #include <memory>
 
@@ -39,21 +40,7 @@ public:
   virtual int hasHessian() const { return 1; }
   virtual int isHessianTopologyFixed() const { return 1; }
 
-  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const = 0;
-  virtual void resetSolveMaxStepStats() const {}
-  virtual void recordLineSearchStepDiagnostics(
-    double,
-    double,
-    double) const
-  {
-  }
-  virtual void getFeasibleAlphaClampBreakdown(
-    double &materialAlpha,
-    double &contactAlpha) const
-  {
-    materialAlpha = 1.0;
-    contactAlpha = 1.0;
-  }
+  virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const = 0;
 };
 
 typedef std::shared_ptr<PotentialEnergy> PotentialEnergy_p;

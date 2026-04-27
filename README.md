@@ -18,8 +18,8 @@ Do `pip install ./dist/your-chosen.whl` to install the package. Note that the pa
 
 ## Prerequisites
 
-1. CMake >= **3.28**\
-    We use several functionalities that are only supported by 3.28+. 
+1. CMake >= **3.29**\
+    We use several functionalities that are only supported by 3.29+. 
     > In most cases, both system's CMake and Conda Environment's CMake have a lower version of CMake unfortunately. In this sitation, please install a new CMake into your system. The latest CMake, either pre-built binaries or source files, can be obtained directly from the [official](https://cmake.org/download/) website. Once installed, hook `cmake` to the newly installed one, either by adding the `your-new-cmake/bin` to the front of the `PATH` or by replacing the existing `cmake` executable with the new one.
 
 2. Compilers
@@ -36,20 +36,20 @@ Do `pip install ./dist/your-chosen.whl` to install the package. Note that the pa
     This can be installed on Ubuntu by
 
     ```bash
-        sudo apt install libgmp-dev libmpfr-dev
+    sudo apt install libgmp-dev libmpfr-dev
     ```
 
     Or it can be installed on Mac OS by
 
     ```bash
-        brew install gmp mpfr imath
+    brew install gmp mpfr imath
     ```
 
 4. (Optional) Ninja\
     It can be installed by
 
     ```bash
-        pip install ninja
+    pip install ninja
     ```
 
     for better compilation performance
@@ -64,126 +64,164 @@ Going forward, it is assumed that all specified prerequisites are installed and 
 Install prerequisites:
 
 ```bash
-    conda install tbb tbb-devel mkl mkl-devel
-    conda install conda-forge::imath
+conda install tbb tbb-devel mkl mkl-devel
+conda install conda-forge::imath
 ```
 
-### Windows & Ubuntu
+### CMake Presets
 
-Install libpgo:
+Native C++ builds in this repository are preset-driven:
 
 ```bash
-    cd libpgo
-    pip install .
+cmake --list-presets
+cmake --preset <configure-preset>
+cmake --build --preset <build-preset> [--target <target>...]
+```
+
+Configure presets define feature flags and build directories. Build presets define parallel build options and map to a configure preset.
+
+#### Configure Presets
+
+| Configure preset | Binary directory | Purpose / key options |
+| --- | --- | --- |
+| `base_no_mkl` | `build/base_no_mkl` | Release baseline without MKL. Full stack on: `PGO_ENABLE_FULL=ON`, Alembic/Gmsh/TetWild enabled. |
+| `base` | `build/base` | Release baseline with MKL (`PGO_USE_MKL=ON`) and full stack enabled (non-macOS). |
+| `base_win` | `build/base_win` | Windows-oriented release baseline: MKL on, Alembic/Gmsh/TetWild off. |
+| `debug` | *(fragment preset)* | Inheritance fragment that sets `CMAKE_BUILD_TYPE=Debug`. |
+| `knitro` | *(fragment preset)* | Inheritance fragment enabling Knitro (`PGO_OPT_USE_KNITRO=ON`) with `KNITRO_LIBRARY_HINT`. |
+| `pardiso` | *(fragment preset)* | Inheritance fragment enabling original Pardiso (`PGO_HAS_ORIG_PARDISO=ON`) with `PARDISO_LIBRARY_HINT`. |
+| `cuda` | *(fragment preset)* | Inheritance fragment enabling CUDA (`PGO_ENABLE_CUDA=ON`). |
+| `base_knitro` | `build/base_knitro` | `base` + `knitro` (non-macOS). |
+| `base_knitro_cuda` | `build/base_knitro_cuda` | `base` + `knitro` + `cuda` (non-macOS). |
+| `all_debug` | `build/all_debug` | `base` + `knitro` + `pardiso` + `cuda` in Debug mode (non-macOS). |
+| `all_release` | `build/all_release` | `base` + `knitro` + `pardiso` + `cuda` in Release mode (non-macOS). |
+| `base_cuda_debug` | `build/base_cuda_debug` | `base` + `cuda` in Debug mode (non-macOS). |
+| `base_no_mkl_debug` | `build/base_no_mkl_debug` | `base_no_mkl` in Debug mode. |
+| `base_cuda_release` | `build/base_cuda_release` | `base` + `cuda` in Release mode (non-macOS). |
+| `base_cuda_win` | `build/base_cuda_win` | `base_win` + `cuda`, with Windows `cudss_DIR` hint. |
+
+#### Build Presets
+
+| Build preset | Configure preset | Typical use |
+| --- | --- | --- |
+| `base` | `base` | Release build with MKL/full stack (non-macOS). |
+| `all_debug` | `all_debug` | Debug build with all optional solvers/features (non-macOS). |
+| `all_release` | `all_release` | Release build with all optional solvers/features (non-macOS). |
+| `base_cuda_debug` | `base_cuda_debug` | Debug build with CUDA (non-macOS). |
+| `base_no_mkl_debug` | `base_no_mkl_debug` | Debug build without MKL. |
+| `base_no_mkl_release` | `base_no_mkl` | Release build without MKL. |
+| `base_cuda_release` | `base_cuda_release` | Release build with CUDA (non-macOS). |
+
+Some configure presets are composition-oriented and currently have no dedicated build preset (for example: `base_win`, `base_cuda_win`, `base_knitro`, `base_knitro_cuda`).
+
+On macOS, use the no-MKL preset family only: `base_no_mkl`, `base_no_mkl_release`, and `base_no_mkl_debug`.
+
+### Install libpgo
+
+```bash
+cd libpgo
+pip install .
 ```
 
 If `ninja` has been installed, it will compile source files in parallel. If it is not installed,
 set `CMAKE_BUILD_PARALLEL_LEVEL` to `n`, where `n` is the number of threads for compilation, to control the parallel compilation.
 
-### Mac OS
+### Setup without Python
 
-Install libpgo
+If you want to use the library with your C++ code or modify the source code, you may build it without python.
+
+### Windows & Ubuntu
+
+To compile the lib with basic functionality (no MKL):
 
 ```bash
-    cd libpgo
-    pip install .
+cd libpgo
+cmake --preset base_no_mkl
+cmake --build --preset base_no_mkl_release
 ```
+
+To enable the MKL/full-feature stack, install [MKL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html). Then,
+
+```bash
+cd libpgo
+cmake --preset base
+cmake --build --preset base
+```
+
+> On Windows, a few extra steps are need before running the preset commands above. First, the library should be configured in "x64 Native Tools Command Prompt for VS 2022". In addition, before running the commands above, run `c:\Program Files (x86)\Intel\oneAPI\setvars.bat` to setup the environments for MKL, where `c:\Program Files (x86)\Intel\oneAPI` is the path to the oneAPI installation. Once setup, run above commands.
+
+> On Ubuntu, a similar procedure is needed. Before configuring the library with presets, run `bash /opt/intel/oneapi/setvars.sh` to setup the MKL environments for the subsequent CMake configuration.
+
+### Mac OS
+
+On macOS, MKL is not supported. Use only the no-MKL presets.
+
+Release build:
+
+```bash
+cd libpgo
+cmake --preset base_no_mkl
+cmake --build --preset base_no_mkl_release
+```
+
+Debug build:
+
+```bash
+cmake --preset base_no_mkl_debug
+cmake --build --preset base_no_mkl_debug
+```
+
+The `base_no_mkl` preset already keeps the full non-MKL feature stack enabled (including Alembic/Gmsh/TetWild). Alembic and Gmsh related features still depend on local third-party libraries (such as imath and gmsh).
+
+---
 
 ## Usage & Test
 
-We provide three python scripts to test the installation.
+The primary runnable examples in this repository are now IPC examples driven by `runIPCSim` under `examples/ipc/`.
 
-1. `pgo_test_01.py`. It runs a few basic pgo APIs.
+Build the IPC tools:
 
-    ```bash
-        cd examples
-        python ../src/python/pypgo/pgo_test_01.py
-    ```
+```bash
+cmake --preset base_no_mkl
+cmake --build --preset base_no_mkl_release --target runIPCSim convertAnimation
+```
 
-    The expected result will look like
+Run named IPC batches from the JSON config:
 
-    ```text
-    Opening file torus.veg.
-    #vtx:564
-    #tets:1950
-    164,134,506,563
-    L Info:
-    10067040
-    (10067040,)
-    (10067040,)
-    125.0
-    GTLTLG Info:
-    503400
-    (503400,)
-    (503400,)
-    9695578.0
-    [[  6.958279    0.          0.        -17.495821    0.          0.
-       13.10052     0.          0.         -2.5629783   0.          0.       ]
-     [  0.          6.958279    0.          0.        -17.495821    0.
-        0.         13.10052     0.          0.         -2.5629783   0.       ]
-     [  0.          0.          6.958279    0.          0.        -17.495821
-        0.          0.         13.10052     0.          0.         -2.5629783]
-     [ -5.1109824   0.          0.         10.111505    0.          0.
-        8.160282    0.          0.        -13.160804    0.          0.       ]
-     [  0.         -5.1109824   0.          0.         10.111505    0.
-        0.          8.160282    0.          0.        -13.160804    0.       ]
-     [  0.          0.         -5.1109824   0.          0.         10.111505
-        0.          0.          8.160282    0.          0.        -13.160804 ]
-     [ 23.97409     0.          0.         -6.634346    0.          0.
-       -1.4866991   0.          0.        -15.853046    0.          0.       ]
-     [  0.         23.97409     0.          0.         -6.634346    0.
-        0.         -1.4866991   0.          0.        -15.853046    0.       ]
-     [  0.          0.         23.97409     0.          0.         -6.634346
-        0.          0.         -1.4866991   0.          0.        -15.853046 ]]
-    ```
+```bash
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job squash_regression --dry-run
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job squash_regression --skip-existing
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job all_ipc_abc
+```
 
-2. `pgo_run_sim.py`. It reads input config file and run simulation. You can try `box`, `box-with-sphere`, `dragon`, and `dragon-dyn` to test different simulation results. Take the box example for illustration. You can run the box example using the following commands.
-   
-    ```bash
-        python src/python/pypgo/pgo_run_sim.py examples/box/box.json
-    ```
+The generic batch runner reads [`examples/ipc/ipc_batch.json`](./examples/ipc/ipc_batch.json), runs the stages declared by each job, and defaults jobs without a `stages` field to `runIPCSim` with `--log` followed by `convertAnimation` with the matching per-case `anim.json`. Use [`examples/ipc/README.md`](./examples/ipc/README.md) for the full case list, job definitions, and output-overwrite policy.
 
-    The expected result will look like the first image. The time integrator is hard-coded as implicit backward Euler (BE). You are free to change it to implicit Newmark (NW) or TR-BDF2 integrator (not support friction).
-    <table style="width: 100%; table-layout: fixed; border-collapse: collapse;">
-        <tr>
-            <th style="width: 50%;text-align:center; border-top: 1px solid #ddd;">Box (NM)</th>
-            <th style="width: 50%;text-align:center; border-top: 1px solid #ddd;">Box with Sphere (NM)</th>
-        </tr>
-        <tr>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box/box.gif" alt="box"></td>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box-with-sphere/box-with-sphere.gif" alt="box with sphere"></td>
-        </tr>
-        <tr>
-            <th style="width: 50%;text-align:center;">Dragon (BE)</th>
-            <th style="width: 50%;text-align:center;">Bunny (BE)</th>
-        </tr>
-        <tr>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/dragon-dyn/dragon-dyn.gif" alt="dragon"></td>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/bunny/bunny.gif" alt="bunny"></td>
-        </tr>
-        <tr>
-            <th style="width: 50%;text-align:center;">Rest Dragon</th>
-            <th style="width: 50%;text-align:center;">Deformed Dragon</th>           
-        </tr>
-        <tr>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/dragon/dragon-rest.png" alt="dragon rest shape"></td>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/dragon/dragon-deformed.png" alt="dragon deformed shape"></td>
-        </tr>
-    </table>
+Run representative IPC cases from the repo root:
 
-3. `pgo_dump_abc.py`. It creates the abc file that can be used for blender/maya from config file `anim.json`. Essentially, it takes the simulation output `.obj` sequences and output a `.abc` file.
+```bash
+build/base_no_mkl/bin/runIPCSim examples/ipc/shell/shell-ipc.json
+build/base_no_mkl/bin/runIPCSim examples/ipc/tet/box-hang/box-ipc.json
+build/base_no_mkl/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc.json
+```
 
-    ```bash
-        python src/python/pypgo/pgo_dump_abc.py examples/box/anim.json examples/box/
-    ```
+Convert dumped frame sequences to Alembic:
 
-    The `convertAnimation` tool provides the same conversion on the CLI:
+```bash
+build/base_no_mkl/bin/convertAnimation examples/ipc/shell/anim.json
+build/base_no_mkl/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
+build/base_no_mkl/bin/convertAnimation examples/ipc/cubic/box-with-sphere/anim.json
+```
 
-    ```bash
-        convertAnimation examples/box/anim.json
-    ```
+For the full IPC case list and per-case notes, see [`examples/ipc/README.md`](./examples/ipc/README.md).
 
-    If the optional second argument is omitted, the tool writes `.abc` files into the folder containing `anim.json`, and each output filename uses the mesh `name` field from the config.
+For non-IPC legacy examples (`runSim`, `runShellSim`, `pgo_run_sim.py`, `pgo_dump_abc.py`), see [`examples/legacy/README.md`](./examples/legacy/README.md).
+
+Optional Python API smoke test:
+
+```bash
+cd examples
+python ../src/python/pypgo/pgo_test_01.py
+```
 
 ## Tools
 
@@ -194,21 +232,21 @@ We provide three python scripts to test the installation.
 Build the tool:
 
 ```bash
-    cmake --preset base_no_mkl
-    cmake --build build/base_no_mkl --target cubicMesher
+cmake --preset base_no_mkl
+cmake --build --preset base_no_mkl_release --target cubicMesher
 ```
 
 Basic usage:
 
 ```bash
-    build/base_no_mkl/bin/cubicMesher \
-        --input-mesh examples/cubic/box/box.obj \
-        --resolution 4 \
-        --output-mesh examples/cubic/box/box.veg \
-        --output-surface examples/cubic/box/box-surface.obj \
-        --E 10000000 \
-        --nu 0.45 \
-        --density 1000
+build/base_no_mkl/bin/cubicMesher \
+--input-mesh examples/legacy/cubic/box/box.obj \
+--resolution 4 \
+--output-mesh examples/legacy/cubic/box/box.veg \
+--output-surface examples/legacy/cubic/box/box-surface.obj \
+--E 10000000 \
+--nu 0.45 \
+--density 1000
 ```
 
 Main arguments:
@@ -219,72 +257,91 @@ Main arguments:
 - `--output-surface`: optional extracted surface `.obj`
 - `--E`, `--nu`, `--density`: isotropic material parameters written into the output mesh
 
-Generated sample cubic assets are stored under `examples/cubic/`. See [`examples/cubic/README.md`](./examples/cubic/README.md) for the exact commands and parameters used for `box`, `box-hang`, `bunny`, `dragon-dyn`, and `box-with-sphere`.
+Generated legacy cubic assets are stored under `examples/legacy/cubic/`. See [`examples/legacy/cubic/README.md`](./examples/legacy/cubic/README.md) for detailed commands and case notes.
 
-### Shell Simulation
+### Tet Mesher
 
-Build the shell simulation CLI:
+`tetMesher` converts a closed triangle surface mesh into a tetrahedral `.veg` simulation mesh from a JSON job config. The JSON selects the backend, backend parameters, input/output paths, and optional generated boundary surface export. Paths inside the config are resolved relative to the config file.
 
-```bash
-    cmake --preset base_no_mkl
-    cmake --build build/base_no_mkl --target runShellSim
-```
-
-Run the bundled shell example:
+Build `tetMesher` in the default no-MKL preset:
 
 ```bash
-    build/base_no_mkl/bin/runShellSim examples/shell/shell.json
+cmake --preset base_no_mkl
+cmake --build --preset base_no_mkl_release --target tetMesher
 ```
 
-To also write the command-line output to `examples/shell/shell.log`, add `--log`:
+Run a tet meshing job:
 
 ```bash
-    build/base_no_mkl/bin/runShellSim examples/shell/shell.json --log
+build/base_no_mkl/bin/tetMesher --config path/to/tetmesh.json
 ```
 
----
+Basic TetGen config:
 
-## Setup without Python (Optional)
+```json
+{
+  "version": 1,
+  "backend": "tetgen",
+  "input_mesh": "union_shell_remesh.obj",
+  "output_mesh": "union_shell_tetgen.veg",
+  "output_surface": "union_shell_tetgen_surface.obj",
+  "print_stats": true,
+  "tetgen": {
+    "command": "pq1.414a0.01"
+  }
+}
+```
 
-If you want to use the library with your C++ code or modify the source code, you may build it without python.
-
-### Windows & Ubuntu
-
-To compile the lib with a basic functionality,
+The fTetWild backend is enabled by default in the main presets on macOS/Linux. Build it in the preset build tree:
 
 ```bash
-    cd libpgo
-    mkdir build
-    cd build
-    cmake ..
+cmake --preset base_no_mkl
+cmake --build --preset base_no_mkl_release --target tetMesher
 ```
 
-To enable all functionalities, Install [MKL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html). Then,
+Basic fTetWild config:
 
-```bash
-    cd libpgo
-    mkdir build
-    cd build
-    cmake .. -DPGO_USE_MKL=1 -DPGO_ENABLE_FULL=1
+```json
+{
+  "version": 1,
+  "backend": "tetwild",
+  "input_mesh": "union_shell_remesh.obj",
+  "output_mesh": "union_shell.veg",
+  "output_surface": "union_shell_tet_surface.obj",
+  "print_stats": true,
+  "quiet": true,
+  "tetwild": {
+    "lr": 0.05,
+    "epsr": 0.001,
+    "stop_energy": 10,
+    "max_threads": 8
+  }
+}
 ```
 
-> On Windows, a few extra steps are need before running the above commands. First, the library should be configured in "x64 Native Tools Command Prompt for VS 2022". In addition, before running the commands above, run `c:\Program Files (x86)\Intel\oneAPI\setvars.bat` to setup the environments for MKL, where `c:\Program Files (x86)\Intel\oneAPI` is the path to the oneAPI installation. Once setup, run above commands.
+Config fields:
 
-> On Ubuntu, a similar procedure is needed. Before configuring the library, run `bash /opt/intel/oneapi/setvars.sh` to setup the MKL environments for the subsequent cmake configuration.
+- `backend`: `tetgen` or `tetwild`
+- `input_mesh`: input closed triangle mesh, typically `.obj`
+- `output_mesh`: output tetrahedral `.veg`
+- `output_surface`: optional generated tet boundary surface `.obj`
+- `print_stats`, `quiet`: optional shared booleans
+- `tetgen.command`: TetGen command string
+- `tetwild.lr` / `tetwild.la`: relative or absolute fTetWild target edge length
+- `tetwild.epsr`: fTetWild relative envelope tolerance
+- `tetwild.stop_energy`, `tetwild.max_threads`: fTetWild optimization controls
 
-### Mac OS
+For FBMS shell asset commands and generated example stats, see [`examples/fbms/README.md`](./examples/fbms/README.md).
 
-To have a basic functionality, use CMake to compile it like on Windows & Ubuntu.
+### Legacy Non-IPC Examples
 
-To enable all functionalities,
+The non-IPC example suite has been moved to `examples/legacy/`.
 
-```bash
-    cd libpgo
-    mkdir build
-    cd build
-    cmake .. -DPGO_ENABLE_FULL=1 -DDPGO_ENABLE_ALEMBIC=1 -DPGO_ENABLE_GMSH=1
-```
-The last two flags work only if you have imath and gmesh libs.
+Use [`examples/legacy/README.md`](./examples/legacy/README.md) for:
+
+- `runSim` and `runShellSim` legacy case commands
+- Python wrappers `pgo_run_sim.py` and `pgo_dump_abc.py`
+- legacy case layout and migration notes
 
 ---
 

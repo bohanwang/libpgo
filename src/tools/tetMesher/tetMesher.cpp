@@ -1,35 +1,155 @@
-#include "tetgenInterface.h"
+#include "tetMesherBackend.h"
+
+#include "configFileJSON.h"
 #include "pgoLogging.h"
-#include "triMeshGeo.h"
-#include "tetMesh.h"
 
 #include <argparse/argparse.hpp>
 
+#include <iostream>
+#include <memory>
+#include <stdexcept>
+#include <string>
+
+namespace
+{
+
+using json = nlohmann::json;
+
+std::string requireString(const json &j, const char *key)
+{
+  if (j.contains(key) == false)
+    throw std::runtime_error(std::string("Missing required JSON field: ") + key);
+
+  if (j.at(key).is_string() == false)
+    throw std::runtime_error(std::string("JSON field must be a string: ") + key);
+
+  return j.at(key).get<std::string>();
+}
+
+int readVersion(const json &j)
+{
+  if (j.contains("version") == false)
+    return 1;
+
+  if (j.at("version").is_number_integer() == false)
+    throw std::runtime_error("JSON field must be an integer: version");
+
+  return j.at("version").get<int>();
+}
+
+bool readBool(const json &j, const char *key, bool defaultValue)
+{
+  if (j.contains(key) == false)
+    return defaultValue;
+
+  if (j.at(key).is_boolean() == false)
+    throw std::runtime_error(std::string("JSON field must be a boolean: ") + key);
+
+  return j.at(key).get<bool>();
+}
+
+double readDouble(const json &j, const char *key, double defaultValue)
+{
+  if (j.contains(key) == false)
+    return defaultValue;
+
+  if (j.at(key).is_number() == false)
+    throw std::runtime_error(std::string("JSON field must be a number: ") + key);
+
+  return j.at(key).get<double>();
+}
+
+int readInt(const json &j, const char *key, int defaultValue)
+{
+  if (j.contains(key) == false)
+    return defaultValue;
+
+  if (j.at(key).is_number_integer() == false)
+    throw std::runtime_error(std::string("JSON field must be an integer: ") + key);
+
+  return j.at(key).get<int>();
+}
+
+const json &readObject(const json &j, const char *key, bool required)
+{
+  static const json empty = json::object();
+
+  if (j.contains(key) == false) {
+    if (required)
+      throw std::runtime_error(std::string("Missing required JSON object: ") + key);
+    return empty;
+  }
+
+  if (j.at(key).is_object() == false)
+    throw std::runtime_error(std::string("JSON field must be an object: ") + key);
+
+  return j.at(key);
+}
+
+tet_mesher::CommonOptions readCommonOptions(const pgo::ConfigFileJSON &config)
+{
+  const json &j = config.handle();
+
+  tet_mesher::CommonOptions options;
+  options.inputMesh = config.resolvePath(requireString(j, "input_mesh"));
+  options.outputMesh = config.resolvePath(requireString(j, "output_mesh"));
+  if (j.contains("output_surface"))
+    options.outputSurface = config.resolvePath(requireString(j, "output_surface"));
+  options.printStats = readBool(j, "print_stats", false);
+  options.quiet = readBool(j, "quiet", false);
+  return options;
+}
+
+int runTetgen(const pgo::ConfigFileJSON &config)
+{
+  const json &tetgen = readObject(config.handle(), "tetgen", true);
+
+  tet_mesher::TetgenOptions options;
+  options.common = readCommonOptions(config);
+  options.command = requireString(tetgen, "command");
+
+  std::unique_ptr<pgo::VolumetricMeshes::TetMesh> tetMesh = tet_mesher::generateTetgenMesh(options);
+  tet_mesher::saveTetMeshOutputs(*tetMesh, options.common);
+  return 0;
+}
+
+int runTetwild(const pgo::ConfigFileJSON &config)
+{
+  const json &tetwild = readObject(config.handle(), "tetwild", false);
+
+  tet_mesher::TetwildOptions options;
+  options.common = readCommonOptions(config);
+  options.lr = readDouble(tetwild, "lr", options.lr);
+  options.epsr = readDouble(tetwild, "epsr", options.epsr);
+  options.stopEnergy = readDouble(tetwild, "stop_energy", options.stopEnergy);
+  options.maxThreads = readInt(tetwild, "max_threads", options.maxThreads);
+
+  if (tetwild.contains("la")) {
+    options.la = readDouble(tetwild, "la", options.la);
+    options.hasLa = true;
+  }
+
+  if (options.hasLa && tetwild.contains("lr"))
+    throw std::runtime_error("tetwild.la and tetwild.lr are mutually exclusive");
+
+  std::unique_ptr<pgo::VolumetricMeshes::TetMesh> tetMesh = tet_mesher::generateTetwildMesh(options);
+  tet_mesher::saveTetMeshOutputs(*tetMesh, options.common);
+  return 0;
+}
+
+}  // namespace
+
 int main(int argc, char *argv[])
 {
-  argparse::ArgumentParser program("Tetrahedralization surface");
-
-  // git add subparser
-  argparse::ArgumentParser tetgen_cmd("tetgen");
-  tetgen_cmd.add_description(
-    "Use tetgen to tetrahedralize surface");
-  tetgen_cmd.add_argument("-i", "--input-mesh")
-    .help("Input surface mesh filename")
+  argparse::ArgumentParser program("tetMesher");
+  program.add_description("Tetrahedralize a surface mesh into a .veg simulation mesh from a JSON config");
+  program.add_argument("--config")
+    .help("Tet meshing JSON config filename")
     .required()
     .metavar("PATH");
-  tetgen_cmd.add_argument("-o", "--output-mesh")
-    .help("Output surface mesh filename")
-    .required()
-    .metavar("PATH");
-  tetgen_cmd.add_argument("-c", "--command")
-    .help("The angle threshold of the edge to be considered as a sharp edge")
-    .required()
-    .metavar("CMD");
-
-  program.add_subparser(tetgen_cmd);
 
   try {
-    program.parse_args(argc, argv);  // Example: ./main --color orange
+    program.parse_args(argc, argv);
   }
   catch (const std::exception &err) {
     std::cerr << err.what() << std::endl;
@@ -39,36 +159,27 @@ int main(int argc, char *argv[])
 
   pgo::Logging::init();
 
-  if (program.is_subcommand_used(tetgen_cmd)) {
-    pgo::Mesh::TriMeshGeo inputMesh;
-    if (inputMesh.load(tetgen_cmd.get<std::string>("--input-mesh")) != true)
-      return 1;
+  try {
+    pgo::ConfigFileJSON config;
+    const std::string configPath = program.get<std::string>("--config");
+    if (config.open(configPath.c_str()) == false)
+      throw std::runtime_error("Failed to open tet mesher config: " + configPath);
 
-    std::string tetgenCommand = tetgen_cmd.get<std::string>("--command");
-    std::cout << "Tetgen command: " << tetgenCommand << std::endl;
+    const int version = readVersion(config.handle());
+    if (version != 1)
+      throw std::runtime_error("Unsupported tet mesher config version: " + std::to_string(version));
 
-    pgo::EigenSupport::MXd V;
-    pgo::EigenSupport::MXi T;
-    pgo::TetgenInterface::computeTetMesh(inputMesh, tetgenCommand, V, T);
+    const std::string backend = requireString(config.handle(), "backend");
+    if (backend == "tetgen")
+      return runTetgen(config);
 
-    std::vector<pgo::Vec3d> positions;
-    std::vector<pgo::Vec4i> tets;
+    if (backend == "tetwild")
+      return runTetwild(config);
 
-    for (int i = 0; i < V.rows(); ++i) {
-      positions.push_back(pgo::Vec3d(V(i, 0), V(i, 1), V(i, 2)));
-    }
-
-    for (int i = 0; i < T.rows(); ++i) {
-      tets.push_back(pgo::Vec4i(T(i, 0), T(i, 1), T(i, 2), T(i, 3)));
-    }
-
-    pgo::VolumetricMeshes::TetMesh tetMesh(positions, tets);
-    std::string outputMeshFilename = tetgen_cmd.get<std::string>("--output-mesh");
-    if (tetMesh.save(outputMeshFilename.c_str()) != 0) {
-      SPDLOG_LOGGER_ERROR(pgo::Logging::lgr(), "Failed to save tet mesh to file {}\n", outputMeshFilename);
-      return 1;
-    }
+    throw std::runtime_error("Unsupported tet mesher backend: " + backend);
   }
-
-  return 0;
+  catch (const std::exception &err) {
+    std::cerr << err.what() << std::endl;
+    return 1;
+  }
 }

@@ -51,7 +51,7 @@ public:
   virtual int isQuadratic() const override { return 1; }
   virtual int hasHessianVector() const override { return 1; }
 
-  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override { return 1.0; }
+  virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd, EigenSupport::ConstRefVecXd) const override { return MaxStepResult::unconstrained(); }
 
 protected:
   const EigenSupport::SpMatD &A;

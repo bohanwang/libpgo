@@ -3,6 +3,7 @@
 #include "timeIntegratorOptions.h"
 
 #include "EigenSupport.h"
+#include "solveDiagnostics.h"
 
 #include <memory>
 
@@ -29,6 +30,8 @@ public:
     std::shared_ptr<const NonlinearOptimization::PotentialEnergy> energy,
     std::shared_ptr<const NonlinearOptimization::ConstraintFunctions> constraints,
     int niter, double eps, int verbose, const char *solverConfigFilename, TimeIntegratorSolverOption op);
+
+  const NonlinearOptimization::SolveDiagnostics &getLastSolveDiagnostics() const;
 
   static int solveDirect(EigenSupport::VXd &x, EigenSupport::VXd &g, EigenSupport::VXd &lambda,
     const EigenSupport::VXd &xlow, const EigenSupport::VXd &xhi,

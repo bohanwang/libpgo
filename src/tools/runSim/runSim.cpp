@@ -50,33 +50,6 @@ bool parseEnableMaterialMaxStep(const pgo::ConfigFileJSON &jconfig)
     : true;
 }
 
-struct SolveMaxStepSummary
-{
-  double minFeasibleAlphaThisSolve = 1.0;
-  double minLineSearchAlphaThisSolve = 1.0;
-  double minEffectiveAlphaThisSolve = 1.0;
-};
-
-SolveMaxStepSummary currentSolveMaxStepSummary(const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
-{
-  const auto internalEnergy = std::dynamic_pointer_cast<const pgo::Simulation::ImplicitBackwardEulerEnergy>(integrator->getInternalEnergy());
-  if (!internalEnergy)
-    return {};
-
-  return {
-    internalEnergy->getMinFeasibleAlphaThisSolve(),
-    internalEnergy->getMinLineSearchAlphaThisSolve(),
-    internalEnergy->getMinEffectiveAlphaThisSolve(),
-  };
-}
-
-void resetSolveMaxStepSummary(const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
-{
-  const auto internalEnergy = std::dynamic_pointer_cast<const pgo::Simulation::ImplicitBackwardEulerEnergy>(integrator->getInternalEnergy());
-  if (internalEnergy)
-    internalEnergy->resetSolveMaxStepStats();
-}
-
 void logRunSimMaxStepSummary(const std::shared_ptr<pgo::SolidDeformationModel::DeformationModelEnergy> &elasticEnergy,
   const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
 {
@@ -84,17 +57,17 @@ void logRunSimMaxStepSummary(const std::shared_ptr<pgo::SolidDeformationModel::D
   if (!logger)
     return;
 
-  const SolveMaxStepSummary summary = currentSolveMaxStepSummary(integrator);
-  const auto materialClampCount = elasticEnergy->getMaterialClampCount();
+  (void)elasticEnergy;
+  const pgo::NonlinearOptimization::SolveDiagnostics &summary = integrator->getLastSolveDiagnostics();
 
   if (logger->should_log(spdlog::level::info)) {
     SPDLOG_LOGGER_INFO(logger,
       "runSim max-step summary: materialClampCount={} minMaterialFeasibleAlphaThisSolve={} minFeasibleAlphaThisSolve={} minLineSearchAlphaThisSolve={} minEffectiveAlphaThisSolve={}",
-      materialClampCount,
-      elasticEnergy->getMinMaterialFeasibleAlphaThisSolve(),
-      summary.minFeasibleAlphaThisSolve,
-      summary.minLineSearchAlphaThisSolve,
-      summary.minEffectiveAlphaThisSolve);
+      summary.materialClampCount,
+      summary.minMaterialFeasibleAlpha,
+      summary.minFeasibleAlpha,
+      summary.minLineSearchAlpha,
+      summary.minEffectiveAlpha);
   }
 }
 }
@@ -425,8 +398,6 @@ int main(int argc, char *argv[])
     }
 
     bool executedStep = false;
-    resetSolveMaxStepSummary(intg);
-    elasticEnergy->resetMaterialMaxStepStats();
     for (int framei = frameStart + 1; framei < numSimSteps; framei++) {
       intg->clearGeneralImplicitForceModel();
 
@@ -527,7 +498,6 @@ int main(int argc, char *argv[])
         }
       }
 
-      elasticEnergy->resetMaterialMaxStepStats();
       intg->setqState(u, uvel, uacc);
 
       intg->doTimestep(1, 2, 1);

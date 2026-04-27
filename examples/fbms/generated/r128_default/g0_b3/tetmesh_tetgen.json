@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "backend": "tetgen",
+  "input_mesh": "union_shell_remesh.obj",
+  "output_mesh": "union_shell_tetgen.veg",
+  "output_surface": "union_shell_tetgen_surface.obj",
+  "print_stats": true,
+  "tetgen": {
+    "command": "pq1.414a0.01"
+  }
+}

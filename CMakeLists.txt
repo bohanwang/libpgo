@@ -27,6 +27,7 @@ option(PGO_OPT_USE_KNITRO "Use KNITRO" OFF)
 option(PGO_MKL_LINK_DYNAMIC "MKL Link" ON)
 option(PGO_ENABLE_ALEMBIC "Enable Alembic support" OFF)
 option(PGO_ENABLE_GMSH "Enable GMSH support" OFF)
+option(PGO_TET_MESHER_USE_TET_WILD "Enable fTetWild backend for tetMesher" ON)
 
 project(libpgo LANGUAGES CXX C)
 
@@ -254,6 +255,10 @@ if(PGO_ENABLE_FULL OR PGO_ENABLE_PYTHON)
   if(PGO_ENABLE_GMSH)
     include(CMakeModules/third-party/gmsh.cmake)
   endif()
+endif()
+
+if(PGO_TET_MESHER_USE_TET_WILD)
+  include(CMakeModules/third-party/ftetwild.cmake)
 endif()
 
 if(PGO_ENABLE_PYTHON)

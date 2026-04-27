@@ -532,7 +532,7 @@ int EnergyOptimizer::minimizeUsingNewton(EigenSupport::RefVecXd x, PotentialEner
   }
 
   NewtonSolver::SolverParam solverParam;
-  solverParam.lsm = NewtonSolver::LSM_SIMPLE;
+  solverParam.lsm = NewtonSolver::LSM_BACKTRACK;
   // solverParam.lsm = NewtonSolver::LSM_BRENTS;
   // solverParam.sst = NewtonSolver::SST_SUBITERATION_ONE;
   NewtonSolver solver(x.data(), solverParam, L, fixedDOFs);

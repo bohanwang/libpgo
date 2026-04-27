@@ -87,7 +87,7 @@ TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, IdentityEmbeddingMatchesDisplacemen
   EXPECT_NEAR(adapter.func(u), wrapper.func(u), 1e-10);
   EXPECT_LT(relativeError(adapterGradient, wrapperGradient), 1e-9);
   EXPECT_LT(relativeError(sparseToDense(adapterHessian), sparseToDense(wrapperHessian)), 1e-8);
-  EXPECT_NEAR(adapter.computeMaxStepSize(u, du), wrapper.computeMaxStepSize(u, du), 1e-10);
+  EXPECT_NEAR(adapter.computeMaxStepLimit(u, du).alpha, wrapper.computeMaxStepLimit(u, du).alpha, 1e-10);
 }
 
 TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, SparseEmbeddingPullsBackGradientAndHessian)

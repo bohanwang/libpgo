@@ -14,7 +14,6 @@ copyright to Bohan Wang
 
 #include "pgoLogging.h"
 
-#include <atomic>
 #include <algorithm>
 #include <cstdint>
 #include <stdexcept>
@@ -24,21 +23,12 @@ namespace Contact {
 namespace CIPC {
 static constexpr double kSmallContactAlphaWarnThreshold = 1e-2;
 
-void updateMinAtomic(std::atomic<double> &target, double value)
-{
-  double current = target.load(std::memory_order_relaxed);
-  while (value < current && !target.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
-  }
-}
-
 SurfaceIPCCore::SurfaceIPCCore(const SurfaceIPCCore &other):
   dhat(other.dhat),
   kappa(other.kappa),
   eps_ee(other.eps_ee),
   slackness(other.slackness),
   topology_(other.topology_),
-  contactClampCount_(other.contactClampCount_.load(std::memory_order_relaxed)),
-  minContactFeasibleAlphaThisSolve_(other.minContactFeasibleAlphaThisSolve_.load(std::memory_order_relaxed)),
   ptPairs_(other.ptPairs_),
   eePairs_(other.eePairs_),
   hasPreparedState_(other.hasPreparedState_),
@@ -56,8 +46,6 @@ SurfaceIPCCore &SurfaceIPCCore::operator=(const SurfaceIPCCore &other)
   eps_ee = other.eps_ee;
   slackness = other.slackness;
   topology_ = other.topology_;
-  contactClampCount_.store(other.contactClampCount_.load(std::memory_order_relaxed), std::memory_order_relaxed);
-  minContactFeasibleAlphaThisSolve_.store(other.minContactFeasibleAlphaThisSolve_.load(std::memory_order_relaxed), std::memory_order_relaxed);
   ptPairs_ = other.ptPairs_;
   eePairs_ = other.eePairs_;
   hasPreparedState_ = other.hasPreparedState_;
@@ -82,12 +70,6 @@ SurfaceIPCCore::Parameters SurfaceIPCCore::getParameters() const
   params.eps_ee = eps_ee;
   params.slackness = slackness;
   return params;
-}
-
-void SurfaceIPCCore::resetContactMaxStepStats() const
-{
-  contactClampCount_.store(0, std::memory_order_relaxed);
-  minContactFeasibleAlphaThisSolve_.store(1.0, std::memory_order_relaxed);
 }
 
 // =========================================================================
@@ -145,29 +127,26 @@ void SurfaceIPCCore::requirePreparedState() const
 // =========================================================================
 //  1)  Maximum step size  (CCD-based line search with spatial hashing)
 // =========================================================================
-double SurfaceIPCCore::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
+NonlinearOptimization::MaxStepResult SurfaceIPCCore::computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
 {
   const double alpha = SurfaceIPCMaxStep().compute(topology_, x, dx, dhat, slackness);
   const double clampedAlpha = std::max(alpha, 1e-12);
-  updateMinAtomic(minContactFeasibleAlphaThisSolve_, clampedAlpha);
 
   if (clampedAlpha < 1.0) {
-    const std::int64_t clampCount = contactClampCount_.fetch_add(1, std::memory_order_relaxed) + 1;
-
     if (clampedAlpha > 0.0 && clampedAlpha < kSmallContactAlphaWarnThreshold) {
       SPDLOG_LOGGER_WARN(Logging::lgr(),
-        "IPC contact max step produced small contactFeasibleAlpha={} (contactClampCount={}, slackness={}).",
-        clampedAlpha, clampCount, slackness);
+        "IPC contact max step produced small contactFeasibleAlpha={} (slackness={}).",
+        clampedAlpha, slackness);
     }
 
     if (auto logger = Logging::lgr(); logger && logger->should_log(spdlog::level::trace)) {
       SPDLOG_LOGGER_TRACE(logger,
-        "IPC contact clamp: contactFeasibleAlpha={} contactClampCount={} slackness={}.",
-        clampedAlpha, clampCount, slackness);
+        "IPC contact clamp: contactFeasibleAlpha={} slackness={}.",
+        clampedAlpha, slackness);
     }
   }
 
-  return clampedAlpha;
+  return NonlinearOptimization::MaxStepResult::contact(clampedAlpha);
 }
 
 // =========================================================================

@@ -1,0 +1,12 @@
+{
+  "output-folder": "case3_wall_impact_floor_prototype_output/abc",
+  "meshes": [
+    {
+      "name": "g0_b3_case3_wall_impact_floor_prototype",
+      "driving-mesh": "union_shell_remesh.obj",
+      "sequence": "case3_wall_impact_floor_prototype_output/surface/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [0, 300]
+    }
+  ]
+}

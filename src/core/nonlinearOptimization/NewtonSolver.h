@@ -36,17 +36,29 @@ public:
     LSM_SIMPLE,
   };
 
+  enum class SolveStatus : int
+  {
+    Converged = 0,
+    MaxIterations = 1,
+    LineSearchFailed = 2,
+    StepTooSmall = 3,
+    NonFinite = 4,
+    LinearSolveFailed = 5
+  };
+
   struct SolverParam
   {
     double alpha = 0.5;
     SolverSubiterationType sst = SST_SUBITERATION_LINE_SEARCH;
-    LineSearchMethod lsm = LSM_SIMPLE;
+    LineSearchMethod lsm = LSM_BACKTRACK;
     int stopAfterIncrease = 1;
     int addDamping = 0;
   };
 
   NewtonSolver(const double *x, SolverParam sp, PotentialEnergy_const_p energy_,
     const std::vector<int> &fixedDOFs, const double *fixedValues_ = nullptr);
+
+  static const char *solveStatusToString(int status);
 
   void setFixedDOFs(const std::vector<int> &fixedDOFs, const double *fixedValues);
   int solve(double *x, int numIter, double epsilon, int verbose);
@@ -55,6 +67,7 @@ public:
   void setStepFunc(StepFunc func) { stepFunc = func; }
 
   const EigenSupport::VXd &getx() const { return x; }
+  const SolveDiagnostics &getSolveDiagnostics() const { return solveDiagnostics; }
 
 protected:
   void filterVector(EigenSupport::VXd &v);
@@ -83,6 +96,7 @@ protected:
 
   EigenSupport::VXd historyx;
   double historyGradNormMin;
+  SolveDiagnostics solveDiagnostics;
 
   StepFunc stepFunc;
 };

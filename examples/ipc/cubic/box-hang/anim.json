@@ -3,7 +3,7 @@
     {
       "name": "box-hang-ipc-cubic",
       "driving-mesh": "box.obj",
-      "sequence": "ret-box-ipc/ret{:04d}.obj",
+      "sequence": "ret-box-ipc/surface/ret{:04d}.obj",
       "sequence-type": "objmesh",
       "sequence-range": [
         0,

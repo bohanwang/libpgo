@@ -4,7 +4,7 @@
     {
       "filename": "shell-fixed0.txt",
       "movement": [0, 0, 0],
-      "coeff": 1e5
+      "coeff": 1e4
     }
   ],
   "g": [0, -9.81, 0],
@@ -16,7 +16,7 @@
   "damping-params": [0, 0],
   "sim-type": "dynamic",
   "solver-eps": 1e-4,
-  "solver-max-iter": 500,
+  "solver-max-iter": 200,
   "elastic-material": "koiter-stvk",
   "dump-interval": 10,
   "output": "ret-shell-ipc",

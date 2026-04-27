@@ -61,11 +61,11 @@ void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceHessian(
   surfaceIPCCore_.computeHessianWithPreparedPairs(surfaceHessian);
 }
 
-double EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceMaxStepSize(
+NonlinearOptimization::MaxStepResult EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceMaxStepLimit(
   EigenSupport::ConstRefVecXd surfacePositions,
   EigenSupport::ConstRefVecXd surfaceDisplacements) const
 {
-  return surfaceIPCCore_.computeMaxStepSize(surfacePositions, surfaceDisplacements);
+  return surfaceIPCCore_.computeMaxStepLimit(surfacePositions, surfaceDisplacements);
 }
 
 }  // namespace CIPC

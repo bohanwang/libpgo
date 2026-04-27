@@ -18,6 +18,7 @@ copyright to USC,MIT,NUS
 #include <tbb/parallel_for.h>
 #include <tbb/enumerable_thread_specific.h>
 
+#include <algorithm>
 #include <atomic>
 
 using namespace pgo::SolidDeformationModel;
@@ -663,6 +664,35 @@ void DeformationModelAssembler::compute_df_db(const double *x, const double *pla
 
 void DeformationModelAssembler::computeVonMisesStresses(const double *x, const double *plasticParams, const double *elasticParams, double *elementStresses) const
 {
+  std::fill(elementStresses, elementStresses + nele, 0.0);
+
+  auto localStressFunc = [this, x, plasticParams, elasticParams, elementStresses](int ele) {
+    if (elementFlags[ele] == 0)
+      return;
+
+    ES::VXd localp(localDOFs);
+    gatherLocalPositions(*deformationModelManager, ele, neleVtx, x, localp);
+
+    ES::VXd plasticParam(numPlasticParams), elasticParam(numElasticParams);
+    getPlasticParameters(ele, plasticParams, plasticParam.data());
+    getElasticParameters(ele, elasticParams, elasticParam.data());
+
+    const DeformationModel *fem = femModels[ele];
+    fem->prepareData(localp.data(), paramPtr(plasticParam), paramPtr(elasticParam), data->elementCacheData[ele]);
+
+    int nPt = 0;
+    std::vector<double> localStresses(std::max(16, fem->getNumMaterialLocations()), 0.0);
+    fem->vonMisesStress(data->elementCacheData[ele], nPt, localStresses.data());
+    if (nPt <= 0) {
+      elementStresses[ele] = 0.0;
+      return;
+    }
+
+    const int stressCount = std::min<int>(nPt, static_cast<int>(localStresses.size()));
+    elementStresses[ele] = *std::max_element(localStresses.begin(), localStresses.begin() + stressCount);
+  };
+
+  tbb::parallel_for(0, nele, localStressFunc, data->partitioners[3]);
 }
 
 void DeformationModelAssembler::computeMaxStrains(const double *x, const double *plasticParams, const double *elasticParams, double *elementStrain) const

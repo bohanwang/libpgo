@@ -3,6 +3,7 @@ set(NONLINEAROPTIMIZATION_HEADERS
 
   potentialEnergy.h 
   potentialEnergies.h 
+  solveDiagnostics.h
 
   potentialEnergyFromConstraintFunctions.h
   
