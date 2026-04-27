@@ -359,19 +359,21 @@ runIPCSim.log                simulator log when --log is used
 
 The three current cases are:
 
-Important contact limitation: the `floors` entries below do not use external IPC
-contact yet. External IPC contact is not implemented in this runner path. The
-current floors are a simple debug-only quadratic floor energy on embedded surface
-vertices, implemented by `EmbeddedSurfaceFloorPotentialEnergy`. This is useful
-for prototype squeezing/impact tests, but it is not the final external-contact
-model. Future work should replace these debug floors with real external IPC
-contact.
-
 | Case | Config | What It Does |
 | --- | --- | --- |
 | `case1_pressure` | `g0_b*_case1_pressure-ipc.json` | Dynamic stable-Neo simulation with no gravity. A surface pressure force pushes inward toward `center: "auto"`, where the center is computed from the scaled surface mesh bounding box. The current configs omit `ramp-steps`, so the default is `1` and the pressure-derived external force is full strength from the first frame. |
 | `case2_squash_floor_prototype` | `g0_b*_case2_squash_floor-prototype-ipc.json` | Dynamic stable-Neo prototype squeezed between two moving debug floor energies along the x axis. The lower floor moves from `x=-1.05` to `x=-0.75`, and the upper floor moves from `x=1.05` to `x=0.75` over frames `[0, 100]`. |
 | `case3_wall_impact_floor_prototype` | `g0_b*_case3_wall_impact_floor-prototype-ipc.json` | Dynamic stable-Neo impact prototype. The shell starts with velocity `[50, 0, 0]` and hits an upper x-axis debug floor energy at `x=1.2`. |
+
+Important contact limitation:
+
+> The `floors` entries below do not use external IPC contact yet. External IPC
+> contact is not implemented in this runner path. The current floors are a
+> simple debug-only quadratic floor energy on embedded surface vertices,
+> implemented by `EmbeddedSurfaceFloorPotentialEnergy`. This is useful for
+> prototype squeezing/impact tests, but it is not the final external-contact
+> model. Future work should replace these debug floors with real external IPC
+> contact.
 
 `surface-pressure-force` is used by case 1:
 
@@ -527,7 +529,7 @@ Open `series.pvd` in ParaView. Each VTU contains cell-data arrays:
 normalized order:
 
 ```text
-sim -> abc -> vtu
+sim -> abc -> render -> vtu
 ```
 
 The job declares its stages in JSON:
@@ -535,7 +537,7 @@ The job declares its stages in JSON:
 ```json
 {
   "name": "g0_b8",
-  "stages": ["sim", "abc", "vtu"],
+  "stages": ["sim", "abc", "render", "vtu"],
   "cases": [
     "g0_b8_case1_pressure",
     "g0_b8_case2_squash_floor_prototype",
@@ -550,13 +552,14 @@ Each case maps to the three config files used by the stages:
 {
   "sim_config": "examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-ipc.json",
   "anim_config": "g0_b8_case1_pressure-anim.json",
-  "vtu_config": "g0_b8_case1_pressure-stress-vtu.json"
+  "vtu_config": "g0_b8_case1_pressure-stress-vtu.json",
+  "render_config": "g0_b8_case1_pressure-render.json"
 }
 ```
 
-Relative `anim_config` and `vtu_config` paths resolve from the simulation config
-directory. If a job includes `vtu`, every selected case must provide
-`vtu_config`.
+Relative `anim_config`, `vtu_config`, and `render_config` paths resolve from the
+simulation config directory. If a job includes `vtu` or `render`, every selected
+case must provide the matching config path.
 
 Preview the full g0_b8 pipeline:
 
@@ -582,6 +585,15 @@ Run only postprocessing from existing simulation output:
 scripts/run_sim_batch.py \
   --config examples/fbms/fbms_batch.json \
   --job g0_b8_post
+```
+
+Regenerate only Alembic-rendered GIF previews from existing `.abc` files:
+
+```bash
+scripts/run_sim_batch.py \
+  --config examples/fbms/fbms_batch.json \
+  --job g0_b8_render \
+  --overwrite
 ```
 
 Regenerate only ParaView VTU/PVD output:
@@ -615,7 +627,58 @@ g0_b3_post
 all_fbms_post
 g0_b8_vtu
 g0_b3_vtu
+g0_b8_render
+g0_b3_render
+all_fbms_render
 ```
+
+## 10. Render Alembic Previews With Blender
+
+`scripts/render_abc_preview.py` is a generic wrapper for rendering an Alembic
+`.abc` animation to PNG frames with Blender, then encoding those frames to a GIF
+with ffmpeg. It is useful for lightweight README previews and can be run directly
+or through the batch runner's `render` stage.
+
+The script expects Blender and ffmpeg to be available. On macOS it automatically
+tries `/Applications/Blender.app/Contents/MacOS/Blender`; otherwise pass
+`--blender` or set `BLENDER`. Pass `--ffmpeg` or set `FFMPEG` if ffmpeg is not
+on `PATH`.
+
+Example:
+
+```bash
+scripts/render_abc_preview.py \
+  --config examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-render.json \
+  --overwrite
+```
+
+The render config is resolved relative to the config file:
+
+```json
+{
+  "abc": "case1_pressure_output/abc/g0_b8_case1_pressure.abc",
+  "frames_dir": "case1_pressure_output/render_frames",
+  "output_gif": "../../../fbms_video/g0b8_case1.gif",
+  "frame_start": 0,
+  "frame_end": 299,
+  "frame_step": 3,
+  "fps": 30,
+  "gif_fps": 10,
+  "width": 960,
+  "height": 540,
+  "samples": 64,
+  "camera": {
+    "mode": "auto",
+    "view": [0.0, -1.0, 0.35],
+    "ortho_scale_multiplier": 2.4
+  }
+}
+```
+
+`frame_step: 3` samples every third Alembic frame from the 300-frame simulation
+and `gif_fps: 10` keeps the preview duration close to the original 10-second
+animation. The intermediate `render_frames` folder is under the case output
+directory and is treated as generated output.
 
 ## End-To-End Example
 
@@ -632,7 +695,7 @@ examples/fbms/generate_shell_assets.py \
 build/base_no_mkl/bin/tetMesher \
   --config examples/fbms/generated/r128_default/g0_b8/tetmesh.json
 
-# 3. Run all g0_b8 simulations, then dump .abc and .vtu/.pvd outputs.
+# 3. Run all g0_b8 simulations, then dump .abc, GIF, and .vtu/.pvd outputs.
 scripts/run_sim_batch.py \
   --config examples/fbms/fbms_batch.json \
   --job g0_b8 \
@@ -647,5 +710,43 @@ examples/fbms/generated/r128_default/g0_b8/case2_squash_floor_prototype_output/
 examples/fbms/generated/r128_default/g0_b8/case3_wall_impact_floor_prototype_output/
 ```
 
-For DCC animation, use each `abc/*.abc` file. For stress visualization, open each
+For DCC animation, use each `abc/*.abc` file. For quick previews, use the GIFs
+under `examples/fbms/fbms_video/`. For stress visualization, open each
 `vtu/series.pvd` file in ParaView.
+
+## Result Previews
+
+The GIFs below are lightweight previews rendered from each case's Alembic `.abc`
+file with `scripts/render_abc_preview.py`. They show the two current FBMS shell
+assets under the three simulation jobs described above. Use the corresponding
+output folders for the full `.abc` animation exports and ParaView `.vtu/.pvd`
+stress data.
+
+### Case 1: Surface Pressure
+
+The pressure case applies an inward surface force with no gravity.
+
+| Asset | Simulation Run Time | Preview Render Time | Preview |
+| --- | --- | --- | --- |
+| `g0_b3` | `29160.31s` (8h 6m 0.31s) | `82.56s` | ![g0_b3 case1 pressure](fbms_video/g0b3_case1.gif) |
+| `g0_b8` | `53875.06s` (14h 57m 55.06s) | `89.59s` | ![g0_b8 case1 pressure](fbms_video/g0b8_case1.gif) |
+
+### Case 2: Squash Between Moving Floors
+
+The squash prototype compresses the shell between two x-axis debug floor
+energies.
+
+| Asset | Simulation Run Time | Preview Render Time | Preview |
+| --- | --- | --- | --- |
+| `g0_b3` | `22916.38s` (6h 21m 56.38s) | `69.87s` | ![g0_b3 case2 squash](fbms_video/g0b3_case2.gif) |
+| `g0_b8` | `42624.27s` (11h 50m 24.27s) | `86.39s` | ![g0_b8 case2 squash](fbms_video/g0b8_case2.gif) |
+
+### Case 3: Wall Impact
+
+The impact prototype gives the shell an initial x velocity and lets it collide
+with an upper x-axis debug floor energy.
+
+| Asset | Simulation Run Time | Preview Render Time | Preview |
+| --- | --- | --- | --- |
+| `g0_b3` | `12786.22s` (3h 33m 6.22s) | `69.12s` | ![g0_b3 case3 wall impact](fbms_video/g0b3_case3.gif) |
+| `g0_b8` | `11847.24s` (3h 17m 27.24s) | `88.56s` | ![g0_b8 case3 wall impact](fbms_video/g0b8_case3.gif) |

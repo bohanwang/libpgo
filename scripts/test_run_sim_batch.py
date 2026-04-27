@@ -96,7 +96,17 @@ class RunSimBatchRunnerTest(unittest.TestCase):
             / "g0_b8"
             / "g0_b8_case1_pressure-stress-vtu.json",
         )
-        self.assertEqual(jobs["case1_pressure"].stages, ("sim", "abc", "vtu"))
+        self.assertEqual(
+            case.render_config,
+            REPO_ROOT
+            / "examples"
+            / "fbms"
+            / "generated"
+            / "r128_default"
+            / "g0_b8"
+            / "g0_b8_case1_pressure-render.json",
+        )
+        self.assertEqual(jobs["case1_pressure"].stages, ("sim", "abc", "render", "vtu"))
         self.assertEqual(jobs["case1_pressure"].cases, ("g0_b8_case1_pressure", "g0_b3_case1_pressure"))
         self.assertEqual(
             jobs["g0_b8"].cases,
@@ -106,9 +116,10 @@ class RunSimBatchRunnerTest(unittest.TestCase):
                 "g0_b8_case3_wall_impact_floor_prototype",
             ),
         )
-        self.assertEqual(jobs["g0_b8"].stages, ("sim", "abc", "vtu"))
-        self.assertEqual(jobs["g0_b8_post"].stages, ("abc", "vtu"))
+        self.assertEqual(jobs["g0_b8"].stages, ("sim", "abc", "render", "vtu"))
+        self.assertEqual(jobs["g0_b8_post"].stages, ("abc", "render", "vtu"))
         self.assertEqual(jobs["g0_b8_vtu"].stages, ("vtu",))
+        self.assertEqual(jobs["g0_b8_render"].stages, ("render",))
         self.assertEqual(
             jobs["g0_b3"].cases,
             (
@@ -128,13 +139,34 @@ class RunSimBatchRunnerTest(unittest.TestCase):
             / "g0_b3_case2_squash_floor-prototype-anim.json",
         )
         commands = runner.build_commands(build_dir, case, jobs["g0_b8"].stages, overwrite=True)
-        self.assertEqual([command.label for command in commands], ["sim", "abc", "vtu"])
+        self.assertEqual([command.label for command in commands], ["sim", "abc", "render", "vtu"])
         self.assertEqual(
             commands[2].argv,
+            [
+                str(REPO_ROOT / "scripts" / "render_abc_preview.py"),
+                "--config",
+                str(case.render_config),
+                "--overwrite",
+            ],
+        )
+        self.assertEqual(
+            commands[3].argv,
             [
                 str(REPO_ROOT / "scripts" / "export_fbms_stress_vtu.py"),
                 "--config",
                 str(case.vtu_config),
+                "--overwrite",
+            ],
+        )
+
+        render_commands = runner.build_commands(build_dir, case, ("render",), overwrite=True)
+        self.assertEqual([command.label for command in render_commands], ["render"])
+        self.assertEqual(
+            render_commands[0].argv,
+            [
+                str(REPO_ROOT / "scripts" / "render_abc_preview.py"),
+                "--config",
+                str(case.render_config),
                 "--overwrite",
             ],
         )
@@ -207,6 +239,13 @@ class RunSimBatchRunnerTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "vtu_config"):
             runner.build_commands(build_dir, cases["tet_box_squash"], ("vtu",), overwrite=False)
+
+    def test_render_stage_requires_render_config(self) -> None:
+        runner = load_runner_module()
+        build_dir, cases, _ = runner.load_config(REPO_ROOT / "examples" / "ipc" / "ipc_batch.json")
+
+        with self.assertRaisesRegex(ValueError, "render_config"):
+            runner.build_commands(build_dir, cases["tet_box_squash"], ("render",), overwrite=False)
 
 
 if __name__ == "__main__":
