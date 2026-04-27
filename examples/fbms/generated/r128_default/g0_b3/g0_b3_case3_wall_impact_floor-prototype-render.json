@@ -1,0 +1,18 @@
+{
+  "abc": "case3_wall_impact_floor_prototype_output/abc/g0_b3_case3_wall_impact_floor_prototype.abc",
+  "frames_dir": "case3_wall_impact_floor_prototype_output/render_frames",
+  "output_gif": "../../../fbms_video/g0b3_case3.gif",
+  "frame_start": 0,
+  "frame_end": 299,
+  "frame_step": 3,
+  "fps": 30,
+  "gif_fps": 10,
+  "width": 960,
+  "height": 540,
+  "samples": 64,
+  "camera": {
+    "mode": "auto",
+    "view": [0.0, -1.0, 0.35],
+    "ortho_scale_multiplier": 2.4
+  }
+}

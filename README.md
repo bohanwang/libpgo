@@ -57,6 +57,13 @@ Do `pip install ./dist/your-chosen.whl` to install the package. Note that the pa
 5. (Optional) numpy\
     This is used for running tests.
 
+6. (Optional) Blender and ffmpeg\
+    These are used by `scripts/render_abc_preview.py` when rendering Alembic
+    `.abc` animations to GIF previews. The script finds Blender on `PATH`, via
+    the `BLENDER` environment variable, or at
+    `/Applications/Blender.app/Contents/MacOS/Blender` on macOS. It finds ffmpeg
+    on `PATH` or via the `FFMPEG` environment variable.
+
 ## Compilation
 
 Going forward, it is assumed that all specified prerequisites are installed and that a Conda environment is used for python.
@@ -195,6 +202,26 @@ scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job all_ipc_abc
 ```
 
 The generic batch runner reads [`examples/ipc/ipc_batch.json`](./examples/ipc/ipc_batch.json), runs the stages declared by each job, and defaults jobs without a `stages` field to `runIPCSim` with `--log` followed by `convertAnimation` with the matching per-case `anim.json`. Use [`examples/ipc/README.md`](./examples/ipc/README.md) for the full case list, job definitions, and output-overwrite policy.
+
+The same runner also supports postprocessing stages for ParaView VTU/PVD export
+and Alembic preview rendering when a case supplies `vtu_config` or
+`render_config`. The render stage calls
+[`scripts/render_abc_preview.py`](./scripts/render_abc_preview.py), which uses
+Blender to render `.abc` frames and ffmpeg to encode a GIF:
+
+```bash
+scripts/render_abc_preview.py \
+  --config examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-render.json \
+  --overwrite
+
+scripts/run_sim_batch.py \
+  --config examples/fbms/fbms_batch.json \
+  --job all_fbms_render \
+  --overwrite
+```
+
+For the FBMS pipeline, render configs and preview GIFs are documented in
+[`examples/fbms/README.md`](./examples/fbms/README.md).
 
 Run representative IPC cases from the repo root:
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run runIPCSim and animation-conversion batches from a JSON config."""
+"""Run simulation, animation, render, and VTU batches from a JSON config."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "examples" / "ipc" / "ipc_batch.json"
 DEFAULT_STAGES = ("sim", "abc")
-STAGE_ORDER = ("sim", "abc", "vtu")
+STAGE_ORDER = ("sim", "abc", "render", "vtu")
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,7 @@ class CaseConfig:
     sim_config: Path
     anim_config: Path
     vtu_config: Path | None
+    render_config: Path | None
     log: bool
 
 
@@ -132,8 +133,22 @@ def parse_case(name: str, case_config: dict[str, Any], defaults: dict[str, Any])
     vtu_config = None
     if vtu_config_value is not None:
         vtu_config = resolve_case_relative_path(require_string(vtu_config_value, f"case {name}.vtu_config"), sim_config)
+    render_config_value = case_config.get("render_config", defaults.get("render_config"))
+    render_config = None
+    if render_config_value is not None:
+        render_config = resolve_case_relative_path(
+            require_string(render_config_value, f"case {name}.render_config"),
+            sim_config,
+        )
     log = require_bool(case_config.get("log", defaults.get("log", True)), f"case {name}.log")
-    return CaseConfig(name=name, sim_config=sim_config, anim_config=anim_config, vtu_config=vtu_config, log=log)
+    return CaseConfig(
+        name=name,
+        sim_config=sim_config,
+        anim_config=anim_config,
+        vtu_config=vtu_config,
+        render_config=render_config,
+        log=log,
+    )
 
 
 def load_config(config_path: Path) -> tuple[Path, dict[str, CaseConfig], dict[str, BatchJob]]:
@@ -177,6 +192,13 @@ def build_commands(build_dir: Path, case: CaseConfig, stages: tuple[str, ...], o
         commands.append(CommandSpec("sim", argv))
     if "abc" in stages:
         commands.append(CommandSpec("abc", [str(build_dir / "bin" / "convertAnimation"), str(case.anim_config)]))
+    if "render" in stages:
+        if case.render_config is None:
+            raise ValueError(f"case {case.name} needs render_config for render stage")
+        argv = [str(REPO_ROOT / "scripts" / "render_abc_preview.py"), "--config", str(case.render_config)]
+        if overwrite:
+            argv.append("--overwrite")
+        commands.append(CommandSpec("render", argv))
     if "vtu" in stages:
         if case.vtu_config is None:
             raise ValueError(f"case {case.name} needs vtu_config for vtu stage")
@@ -204,6 +226,11 @@ def check_case_inputs(case: CaseConfig, stages: tuple[str, ...]) -> None:
             raise ValueError(f"case {case.name} needs vtu_config for vtu stage")
         if not case.vtu_config.exists():
             raise FileNotFoundError(case.vtu_config)
+    if "render" in stages:
+        if case.render_config is None:
+            raise ValueError(f"case {case.name} needs render_config for render stage")
+        if not case.render_config.exists():
+            raise FileNotFoundError(case.render_config)
 
 
 def check_tools(commands: list[CommandSpec]) -> None:
@@ -254,7 +281,7 @@ def run_case_stages(args: argparse.Namespace, build_dir: Path, case: CaseConfig,
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run runIPCSim and convertAnimation batches from JSON jobs.")
+    parser = argparse.ArgumentParser(description="Run simulation and postprocessing batches from JSON jobs.")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG, help="JSON batch config file.")
     parser.add_argument("--job", action="append", default=[], help="Job name to run. Can be repeated.")
     parser.add_argument("--all-jobs", action="store_true", help="Run every job from the JSON config.")
