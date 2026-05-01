@@ -22,6 +22,21 @@ foreach (tgt ${ANIMATIONIO_DEPS})
   endif()
 endforeach()
 
+if(TARGET openvdb_static OR TARGET OpenVDB::openvdb)
+  list(APPEND ANIMATIONIO_HEADERS stressFieldVDBExporter.h)
+  list(APPEND ANIMATIONIO_SOURCES stressFieldVDBExporter.cpp)
+
+  if(TARGET openvdb_static)
+    list(APPEND ANIMATIONIO_DEPS openvdb_static)
+  else()
+    list(APPEND ANIMATIONIO_DEPS OpenVDB::openvdb)
+  endif()
+
+  message(STATUS "animationIO: stressFieldVDBExporter enabled (OpenVDB found).")
+else()
+  message(STATUS "animationIO: stressFieldVDBExporter disabled (OpenVDB not found; enable PGO_ENABLE_OPENVDB).")
+endif()
+
 add_libpgo_lib(animationIO "${ANIMATIONIO_SOURCES}" "${ANIMATIONIO_HEADERS}")
 
 target_link_libraries(animationIO PUBLIC ${ANIMATIONIO_DEPS})

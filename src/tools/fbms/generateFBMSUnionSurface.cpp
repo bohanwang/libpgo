@@ -30,6 +30,7 @@ struct Options
   double sphereThickness = 0.0;
   double paddingRatio = 0.0;
   int resolution = 0;
+  bool enableTruncating = false;
 };
 
 struct SphereParameters
@@ -52,7 +53,9 @@ Options parseOptions(int argc, char *argv[])
     .required()
     .metavar("PATH");
   program.add_argument("--fbms-thickness")
-    .help("FBMS unsigned-distance thickening width")
+    .help("FBMS unsigned-distance thickening width. Positive: use as-is. "
+          "Negative V: treat |V| as a target volume budget and binary-search "
+          "the largest thickness whose union mesh has volume <= |V|.")
     .required()
     .metavar("FLOAT")
     .scan<'g', double>();
@@ -75,6 +78,11 @@ Options parseOptions(int argc, char *argv[])
     .help("Output raw union surface OBJ")
     .required()
     .metavar("PATH");
+  program.add_argument("--enable-truncating")
+    .help("Truncate the FBMS shell by the outer surface of the thickened sphere; "
+          "only FBMS structure inside that surface is kept.")
+    .default_value(false)
+    .implicit_value(true);
 
   program.parse_args(argc, argv);
 
@@ -86,13 +94,15 @@ Options parseOptions(int argc, char *argv[])
   options.resolution = program.get<int>("--resolution");
   options.paddingRatio = program.get<double>("--padding-ratio");
   options.outputSurfacePath = program.get<std::string>("--output-surface");
+  options.enableTruncating = program.get<bool>("--enable-truncating");
   return options;
 }
 
 void validateOptions(const Options &options)
 {
-  if (options.fbmsThickness <= 0.0 || !std::isfinite(options.fbmsThickness))
-    throw std::runtime_error("--fbms-thickness must be positive");
+  if (options.fbmsThickness == 0.0 || !std::isfinite(options.fbmsThickness))
+    throw std::runtime_error("--fbms-thickness must be a finite non-zero value "
+                             "(positive = explicit thickness; negative = volume budget)");
   if (options.sphereThickness <= 0.0 || !std::isfinite(options.sphereThickness))
     throw std::runtime_error("--sphere-thickness must be positive");
   if (options.resolution < 2)
@@ -221,18 +231,27 @@ void computeUnionBBox(const pgo::Mesh::TriMeshGeo &fbmsMesh, const pgo::Mesh::Tr
   }
 }
 
-void computeUnionField(const pgo::Mesh::TriMeshGeo &fbmsMesh, const SphereParameters &sphere,
+void computeFBMSDistance(const pgo::Mesh::TriMeshGeo &fbmsMesh,
   const V3d &bmin, const V3d &bmax, int resolution,
-  double fbmsThickness, double sphereThickness,
-  pgo::EigenSupport::VXd &unionField, double &fieldMin, double &fieldMax)
+  pgo::EigenSupport::VXd &fbmsDistance)
 {
-  pgo::EigenSupport::VXd fbmsDistance;
   pgo::libiglInterface::computeDistanceField(
     fbmsMesh, bmin, bmax, resolution,
     /*robust=*/1, /*sign=*/0, fbmsDistance);
+}
 
+void assembleUnionField(const pgo::EigenSupport::VXd &fbmsDistance, const SphereParameters &sphere,
+  const V3d &bmin, const V3d &bmax, int resolution,
+  double fbmsThickness, double sphereThickness, bool enableTruncating,
+  pgo::EigenSupport::VXd &unionField, double &fieldMin, double &fieldMax)
+{
   unionField.resize(fbmsDistance.size());
   const V3d delta = (bmax - bmin) / static_cast<double>(resolution - 1);
+
+  // Outer surface of the thickened sphere shell. When --enable-truncating is on,
+  // the FBMS shell is CSG-intersected with the solid ball of this radius, so any
+  // FBMS structure outside the sphere's outer surface is dropped.
+  const double truncationRadius = sphere.radius + sphereThickness * 0.5;
 
   fieldMin = std::numeric_limits<double>::infinity();
   fieldMax = -std::numeric_limits<double>::infinity();
@@ -242,8 +261,13 @@ void computeUnionField(const pgo::Mesh::TriMeshGeo &fbmsMesh, const SphereParame
       for (int x = 0; x < resolution; ++x) {
         const int index = z * resolution * resolution + y * resolution + x;
         const V3d p = bmin + delta.cwiseProduct(V3d(x, y, z).cast<double>());
-        const double fbmsField = fbmsDistance[index] - fbmsThickness * 0.5;
-        const double sphereShellField = std::abs((p - sphere.center).norm() - sphere.radius) - sphereThickness * 0.5;
+        const double radial = (p - sphere.center).norm();
+        double fbmsField = fbmsDistance[index] - fbmsThickness * 0.5;
+        if (enableTruncating) {
+          const double ballSDF = radial - truncationRadius;
+          fbmsField = std::max(fbmsField, ballSDF);
+        }
+        const double sphereShellField = std::abs(radial - sphere.radius) - sphereThickness * 0.5;
         const double value = std::min(fbmsField, sphereShellField);
         unionField[index] = value;
         fieldMin = std::min(fieldMin, value);
@@ -251,6 +275,109 @@ void computeUnionField(const pgo::Mesh::TriMeshGeo &fbmsMesh, const SphereParame
       }
     }
   }
+}
+
+double computeMeshVolume(const pgo::Mesh::TriMeshGeo &mesh)
+{
+  // Signed volume of a closed polyhedron via the divergence theorem on triangles:
+  // V = (1/6) * sum_t (a . (b x c)). Sign depends on triangle winding; absolute
+  // value gives the enclosed volume for a watertight mesh.
+  double v6 = 0.0;
+  const int numTri = mesh.numTriangles();
+  for (int t = 0; t < numTri; ++t) {
+    const pgo::Vec3d &a = mesh.pos(t, 0);
+    const pgo::Vec3d &b = mesh.pos(t, 1);
+    const pgo::Vec3d &c = mesh.pos(t, 2);
+    v6 += a.dot(b.cross(c));
+  }
+  return std::abs(v6) / 6.0;
+}
+
+struct ThicknessSearchResult
+{
+  double thickness = 0.0;
+  double volume = 0.0;
+  pgo::Mesh::TriMeshGeo mesh;
+  bool budgetExceededAtMin = false;
+  bool budgetUnreachedAtMax = false;
+  int iterations = 0;
+};
+
+// Finds the largest fbmsThickness in [tLo, tHi] whose union mesh has volume <= targetVolume.
+// fbmsDistance is the precomputed unsigned distance field on the fixed grid; the grid bbox
+// must be sized to accommodate tHi.
+ThicknessSearchResult findThicknessForVolumeBudget(
+  const pgo::EigenSupport::VXd &fbmsDistance, const SphereParameters &sphere,
+  const V3d &bmin, const V3d &bmax, int resolution,
+  double sphereThickness, bool enableTruncating, double targetVolume,
+  double tLo, double tHi, int maxIterations, double relTol)
+{
+  pgo::EigenSupport::VXd unionField;
+  double fmin = 0.0;
+  double fmax = 0.0;
+
+  auto evalAt = [&](double t, pgo::Mesh::TriMeshGeo &outMesh) -> double {
+    assembleUnionField(fbmsDistance, sphere, bmin, bmax, resolution,
+      t, sphereThickness, enableTruncating, unionField, fmin, fmax);
+    if (!(fmin <= 0.0 && fmax >= 0.0)) {
+      // No zero crossing: nothing to mesh; treat as volume 0.
+      outMesh = pgo::Mesh::TriMeshGeo();
+      return 0.0;
+    }
+    pgo::libiglInterface::computeMarchingCubes(bmin, bmax, resolution, unionField, outMesh);
+    if (outMesh.numTriangles() == 0)
+      return 0.0;
+    return computeMeshVolume(outMesh);
+  };
+
+  ThicknessSearchResult result;
+  pgo::Mesh::TriMeshGeo meshLo, meshHi, meshMid;
+
+  const double vLo = evalAt(tLo, meshLo);
+  std::cout << "[volume-search] tLo=" << tLo << " vol=" << vLo << " (target=" << targetVolume << ")" << std::endl;
+
+  if (vLo > targetVolume) {
+    result.budgetExceededAtMin = true;
+    result.thickness = tLo;
+    result.volume = vLo;
+    result.mesh = std::move(meshLo);
+    return result;
+  }
+
+  const double vHi = evalAt(tHi, meshHi);
+  std::cout << "[volume-search] tHi=" << tHi << " vol=" << vHi << std::endl;
+
+  if (vHi <= targetVolume) {
+    result.budgetUnreachedAtMax = true;
+    result.thickness = tHi;
+    result.volume = vHi;
+    result.mesh = std::move(meshHi);
+    return result;
+  }
+
+  result.thickness = tLo;
+  result.volume = vLo;
+  result.mesh = meshLo;
+
+  for (int it = 0; it < maxIterations; ++it) {
+    const double mid = 0.5 * (tLo + tHi);
+    const double vMid = evalAt(mid, meshMid);
+    std::cout << "[volume-search] iter=" << it << " t=" << mid << " vol=" << vMid << std::endl;
+
+    if (vMid <= targetVolume) {
+      tLo = mid;
+      result.thickness = mid;
+      result.volume = vMid;
+      result.mesh = meshMid;
+    }
+    else {
+      tHi = mid;
+    }
+    result.iterations = it + 1;
+    if (tHi <= 0.0 || (tHi - tLo) / tHi < relTol)
+      break;
+  }
+  return result;
 }
 
 void saveSurfaceOrThrow(const pgo::Mesh::TriMeshGeo &mesh, const std::string &path)
@@ -290,26 +417,100 @@ int main(int argc, char *argv[])
     printVector("Sphere center", sphere.center);
     std::cout << "Sphere radius = " << sphere.radius << std::endl;
 
-    V3d bmin, bmax;
-    computeUnionBBox(fbmsMesh, sphereMesh, options.fbmsThickness, options.sphereThickness, options.paddingRatio, bmin, bmax);
-
-    pgo::EigenSupport::VXd unionField;
-    double fieldMin = 0.0;
-    double fieldMax = 0.0;
-    computeUnionField(fbmsMesh, sphere, bmin, bmax, options.resolution,
-      options.fbmsThickness, options.sphereThickness, unionField, fieldMin, fieldMax);
-
-    if (!(fieldMin <= 0.0 && fieldMax >= 0.0))
-      throw std::runtime_error("Union field does not cross the zero isosurface");
+    if (options.enableTruncating)
+      std::cout << "Truncation enabled: FBMS clipped to ball of radius "
+                << (sphere.radius + options.sphereThickness * 0.5) << std::endl;
 
     pgo::Mesh::TriMeshGeo rawSurface;
-    pgo::libiglInterface::computeMarchingCubes(bmin, bmax, options.resolution, unionField, rawSurface);
+    V3d bmin, bmax;
 
-    std::cout << "Grid resolution = " << options.resolution << std::endl;
-    printVector("BBox min", bmin);
-    printVector("BBox max", bmax);
-    std::cout << "Field min = " << fieldMin << std::endl;
-    std::cout << "Field max = " << fieldMax << std::endl;
+    if (options.fbmsThickness > 0.0) {
+      computeUnionBBox(fbmsMesh, sphereMesh, options.fbmsThickness,
+        options.sphereThickness, options.paddingRatio, bmin, bmax);
+
+      pgo::EigenSupport::VXd fbmsDistance;
+      computeFBMSDistance(fbmsMesh, bmin, bmax, options.resolution, fbmsDistance);
+
+      pgo::EigenSupport::VXd unionField;
+      double fieldMin = 0.0;
+      double fieldMax = 0.0;
+      assembleUnionField(fbmsDistance, sphere, bmin, bmax, options.resolution,
+        options.fbmsThickness, options.sphereThickness, options.enableTruncating,
+        unionField, fieldMin, fieldMax);
+
+      if (!(fieldMin <= 0.0 && fieldMax >= 0.0))
+        throw std::runtime_error("Union field does not cross the zero isosurface");
+
+      pgo::libiglInterface::computeMarchingCubes(bmin, bmax, options.resolution, unionField, rawSurface);
+
+      std::cout << "Grid resolution = " << options.resolution << std::endl;
+      printVector("BBox min", bmin);
+      printVector("BBox max", bmax);
+      std::cout << "Field min = " << fieldMin << std::endl;
+      std::cout << "Field max = " << fieldMax << std::endl;
+    }
+    else {
+      // Volume-budget mode: |options.fbmsThickness| = target volume.
+      const double targetVolume = -options.fbmsThickness;
+
+      const pgo::Mesh::BoundingBox fbmsBBox(fbmsMesh.positions());
+      const pgo::Mesh::BoundingBox sphereBBox(sphereMesh.positions());
+      const V3d baseSides =
+        fbmsBBox.bmax().cwiseMax(sphereBBox.bmax())
+        - fbmsBBox.bmin().cwiseMin(sphereBBox.bmin());
+      const double baseDiag = baseSides.norm();
+
+      // Search ceiling. With truncating, volume saturates once t exceeds the
+      // ball diameter; without truncating, t can grow until the union fills
+      // a sizable fraction of the union bbox.
+      const double tHiCap = options.enableTruncating
+        ? std::max(2.0 * sphere.radius, 4.0 * options.sphereThickness)
+        : std::max(0.5 * baseDiag, 4.0 * options.sphereThickness);
+
+      // Size the grid so the precomputed FBMS UDF is valid across the whole
+      // search range. With truncating, the meshable region is clipped to the
+      // ball, so we only need padding for the sphere shell. Otherwise we must
+      // accommodate the search ceiling.
+      const double bboxThickness = options.enableTruncating ? options.sphereThickness : tHiCap;
+      computeUnionBBox(fbmsMesh, sphereMesh, bboxThickness,
+        options.sphereThickness, options.paddingRatio, bmin, bmax);
+
+      pgo::EigenSupport::VXd fbmsDistance;
+      computeFBMSDistance(fbmsMesh, bmin, bmax, options.resolution, fbmsDistance);
+
+      const V3d voxel = (bmax - bmin) / static_cast<double>(options.resolution - 1);
+      const double tLo = 2.0 * voxel.maxCoeff();
+
+      std::cout << "[volume-search] target volume = " << targetVolume
+                << ", search range t in [" << tLo << ", " << tHiCap << "]" << std::endl;
+
+      const ThicknessSearchResult result = findThicknessForVolumeBudget(
+        fbmsDistance, sphere, bmin, bmax, options.resolution,
+        options.sphereThickness, options.enableTruncating, targetVolume,
+        tLo, tHiCap, /*maxIterations=*/20, /*relTol=*/1e-3);
+
+      if (result.budgetExceededAtMin)
+        std::cout << "[volume-search] WARNING: even t=" << result.thickness
+                  << " produces volume " << result.volume
+                  << " > target " << targetVolume
+                  << "; saving the minimum-thickness mesh anyway." << std::endl;
+      else if (result.budgetUnreachedAtMax)
+        std::cout << "[volume-search] WARNING: top of search range t=" << result.thickness
+                  << " still has volume " << result.volume
+                  << " <= target " << targetVolume
+                  << "; budget is not exhausted." << std::endl;
+
+      std::cout << "[volume-search] selected thickness = " << result.thickness
+                << " volume = " << result.volume
+                << " iterations = " << result.iterations << std::endl;
+
+      rawSurface = result.mesh;
+
+      std::cout << "Grid resolution = " << options.resolution << std::endl;
+      printVector("BBox min", bmin);
+      printVector("BBox max", bmax);
+    }
+
     std::cout << "Raw vertex count = " << rawSurface.numVertices() << std::endl;
     std::cout << "Raw face count = " << rawSurface.numTriangles() << std::endl;
 

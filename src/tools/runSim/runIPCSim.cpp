@@ -17,6 +17,7 @@
 #include <argparse/argparse.hpp>
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
+#include <tbb/global_control.h>
 
 #include <array>
 #include <filesystem>
@@ -208,6 +209,8 @@ int main(int argc, char *argv[])
     std::cerr << program;
     return 1;
   }
+
+  tbb::global_control c(tbb::global_control::max_allowed_parallelism, 64);
 
   const std::string configFilename = program.get<std::string>("config");
   const bool enableCliLog = program.get<bool>("--log");

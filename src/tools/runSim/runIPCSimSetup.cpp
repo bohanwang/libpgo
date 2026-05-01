@@ -19,6 +19,7 @@
 #include "simulationMesh.h"
 #include "ipc/core/surfaceIPCCore.h"
 #include "volumetricMesh.h"
+#include "triMeshPseudoNormal.h"
 
 #include <algorithm>
 #include <array>
@@ -416,6 +417,8 @@ ES::VXd computeSurfacePressureSimulationForce(const pgo::Mesh::TriMeshGeo &surfa
   std::vector<double> vertexAreas(surfaceMesh.numVertices(), 0.0);
   surfaceMesh.ref().computeVertexSurfaceAreas(vertexAreas.data());
 
+  pgo::Mesh::TriMeshPseudoNormal meshNormal(surfaceMesh);
+
   ES::VXd surfaceForce = ES::VXd::Zero(surfaceMesh.numVertices() * 3);
   int zeroDirectionCount = 0;
   for (int vi = 0; vi < surfaceMesh.numVertices(); ++vi) {
@@ -427,8 +430,7 @@ ES::VXd computeSurfacePressureSimulationForce(const pgo::Mesh::TriMeshGeo &surfa
       continue;
     }
 
-    surfaceForce.segment<3>(vi * 3) =
-      pressureConfig.pressure * vertexAreas[vi] * (centerDirection / distanceToCenter);
+    surfaceForce.segment<3>(vi * 3) = meshNormal.vtxNormal(vi) * pressureConfig.pressure * vertexAreas[vi] * -1.0;
   }
 
   if (zeroDirectionCount > 0) {

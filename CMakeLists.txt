@@ -26,6 +26,7 @@ option(PGO_OPT_USE_IPOPT "Use IPOPT" OFF)
 option(PGO_OPT_USE_KNITRO "Use KNITRO" OFF)
 option(PGO_MKL_LINK_DYNAMIC "MKL Link" ON)
 option(PGO_ENABLE_ALEMBIC "Enable Alembic support" OFF)
+option(PGO_ENABLE_OPENVDB "Enable OpenVDB support" OFF)
 option(PGO_ENABLE_GMSH "Enable GMSH support" OFF)
 option(PGO_TET_MESHER_USE_TET_WILD "Enable fTetWild backend for tetMesher" ON)
 
@@ -251,10 +252,14 @@ if(PGO_ENABLE_FULL OR PGO_ENABLE_PYTHON)
   if(PGO_ENABLE_ALEMBIC)
     include(CMakeModules/third-party/alembic.cmake)
   endif()
-  
+
   if(PGO_ENABLE_GMSH)
     include(CMakeModules/third-party/gmsh.cmake)
   endif()
+endif()
+
+if(PGO_ENABLE_OPENVDB)
+  include(CMakeModules/third-party/openvdb.cmake)
 endif()
 
 if(PGO_TET_MESHER_USE_TET_WILD)

@@ -367,8 +367,10 @@ def write_sphere_obj(
         fout.write(f"# Bounding sphere generated for {source_path.name}\n")
         if bounds_method == "aabb":
             fout.write("# bounds_method = axis-aligned bounding-box center plus maximal vertex distance\n")
-        else:
+        elif bounds_method == "minimal":
             fout.write("# bounds_method = minimal enclosing sphere\n")
+        else:
+            fout.write("# bounds_method = unit sphere centered at the origin\n")
         fout.write(f"# source_vertex_count = {source_vertex_count}\n")
         fout.write(f"# center = ({center[0]:.17g}, {center[1]:.17g}, {center[2]:.17g})\n")
         fout.write(f"# radius = {radius:.17g}\n")
@@ -380,7 +382,12 @@ def write_sphere_obj(
             fout.write(f"# sphere_resolution = icosphere subdivisions {subdivisions}\n")
         fout.write(f"# sphere_vertices = {len(vertices)}\n")
         fout.write(f"# sphere_faces = {len(faces)}\n")
-        object_name = "minimal_bounding_sphere" if bounds_method == "minimal" else "bounding_sphere"
+        if bounds_method == "minimal":
+            object_name = "minimal_bounding_sphere"
+        elif bounds_method == "unit":
+            object_name = "unit_sphere"
+        else:
+            object_name = "bounding_sphere"
         fout.write(f"o {object_name}\n")
 
         for x, y, z in vertices:
@@ -397,9 +404,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, type=Path, help="Output bounding sphere OBJ path")
     parser.add_argument(
         "--bounds-method",
-        choices=("aabb", "minimal"),
+        choices=("aabb", "minimal", "unit"),
         default="aabb",
-        help="Bounding sphere computation. Default: aabb, matching the original g0_b8 asset.",
+        help="Bounding sphere computation. Default: aabb, matching the original g0_b8 asset. 'unit' ignores the input geometry and emits a unit sphere centered at the origin.",
     )
     parser.add_argument(
         "--method",
@@ -428,6 +435,8 @@ def main() -> int:
         source_vertices = read_obj_vertices(args.input)
         if args.bounds_method == "minimal":
             center, radius = compute_minimal_bounding_sphere(source_vertices, args.padding)
+        elif args.bounds_method == "unit":
+            center, radius = (0.0, 0.0, 0.0), 1.0
         else:
             center, radius = compute_aabb_center_bounding_sphere(source_vertices, args.padding)
         if args.method == "uv":
