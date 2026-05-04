@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run simulation, animation, render, and VTU batches from a JSON config."""
+"""Run simulation, animation, and render batches from a JSON config."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "examples" / "ipc" / "ipc_batch.json"
 DEFAULT_STAGES = ("sim", "abc")
-STAGE_ORDER = ("sim", "abc", "render", "vtu")
+STAGE_ORDER = ("sim", "abc", "render")
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,6 @@ class CaseConfig:
     name: str
     sim_config: Path
     anim_config: Path
-    vtu_config: Path | None
     render_config: Path | None
     log: bool
 
@@ -129,10 +128,6 @@ def parse_case(name: str, case_config: dict[str, Any], defaults: dict[str, Any])
         require_string(case_config.get("anim_config", defaults.get("anim_config", "anim.json")), f"case {name}.anim_config"),
         sim_config,
     )
-    vtu_config_value = case_config.get("vtu_config", defaults.get("vtu_config"))
-    vtu_config = None
-    if vtu_config_value is not None:
-        vtu_config = resolve_case_relative_path(require_string(vtu_config_value, f"case {name}.vtu_config"), sim_config)
     render_config_value = case_config.get("render_config", defaults.get("render_config"))
     render_config = None
     if render_config_value is not None:
@@ -145,7 +140,6 @@ def parse_case(name: str, case_config: dict[str, Any], defaults: dict[str, Any])
         name=name,
         sim_config=sim_config,
         anim_config=anim_config,
-        vtu_config=vtu_config,
         render_config=render_config,
         log=log,
     )
@@ -199,13 +193,6 @@ def build_commands(build_dir: Path, case: CaseConfig, stages: tuple[str, ...], o
         if overwrite:
             argv.append("--overwrite")
         commands.append(CommandSpec("render", argv))
-    if "vtu" in stages:
-        if case.vtu_config is None:
-            raise ValueError(f"case {case.name} needs vtu_config for vtu stage")
-        argv = [str(REPO_ROOT / "scripts" / "export_fbms_stress_vtu.py"), "--config", str(case.vtu_config)]
-        if overwrite:
-            argv.append("--overwrite")
-        commands.append(CommandSpec("vtu", argv))
     return commands
 
 
@@ -221,11 +208,6 @@ def check_case_inputs(case: CaseConfig, stages: tuple[str, ...]) -> None:
         raise FileNotFoundError(case.sim_config)
     if "abc" in stages and not case.anim_config.exists():
         raise FileNotFoundError(case.anim_config)
-    if "vtu" in stages:
-        if case.vtu_config is None:
-            raise ValueError(f"case {case.name} needs vtu_config for vtu stage")
-        if not case.vtu_config.exists():
-            raise FileNotFoundError(case.vtu_config)
     if "render" in stages:
         if case.render_config is None:
             raise ValueError(f"case {case.name} needs render_config for render stage")

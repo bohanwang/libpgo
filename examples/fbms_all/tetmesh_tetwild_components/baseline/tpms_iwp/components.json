@@ -1,0 +1,23 @@
+[
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_all/tetmesh_tetwild/baseline/tpms_iwp/tpms_iwp.veg.obj",
+    "output": "examples/fbms_all/tetmesh_tetwild_components/baseline/tpms_iwp/tpms_iwp_component_0.obj",
+    "component": 0,
+    "vertices": 9582,
+    "triangles": 19188
+  },
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_all/tetmesh_tetwild/baseline/tpms_iwp/tpms_iwp.veg.obj",
+    "output": "examples/fbms_all/tetmesh_tetwild_components/baseline/tpms_iwp/tpms_iwp_component_1.obj",
+    "component": 1,
+    "vertices": 7588,
+    "triangles": 15172
+  },
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_all/tetmesh_tetwild/baseline/tpms_iwp/tpms_iwp.veg.obj",
+    "output": "examples/fbms_all/tetmesh_tetwild_components/baseline/tpms_iwp/tpms_iwp_component_2.obj",
+    "component": 2,
+    "vertices": 6285,
+    "triangles": 12566
+  }
+]

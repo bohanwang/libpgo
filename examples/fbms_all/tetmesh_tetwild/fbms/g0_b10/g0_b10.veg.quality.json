@@ -1,0 +1,44 @@
+{
+  "bbox": {
+    "max": [
+      1.0430662069497918,
+      1.0437582555401566,
+      1.083917835481406
+    ],
+    "min": [
+      -1.0546613488551624,
+      -1.0538748191436895,
+      -1.013728731296009
+    ]
+  },
+  "boundary_or_exterior_edges": 0,
+  "check_status": {
+    "basic_geometry": "passed",
+    "self_intersection": "passed",
+    "topology": "passed",
+    "winding": "passed"
+  },
+  "component_triangle_counts_by_edge": [
+    21210,
+    15324,
+    12412
+  ],
+  "components_by_edge": 3,
+  "edge_length": {
+    "max": 0.08882033231753553,
+    "mean": 0.04663057536815458,
+    "min": 0.011182054131903721
+  },
+  "errors": [],
+  "input": "examples/fbms_all/tetmesh_tetwild/fbms/g0_b10/g0_b10.veg.obj",
+  "invalid_triangles": 0,
+  "is_manifold": true,
+  "is_winding_consistent": true,
+  "oriented_boundary_or_exterior_edges": 0,
+  "passed": true,
+  "self_intersections": 0,
+  "triangles": 48946,
+  "type": "surface",
+  "vertices": 24461,
+  "warnings": []
+}

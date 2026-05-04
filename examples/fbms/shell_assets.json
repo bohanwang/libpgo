@@ -7,7 +7,8 @@
     "remesh_filename": "union_shell_remesh.obj",
     "stats_filename": "stats.json",
     "raw": {
-      "padding_ratio": 0.08
+      "padding_ratio": 0.08,
+      "enable_truncating": false
     },
     "remesh": {
       "edge_length": 0.75,

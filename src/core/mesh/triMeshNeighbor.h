@@ -153,6 +153,44 @@ bool areTrianglesEdgeManifold(BasicAlgorithms::ArrayRef<Vec3i> triangles);
 // return false if triangles contain invalid or degenerate triangles
 bool areTrianglesManifold(BasicAlgorithms::ArrayRef<Vec3i> triangles);
 
+struct TriangleTopologyStats
+{
+  bool isManifold = true;
+  int boundaryOrNonManifoldEdges = 0;
+};
+
+// MeshLab-style topology check that ignores triangle winding/orientation.
+// isManifold is false only when an edge has more than two incident triangles
+// or a vertex has disconnected incident triangle fans.
+// boundaryOrNonManifoldEdges counts unordered edges with incident triangle count != 2.
+TriangleTopologyStats computeTriangleTopologyStats(BasicAlgorithms::ArrayRef<Vec3i> triangles);
+
+struct TriangleEdgeConnectivityStats
+{
+  bool isManifold = true;
+  int boundaryOrNonManifoldEdges = 0;
+  int componentsByEdge = 0;
+  std::vector<int> componentTriangleCountsByEdge;
+};
+
+// Fast unordered-edge + union-find statistics for large triangle soups.
+// Connectivity is defined by sharing unordered edges. componentTriangleCountsByEdge
+// is sorted descending. isManifold only checks unordered edge incident counts.
+TriangleEdgeConnectivityStats computeTriangleEdgeConnectivityStats(BasicAlgorithms::ArrayRef<Vec3i> triangles);
+
+// Fast unordered-edge + union-find component labels for triangle soups.
+// Return vector size #triangles, mapping triID -> componentID. Component IDs are
+// dense in [0, numComponents). If componentTriangleCountsByEdge is provided, it
+// stores counts in componentID order.
+std::vector<int> computeTriangleEdgeComponentIDs(BasicAlgorithms::ArrayRef<Vec3i> triangles,
+  std::vector<int> *componentTriangleCountsByEdge = nullptr);
+
+// Remove edge-connected components smaller than minTriangleCount, optionally
+// keeping only the largest N components after thresholding. Isolated vertices
+// are removed from the returned mesh.
+TriMeshGeo filterSmallTriangleComponentsByEdge(const TriMeshRef meshRef, int minTriangleCount,
+  int keepLargestComponents = -1);
+
 // return vector of size #triangles, mapping: triID -> nbring triIDs sorted
 // triangle connections are found by sharing edges
 // work on non-manifold meshes

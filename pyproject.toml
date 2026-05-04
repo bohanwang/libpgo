@@ -1,3 +1,16 @@
+[project]
+name = "libpgo"
+version = "0.0.0"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "scikit-image",
+    "trimesh",
+]
+
+[tool.uv]
+package = false
+
 [build-system]
 requires = [
     "setuptools>=42",

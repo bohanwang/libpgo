@@ -7,44 +7,38 @@
     "g0_b8_case1_pressure": {
       "sim_config": "examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-ipc.json",
       "anim_config": "g0_b8_case1_pressure-anim.json",
-      "vtu_config": "g0_b8_case1_pressure-stress-vtu.json",
       "render_config": "g0_b8_case1_pressure-render.json"
     },
     "g0_b8_case2_squash_floor_prototype": {
       "sim_config": "examples/fbms/generated/r128_default/g0_b8/g0_b8_case2_squash_floor-prototype-ipc.json",
       "anim_config": "g0_b8_case2_squash_floor-prototype-anim.json",
-      "vtu_config": "g0_b8_case2_squash_floor-prototype-stress-vtu.json",
       "render_config": "g0_b8_case2_squash_floor-prototype-render.json"
     },
     "g0_b8_case3_wall_impact_floor_prototype": {
       "sim_config": "examples/fbms/generated/r128_default/g0_b8/g0_b8_case3_wall_impact_floor-prototype-ipc.json",
       "anim_config": "g0_b8_case3_wall_impact_floor-prototype-anim.json",
-      "vtu_config": "g0_b8_case3_wall_impact_floor-prototype-stress-vtu.json",
       "render_config": "g0_b8_case3_wall_impact_floor-prototype-render.json"
     },
     "g0_b3_case1_pressure": {
       "sim_config": "examples/fbms/generated/r128_default/g0_b3/g0_b3_case1_pressure-ipc.json",
       "anim_config": "g0_b3_case1_pressure-anim.json",
-      "vtu_config": "g0_b3_case1_pressure-stress-vtu.json",
       "render_config": "g0_b3_case1_pressure-render.json"
     },
     "g0_b3_case2_squash_floor_prototype": {
       "sim_config": "examples/fbms/generated/r128_default/g0_b3/g0_b3_case2_squash_floor-prototype-ipc.json",
       "anim_config": "g0_b3_case2_squash_floor-prototype-anim.json",
-      "vtu_config": "g0_b3_case2_squash_floor-prototype-stress-vtu.json",
       "render_config": "g0_b3_case2_squash_floor-prototype-render.json"
     },
     "g0_b3_case3_wall_impact_floor_prototype": {
       "sim_config": "examples/fbms/generated/r128_default/g0_b3/g0_b3_case3_wall_impact_floor-prototype-ipc.json",
       "anim_config": "g0_b3_case3_wall_impact_floor-prototype-anim.json",
-      "vtu_config": "g0_b3_case3_wall_impact_floor-prototype-stress-vtu.json",
       "render_config": "g0_b3_case3_wall_impact_floor-prototype-render.json"
     }
   },
   "jobs": [
     {
       "name": "case1_pressure",
-      "stages": ["sim", "abc", "render", "vtu"],
+      "stages": ["sim", "abc", "render"],
       "cases": [
         "g0_b8_case1_pressure",
         "g0_b3_case1_pressure"
@@ -52,7 +46,7 @@
     },
     {
       "name": "case2_squash_floor_prototype",
-      "stages": ["sim", "abc", "render", "vtu"],
+      "stages": ["sim", "abc", "render"],
       "cases": [
         "g0_b8_case2_squash_floor_prototype",
         "g0_b3_case2_squash_floor_prototype"
@@ -60,7 +54,7 @@
     },
     {
       "name": "case3_wall_impact_floor_prototype",
-      "stages": ["sim", "abc", "render", "vtu"],
+      "stages": ["sim", "abc", "render"],
       "cases": [
         "g0_b8_case3_wall_impact_floor_prototype",
         "g0_b3_case3_wall_impact_floor_prototype"
@@ -68,7 +62,7 @@
     },
     {
       "name": "g0_b8",
-      "stages": ["sim", "abc", "render", "vtu"],
+      "stages": ["sim", "abc", "render"],
       "cases": [
         "g0_b8_case1_pressure",
         "g0_b8_case2_squash_floor_prototype",
@@ -77,7 +71,7 @@
     },
     {
       "name": "g0_b3",
-      "stages": ["sim", "abc", "render", "vtu"],
+      "stages": ["sim", "abc", "render"],
       "cases": [
         "g0_b3_case1_pressure",
         "g0_b3_case2_squash_floor_prototype",
@@ -86,12 +80,12 @@
     },
     {
       "name": "all_fbms",
-      "stages": ["sim", "abc", "render", "vtu"],
+      "stages": ["sim", "abc", "render"],
       "cases": "all"
     },
     {
       "name": "g0_b8_post",
-      "stages": ["abc", "render", "vtu"],
+      "stages": ["abc", "render"],
       "cases": [
         "g0_b8_case1_pressure",
         "g0_b8_case2_squash_floor_prototype",
@@ -100,7 +94,7 @@
     },
     {
       "name": "g0_b3_post",
-      "stages": ["abc", "render", "vtu"],
+      "stages": ["abc", "render"],
       "cases": [
         "g0_b3_case1_pressure",
         "g0_b3_case2_squash_floor_prototype",
@@ -109,26 +103,8 @@
     },
     {
       "name": "all_fbms_post",
-      "stages": ["abc", "render", "vtu"],
+      "stages": ["abc", "render"],
       "cases": "all"
-    },
-    {
-      "name": "g0_b8_vtu",
-      "stages": ["vtu"],
-      "cases": [
-        "g0_b8_case1_pressure",
-        "g0_b8_case2_squash_floor_prototype",
-        "g0_b8_case3_wall_impact_floor_prototype"
-      ]
-    },
-    {
-      "name": "g0_b3_vtu",
-      "stages": ["vtu"],
-      "cases": [
-        "g0_b3_case1_pressure",
-        "g0_b3_case2_squash_floor_prototype",
-        "g0_b3_case3_wall_impact_floor_prototype"
-      ]
     },
     {
       "name": "g0_b8_render",

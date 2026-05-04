@@ -6,6 +6,7 @@
 #include "triMeshNeighbor.h"
 
 #include <cmath>
+#include <algorithm>
 #include <vector>
 
 namespace
@@ -77,6 +78,59 @@ TEST(MeshGTest, BuildsNeighborInformationForUnitSquare)
   EXPECT_EQ(tri1Neighbors[0], 0);
   EXPECT_EQ(tri1Neighbors[1], -1);
   EXPECT_EQ(tri1Neighbors[2], -1);
+}
+
+TEST(MeshGTest, ComputesFastEdgeConnectivityStats)
+{
+  std::vector<Vec3i> triangles{
+    Vec3i(0, 1, 2),
+    Vec3i(0, 2, 3),
+    Vec3i(4, 5, 6),
+    Vec3i(4, 6, 7),
+    Vec3i(8, 9, 10),
+  };
+
+  const auto components = pgo::Mesh::getConnectedComponentsByEdge(pgo::BasicAlgorithms::makeArrayRef(triangles));
+  std::vector<int> expectedCounts;
+  for (const auto &component : components)
+    expectedCounts.push_back((int)component.size());
+  std::sort(expectedCounts.begin(), expectedCounts.end(), std::greater<int>());
+
+  const auto stats = pgo::Mesh::computeTriangleEdgeConnectivityStats(pgo::BasicAlgorithms::makeArrayRef(triangles));
+  EXPECT_TRUE(stats.isManifold);
+  EXPECT_GT(stats.boundaryOrNonManifoldEdges, 0);
+  EXPECT_EQ(stats.componentsByEdge, 3);
+  EXPECT_EQ(stats.componentTriangleCountsByEdge, expectedCounts);
+}
+
+TEST(MeshGTest, FiltersSmallEdgeConnectedTriangleComponents)
+{
+  std::vector<Vec3d> vertices{
+    Vec3d(0.0, 0.0, 0.0),
+    Vec3d(1.0, 0.0, 0.0),
+    Vec3d(1.0, 1.0, 0.0),
+    Vec3d(0.0, 1.0, 0.0),
+    Vec3d(10.0, 0.0, 0.0),
+    Vec3d(11.0, 0.0, 0.0),
+    Vec3d(10.0, 1.0, 0.0),
+  };
+  std::vector<Vec3i> triangles{
+    Vec3i(0, 1, 2),
+    Vec3i(0, 2, 3),
+    Vec3i(4, 5, 6),
+  };
+
+  const TriMeshGeo mesh(std::move(vertices), std::move(triangles));
+  const TriMeshGeo filtered =
+    pgo::Mesh::filterSmallTriangleComponentsByEdge(mesh, /*minTriangleCount=*/2);
+
+  EXPECT_EQ(filtered.numVertices(), 4);
+  EXPECT_EQ(filtered.numTriangles(), 2);
+
+  const auto stats = pgo::Mesh::computeTriangleEdgeConnectivityStats(filtered.triangles());
+  EXPECT_EQ(stats.componentsByEdge, 1);
+  ASSERT_EQ(stats.componentTriangleCountsByEdge.size(), 1u);
+  EXPECT_EQ(stats.componentTriangleCountsByEdge[0], 2);
 }
 
 TEST(MeshGTest, QueriesClosestTriangleWithBVTree)

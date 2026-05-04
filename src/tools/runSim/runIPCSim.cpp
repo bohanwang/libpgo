@@ -237,6 +237,9 @@ int main(int argc, char *argv[])
     const std::filesystem::path outputFolder = jconfig.getResolvedPath("output", 1);
     const OutputDirectories outputDirs = makeOutputDirectories(outputFolder);
     const bool restartFromU = jconfig.exist("restart-from-u") ? jconfig.getValue<bool>("restart-from-u", 1) : false;
+    const bool dumpDeformEveryFrame = jconfig.exist("dump_deform_every_frame")
+      ? jconfig.getValue<bool>("dump_deform_every_frame", 1)
+      : false;
     const bool outputVonMises = jconfig.exist("output-von-mises") ? jconfig.getValue<bool>("output-von-mises", 1) : false;
     enableProfiling = jconfig.exist("profiling") ? jconfig.getValue<bool>("profiling", 1) : false;
 
@@ -358,11 +361,14 @@ int main(int argc, char *argv[])
       intg->getqacc(uacc);
       logRunIPCSimMaxStepSummary(context.elasticEnergy, context.collisionHandler, intg);
 
-      ES::MXd uMat(n3, 3);
-      uMat.col(0) = u;
-      uMat.col(1) = uvel;
-      uMat.col(2) = uacc;
-      ES::writeMatrix(framePath(outputDirs.states, "deform", framei, ".u").string().c_str(), uMat);
+      const bool dumpDeformThisFrame = dumpDeformEveryFrame || (framei % frameGap == 0);
+      if (dumpDeformThisFrame) {
+        ES::MXd uMat(n3, 3);
+        uMat.col(0) = u;
+        uMat.col(1) = uvel;
+        uMat.col(2) = uacc;
+        ES::writeMatrix(framePath(outputDirs.states, "deform", framei, ".u").string().c_str(), uMat);
+      }
 
       if (outputVonMises) {
         writeVonMisesStressJson(outputDirs, framei, timestep, context, u);

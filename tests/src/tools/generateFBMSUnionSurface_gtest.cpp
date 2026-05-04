@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 
@@ -109,6 +110,13 @@ void writeHeaderSphereOctahedron(const std::filesystem::path &path)
   out << "f 1 4 6\n";
 }
 
+std::string readTextFile(const std::filesystem::path &path)
+{
+  std::ifstream in(path);
+  EXPECT_TRUE(in.is_open());
+  return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+}
+
 }  // namespace
 
 TEST(GenerateFBMSUnionSurfaceCli, CreatesNonEmptyUnionShellFromOpenPatchAndHeaderSphere)
@@ -150,4 +158,170 @@ TEST(GenerateFBMSUnionSurfaceCli, CreatesNonEmptyUnionShellFromOpenPatchAndHeade
   EXPECT_GT(bb.bmax()[0], 0.95);
   EXPECT_GT(bb.bmax()[0], 1.02);
   EXPECT_LT(bb.bmax()[0], 1.30);
+}
+
+TEST(GenerateFBMSUnionSurfaceCli, SupportsFixedIsoOffsetExtraction)
+{
+  const std::filesystem::path binary = generatorBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(std::filesystem::exists(binary)) << binary;
+
+  ScopedTempDir tempDir;
+  const std::filesystem::path fbms = tempDir.path() / "patch.obj";
+  const std::filesystem::path sphere = tempDir.path() / "sphere.obj";
+  const std::filesystem::path output = tempDir.path() / "union-offset.obj";
+  const std::filesystem::path log = tempDir.path() / "generate-offset.log";
+
+  writeOpenFbmsPatch(fbms);
+  writeHeaderSphereOctahedron(sphere);
+
+  const std::string command =
+    shellExecutable(binary) +
+    " --fbms " + quotePath(fbms) +
+    " --sphere " + quotePath(sphere) +
+    " --fbms-thickness 0.20"
+    " --sphere-thickness 0.20"
+    " --resolution 28"
+    " --padding-ratio 0.02"
+    " --iso-offset-mode fixed"
+    " --iso-offset 0.001"
+    " --output-surface " + quotePath(output) +
+    " > " + quotePath(log) + " 2>&1";
+
+  ASSERT_EQ(std::system(command.c_str()), 0) << command;
+  ASSERT_TRUE(std::filesystem::exists(output));
+
+  pgo::Mesh::TriMeshGeo mesh;
+  ASSERT_TRUE(mesh.load(output.string()));
+  EXPECT_GT(mesh.numVertices(), 0);
+  EXPECT_GT(mesh.numTriangles(), 0);
+}
+
+TEST(GenerateFBMSUnionSurfaceCli, SupportsMarchingCubesSubcommand)
+{
+  const std::filesystem::path binary = generatorBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(std::filesystem::exists(binary)) << binary;
+
+  ScopedTempDir tempDir;
+  const std::filesystem::path fbms = tempDir.path() / "patch.obj";
+  const std::filesystem::path sphere = tempDir.path() / "sphere.obj";
+  const std::filesystem::path output = tempDir.path() / "union-subcommand.obj";
+  const std::filesystem::path log = tempDir.path() / "generate-subcommand.log";
+
+  writeOpenFbmsPatch(fbms);
+  writeHeaderSphereOctahedron(sphere);
+
+  const std::string command =
+    shellExecutable(binary) +
+    " marching-cubes"
+    " --fbms " + quotePath(fbms) +
+    " --sphere " + quotePath(sphere) +
+    " --fbms-thickness 0.20"
+    " --sphere-thickness 0.20"
+    " --resolution 28"
+    " --padding-ratio 0.02"
+    " --iso-offset-mode fixed"
+    " --iso-offset 0.001"
+    " --output-surface " + quotePath(output) +
+    " > " + quotePath(log) + " 2>&1";
+
+  ASSERT_EQ(std::system(command.c_str()), 0) << command;
+  ASSERT_TRUE(std::filesystem::exists(output));
+
+  pgo::Mesh::TriMeshGeo mesh;
+  ASSERT_TRUE(mesh.load(output.string()));
+  EXPECT_GT(mesh.numVertices(), 0);
+  EXPECT_GT(mesh.numTriangles(), 0);
+}
+
+TEST(GenerateFBMSUnionSurfaceCli, SupportsSmallComponentFilterOptions)
+{
+  const std::filesystem::path binary = generatorBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(std::filesystem::exists(binary)) << binary;
+
+  ScopedTempDir tempDir;
+  const std::filesystem::path fbms = tempDir.path() / "patch.obj";
+  const std::filesystem::path sphere = tempDir.path() / "sphere.obj";
+  const std::filesystem::path output = tempDir.path() / "union-filtered.obj";
+  const std::filesystem::path log = tempDir.path() / "generate-filtered.log";
+
+  writeOpenFbmsPatch(fbms);
+  writeHeaderSphereOctahedron(sphere);
+
+  const std::string command =
+    shellExecutable(binary) +
+    " marching-cubes"
+    " --fbms " + quotePath(fbms) +
+    " --sphere " + quotePath(sphere) +
+    " --fbms-thickness 0.20"
+    " --sphere-thickness 0.20"
+    " --resolution 28"
+    " --padding-ratio 0.02"
+    " --output-surface " + quotePath(output) +
+    " --filter-small-components"
+    " --min-component-triangles 2"
+    " > " + quotePath(log) + " 2>&1";
+
+  ASSERT_EQ(std::system(command.c_str()), 0) << command << "\n" << readTextFile(log);
+  ASSERT_TRUE(std::filesystem::exists(output));
+
+  const std::string logText = readTextFile(log);
+  EXPECT_NE(logText.find("Small component filter = enabled"), std::string::npos) << logText;
+  EXPECT_NE(logText.find("Min component triangles = 2"), std::string::npos) << logText;
+}
+
+TEST(GenerateFBMSUnionSurfaceCli, OpenVDBUnionKeepsFbmsShellByDefault)
+{
+  const std::filesystem::path binary = generatorBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(std::filesystem::exists(binary)) << binary;
+
+  ScopedTempDir tempDir;
+  const std::filesystem::path fbms = tempDir.path() / "patch.obj";
+  const std::filesystem::path sphere = tempDir.path() / "sphere.obj";
+  const std::filesystem::path unionOutput = tempDir.path() / "union-openvdb.obj";
+  const std::filesystem::path sphereOutput = tempDir.path() / "sphere-openvdb.obj";
+  const std::filesystem::path unionLog = tempDir.path() / "union-openvdb.log";
+  const std::filesystem::path sphereLog = tempDir.path() / "sphere-openvdb.log";
+
+  writeOpenFbmsPatch(fbms);
+  writeHeaderSphereOctahedron(sphere);
+
+  const std::string commonArgs =
+    " --fbms " + quotePath(fbms) +
+    " --sphere " + quotePath(sphere) +
+    " --fbms-thickness 0.20"
+    " --sphere-thickness 0.20"
+    " --resolution 36"
+    " --padding-ratio 0.02";
+
+  const std::string unionCommand =
+    shellExecutable(binary) +
+    " openvdb" +
+    commonArgs +
+    " --output-surface " + quotePath(unionOutput) +
+    " > " + quotePath(unionLog) + " 2>&1";
+
+  const int unionStatus = std::system(unionCommand.c_str());
+  if (unionStatus != 0 && readTextFile(unionLog).find("OpenVDB backend is unavailable") != std::string::npos)
+    GTEST_SKIP() << "OpenVDB backend is unavailable in this build.";
+  ASSERT_EQ(unionStatus, 0) << unionCommand << "\n" << readTextFile(unionLog);
+
+  const std::string sphereCommand =
+    shellExecutable(binary) +
+    " openvdb" +
+    commonArgs +
+    " --debug-field-mode sphere"
+    " --output-surface " + quotePath(sphereOutput) +
+    " > " + quotePath(sphereLog) + " 2>&1";
+  ASSERT_EQ(std::system(sphereCommand.c_str()), 0) << sphereCommand << "\n" << readTextFile(sphereLog);
+
+  pgo::Mesh::TriMeshGeo unionMesh;
+  pgo::Mesh::TriMeshGeo sphereMesh;
+  ASSERT_TRUE(unionMesh.load(unionOutput.string()));
+  ASSERT_TRUE(sphereMesh.load(sphereOutput.string()));
+
+  EXPECT_GT(unionMesh.numTriangles(), sphereMesh.numTriangles());
 }

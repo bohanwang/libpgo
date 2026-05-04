@@ -198,8 +198,6 @@ struct ParsedFloorConfig
 struct ParsedSurfacePressureForceConfig
 {
   bool enabled = false;
-  bool autoCenter = false;
-  ES::V3d center = ES::V3d::Zero();
   double pressure = 0.0;
   int rampSteps = 1;
 };
@@ -353,28 +351,13 @@ ParsedSurfacePressureForceConfig parseSurfacePressureForceConfig(const pgo::Conf
   if (!pressureConfig.enabled)
     return pressureConfig;
 
-  if (!pressureJson.contains("center"))
-    throwConfigError("Missing required field `surface-pressure-force.center` when enabled.");
   if (!pressureJson.contains("pressure"))
     throwConfigError("Missing required field `surface-pressure-force.pressure` when enabled.");
 
-  const auto &centerJson = pressureJson.at("center");
-  if (centerJson.is_string()) {
-    const std::string centerMode = centerJson.get<std::string>();
-    if (centerMode != "auto")
-      throwConfigError("`surface-pressure-force.center` string value must be `auto`.");
-    pressureConfig.autoCenter = true;
-  }
-  else {
-    const std::array<double, 3> center = centerJson.get<std::array<double, 3>>();
-    pressureConfig.center = ES::V3d(center[0], center[1], center[2]);
-  }
   pressureConfig.pressure = pressureJson.at("pressure").get<double>();
   if (pressureJson.contains("ramp-steps"))
     pressureConfig.rampSteps = pressureJson.at("ramp-steps").get<int>();
 
-  if (!pressureConfig.autoCenter && (!std::isfinite(pressureConfig.center[0]) || !std::isfinite(pressureConfig.center[1]) || !std::isfinite(pressureConfig.center[2])))
-    throwConfigError("`surface-pressure-force.center` entries must be finite.");
   if (!std::isfinite(pressureConfig.pressure))
     throwConfigError("`surface-pressure-force.pressure` must be finite.");
   if (pressureConfig.rampSteps <= 0)
@@ -383,32 +366,8 @@ ParsedSurfacePressureForceConfig parseSurfacePressureForceConfig(const pgo::Conf
   return pressureConfig;
 }
 
-ES::V3d computeSurfaceRestBoundingBoxCenter(const ES::VXd &surfaceRestPositions)
-{
-  if (surfaceRestPositions.size() < 3 || surfaceRestPositions.size() % 3 != 0)
-    throwConfigError("surface rest positions must contain 3D vertex coordinates.");
-
-  ES::V3d bmin = surfaceRestPositions.segment<3>(0);
-  ES::V3d bmax = bmin;
-  for (int vi = 1; vi < surfaceRestPositions.size() / 3; ++vi) {
-    const ES::V3d p = surfaceRestPositions.segment<3>(vi * 3);
-    bmin = bmin.cwiseMin(p);
-    bmax = bmax.cwiseMax(p);
-  }
-  return 0.5 * (bmin + bmax);
-}
-
-void resolveSurfacePressureAutoCenter(ParsedSurfacePressureForceConfig &pressureConfig, const ES::VXd &surfaceRestPositions)
-{
-  if (!pressureConfig.enabled || !pressureConfig.autoCenter)
-    return;
-
-  pressureConfig.center = computeSurfaceRestBoundingBoxCenter(surfaceRestPositions);
-  pressureConfig.autoCenter = false;
-}
-
 ES::VXd computeSurfacePressureSimulationForce(const pgo::Mesh::TriMeshGeo &surfaceMesh,
-  const ES::VXd &surfaceRestPositions, const ES::SpMatD &surfaceFromSimulationDispMap,
+  const ES::SpMatD &surfaceFromSimulationDispMap,
   const ParsedSurfacePressureForceConfig &pressureConfig, int simulationDofCount)
 {
   if (!pressureConfig.enabled)
@@ -420,23 +379,8 @@ ES::VXd computeSurfacePressureSimulationForce(const pgo::Mesh::TriMeshGeo &surfa
   pgo::Mesh::TriMeshPseudoNormal meshNormal(surfaceMesh);
 
   ES::VXd surfaceForce = ES::VXd::Zero(surfaceMesh.numVertices() * 3);
-  int zeroDirectionCount = 0;
   for (int vi = 0; vi < surfaceMesh.numVertices(); ++vi) {
-    const ES::V3d restPosition = surfaceRestPositions.segment<3>(vi * 3);
-    const ES::V3d centerDirection = pressureConfig.center - restPosition;
-    const double distanceToCenter = centerDirection.norm();
-    if (distanceToCenter < 1e-12) {
-      ++zeroDirectionCount;
-      continue;
-    }
-
     surfaceForce.segment<3>(vi * 3) = meshNormal.vtxNormal(vi) * pressureConfig.pressure * vertexAreas[vi] * -1.0;
-  }
-
-  if (zeroDirectionCount > 0) {
-    SPDLOG_LOGGER_WARN(Logging::lgr(),
-      "surface-pressure-force skipped {} surface vertices closer than 1e-12 to the pressure center.",
-      zeroDirectionCount);
   }
 
   ES::VXd simulationForce(surfaceFromSimulationDispMap.cols());
@@ -621,8 +565,6 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   pgo::Mesh::TriMeshGeo surfaceMesh;
   ES::VXd surfaceRestPositions;
   loadSurfaceMeshAndRestPositions(resolvedPaths.surfaceMeshFilename, scale, surfaceMesh, surfaceRestPositions);
-  const bool pressureCenterWasAuto = pressureConfig.autoCenter;
-  resolveSurfacePressureAutoCenter(pressureConfig, surfaceRestPositions);
 
   std::cout << "runIPCSim phase1D volume IPC parameters: "
             << "ipc-heuristic=false, "
@@ -650,8 +592,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   if (pressureConfig.enabled) {
     std::cout << ", pressure=" << pressureConfig.pressure
               << ", ramp-steps=" << pressureConfig.rampSteps
-              << ", center-mode=" << (pressureCenterWasAuto ? "auto" : "manual")
-              << ", center=[" << pressureConfig.center.transpose() << "]";
+              << ", direction=opposite-surface-normal";
   }
   std::cout << std::endl;
 
@@ -717,7 +658,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   context.surfacePressureForceEnabled = pressureConfig.enabled;
   context.surfacePressureRampSteps = pressureConfig.rampSteps;
   context.surfacePressureSimulationForce = computeSurfacePressureSimulationForce(
-    context.surfaceMesh, context.surfaceRestPositions, context.surfaceFromSimulationDispMap,
+    context.surfaceMesh, context.surfaceFromSimulationDispMap,
     pressureConfig, static_cast<int>(context.simulationRestPosition.size()));
   return context;
 }

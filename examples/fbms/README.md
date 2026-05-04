@@ -1,8 +1,8 @@
 # FBMS Pipeline
 
-This directory contains the FBMS surface inputs, generated shell assets, tetrahedral
-simulation meshes, simulation case configs, and postprocessing configs for Alembic
-and ParaView VTU/PVD output.
+This directory contains the FBMS surface inputs, generated shell assets,
+tetrahedral simulation meshes, simulation case configs, and Alembic
+postprocessing configs.
 
 The main pipeline is:
 
@@ -15,7 +15,6 @@ raw FBMS OBJ
   -> tetrahedralize the remeshed surface into a .veg simulation mesh
   -> run IPC simulation cases
   -> dump surface animation as .abc
-  -> dump tetrahedral stress as .vtu/.pvd
 ```
 
 The current production assets live under:
@@ -168,7 +167,8 @@ filenames, and the raw/remesh parameters shared by all jobs:
     "remesh_filename": "union_shell_remesh.obj",
     "stats_filename": "stats.json",
     "raw": {
-      "padding_ratio": 0.08
+      "padding_ratio": 0.08,
+      "enable_truncating": false
     },
     "remesh": {
       "edge_length": 0.75,
@@ -181,9 +181,13 @@ filenames, and the raw/remesh parameters shared by all jobs:
 The raw parameters map directly to `generateFBMSUnionSurface`:
 
 - `resolution`: uniform SDF grid resolution per axis.
-- `fbms_thickness`: unsigned-distance shell width for the raw FBMS surface.
+- `fbms_thickness`: unsigned-distance shell width for the raw FBMS surface. A
+  negative value is treated as a target volume budget passed through to
+  `generateFBMSUnionSurface`.
 - `sphere_thickness`: unsigned-distance shell width for the bounding sphere.
 - `padding_ratio`: extra SDF grid domain padding after thickness expansion.
+- `enable_truncating`: when true, pass `--enable-truncating` so the FBMS shell is
+  clipped to the outer surface of the thickened bounding sphere.
 
 The remesh parameters map directly to `remeshSurface cgal_iso`:
 
@@ -476,60 +480,14 @@ build/base_no_mkl/bin/convertAnimation \
   /tmp/fbms_abc_preview
 ```
 
-## 8. Dump VTU/PVD Stress For ParaView
-
-`scripts/export_fbms_stress_vtu.py` converts the `.veg` mesh, `deformXXXX.u`
-states, and `von_misesXXXX.json` stress frames into ParaView-readable VTU files
-plus a PVD time-series index.
-
-Example:
-
-```bash
-scripts/export_fbms_stress_vtu.py \
-  --config examples/fbms/generated/r128_default/g0_b8/g0_b8_case2_squash_floor-prototype-stress-vtu.json \
-  --overwrite
-```
-
-The stress VTU config lives next to the case `*-ipc.json` and `*-anim.json`, not
-inside the output folder:
-
-```json
-{
-  "veg": "union_shell.veg",
-  "states": "case2_squash_floor_prototype_output/states",
-  "stress": "case2_squash_floor_prototype_output/stress",
-  "output": "case2_squash_floor_prototype_output/vtu",
-  "frame-start": 0,
-  "frame-end": 300
-}
-```
-
-Relative paths resolve from the config directory. `frame-end` is exclusive, so
-`0..300` exports frames `0` through `299`.
-
-Output:
-
-```text
-case2_squash_floor_prototype_output/vtu/frame0000.vtu
-case2_squash_floor_prototype_output/vtu/frame0001.vtu
-...
-case2_squash_floor_prototype_output/vtu/series.pvd
-```
-
-Open `series.pvd` in ParaView. Each VTU contains cell-data arrays:
-
-- `von_mises`: raw stress.
-- `von_mises_log10`: log-scaled stress for high dynamic range.
-- `von_mises_clamped_99`: stress clamped to the 99th percentile for quick visual inspection.
-
-## 9. Run Simulation And Postprocessing With The Batch Runner
+## 8. Run Simulation And Postprocessing With The Batch Runner
 
 `scripts/run_sim_batch.py` is the pipeline runner. It reads
 `examples/fbms/fbms_batch.json`, selects a job, then runs that job's stages in
 normalized order:
 
 ```text
-sim -> abc -> render -> vtu
+sim -> abc -> render
 ```
 
 The job declares its stages in JSON:
@@ -537,7 +495,7 @@ The job declares its stages in JSON:
 ```json
 {
   "name": "g0_b8",
-  "stages": ["sim", "abc", "render", "vtu"],
+  "stages": ["sim", "abc", "render"],
   "cases": [
     "g0_b8_case1_pressure",
     "g0_b8_case2_squash_floor_prototype",
@@ -552,14 +510,13 @@ Each case maps to the three config files used by the stages:
 {
   "sim_config": "examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-ipc.json",
   "anim_config": "g0_b8_case1_pressure-anim.json",
-  "vtu_config": "g0_b8_case1_pressure-stress-vtu.json",
   "render_config": "g0_b8_case1_pressure-render.json"
 }
 ```
 
-Relative `anim_config`, `vtu_config`, and `render_config` paths resolve from the
-simulation config directory. If a job includes `vtu` or `render`, every selected
-case must provide the matching config path.
+Relative `anim_config` and `render_config` paths resolve from the simulation
+config directory. If a job includes `render`, every selected case must provide
+the matching config path.
 
 Preview the full g0_b8 pipeline:
 
@@ -596,20 +553,11 @@ scripts/run_sim_batch.py \
   --overwrite
 ```
 
-Regenerate only ParaView VTU/PVD output:
-
-```bash
-scripts/run_sim_batch.py \
-  --config examples/fbms/fbms_batch.json \
-  --job g0_b8_vtu \
-  --overwrite
-```
-
 Useful runner flags:
 
 - `--dry-run`: print commands without running them.
 - `--overwrite`: allow `runIPCSim` to replace existing output folders and pass
-  `--overwrite` to the VTU exporter.
+  `--overwrite` to render postprocessing.
 - `--skip-existing`: skip simulation cases whose output folder already exists.
 - `--all-jobs`: run every job in the batch config.
 
@@ -625,14 +573,12 @@ all_fbms
 g0_b8_post
 g0_b3_post
 all_fbms_post
-g0_b8_vtu
-g0_b3_vtu
 g0_b8_render
 g0_b3_render
 all_fbms_render
 ```
 
-## 10. Render Alembic Previews With Blender
+## 9. Render Alembic Previews With Blender
 
 `scripts/render_abc_preview.py` is a generic wrapper for rendering an Alembic
 `.abc` animation to PNG frames with Blender, then encoding those frames to a GIF
@@ -695,7 +641,7 @@ examples/fbms/generate_shell_assets.py \
 build/base_no_mkl/bin/tetMesher \
   --config examples/fbms/generated/r128_default/g0_b8/tetmesh.json
 
-# 3. Run all g0_b8 simulations, then dump .abc, GIF, and .vtu/.pvd outputs.
+# 3. Run all g0_b8 simulations, then dump .abc and GIF outputs.
 scripts/run_sim_batch.py \
   --config examples/fbms/fbms_batch.json \
   --job g0_b8 \
@@ -711,16 +657,15 @@ examples/fbms/generated/r128_default/g0_b8/case3_wall_impact_floor_prototype_out
 ```
 
 For DCC animation, use each `abc/*.abc` file. For quick previews, use the GIFs
-under `examples/fbms/fbms_video/`. For stress visualization, open each
-`vtu/series.pvd` file in ParaView.
+under `examples/fbms/fbms_video/`. For volumetric stress visualization, use the
+OpenVDB exporter pipeline.
 
 ## Result Previews
 
 The GIFs below are lightweight previews rendered from each case's Alembic `.abc`
 file with `scripts/render_abc_preview.py`. They show the two current FBMS shell
 assets under the three simulation jobs described above. Use the corresponding
-output folders for the full `.abc` animation exports and ParaView `.vtu/.pvd`
-stress data.
+output folders for the full `.abc` animation exports.
 
 ### Case 1: Surface Pressure
 

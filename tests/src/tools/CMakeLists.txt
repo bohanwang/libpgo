@@ -16,6 +16,14 @@ target_compile_definitions(tetMesher_gtest PRIVATE
 set_property(TARGET tetMesher_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(tetMesher_gtest)
 
+add_executable(meshQualityCheck_gtest meshQualityCheck_gtest.cpp)
+target_link_libraries(meshQualityCheck_gtest PRIVATE GTest::gtest_main nlohmann_json::nlohmann_json)
+add_dependencies(meshQualityCheck_gtest meshQualityCheck)
+target_compile_definitions(meshQualityCheck_gtest PRIVATE
+  PGO_TEST_MESH_QUALITY_CHECK_BIN="$<TARGET_FILE:meshQualityCheck>")
+set_property(TARGET meshQualityCheck_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(meshQualityCheck_gtest)
+
 if(TARGET convertAnimation)
   add_executable(convertAnimation_gtest convertAnimation_gtest.cpp)
   target_link_libraries(convertAnimation_gtest PRIVATE GTest::gtest_main)

@@ -3,8 +3,58 @@
 #include "geogramInterface.h"
 #include "pgoLogging.h"
 #include "triMeshPseudoNormal.h"
+#include "triMeshNeighbor.h"
 
 #include <argparse/argparse.hpp>
+#include <geogram/basic/process.h>
+
+#include <cmath>
+
+namespace
+{
+
+double triangleSignedVolume(const pgo::EigenSupport::V3d &a,
+  const pgo::EigenSupport::V3d &b, const pgo::EigenSupport::V3d &c)
+{
+  return a.dot(b.cross(c)) / 6.0;
+}
+
+int orientNestedComponents(pgo::Mesh::TriMeshGeo &mesh)
+{
+  std::vector<int> componentTriangleCounts;
+  const std::vector<int> componentIDs =
+    pgo::Mesh::computeTriangleEdgeComponentIDs(mesh.ref().trianglesRef(), &componentTriangleCounts);
+  if (componentTriangleCounts.size() <= 1)
+    return 0;
+
+  std::vector<double> componentVolumes(componentTriangleCounts.size(), 0.0);
+  for (int triID = 0; triID < mesh.numTriangles(); ++triID) {
+    const int componentID = componentIDs[triID];
+    const pgo::Vec3i &tri = mesh.tri(triID);
+    componentVolumes[componentID] += triangleSignedVolume(
+      mesh.pos(tri[0]), mesh.pos(tri[1]), mesh.pos(tri[2]));
+  }
+
+  int outerComponent = 0;
+  for (int componentID = 1; componentID < (int)componentVolumes.size(); ++componentID) {
+    if (std::abs(componentVolumes[componentID]) > std::abs(componentVolumes[outerComponent]))
+      outerComponent = componentID;
+  }
+
+  int flippedTriangles = 0;
+  for (int triID = 0; triID < mesh.numTriangles(); ++triID) {
+    const int componentID = componentIDs[triID];
+    const double desiredSign = (componentID == outerComponent) ? 1.0 : -1.0;
+    if (componentVolumes[componentID] * desiredSign < 0.0) {
+      std::swap(mesh.tri(triID)[0], mesh.tri(triID)[1]);
+      ++flippedTriangles;
+    }
+  }
+
+  return flippedTriangles;
+}
+
+}  // namespace
 
 int main(int argc, char *argv[])
 {
@@ -49,6 +99,11 @@ int main(int argc, char *argv[])
     .default_value(180.0)
     .metavar("DEG")
     .scan<'g', double>();
+  cgal_iso_cmd.add_argument("--iterations")
+    .help("Number of CGAL isotropic remeshing iterations")
+    .default_value(10)
+    .metavar("INT")
+    .scan<'i', int>();
 
   argparse::ArgumentParser cgal_simplify_cmd("cgal_simplify");
   cgal_simplify_cmd.add_description(
@@ -82,6 +137,15 @@ int main(int argc, char *argv[])
     .required()
     .metavar("FLOAT")
     .scan<'i', int>();
+  geogram_cmd.add_argument("--threads")
+    .help("Number of Geogram remeshing threads")
+    .default_value(1)
+    .metavar("INT")
+    .scan<'i', int>();
+  geogram_cmd.add_argument("--orient-nested-components")
+    .help("Orient the largest closed component outward and all other components inward; useful for nested shell/cavity meshes before TetWild")
+    .default_value(false)
+    .implicit_value(true);
 
   program.add_subparser(cgal_smooth_cmd);
   program.add_subparser(cgal_iso_cmd);
@@ -135,9 +199,15 @@ int main(int argc, char *argv[])
 
     double angleThreshold = cgal_iso_cmd.get<double>("--sharp-edge-angle");
     std::cout << "Sharp edge angle threshold: " << angleThreshold << std::endl;
+    int iterations = cgal_iso_cmd.get<int>("--iterations");
+    if (iterations < 0) {
+      std::cerr << "--iterations must be non-negative" << std::endl;
+      return 1;
+    }
+    std::cout << "Iterations: " << iterations << std::endl;
 
     pgo::Mesh::TriMeshGeo meshOut =
-      pgo::CGALInterface::isotropicRemeshing(inputMesh, tgtLength, 10, angleThreshold);
+      pgo::CGALInterface::isotropicRemeshing(inputMesh, tgtLength, iterations, angleThreshold);
 
     meshOut.save(cgal_iso_cmd.get<std::string>("--output-mesh"));
   }
@@ -156,6 +226,14 @@ int main(int argc, char *argv[])
   }
   else if (program.is_subcommand_used(geogram_cmd)) {
     pgo::GeogramInterface::initGEO();
+
+    int numThreads = geogram_cmd.get<int>("--threads");
+    if (numThreads < 1) {
+      std::cerr << "--threads must be positive" << std::endl;
+      return 1;
+    }
+    GEO::Process::set_max_threads(numThreads);
+    std::cout << "Geogram threads: " << numThreads << std::endl;
 
     int numInputTgtPts = geogram_cmd.get<int>("--target-num-vertices");
     int numTargetPoints = std::max(numInputTgtPts, 20);
@@ -219,6 +297,11 @@ int main(int argc, char *argv[])
           std::swap(outputMesh.tri(ti)[0], outputMesh.tri(ti)[1]);
         }
       }
+    }
+
+    if (geogram_cmd.get<bool>("--orient-nested-components")) {
+      const int flippedTriangles = orientNestedComponents(outputMesh);
+      std::cout << "Nested component orientation flipped triangles: " << flippedTriangles << std::endl;
     }
 
     pgo::Mesh::TriMeshGeo inputMesh;

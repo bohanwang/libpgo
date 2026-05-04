@@ -39,8 +39,12 @@
 #include "pgoLogging.h"
 
 #include <unordered_map>
+#include <map>
+#include <queue>
 #include <set>
 #include <iostream>
+#include <numeric>
+#include <stdexcept>
 
 namespace pgo
 {
@@ -551,6 +555,288 @@ bool areTrianglesManifold(ArrayRef<Vec3i> triangles)
   // now the mesh is at least edge-manifold
 
   return (getNonManifoldVerticesOnEdgeManifoldTriangles(triangles, oedgeTri).size() == 0);
+}
+
+TriangleTopologyStats computeTriangleTopologyStats(ArrayRef<Vec3i> triangles)
+{
+  std::map<UEdgeKey, std::vector<int>> edgeTriangles;
+  std::map<int, std::vector<int>> vertexTriangles;
+
+  for (int triID = 0; triID < triangles.size(); ++triID) {
+    const Vec3i &tri = triangles[triID];
+    if (isTriangleInvalid(tri)) {
+      TriangleTopologyStats stats;
+      stats.isManifold = false;
+      return stats;
+    }
+
+    for (int i = 0; i < 3; ++i) {
+      edgeTriangles[UEdgeKey(tri[i], tri[(i + 1) % 3])].push_back(triID);
+      vertexTriangles[tri[i]].push_back(triID);
+    }
+  }
+
+  TriangleTopologyStats stats;
+  for (const auto &edge : edgeTriangles) {
+    if (edge.second.size() != 2)
+      ++stats.boundaryOrNonManifoldEdges;
+    if (edge.second.size() > 2)
+      stats.isManifold = false;
+  }
+
+  for (const auto &vertex : vertexTriangles) {
+    const std::vector<int> &incidentTriangles = vertex.second;
+    if (incidentTriangles.size() <= 1)
+      continue;
+
+    std::map<int, int> localTriangleIDs;
+    for (int i = 0; i < (int)incidentTriangles.size(); ++i)
+      localTriangleIDs.emplace(incidentTriangles[i], i);
+
+    std::vector<std::vector<int>> linkNeighbors(incidentTriangles.size());
+    for (const auto &edge : edgeTriangles) {
+      if (edge.first[0] != vertex.first && edge.first[1] != vertex.first)
+        continue;
+      if (edge.second.size() != 2)
+        continue;
+
+      const auto it0 = localTriangleIDs.find(edge.second[0]);
+      const auto it1 = localTriangleIDs.find(edge.second[1]);
+      if (it0 == localTriangleIDs.end() || it1 == localTriangleIDs.end())
+        continue;
+
+      linkNeighbors[it0->second].push_back(it1->second);
+      linkNeighbors[it1->second].push_back(it0->second);
+    }
+
+    for (const auto &neighbors : linkNeighbors) {
+      if (neighbors.size() > 2) {
+        stats.isManifold = false;
+        break;
+      }
+    }
+    if (stats.isManifold == false)
+      break;
+
+    std::vector<char> visited(incidentTriangles.size(), 0);
+    std::queue<int> queue;
+    visited[0] = 1;
+    queue.push(0);
+    int visitedCount = 0;
+    while (queue.empty() == false) {
+      const int current = queue.front();
+      queue.pop();
+      ++visitedCount;
+      for (int neighbor : linkNeighbors[current]) {
+        if (visited[neighbor])
+          continue;
+        visited[neighbor] = 1;
+        queue.push(neighbor);
+      }
+    }
+
+    if (visitedCount != (int)incidentTriangles.size()) {
+      stats.isManifold = false;
+      break;
+    }
+  }
+
+  return stats;
+}
+
+class TriangleUnionFind
+{
+public:
+  explicit TriangleUnionFind(int size):
+    parent(size), rank(size, 0)
+  {
+    std::iota(parent.begin(), parent.end(), 0);
+  }
+
+  int find(int x)
+  {
+    if (parent[x] != x)
+      parent[x] = find(parent[x]);
+    return parent[x];
+  }
+
+  void unite(int a, int b)
+  {
+    int rootA = find(a);
+    int rootB = find(b);
+    if (rootA == rootB)
+      return;
+
+    if (rank[rootA] < rank[rootB])
+      std::swap(rootA, rootB);
+    parent[rootB] = rootA;
+    if (rank[rootA] == rank[rootB])
+      ++rank[rootA];
+  }
+
+private:
+  std::vector<int> parent;
+  std::vector<unsigned char> rank;
+};
+
+TriangleEdgeConnectivityStats computeTriangleEdgeConnectivityStats(ArrayRef<Vec3i> triangles)
+{
+  TriangleEdgeConnectivityStats stats;
+  const int numTriangles = triangles.size();
+  if (numTriangles == 0)
+    return stats;
+
+  TriangleUnionFind components(numTriangles);
+
+  struct EdgeRecord
+  {
+    int firstTriangle = -1;
+    int incidentCount = 0;
+  };
+
+  std::unordered_map<UEdgeKey, EdgeRecord> edgeRecords;
+  edgeRecords.reserve((size_t)numTriangles * 3);
+
+  for (int triID = 0; triID < numTriangles; ++triID) {
+    const Vec3i &tri = triangles[triID];
+    if (isTriangleInvalid(tri))
+      stats.isManifold = false;
+
+    for (int i = 0; i < 3; ++i) {
+      const UEdgeKey edge(tri[i], tri[(i + 1) % 3]);
+      EdgeRecord &record = edgeRecords[edge];
+      if (record.incidentCount == 0) {
+        record.firstTriangle = triID;
+      }
+      else {
+        components.unite(record.firstTriangle, triID);
+      }
+      ++record.incidentCount;
+    }
+  }
+
+  for (const auto &entry : edgeRecords) {
+    if (entry.second.incidentCount != 2)
+      ++stats.boundaryOrNonManifoldEdges;
+    if (entry.second.incidentCount > 2)
+      stats.isManifold = false;
+  }
+
+  std::unordered_map<int, int> componentSizes;
+  componentSizes.reserve(numTriangles);
+  for (int triID = 0; triID < numTriangles; ++triID)
+    ++componentSizes[components.find(triID)];
+
+  stats.componentsByEdge = (int)componentSizes.size();
+  stats.componentTriangleCountsByEdge.reserve(componentSizes.size());
+  for (const auto &component : componentSizes)
+    stats.componentTriangleCountsByEdge.push_back(component.second);
+
+  std::sort(stats.componentTriangleCountsByEdge.begin(), stats.componentTriangleCountsByEdge.end(), std::greater<int>());
+  return stats;
+}
+
+std::vector<int> computeTriangleEdgeComponentIDs(ArrayRef<Vec3i> triangles,
+  std::vector<int> *componentTriangleCountsByEdge)
+{
+  const int numTriangles = triangles.size();
+  std::vector<int> triangleComponentIDs(numTriangles, -1);
+  if (componentTriangleCountsByEdge)
+    componentTriangleCountsByEdge->clear();
+  if (numTriangles == 0)
+    return triangleComponentIDs;
+
+  TriangleUnionFind components(numTriangles);
+
+  struct EdgeRecord
+  {
+    int firstTriangle = -1;
+    int incidentCount = 0;
+  };
+
+  std::unordered_map<UEdgeKey, EdgeRecord> edgeRecords;
+  edgeRecords.reserve((size_t)numTriangles * 3);
+
+  for (int triID = 0; triID < numTriangles; ++triID) {
+    const Vec3i &tri = triangles[triID];
+    for (int i = 0; i < 3; ++i) {
+      const UEdgeKey edge(tri[i], tri[(i + 1) % 3]);
+      EdgeRecord &record = edgeRecords[edge];
+      if (record.incidentCount == 0) {
+        record.firstTriangle = triID;
+      }
+      else {
+        components.unite(record.firstTriangle, triID);
+      }
+      ++record.incidentCount;
+    }
+  }
+
+  std::unordered_map<int, int> rootToComponentID;
+  rootToComponentID.reserve(numTriangles);
+  std::vector<int> counts;
+  for (int triID = 0; triID < numTriangles; ++triID) {
+    const int root = components.find(triID);
+    auto iter = rootToComponentID.find(root);
+    if (iter == rootToComponentID.end()) {
+      const int componentID = (int)rootToComponentID.size();
+      iter = rootToComponentID.emplace(root, componentID).first;
+      counts.push_back(0);
+    }
+
+    const int componentID = iter->second;
+    triangleComponentIDs[triID] = componentID;
+    ++counts[componentID];
+  }
+
+  if (componentTriangleCountsByEdge)
+    *componentTriangleCountsByEdge = std::move(counts);
+
+  return triangleComponentIDs;
+}
+
+TriMeshGeo filterSmallTriangleComponentsByEdge(const TriMeshRef meshRef, int minTriangleCount,
+  int keepLargestComponents)
+{
+  if (minTriangleCount < 1)
+    throw std::invalid_argument("minTriangleCount must be at least 1");
+
+  std::vector<int> componentTriangleCounts;
+  const std::vector<int> triangleComponentIDs =
+    computeTriangleEdgeComponentIDs(meshRef.trianglesRef(), &componentTriangleCounts);
+
+  if (componentTriangleCounts.empty())
+    return TriMeshGeo(meshRef);
+
+  std::vector<int> componentOrder(componentTriangleCounts.size());
+  std::iota(componentOrder.begin(), componentOrder.end(), 0);
+  std::sort(componentOrder.begin(), componentOrder.end(), [&](int a, int b) {
+    if (componentTriangleCounts[a] != componentTriangleCounts[b])
+      return componentTriangleCounts[a] > componentTriangleCounts[b];
+    return a < b;
+  });
+
+  std::vector<char> keepComponent(componentTriangleCounts.size(), 0);
+  for (int rank = 0; rank < (int)componentOrder.size(); ++rank) {
+    if (keepLargestComponents > 0 && rank >= keepLargestComponents)
+      break;
+
+    const int componentID = componentOrder[rank];
+    if (componentTriangleCounts[componentID] >= minTriangleCount)
+      keepComponent[componentID] = 1;
+  }
+
+  std::vector<Vec3i> filteredTriangles;
+  filteredTriangles.reserve(meshRef.numTriangles());
+  for (int triID = 0; triID < meshRef.numTriangles(); ++triID) {
+    const int componentID = triangleComponentIDs[triID];
+    if (componentID >= 0 && keepComponent[componentID])
+      filteredTriangles.push_back(meshRef.tri(triID));
+  }
+
+  TriMeshGeo filteredWithOriginalVertices(meshRef.numVertices(), meshRef.positions(),
+    std::move(filteredTriangles));
+  return removeIsolatedVertices(filteredWithOriginalVertices);
 }
 
 std::vector<std::vector<int>> getTriangleNeighborsByEdge(ArrayRef<Vec3i> triangles)

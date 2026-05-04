@@ -1,0 +1,44 @@
+{
+  "bbox": {
+    "max": [
+      1.0434447096412638,
+      1.0439931564830198,
+      1.0841341706116263
+    ],
+    "min": [
+      -1.0549550094735196,
+      -1.0541862341976047,
+      -1.0141250786436364
+    ]
+  },
+  "boundary_or_exterior_edges": 0,
+  "check_status": {
+    "basic_geometry": "passed",
+    "self_intersection": "passed",
+    "topology": "passed",
+    "winding": "passed"
+  },
+  "component_triangle_counts_by_edge": [
+    21948,
+    15112,
+    12952
+  ],
+  "components_by_edge": 3,
+  "edge_length": {
+    "max": 0.07112293188218033,
+    "mean": 0.04594317918334115,
+    "min": 0.0028323476752082247
+  },
+  "errors": [],
+  "input": "examples/fbms_all/remesh_geogram/fbms/g0_b10_remesh.obj",
+  "invalid_triangles": 0,
+  "is_manifold": true,
+  "is_winding_consistent": true,
+  "oriented_boundary_or_exterior_edges": 0,
+  "passed": true,
+  "self_intersections": 0,
+  "triangles": 50012,
+  "type": "surface",
+  "vertices": 24994,
+  "warnings": []
+}

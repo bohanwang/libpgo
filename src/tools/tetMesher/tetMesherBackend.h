@@ -8,11 +8,20 @@
 namespace tet_mesher
 {
 
+struct MaterialOptions
+{
+  bool enabled = false;
+  double density = pgo::VolumetricMeshes::VolumetricMesh::density_default;
+  double youngModulus = pgo::VolumetricMeshes::VolumetricMesh::E_default;
+  double poissonRatio = pgo::VolumetricMeshes::VolumetricMesh::nu_default;
+};
+
 struct CommonOptions
 {
   std::string inputMesh;
   std::string outputMesh;
   std::string outputSurface;
+  MaterialOptions material;
   bool printStats = false;
   bool quiet = false;
 };

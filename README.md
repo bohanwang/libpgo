@@ -203,8 +203,7 @@ scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job all_ipc_abc
 
 The generic batch runner reads [`examples/ipc/ipc_batch.json`](./examples/ipc/ipc_batch.json), runs the stages declared by each job, and defaults jobs without a `stages` field to `runIPCSim` with `--log` followed by `convertAnimation` with the matching per-case `anim.json`. Use [`examples/ipc/README.md`](./examples/ipc/README.md) for the full case list, job definitions, and output-overwrite policy.
 
-The same runner also supports postprocessing stages for ParaView VTU/PVD export
-and Alembic preview rendering when a case supplies `vtu_config` or
+The same runner also supports Alembic preview rendering when a case supplies
 `render_config`. The render stage calls
 [`scripts/render_abc_preview.py`](./scripts/render_abc_preview.py), which uses
 Blender to render `.abc` frames and ffmpeg to encode a GIF:

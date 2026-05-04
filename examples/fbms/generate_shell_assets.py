@@ -37,6 +37,7 @@ class RawParams:
     fbms_thickness: float
     sphere_thickness: float
     padding_ratio: float
+    enable_truncating: bool
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,12 @@ def require_int(value: Any, context: str) -> int:
     return value
 
 
+def require_bool(value: Any, context: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{context} must be a boolean")
+    return value
+
+
 def repo_path(path_text: str) -> Path:
     path = Path(path_text)
     return path if path.is_absolute() else REPO_ROOT / path
@@ -136,6 +143,10 @@ def parse_job(job_config: dict[str, Any], defaults: dict[str, Any]) -> AssetJob:
         f"job {name}.raw.sphere_thickness",
     )
     padding_ratio = require_number(raw_config.get("padding_ratio"), f"job {name}.raw.padding_ratio")
+    enable_truncating = require_bool(
+        raw_config.get("enable_truncating", False),
+        f"job {name}.raw.enable_truncating",
+    )
     edge_length = require_number(remesh_config.get("edge_length"), f"job {name}.remesh.edge_length")
     sharp_edge_angle = require_number(
         remesh_config.get("sharp_edge_angle"),
@@ -144,8 +155,10 @@ def parse_job(job_config: dict[str, Any], defaults: dict[str, Any]) -> AssetJob:
 
     if resolution < 2:
         raise ValueError(f"job {name}.raw.resolution must be at least 2")
-    if fbms_thickness <= 0.0 or sphere_thickness <= 0.0:
-        raise ValueError(f"job {name} thickness values must be positive")
+    if fbms_thickness == 0.0:
+        raise ValueError(f"job {name}.raw.fbms_thickness must be non-zero")
+    if sphere_thickness <= 0.0:
+        raise ValueError(f"job {name}.raw.sphere_thickness must be positive")
     if padding_ratio < 0.0:
         raise ValueError(f"job {name}.raw.padding_ratio must be non-negative")
     if edge_length <= 0.0:
@@ -159,6 +172,7 @@ def parse_job(job_config: dict[str, Any], defaults: dict[str, Any]) -> AssetJob:
             fbms_thickness=fbms_thickness,
             sphere_thickness=sphere_thickness,
             padding_ratio=padding_ratio,
+            enable_truncating=enable_truncating,
         ),
         remesh=RemeshParams(edge_length=edge_length, sharp_edge_angle=sharp_edge_angle),
         output_dir=require_string(
@@ -271,6 +285,7 @@ def write_stats(job: AssetJob, case: AssetCase, raw_path: Path, remesh_path: Pat
             "fbms_thickness": job.raw.fbms_thickness,
             "sphere_thickness": job.raw.sphere_thickness,
             "padding_ratio": job.raw.padding_ratio,
+            "enable_truncating": job.raw.enable_truncating,
         },
         "remesh": {
             "edge_length": job.remesh.edge_length,
@@ -305,26 +320,26 @@ def generate_asset(args: argparse.Namespace, build_dir: Path, job: AssetJob, cas
                 raise FileNotFoundError(tool)
 
     if not args.remesh_only:
-        run_command(
-            [
-                str(generate_bin),
-                "--fbms",
-                str(case.fbms_obj),
-                "--sphere",
-                str(case.sphere_obj),
-                "--fbms-thickness",
-                compact_float(job.raw.fbms_thickness),
-                "--sphere-thickness",
-                compact_float(job.raw.sphere_thickness),
-                "--resolution",
-                str(job.raw.resolution),
-                "--padding-ratio",
-                compact_float(job.raw.padding_ratio),
-                "--output-surface",
-                str(raw_path),
-            ],
-            args.dry_run,
-        )
+        command = [
+            str(generate_bin),
+            "--fbms",
+            str(case.fbms_obj),
+            "--sphere",
+            str(case.sphere_obj),
+            "--fbms-thickness",
+            compact_float(job.raw.fbms_thickness),
+            "--sphere-thickness",
+            compact_float(job.raw.sphere_thickness),
+            "--resolution",
+            str(job.raw.resolution),
+            "--padding-ratio",
+            compact_float(job.raw.padding_ratio),
+            "--output-surface",
+            str(raw_path),
+        ]
+        if job.raw.enable_truncating:
+            command.append("--enable-truncating")
+        run_command(command, args.dry_run)
 
     if not args.raw_only:
         run_command(
@@ -390,7 +405,7 @@ def main() -> int:
                 print(
                     f"== {job.name}/{case.name}: resolution={job.raw.resolution}, "
                     f"fbms_thickness={job.raw.fbms_thickness}, sphere_thickness={job.raw.sphere_thickness}, "
-                    f"edge_length={job.remesh.edge_length} =="
+                    f"enable_truncating={job.raw.enable_truncating}, edge_length={job.remesh.edge_length} =="
                 )
                 generate_asset(args, build_dir, job, case)
         return 0

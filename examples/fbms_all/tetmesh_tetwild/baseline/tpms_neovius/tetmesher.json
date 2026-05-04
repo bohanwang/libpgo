@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "backend": "tetwild",
+  "input_mesh": "../../../remesh_geogram/baseline/tpms_neovius_remesh.obj",
+  "output_mesh": "tpms_neovius.veg",
+  "output_surface": "tpms_neovius.veg.obj",
+  "print_stats": true,
+  "tetwild": {
+    "lr": 0.013,
+    "epsr": 0.001,
+    "stop_energy": 10
+  },
+  "material": {
+    "density": 1000,
+    "young_modulus": 10000000,
+    "poisson_ratio": 0.45
+  }
+}

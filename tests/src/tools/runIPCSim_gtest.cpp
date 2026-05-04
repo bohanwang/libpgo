@@ -166,6 +166,28 @@ std::string addSurfacePressureForceConfig(std::string json, bool enabled, double
   return json;
 }
 
+std::string addSurfacePressureForceConfigWithoutCenter(std::string json, bool enabled, double pressure = 1000.0, std::optional<int> rampSteps = 20)
+{
+  const std::string marker = "\n}\n";
+  const std::size_t pos = json.rfind(marker);
+  if (pos == std::string::npos)
+    throw std::runtime_error("Failed to add surface pressure force config to test JSON.");
+
+  std::ostringstream field;
+  field << ",\n"
+        << "  \"surface-pressure-force\": {\n"
+        << "    \"enabled\": " << (enabled ? "true" : "false") << ",\n"
+        << "    \"pressure\": " << pressure;
+  if (rampSteps.has_value()) {
+    field << ",\n"
+          << "    \"ramp-steps\": " << *rampSteps;
+  }
+  field << "\n"
+        << "  }";
+  json.insert(pos, field.str());
+  return json;
+}
+
 void writeZeroShellRestartState(const fs::path &outputDir, int frame)
 {
   pgo::Mesh::TriMeshGeo mesh;
@@ -544,17 +566,6 @@ std::string vec3Json(const ES::V3d &v)
   return out.str();
 }
 
-ES::V3d surfaceRestBoundingBoxCenter(const ES::VXd &surfaceRestPositions)
-{
-  PGO_ALOG(surfaceRestPositions.size() >= 3 && surfaceRestPositions.size() % 3 == 0);
-  ES::V3d bmin = surfaceRestPositions.segment<3>(0);
-  ES::V3d bmax = bmin;
-  for (int vi = 1; vi < surfaceRestPositions.size() / 3; ++vi) {
-    bmin = bmin.cwiseMin(surfaceRestPositions.segment<3>(vi * 3));
-    bmax = bmax.cwiseMax(surfaceRestPositions.segment<3>(vi * 3));
-  }
-  return 0.5 * (bmin + bmax);
-}
 }  // namespace
 
 TEST(RunIPCSimCliGTest, VolumeSetupRespectsDisabledMaterialMaxStepFlag)
@@ -892,7 +903,33 @@ TEST(RunIPCSimCliGTest, OneTimestepShellFloorSmokeSucceeds)
   EXPECT_FALSE(fs::exists(outputDir / "ret0000.obj"));
 }
 
-TEST(RunIPCSimCliGTest, DeformStateIsWrittenEveryTimestep)
+TEST(RunIPCSimCliGTest, DeformStateDefaultsToDumpInterval)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-ipc-deform-dump-interval.json";
+
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 2, true, false, 0.002, 3000.0, 10));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  const fs::path outputDir = tempDir.path() / "shell-output";
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+  EXPECT_FALSE(fs::exists(statePath(outputDir, 1)));
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_FALSE(fs::exists(surfacePath(outputDir, 1)));
+  EXPECT_FALSE(fs::exists(outputDir / "deform0000.u"));
+  EXPECT_FALSE(fs::exists(outputDir / "ret0000.obj"));
+}
+
+TEST(RunIPCSimCliGTest, DumpDeformEveryFrameWritesEveryTimestep)
 {
   const fs::path binary = runIPCSimBinaryPath();
   ASSERT_FALSE(binary.empty());
@@ -901,7 +938,9 @@ TEST(RunIPCSimCliGTest, DeformStateIsWrittenEveryTimestep)
   ScopedTempDir tempDir;
   const fs::path configPath = tempDir.path() / "shell-ipc-deform-every-step.json";
 
-  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 2, true, false, 0.002, 3000.0, 10));
+  writeTextFile(configPath,
+    addBoolConfigField(makeShellIPCConfig(tempDir.path(), 2, true, false, 0.002, 3000.0, 10),
+      "dump_deform_every_frame", true));
 
   std::ostringstream command;
   command << shellExecutable(binary)
@@ -1331,20 +1370,43 @@ TEST(RunIPCSimSetupGTest, VolumeSurfacePressureForceDefaultsRampStepsToOne)
   EXPECT_EQ(context.surfacePressureRampSteps, 1);
 }
 
-TEST(RunIPCSimSetupGTest, VolumeSurfacePressureForceAutoCenterMatchesSurfaceRestBoundingBoxCenter)
+TEST(RunIPCSimSetupGTest, SurfacePressureForceDoesNotRequireCenter)
 {
   initializeRunIPCSimTestEnvironment();
 
   ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-pressure-no-center.json";
+  writeTextFile(configPath, addSurfacePressureForceConfigWithoutCenter(makeTetIPCConfig(tempDir.path(), 0), true, 1000.0, 20));
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+
+  const auto context = pgo::RunIPCSim::buildVolumeIpcSimulation(config);
+  EXPECT_TRUE(context.surfacePressureForceEnabled);
+  ASSERT_EQ(context.surfacePressureSimulationForce.size(), context.simulationRestPosition.size());
+  EXPECT_GT(context.surfacePressureSimulationForce.norm(), 0.0);
+}
+
+TEST(RunIPCSimSetupGTest, SurfacePressureForceIgnoresDeprecatedCenterField)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path noCenterConfigPath = tempDir.path() / "tet-pressure-no-center-reference.json";
   const fs::path autoConfigPath = tempDir.path() / "tet-pressure-auto-center.json";
   const fs::path explicitConfigPath = tempDir.path() / "tet-pressure-explicit-center.json";
+  writeTextFile(noCenterConfigPath, addSurfacePressureForceConfigWithoutCenter(makeTetIPCConfig(tempDir.path(), 0, 2.0), true, 1000.0, 20));
   writeTextFile(autoConfigPath, addSurfacePressureForceConfig(makeTetIPCConfig(tempDir.path(), 0, 2.0), true, 1000.0, 20, "\"auto\""));
+
+  pgo::ConfigFileJSON noCenterConfig;
+  ASSERT_TRUE(noCenterConfig.open(noCenterConfigPath.string().c_str()));
+  const auto noCenterContext = pgo::RunIPCSim::buildVolumeIpcSimulation(noCenterConfig);
 
   pgo::ConfigFileJSON autoConfig;
   ASSERT_TRUE(autoConfig.open(autoConfigPath.string().c_str()));
-
   const auto autoContext = pgo::RunIPCSim::buildVolumeIpcSimulation(autoConfig);
-  const ES::V3d explicitCenter = surfaceRestBoundingBoxCenter(autoContext.surfaceRestPositions);
+
+  const ES::V3d explicitCenter(0.25, -0.5, 0.75);
   writeTextFile(explicitConfigPath,
     addSurfacePressureForceConfig(makeTetIPCConfig(tempDir.path(), 0, 2.0), true, 1000.0, 20, vec3Json(explicitCenter)));
 
@@ -1352,9 +1414,12 @@ TEST(RunIPCSimSetupGTest, VolumeSurfacePressureForceAutoCenterMatchesSurfaceRest
   ASSERT_TRUE(explicitConfig.open(explicitConfigPath.string().c_str()));
 
   const auto explicitContext = pgo::RunIPCSim::buildVolumeIpcSimulation(explicitConfig);
-  ASSERT_EQ(autoContext.surfacePressureSimulationForce.size(), explicitContext.surfacePressureSimulationForce.size());
+  ASSERT_EQ(noCenterContext.surfacePressureSimulationForce.size(), autoContext.surfacePressureSimulationForce.size());
+  ASSERT_EQ(noCenterContext.surfacePressureSimulationForce.size(), explicitContext.surfacePressureSimulationForce.size());
+  EXPECT_GT(noCenterContext.surfacePressureSimulationForce.norm(), 0.0);
+  EXPECT_NEAR((noCenterContext.surfacePressureSimulationForce - autoContext.surfacePressureSimulationForce).norm(), 0.0, 1e-8);
+  EXPECT_NEAR((noCenterContext.surfacePressureSimulationForce - explicitContext.surfacePressureSimulationForce).norm(), 0.0, 1e-8);
   EXPECT_GT(autoContext.surfacePressureSimulationForce.norm(), 0.0);
-  EXPECT_NEAR((autoContext.surfacePressureSimulationForce - explicitContext.surfacePressureSimulationForce).norm(), 0.0, 1e-8);
 }
 
 TEST(RunIPCSimSetupGTest, SurfacePressureForceDisabledOrZeroPressureProducesNoContribution)

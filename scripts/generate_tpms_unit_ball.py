@@ -12,10 +12,12 @@ For convenience we also drop a matching unit-sphere mesh into each folder,
 with a header that loadSphereParameters() in generateFBMSUnionSurface.cpp
 can parse (# center = ..., # radius = ...).
 
-Each TPMS lands in its own subdirectory under examples/fbms with files
-named per the existing fbms convention:
+By default, each TPMS lands in its own subdirectory under examples/fbms with
+files named per the existing fbms convention:
     <prefix>_fbms.obj
     <prefix>_fbms_bounding_sphere.obj
+
+Pass --flat-output to write all files directly into the output folder.
 """
 
 from __future__ import annotations
@@ -147,14 +149,16 @@ def write_unit_sphere_obj(path: Path, subdivisions: int) -> tuple[int, int]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--cells", type=float, default=2.0,
-                        help="Number of TPMS unit cells across the [-1, 1] domain (default: 2).")
+    parser.add_argument("--cells", type=float, default=1.0,
+                        help="Number of TPMS unit cells across the [-1, 1] domain (default: 1).")
     parser.add_argument("--resolution", type=int, default=256,
                         help="Grid samples per axis for marching cubes (default: 256).")
     parser.add_argument("--sphere-subdivisions", type=int, default=4,
                         help="Icosphere subdivisions for the bounding-sphere mesh (default: 4).")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT,
                         help="Parent output folder (default: examples/fbms).")
+    parser.add_argument("--flat-output", action="store_true",
+                        help="Write all TPMS assets directly under --out instead of one subfolder per TPMS.")
     return parser.parse_args()
 
 
@@ -165,11 +169,12 @@ def main() -> int:
     if args.cells <= 0:
         raise SystemExit("--cells must be positive")
 
+    args.out = args.out.resolve()
     args.out.mkdir(parents=True, exist_ok=True)
 
     print(f"[tpms] resolution={args.resolution} cells={args.cells} out={args.out}")
     for tpms in TPMS_LIST:
-        sub_dir = args.out / tpms.folder
+        sub_dir = args.out if args.flat_output else args.out / tpms.folder
         sub_dir.mkdir(parents=True, exist_ok=True)
 
         field, spacing, origin = build_tpms_field(tpms.field, args.resolution, args.cells)

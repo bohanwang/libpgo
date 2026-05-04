@@ -174,6 +174,27 @@ void writeTetgenConfig(const std::filesystem::path &path)
   out << "}\n";
 }
 
+void writeTetgenMaterialConfig(const std::filesystem::path &path)
+{
+  std::ofstream out(path);
+  ASSERT_TRUE(out.is_open());
+
+  out << "{\n";
+  out << "  \"version\": 1,\n";
+  out << "  \"backend\": \"tetgen\",\n";
+  out << "  \"input_mesh\": \"cube.obj\",\n";
+  out << "  \"output_mesh\": \"cube_material.veg\",\n";
+  out << "  \"material\": {\n";
+  out << "    \"density\": 1234,\n";
+  out << "    \"young_modulus\": 10000000,\n";
+  out << "    \"poisson_ratio\": 0.35\n";
+  out << "  },\n";
+  out << "  \"tetgen\": {\n";
+  out << "    \"command\": \"pq1.414a0.01\"\n";
+  out << "  }\n";
+  out << "}\n";
+}
+
 void writeTetwildConfig(const std::filesystem::path &path)
 {
   std::ofstream out(path);
@@ -281,6 +302,30 @@ TEST(TetMesherCli, JsonTetgenGeneratesVegAndSurfaceAssets)
   ASSERT_TRUE(surface.load(outputSurface.string()));
   EXPECT_GT(surface.numVertices(), 0);
   EXPECT_GT(surface.numTriangles(), 0);
+}
+
+TEST(TetMesherCli, JsonMaterialOverridesDefaultVegMaterial)
+{
+  const std::filesystem::path tetMesherBin = getTetMesherBinaryPath();
+  ASSERT_FALSE(tetMesherBin.empty());
+  ASSERT_TRUE(std::filesystem::exists(tetMesherBin));
+
+  ScopedTempDir tempDir;
+  const std::filesystem::path inputObj = tempDir.path() / "cube.obj";
+  const std::filesystem::path outputVeg = tempDir.path() / "cube_material.veg";
+  const std::filesystem::path configPath = tempDir.path() / "tetgen_material.json";
+  writeUnitCubeObj(inputObj);
+  writeTetgenMaterialConfig(configPath);
+
+  const std::string cmd = shellExecutable(tetMesherBin) +
+    " --config " + quotePath(configPath);
+
+  ASSERT_EQ(runCommand(cmd), 0);
+  ASSERT_TRUE(std::filesystem::exists(outputVeg));
+
+  const std::string vegText = readTextFile(outputVeg);
+  EXPECT_NE(vegText.find("*MATERIAL defaultMaterial"), std::string::npos);
+  EXPECT_NE(vegText.find("ENU, 1234, 10000000, 0.35"), std::string::npos);
 }
 
 TEST(TetMesherCli, TetwildDisabledReportsClearError)

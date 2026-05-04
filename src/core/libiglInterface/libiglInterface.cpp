@@ -108,7 +108,7 @@ void pgo::libiglInterface::computeDistanceField(const Mesh::TriMeshGeo &mesh,
   }
 }
 
-void pgo::libiglInterface::computeMarchingCubes(const EigenSupport::V3d &bmin, const EigenSupport::V3d &bmax, int res, const EigenSupport::VXd &dists, Mesh::TriMeshGeo &outMesh)
+void pgo::libiglInterface::computeMarchingCubes(const EigenSupport::V3d &bmin, const EigenSupport::V3d &bmax, int res, const EigenSupport::VXd &dists, Mesh::TriMeshGeo &outMesh, double isovalue)
 {
   EigenSupport::MX3d gridPoints(res * res * res, 3);
   EigenSupport::V3d diff = bmax - bmin;
@@ -123,7 +123,7 @@ void pgo::libiglInterface::computeMarchingCubes(const EigenSupport::V3d &bmin, c
 
   EigenSupport::MXd V;
   EigenSupport::MXi F;
-  igl::marching_cubes(dists, gridPoints, res, res, res, 0.0, V, F);
+  igl::marching_cubes(dists, gridPoints, res, res, res, isovalue, V, F);
 
   matrixToTriMesh(V, F, outMesh);
 }

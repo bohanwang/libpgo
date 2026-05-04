@@ -1,0 +1,44 @@
+{
+  "bbox": {
+    "max": [
+      1.0149579048156743,
+      1.0149579048156743,
+      1.0149579048156743
+    ],
+    "min": [
+      -1.0149579048156743,
+      -1.0149579048156743,
+      -1.0149579048156743
+    ]
+  },
+  "boundary_or_exterior_edges": 0,
+  "check_status": {
+    "basic_geometry": "passed",
+    "self_intersection": "skipped",
+    "topology": "passed",
+    "winding": "skipped"
+  },
+  "component_triangle_counts_by_edge": [
+    369372,
+    354384,
+    340380
+  ],
+  "components_by_edge": 3,
+  "edge_length": {
+    "max": 0.01812862504771311,
+    "mean": 0.009553502083422741,
+    "min": 0.00022713361249770972
+  },
+  "errors": [],
+  "input": "examples/fbms_all/raw_mesh_vdb/baseline/tpms_schwarz_p_union.obj",
+  "invalid_triangles": 0,
+  "is_manifold": true,
+  "is_winding_consistent": null,
+  "oriented_boundary_or_exterior_edges": null,
+  "passed": true,
+  "self_intersections": null,
+  "triangles": 1064136,
+  "type": "surface",
+  "vertices": 532016,
+  "warnings": []
+}

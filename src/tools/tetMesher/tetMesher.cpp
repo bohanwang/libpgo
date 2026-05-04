@@ -5,6 +5,7 @@
 
 #include <argparse/argparse.hpp>
 
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -86,6 +87,32 @@ const json &readObject(const json &j, const char *key, bool required)
   return j.at(key);
 }
 
+tet_mesher::MaterialOptions readMaterialOptions(const json &j)
+{
+  tet_mesher::MaterialOptions material;
+  if (j.contains("material") == false)
+    return material;
+
+  const json &materialJson = readObject(j, "material", false);
+  material.enabled = true;
+  material.density = readDouble(materialJson, "density", material.density);
+  material.youngModulus = readDouble(materialJson, "young_modulus", material.youngModulus);
+  material.poissonRatio = readDouble(materialJson, "poisson_ratio", material.poissonRatio);
+
+  if (std::isfinite(material.density) == false || material.density <= 0.0)
+    throw std::runtime_error("material.density must be positive");
+
+  if (std::isfinite(material.youngModulus) == false || material.youngModulus <= 0.0)
+    throw std::runtime_error("material.young_modulus must be positive");
+
+  if (std::isfinite(material.poissonRatio) == false ||
+    material.poissonRatio <= -1.0 || material.poissonRatio >= 0.5) {
+    throw std::runtime_error("material.poisson_ratio must be in (-1, 0.5)");
+  }
+
+  return material;
+}
+
 tet_mesher::CommonOptions readCommonOptions(const pgo::ConfigFileJSON &config)
 {
   const json &j = config.handle();
@@ -95,6 +122,7 @@ tet_mesher::CommonOptions readCommonOptions(const pgo::ConfigFileJSON &config)
   options.outputMesh = config.resolvePath(requireString(j, "output_mesh"));
   if (j.contains("output_surface"))
     options.outputSurface = config.resolvePath(requireString(j, "output_surface"));
+  options.material = readMaterialOptions(j);
   options.printStats = readBool(j, "print_stats", false);
   options.quiet = readBool(j, "quiet", false);
   return options;
@@ -109,6 +137,9 @@ int runTetgen(const pgo::ConfigFileJSON &config)
   options.command = requireString(tetgen, "command");
 
   std::unique_ptr<pgo::VolumetricMeshes::TetMesh> tetMesh = tet_mesher::generateTetgenMesh(options);
+  if (options.common.material.enabled)
+    tetMesh->setSingleMaterial(options.common.material.youngModulus,
+      options.common.material.poissonRatio, options.common.material.density);
   tet_mesher::saveTetMeshOutputs(*tetMesh, options.common);
   return 0;
 }
@@ -133,6 +164,9 @@ int runTetwild(const pgo::ConfigFileJSON &config)
     throw std::runtime_error("tetwild.la and tetwild.lr are mutually exclusive");
 
   std::unique_ptr<pgo::VolumetricMeshes::TetMesh> tetMesh = tet_mesher::generateTetwildMesh(options);
+  if (options.common.material.enabled)
+    tetMesh->setSingleMaterial(options.common.material.youngModulus,
+      options.common.material.poissonRatio, options.common.material.density);
   tet_mesher::saveTetMeshOutputs(*tetMesh, options.common);
   return 0;
 }
