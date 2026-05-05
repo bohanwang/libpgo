@@ -35,7 +35,7 @@
     "Input triangle mesh is not closed",
     "Input triangle mesh has inconsistent winding"
   ],
-  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.obj",
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.obj",
   "invalid_triangles": 0,
   "is_manifold": false,
   "is_winding_consistent": false,

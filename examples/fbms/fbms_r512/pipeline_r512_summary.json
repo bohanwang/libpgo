@@ -1,5 +1,5 @@
 {
-  "generated_at_unix": 1777974889,
+  "generated_at_unix": 1777976476,
   "working_directory": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512",
   "results": [
     {
@@ -293,7 +293,7 @@
       "boundary_source": "repaired",
       "boundary_repair_attempted": true,
       "boundary_repair_passed": true,
-      "boundary_repair_volume_drift": 3.473501315405516e-07,
+      "boundary_repair_volume_drift": 3.473501317586125e-07,
       "component_count": 3
     },
     {

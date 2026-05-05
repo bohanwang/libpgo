@@ -242,6 +242,8 @@ class RunFbmsAllAssetPipelineTest(unittest.TestCase):
         self.assertIn("boundary-quality:g0_b5:tpms_schwarz_p", labels)
         self.assertIn("boundary-repair:g0_b5:tpms_schwarz_p", labels)
         self.assertIn("boundary-repaired-quality:g0_b5:tpms_schwarz_p", labels)
+        repair_command = next(command for command in commands if command.label.startswith("boundary-repair:"))
+        self.assertNotIn("--orient-positive", repair_command.argv)
         component_command = next(command for command in commands if command.label.startswith("components:"))
         self.assertIn(str(target.repaired_veg_obj), component_command.argv)
 

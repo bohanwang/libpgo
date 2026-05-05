@@ -256,7 +256,8 @@ The runner saves this as `{name}.veg.info.txt` and uses it in the summary.
 Repairs a failed TetWild boundary OBJ after TetWild has completed. It uses
 PyMeshFix per connected component, preserving components as much as possible.
 It never overwrites the original `.veg` or `.veg.obj`; repaired surfaces are
-written as `{name}.veg.repaired.obj`.
+written as `{name}.veg.repaired.obj`. The pipeline does not force component
+signed volumes to be positive, preserving cavity normal semantics.
 
 `dump_obj_components.py`
 
@@ -474,8 +475,7 @@ If the original `.veg.obj` fails, the runner uses:
 uv run python scripts/repair_tpms_mesh.py \
   {tet_output_dir}/{name}.veg.obj \
   --out {tet_output_dir}/{name}.veg.repaired.obj \
-  --report {tet_output_dir}/{name}.veg.repair_report.json \
-  --orient-positive
+  --report {tet_output_dir}/{name}.veg.repair_report.json
 ```
 
 Then it checks the repaired surface with the same full quality gate:

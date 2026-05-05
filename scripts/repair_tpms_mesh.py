@@ -9,14 +9,13 @@ smaller components. This script:
   3. splits the mesh into connected components,
   4. runs PyMeshFix on each component separately,
   5. merges the repaired components,
-  6. optionally flips closed components to positive signed volume,
-  7. writes repaired OBJ and JSON report.
+  6. writes repaired OBJ and JSON report.
 
 Install dependency:
   pip install pymeshfix numpy
 
 Example:
-  python repair_tpms_mesh.py tpms_schwarz_p.veg.obj --out tpms_schwarz_p.fixed.obj --orient-positive
+  python repair_tpms_mesh.py tpms_schwarz_p.veg.obj --out tpms_schwarz_p.fixed.obj
 """
 from __future__ import annotations
 
@@ -203,25 +202,6 @@ def signed_volume(vertices: np.ndarray, faces: np.ndarray, comp: List[int] | Non
     return float(np.einsum("ij,ij->i", vertices[tri[:, 0]], np.cross(vertices[tri[:, 1]], vertices[tri[:, 2]])).sum() / 6.0)
 
 
-def orient_positive(vertices: np.ndarray, faces: np.ndarray) -> Tuple[np.ndarray, dict]:
-    comps = connected_face_components(faces)
-    new_faces = faces.copy()
-    volumes_before = []
-    flipped = []
-    for ci, comp in enumerate(comps):
-        vol = signed_volume(vertices, faces, comp)
-        volumes_before.append(vol)
-        if vol < 0:
-            temp = new_faces[comp, 1].copy()
-            new_faces[comp, 1] = new_faces[comp, 2]
-            new_faces[comp, 2] = temp
-            flipped.append(ci)
-    return new_faces, {
-        "component_signed_volumes_before": volumes_before,
-        "flipped_components": flipped,
-    }
-
-
 def stats(vertices: np.ndarray, faces: np.ndarray) -> dict:
     edge_faces = build_edge_faces(faces)
     hist = defaultdict(int)
@@ -280,7 +260,6 @@ def main() -> None:
     parser.add_argument("input", help="input OBJ file")
     parser.add_argument("--out", default=None, help="output OBJ file")
     parser.add_argument("--report", default=None, help="output JSON report")
-    parser.add_argument("--orient-positive", action="store_true", help="flip closed components with negative signed volume")
     parser.add_argument("--remove-smallest-per-component", action="store_true", help="let MeshFix remove small islands inside each component")
     args = parser.parse_args()
 
@@ -300,11 +279,6 @@ def main() -> None:
     vertices, faces, component_reports = repair_by_component(vertices, faces, args.remove_smallest_per_component)
     report["component_repairs"] = component_reports
     report["after_meshfix_by_component"] = stats(vertices, faces)
-
-    if args.orient_positive:
-        faces, orientation = orient_positive(vertices, faces)
-        report["orientation"] = orientation
-        report["after_orient_positive"] = stats(vertices, faces)
 
     report["final"] = stats(vertices, faces)
 

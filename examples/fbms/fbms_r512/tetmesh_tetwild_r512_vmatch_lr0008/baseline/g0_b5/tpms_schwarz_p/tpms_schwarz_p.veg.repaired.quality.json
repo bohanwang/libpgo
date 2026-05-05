@@ -29,9 +29,9 @@
     "mean": 0.02753477952539728,
     "min": 0.004958799213592851
   },
-  "enclosed_volume": 8.208835622988707,
+  "enclosed_volume": 0.5465278987966847,
   "errors": [],
-  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_schwarz_p/tpms_schwarz_p.veg.repaired.obj",
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_schwarz_p/tpms_schwarz_p.veg.repaired.obj",
   "invalid_triangles": 0,
   "is_manifold": true,
   "is_winding_consistent": true,

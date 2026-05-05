@@ -769,7 +769,6 @@ def repair_command(target: PipelineTarget) -> CommandSpec:
             str(target.repaired_veg_obj),
             "--report",
             str(target.repair_report),
-            "--orient-positive",
         ],
         target.boundary_repair_log,
         allow_failure=True,

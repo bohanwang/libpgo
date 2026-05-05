@@ -31,7 +31,7 @@
   },
   "enclosed_volume": 0.5456343216353484,
   "errors": [],
-  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008/fbms/g0_b5/g0_b5.veg.obj",
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_t002_lr0008/fbms/g0_b5/g0_b5.veg.obj",
   "invalid_triangles": 0,
   "is_manifold": true,
   "is_winding_consistent": true,

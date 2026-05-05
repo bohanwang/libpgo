@@ -1,6 +1,6 @@
 {
-  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.obj",
-  "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.repaired.obj",
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.obj",
+  "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.repaired.obj",
   "before": {
     "vertices": 56319,
     "faces": 112714,
@@ -193,39 +193,6 @@
       -0.2659389909208487
     ]
   },
-  "orientation": {
-    "component_signed_volumes_before": [
-      4.377526720850743,
-      -3.5026869736894404,
-      -0.2659389909208487
-    ],
-    "flipped_components": [
-      1,
-      2
-    ]
-  },
-  "after_orient_positive": {
-    "vertices": 56023,
-    "faces": 112054,
-    "edges": 168081,
-    "boundary_edges": 0,
-    "nonmanifold_edges": 0,
-    "winding_conflict_edges": 0,
-    "edge_face_count_histogram": {
-      "2": 168081
-    },
-    "connected_components": 3,
-    "component_face_counts": [
-      40654,
-      35866,
-      35534
-    ],
-    "component_signed_volumes": [
-      4.377526720850743,
-      3.5026869736894404,
-      0.26593899092084866
-    ]
-  },
   "final": {
     "vertices": 56023,
     "faces": 112054,
@@ -244,8 +211,8 @@
     ],
     "component_signed_volumes": [
       4.377526720850743,
-      3.5026869736894404,
-      0.26593899092084866
+      -3.5026869736894404,
+      -0.2659389909208487
     ]
   }
 }
