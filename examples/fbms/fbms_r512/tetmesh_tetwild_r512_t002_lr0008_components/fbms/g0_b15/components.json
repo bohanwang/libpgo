@@ -1,0 +1,23 @@
+[
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008/fbms/g0_b15/g0_b15.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008_components/fbms/g0_b15/g0_b15_component_0.obj",
+    "component": 0,
+    "vertices": 30435,
+    "triangles": 60922
+  },
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008/fbms/g0_b15/g0_b15.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008_components/fbms/g0_b15/g0_b15_component_1.obj",
+    "component": 1,
+    "vertices": 20363,
+    "triangles": 40722
+  },
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008/fbms/g0_b15/g0_b15.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008_components/fbms/g0_b15/g0_b15_component_2.obj",
+    "component": 2,
+    "vertices": 16864,
+    "triangles": 33724
+  }
+]

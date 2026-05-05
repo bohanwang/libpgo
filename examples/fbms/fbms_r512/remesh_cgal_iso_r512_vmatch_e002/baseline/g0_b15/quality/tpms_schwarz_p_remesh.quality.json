@@ -1,0 +1,49 @@
+{
+  "bbox": {
+    "max": [
+      1.0149682609811521,
+      1.0149384747049437,
+      1.014933054276654
+    ],
+    "min": [
+      -1.0149558774367229,
+      -1.0149660972768573,
+      -1.014953178720475
+    ]
+  },
+  "boundary_or_exterior_edges": 0,
+  "check_status": {
+    "basic_geometry": "passed",
+    "self_intersection": "failed",
+    "topology": "passed",
+    "winding": "passed"
+  },
+  "component_triangle_counts_by_edge": [
+    88742,
+    79584,
+    74672
+  ],
+  "components_by_edge": 3,
+  "edge_length": {
+    "max": 0.026730029769828675,
+    "mean": 0.018444618450023344,
+    "min": 0.0010902216491485242
+  },
+  "enclosed_volume": 0.6082985346013418,
+  "errors": [
+    "Input triangle mesh has self intersections"
+  ],
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/remesh_cgal_iso_r512_vmatch_e002/baseline/g0_b15/tpms_schwarz_p_remesh.obj",
+  "invalid_triangles": 0,
+  "is_manifold": true,
+  "is_winding_consistent": true,
+  "oriented_boundary_or_exterior_edges": 0,
+  "passed": false,
+  "self_intersection_backend": "exact-count",
+  "self_intersections": 68,
+  "self_intersections_exact": true,
+  "triangles": 242998,
+  "type": "surface",
+  "vertices": 121303,
+  "warnings": []
+}

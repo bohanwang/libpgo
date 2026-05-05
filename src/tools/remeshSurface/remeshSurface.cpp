@@ -105,6 +105,22 @@ int main(int argc, char *argv[])
     .metavar("INT")
     .scan<'i', int>();
 
+  argparse::ArgumentParser cgal_repair_self_intersections_cmd("cgal_repair_self_intersections");
+  cgal_repair_self_intersections_cmd.add_description(
+    "Use CGAL autorefine_and_remove_self_intersections() to repair local self-intersections");
+  cgal_repair_self_intersections_cmd.add_argument("-i", "--input-mesh")
+    .help("Input surface mesh filename")
+    .required()
+    .metavar("PATH");
+  cgal_repair_self_intersections_cmd.add_argument("-o", "--output-mesh")
+    .help("Output surface mesh filename")
+    .required()
+    .metavar("PATH");
+  cgal_repair_self_intersections_cmd.add_argument("--method")
+    .help("CGAL repair method: autorefine, autorefine-only, or remove")
+    .default_value(std::string("autorefine"))
+    .metavar("NAME");
+
   argparse::ArgumentParser cgal_simplify_cmd("cgal_simplify");
   cgal_simplify_cmd.add_description(
     "Use CGAL edge_collapse() to simplify surface");
@@ -149,6 +165,7 @@ int main(int argc, char *argv[])
 
   program.add_subparser(cgal_smooth_cmd);
   program.add_subparser(cgal_iso_cmd);
+  program.add_subparser(cgal_repair_self_intersections_cmd);
   program.add_subparser(cgal_simplify_cmd);
   program.add_subparser(geogram_cmd);
 
@@ -210,6 +227,28 @@ int main(int argc, char *argv[])
       pgo::CGALInterface::isotropicRemeshing(inputMesh, tgtLength, iterations, angleThreshold);
 
     meshOut.save(cgal_iso_cmd.get<std::string>("--output-mesh"));
+  }
+  else if (program.is_subcommand_used(cgal_repair_self_intersections_cmd)) {
+    pgo::Mesh::TriMeshGeo inputMesh;
+    if (inputMesh.load(cgal_repair_self_intersections_cmd.get<std::string>("--input-mesh")) != true)
+      return 1;
+
+    bool allFixed = false;
+    const std::string method = cgal_repair_self_intersections_cmd.get<std::string>("--method");
+    if (method != "autorefine" && method != "autorefine-only" && method != "remove") {
+      std::cerr << "--method must be autorefine, autorefine-only, or remove" << std::endl;
+      return 1;
+    }
+    std::cout << "Repair method: " << method << std::endl;
+
+    pgo::Mesh::TriMeshGeo meshOut =
+      pgo::CGALInterface::repairSelfIntersections(inputMesh, method, &allFixed);
+
+    std::cout << "All self-intersections fixed: " << (allFixed ? "true" : "false") << std::endl;
+
+    meshOut.save(cgal_repair_self_intersections_cmd.get<std::string>("--output-mesh"));
+    if (allFixed == false)
+      return 2;
   }
   else if (program.is_subcommand_used(cgal_simplify_cmd)) {
     pgo::Mesh::TriMeshGeo inputMesh;

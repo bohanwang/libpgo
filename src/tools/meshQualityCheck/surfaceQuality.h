@@ -10,6 +10,12 @@
 namespace mesh_quality_check
 {
 
+enum class SelfIntersectionBackend
+{
+  CgalBool,
+  ExactCount,
+};
+
 struct EdgeLengthStats
 {
   double min = 0.0;
@@ -35,6 +41,9 @@ struct SurfaceQualityReport
   std::optional<bool> isWindingConsistent;
   std::optional<int> orientedBoundaryOrExteriorEdges;
   std::optional<int> selfIntersections;
+  std::optional<bool> selfIntersectionsExact;
+  std::optional<std::string> selfIntersectionBackend;
+  std::optional<double> enclosedVolume;
   int invalidTriangles = 0;
   EdgeLengthStats edgeLength;
   std::array<double, 3> bboxMin{ { 0.0, 0.0, 0.0 } };
@@ -51,6 +60,7 @@ struct SurfaceQualityOptions
   bool failOnInvalidTriangles = true;
   std::optional<int> expectedComponents;
   int selfIntersectionTriangleLimit = 200000;
+  SelfIntersectionBackend selfIntersectionBackend = SelfIntersectionBackend::CgalBool;
 };
 
 SurfaceQualityReport checkSurfaceMesh(const std::string &inputMesh, const SurfaceQualityOptions &options = {});

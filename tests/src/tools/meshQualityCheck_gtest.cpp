@@ -221,12 +221,17 @@ TEST(meshQualityCheckTool, AcceptsClosedCube)
   EXPECT_EQ(report["boundary_or_exterior_edges"], 0);
   EXPECT_TRUE(report["is_manifold"]);
   EXPECT_EQ(report["self_intersections"], 0);
+  EXPECT_EQ(report["self_intersection_backend"], "cgal-bool");
+  EXPECT_FALSE(report["self_intersections_exact"]);
   EXPECT_EQ(report["check_status"]["basic_geometry"], "passed");
   EXPECT_EQ(report["check_status"]["topology"], "passed");
   EXPECT_EQ(report["check_status"]["winding"], "passed");
   EXPECT_EQ(report["check_status"]["self_intersection"], "passed");
   EXPECT_TRUE(report["is_winding_consistent"]);
   EXPECT_EQ(report["oriented_boundary_or_exterior_edges"], 0);
+  ASSERT_TRUE(report.contains("enclosed_volume"));
+  ASSERT_TRUE(report["enclosed_volume"].is_number());
+  EXPECT_NEAR(report["enclosed_volume"].get<double>(), 1.0, 1e-12);
 }
 
 TEST(meshQualityCheckTool, ExpectedComponentsAcceptsMatchingTopology)
@@ -291,6 +296,8 @@ TEST(meshQualityCheckTool, RejectsOpenMeshAndWritesReport)
   EXPECT_EQ(report["check_status"]["self_intersection"], "passed");
   EXPECT_FALSE(report["is_winding_consistent"]);
   EXPECT_GT(report["oriented_boundary_or_exterior_edges"], 0);
+  ASSERT_TRUE(report.contains("enclosed_volume"));
+  EXPECT_TRUE(report["enclosed_volume"].is_null());
 }
 
 TEST(meshQualityCheckTool, RejectsSelfIntersectingMesh)
@@ -305,10 +312,32 @@ TEST(meshQualityCheckTool, RejectsSelfIntersectingMesh)
 
   const nlohmann::json report = readJson(reportPath);
   EXPECT_FALSE(report["passed"]);
-  EXPECT_GT(report["self_intersections"], 0);
+  EXPECT_EQ(report["self_intersections"], 1);
+  EXPECT_EQ(report["self_intersection_backend"], "cgal-bool");
+  EXPECT_FALSE(report["self_intersections_exact"]);
   EXPECT_EQ(report["check_status"]["basic_geometry"], "passed");
   EXPECT_EQ(report["check_status"]["topology"], "failed");
   EXPECT_EQ(report["check_status"]["winding"], "failed");
+  EXPECT_EQ(report["check_status"]["self_intersection"], "failed");
+}
+
+TEST(meshQualityCheckTool, ExactCountBackendReportsPreciseSelfIntersectionCount)
+{
+  ScopedTempDir tempDir;
+  const std::filesystem::path inputObj = tempDir.path() / "self_intersect.obj";
+  const std::filesystem::path reportPath = tempDir.path() / "self_intersect.exact.quality.json";
+  writeSelfIntersectingMeshObj(inputObj);
+
+  const std::string command = shellExecutable(requireBinary()) +
+    " surface --self-intersection-backend exact-count --input " + quotePath(inputObj) +
+    " --json " + quotePath(reportPath);
+  EXPECT_NE(runCommand(command), 0);
+
+  const nlohmann::json report = readJson(reportPath);
+  EXPECT_FALSE(report["passed"]);
+  EXPECT_GT(report["self_intersections"], 0);
+  EXPECT_EQ(report["self_intersection_backend"], "exact-count");
+  EXPECT_TRUE(report["self_intersections_exact"]);
   EXPECT_EQ(report["check_status"]["self_intersection"], "failed");
 }
 
@@ -379,6 +408,10 @@ TEST(meshQualityCheckTool, DegenerateOnlyModeSkipsTopologyWindingAndSelfIntersec
   EXPECT_TRUE(report["is_winding_consistent"].is_null());
   EXPECT_TRUE(report["oriented_boundary_or_exterior_edges"].is_null());
   EXPECT_TRUE(report["self_intersections"].is_null());
+  EXPECT_TRUE(report["self_intersection_backend"].is_null());
+  EXPECT_TRUE(report["self_intersections_exact"].is_null());
+  ASSERT_TRUE(report.contains("enclosed_volume"));
+  EXPECT_TRUE(report["enclosed_volume"].is_null());
 }
 
 TEST(meshQualityCheckTool, SkipsSelfIntersectionWhenTriangleLimitIsExceeded)
@@ -397,6 +430,8 @@ TEST(meshQualityCheckTool, SkipsSelfIntersectionWhenTriangleLimitIsExceeded)
   EXPECT_FALSE(report["passed"]);
   EXPECT_EQ(report["check_status"]["self_intersection"], "skipped");
   EXPECT_TRUE(report["self_intersections"].is_null());
+  EXPECT_TRUE(report["self_intersection_backend"].is_null());
+  EXPECT_TRUE(report["self_intersections_exact"].is_null());
 }
 
 TEST(meshQualityCheckTool, RawModeReportsTopologyComponentsAndAllowsDegenerateTriangles)
@@ -422,6 +457,41 @@ TEST(meshQualityCheckTool, RawModeReportsTopologyComponentsAndAllowsDegenerateTr
   EXPECT_FALSE(report["is_manifold"].is_null());
   EXPECT_TRUE(report["is_winding_consistent"].is_null());
   EXPECT_TRUE(report["self_intersections"].is_null());
+  EXPECT_TRUE(report["self_intersection_backend"].is_null());
+  EXPECT_TRUE(report["self_intersections_exact"].is_null());
+}
+
+TEST(meshQualityCheckTool, RejectsInvalidSelfIntersectionBackend)
+{
+  ScopedTempDir tempDir;
+  const std::filesystem::path inputObj = tempDir.path() / "cube.obj";
+  const std::filesystem::path reportPath = tempDir.path() / "cube.invalid_backend.quality.json";
+  writeUnitCubeObj(inputObj);
+
+  const std::string command = shellExecutable(requireBinary()) +
+    " surface --self-intersection-backend not-a-backend --input " + quotePath(inputObj) +
+    " --json " + quotePath(reportPath);
+  EXPECT_NE(runCommand(command), 0);
+  EXPECT_FALSE(std::filesystem::exists(reportPath));
+}
+
+TEST(meshQualityCheckTool, RawModeReportsEnclosedVolumeForClosedMesh)
+{
+  ScopedTempDir tempDir;
+  const std::filesystem::path inputObj = tempDir.path() / "cube.obj";
+  const std::filesystem::path reportPath = tempDir.path() / "cube.raw.quality.json";
+  writeUnitCubeObj(inputObj);
+
+  const std::string command = shellExecutable(requireBinary()) + " surface --check-level raw --input " + quotePath(inputObj) + " --json " + quotePath(reportPath);
+  EXPECT_EQ(runCommand(command), 0);
+
+  const nlohmann::json report = readJson(reportPath);
+  EXPECT_TRUE(report["passed"]);
+  EXPECT_EQ(report["check_status"]["topology"], "passed");
+  EXPECT_EQ(report["check_status"]["winding"], "skipped");
+  ASSERT_TRUE(report.contains("enclosed_volume"));
+  ASSERT_TRUE(report["enclosed_volume"].is_number());
+  EXPECT_NEAR(report["enclosed_volume"].get<double>(), 1.0, 1e-12);
 }
 
 TEST(meshQualityCheckTool, RejectsClosedMeshWithInconsistentOrientation)
@@ -493,6 +563,8 @@ TEST(meshQualityCheckTool, RejectsMissingInput)
   EXPECT_TRUE(report["boundary_or_exterior_edges"].is_null());
   EXPECT_TRUE(report["is_manifold"].is_null());
   EXPECT_TRUE(report["self_intersections"].is_null());
+  EXPECT_TRUE(report["self_intersection_backend"].is_null());
+  EXPECT_TRUE(report["self_intersections_exact"].is_null());
   EXPECT_TRUE(report["is_winding_consistent"].is_null());
   EXPECT_TRUE(report["oriented_boundary_or_exterior_edges"].is_null());
 }

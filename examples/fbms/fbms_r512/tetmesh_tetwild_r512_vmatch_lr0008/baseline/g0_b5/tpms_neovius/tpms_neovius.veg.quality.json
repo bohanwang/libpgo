@@ -1,0 +1,47 @@
+{
+  "bbox": {
+    "max": [
+      1.014916434485047,
+      1.0148941637395579,
+      1.0148360999064518
+    ],
+    "min": [
+      -1.0148603393440645,
+      -1.014911246183654,
+      -1.0148698864883523
+    ]
+  },
+  "boundary_or_exterior_edges": 0,
+  "check_status": {
+    "basic_geometry": "passed",
+    "self_intersection": "passed",
+    "topology": "passed",
+    "winding": "passed"
+  },
+  "component_triangle_counts_by_edge": [
+    53984,
+    40406,
+    34762
+  ],
+  "components_by_edge": 3,
+  "edge_length": {
+    "max": 0.05219048291141703,
+    "mean": 0.027742697511974234,
+    "min": 0.009159177035317906
+  },
+  "enclosed_volume": 0.5467786125347287,
+  "errors": [],
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_neovius/tpms_neovius.veg.obj",
+  "invalid_triangles": 0,
+  "is_manifold": true,
+  "is_winding_consistent": true,
+  "oriented_boundary_or_exterior_edges": 0,
+  "passed": true,
+  "self_intersection_backend": "exact-count",
+  "self_intersections": 0,
+  "self_intersections_exact": true,
+  "triangles": 129152,
+  "type": "surface",
+  "vertices": 64560,
+  "warnings": []
+}

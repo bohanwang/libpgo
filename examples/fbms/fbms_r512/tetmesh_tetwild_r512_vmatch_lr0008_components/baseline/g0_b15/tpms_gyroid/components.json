@@ -1,0 +1,23 @@
+[
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_gyroid/tpms_gyroid.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b15/tpms_gyroid/tpms_gyroid_component_0.obj",
+    "component": 0,
+    "vertices": 20154,
+    "triangles": 40304
+  },
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_gyroid/tpms_gyroid.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b15/tpms_gyroid/tpms_gyroid_component_1.obj",
+    "component": 1,
+    "vertices": 19293,
+    "triangles": 38590
+  },
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_gyroid/tpms_gyroid.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b15/tpms_gyroid/tpms_gyroid_component_2.obj",
+    "component": 2,
+    "vertices": 19287,
+    "triangles": 38578
+  }
+]

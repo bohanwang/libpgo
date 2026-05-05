@@ -7,10 +7,39 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
 namespace
 {
+
+#ifndef MESH_QUALITY_CHECK_HAS_CGAL
+#define MESH_QUALITY_CHECK_HAS_CGAL 0
+#endif
+
+std::string defaultSelfIntersectionBackend()
+{
+#if MESH_QUALITY_CHECK_HAS_CGAL
+  return "cgal-bool";
+#else
+  return "exact-count";
+#endif
+}
+
+mesh_quality_check::SelfIntersectionBackend parseSelfIntersectionBackend(const std::string &backend)
+{
+  if (backend == "exact-count")
+    return mesh_quality_check::SelfIntersectionBackend::ExactCount;
+  if (backend == "cgal-bool") {
+#if MESH_QUALITY_CHECK_HAS_CGAL
+    return mesh_quality_check::SelfIntersectionBackend::CgalBool;
+#else
+    throw std::runtime_error("CGAL self-intersection backend is unavailable in this build");
+#endif
+  }
+
+  throw std::runtime_error("--self-intersection-backend must be one of: cgal-bool, exact-count");
+}
 
 void writeJsonReport(const std::string &path, const nlohmann::json &report)
 {
@@ -46,10 +75,14 @@ int main(int argc, char *argv[])
     .default_value(std::string("full"))
     .metavar("LEVEL");
   surfaceCommand.add_argument("--self-intersection-triangle-limit")
-    .help("Maximum triangle count for exact self-intersection checking")
+    .help("Maximum triangle count for self-intersection checking")
     .default_value(200000)
     .metavar("INT")
     .scan<'i', int>();
+  surfaceCommand.add_argument("--self-intersection-backend")
+    .help("Self-intersection backend: cgal-bool or exact-count")
+    .default_value(defaultSelfIntersectionBackend())
+    .metavar("BACKEND");
   surfaceCommand.add_argument("--expected-components")
     .help("Expected number of edge-connected triangle components when topology is checked")
     .default_value(-1)
@@ -81,6 +114,7 @@ int main(int argc, char *argv[])
     const std::string jsonReport = surfaceCommand.get<std::string>("--json");
     const std::string checkLevel = surfaceCommand.get<std::string>("--check-level");
     const int selfIntersectionTriangleLimit = surfaceCommand.get<int>("--self-intersection-triangle-limit");
+    const std::string selfIntersectionBackend = surfaceCommand.get<std::string>("--self-intersection-backend");
     const int expectedComponents = surfaceCommand.get<int>("--expected-components");
     const std::string invalidTrianglesPolicy = surfaceCommand.get<std::string>("--invalid-triangles-policy");
 
@@ -88,6 +122,7 @@ int main(int argc, char *argv[])
     if (selfIntersectionTriangleLimit < 0)
       throw std::runtime_error("--self-intersection-triangle-limit must be non-negative");
     options.selfIntersectionTriangleLimit = selfIntersectionTriangleLimit;
+    options.selfIntersectionBackend = parseSelfIntersectionBackend(selfIntersectionBackend);
     if (expectedComponents < -1)
       throw std::runtime_error("--expected-components must be non-negative");
     if (expectedComponents >= 0)

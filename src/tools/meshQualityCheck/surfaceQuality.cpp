@@ -5,6 +5,10 @@
 #include "triMeshGeo.h"
 #include "triMeshNeighbor.h"
 
+#if MESH_QUALITY_CHECK_HAS_CGAL
+#include "cgalInterface.h"
+#endif
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -23,6 +27,30 @@ namespace
 
 using pgo::Vec3d;
 using pgo::Vec3i;
+
+const char *selfIntersectionBackendName(SelfIntersectionBackend backend)
+{
+  switch (backend) {
+    case SelfIntersectionBackend::CgalBool:
+      return "cgal-bool";
+    case SelfIntersectionBackend::ExactCount:
+      return "exact-count";
+  }
+
+  return "unknown";
+}
+
+bool canUseCgalSelfIntersectionBackend(const SurfaceQualityReport &report)
+{
+  if (report.isManifold.has_value() && *report.isManifold == false)
+    return false;
+
+  if (report.boundaryOrExteriorEdges.has_value() && *report.boundaryOrExteriorEdges == 0 &&
+    report.isWindingConsistent.has_value() && *report.isWindingConsistent == false)
+    return false;
+
+  return true;
+}
 
 bool hasDegenerateGeometry(const pgo::Mesh::TriMeshGeo &mesh, const Vec3i &tri)
 {
@@ -82,6 +110,18 @@ void fillBoundingBox(const pgo::Mesh::TriMeshGeo &mesh, SurfaceQualityReport &re
     report.bboxMin[i] = bbox.bmin()[i];
     report.bboxMax[i] = bbox.bmax()[i];
   }
+}
+
+double computeEnclosedVolume(const pgo::Mesh::TriMeshGeo &mesh)
+{
+  double v6 = 0.0;
+  for (int t = 0; t < mesh.numTriangles(); ++t) {
+    const Vec3d &a = mesh.pos(t, 0);
+    const Vec3d &b = mesh.pos(t, 1);
+    const Vec3d &c = mesh.pos(t, 2);
+    v6 += a.dot(b.cross(c));
+  }
+  return std::abs(v6) / 6.0;
 }
 
 void appendFailureReasons(SurfaceQualityReport &report, const SurfaceQualityOptions &options)
@@ -170,18 +210,50 @@ SurfaceQualityReport checkSurfaceMesh(const std::string &inputMesh, const Surfac
     }
 
     if (options.checkSelfIntersection && report.triangles <= options.selfIntersectionTriangleLimit) {
-      pgo::Mesh::TriMeshBVTree bvTree;
-      bvTree.buildByInertiaPartition(mesh.ref());
+      SelfIntersectionBackend backend = options.selfIntersectionBackend;
+      if (backend == SelfIntersectionBackend::CgalBool && canUseCgalSelfIntersectionBackend(report) == false) {
+        backend = SelfIntersectionBackend::ExactCount;
+        report.warnings.push_back("CGAL self-intersection backend requires a polygon mesh; falling back to exact-count");
+      }
 
-      std::vector<std::pair<int, int>> selfIntersections;
-      bvTree.selfIntersectionExact(mesh.ref(), selfIntersections);
-      report.selfIntersections = (int)selfIntersections.size();
+      report.selfIntersectionBackend = selfIntersectionBackendName(backend);
+
+      if (backend == SelfIntersectionBackend::CgalBool) {
+#if MESH_QUALITY_CHECK_HAS_CGAL
+        const bool hasSelfIntersection = pgo::CGALInterface::isSelfIntersected(mesh);
+        report.selfIntersections = hasSelfIntersection ? 1 : 0;
+        report.selfIntersectionsExact = false;
+#else
+        throw std::runtime_error("CGAL self-intersection backend is unavailable in this build");
+#endif
+      }
+      else if (backend == SelfIntersectionBackend::ExactCount) {
+        pgo::Mesh::TriMeshBVTree bvTree;
+        bvTree.buildByInertiaPartition(mesh.ref());
+
+        std::vector<std::pair<int, int>> selfIntersections;
+        bvTree.selfIntersectionExact(mesh.ref(), selfIntersections);
+        report.selfIntersections = (int)selfIntersections.size();
+        report.selfIntersectionsExact = true;
+      }
+      else {
+        throw std::runtime_error("Unknown self-intersection backend");
+      }
+
       report.selfIntersectionStatus = (*report.selfIntersections == 0) ? "passed" : "failed";
     }
     else if (options.checkSelfIntersection) {
       report.selfIntersectionStatus = "skipped";
-      report.errors.push_back("Input triangle mesh is too large for exact self-intersection checking in this tool run");
+      report.errors.push_back("Input triangle mesh is too large for self-intersection checking in this tool run");
     }
+
+    const bool closedManifold =
+      report.isManifold.has_value() && *report.isManifold &&
+      report.boundaryOrExteriorEdges.has_value() && *report.boundaryOrExteriorEdges == 0;
+    const bool windingKnownBad =
+      report.isWindingConsistent.has_value() && *report.isWindingConsistent == false;
+    if (closedManifold && !windingKnownBad)
+      report.enclosedVolume = computeEnclosedVolume(mesh);
   }
 
   report.passed =
@@ -215,6 +287,9 @@ nlohmann::json surfaceQualityReportToJson(const SurfaceQualityReport &report)
     { "is_winding_consistent", optionalToJson(report.isWindingConsistent) },
     { "oriented_boundary_or_exterior_edges", optionalToJson(report.orientedBoundaryOrExteriorEdges) },
     { "self_intersections", optionalToJson(report.selfIntersections) },
+    { "self_intersections_exact", optionalToJson(report.selfIntersectionsExact) },
+    { "self_intersection_backend", optionalToJson(report.selfIntersectionBackend) },
+    { "enclosed_volume", optionalToJson(report.enclosedVolume) },
     { "invalid_triangles", report.invalidTriangles },
     { "edge_length", {
         { "min", report.edgeLength.min },

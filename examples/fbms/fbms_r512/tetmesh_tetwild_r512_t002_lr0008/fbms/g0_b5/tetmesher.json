@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "backend": "tetwild",
+  "input_mesh": "../../../remesh_cgal_iso_r512_t002_e002/fbms/g0_b5_remesh.obj",
+  "output_mesh": "g0_b5.veg",
+  "output_surface": "g0_b5.veg.obj",
+  "print_stats": true,
+  "tetwild": {
+    "lr": 0.008,
+    "epsr": 0.001
+  },
+  "material": {
+    "density": 1000,
+    "young_modulus": 10000000,
+    "poisson_ratio": 0.45
+  }
+}

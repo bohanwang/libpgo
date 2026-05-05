@@ -1,0 +1,47 @@
+{
+  "bbox": {
+    "max": [
+      1.071318662027256,
+      1.0310857602862569,
+      1.039120892088635
+    ],
+    "min": [
+      -1.0407994101548672,
+      -1.0811064427379067,
+      -1.0729650453793087
+    ]
+  },
+  "boundary_or_exterior_edges": 0,
+  "check_status": {
+    "basic_geometry": "passed",
+    "self_intersection": "passed",
+    "topology": "passed",
+    "winding": "passed"
+  },
+  "component_triangle_counts_by_edge": [
+    60922,
+    40722,
+    33724
+  ],
+  "components_by_edge": 3,
+  "edge_length": {
+    "max": 0.053365412236403516,
+    "mean": 0.0287784389916332,
+    "min": 0.0076779781232586075
+  },
+  "enclosed_volume": 0.6089507219887738,
+  "errors": [],
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008/fbms/g0_b15/g0_b15.veg.obj",
+  "invalid_triangles": 0,
+  "is_manifold": true,
+  "is_winding_consistent": true,
+  "oriented_boundary_or_exterior_edges": 0,
+  "passed": true,
+  "self_intersection_backend": "exact-count",
+  "self_intersections": 0,
+  "self_intersections_exact": true,
+  "triangles": 135368,
+  "type": "surface",
+  "vertices": 67662,
+  "warnings": []
+}

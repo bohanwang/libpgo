@@ -1,697 +1,623 @@
-# FBMS Pipeline
+# FBMS Asset Pipeline
 
-This directory contains the FBMS surface inputs, generated shell assets,
-tetrahedral simulation meshes, simulation case configs, and Alembic
-postprocessing configs.
+This directory contains the JSON-driven FBMS asset pipeline and packaged
+simulation assets. The current production run is:
 
-The main pipeline is:
+- `fbms_r512`: OpenVDB raw extraction at resolution 512, CGAL isotropic remesh,
+  TetWild tetrahedralization, and post-TetWild repaired boundary surfaces when
+  needed.
 
-```text
-raw FBMS OBJ
-  -> bounding sphere OBJ
-  -> thicken raw FBMS + thicken sphere with SDFs
-  -> union the thick shells and dump a raw marching-cubes OBJ
-  -> isotropic remesh the raw union surface
-  -> tetrahedralize the remeshed surface into a .veg simulation mesh
-  -> run IPC simulation cases
-  -> dump surface animation as .abc
-```
+The generated assets are meant to provide one FBMS simulation asset and five
+volume-matched TPMS baseline assets for each `g0_b*` case.
 
-The current production assets live under:
+## Pipeline Overview
+
+The pipeline starts from prepared shell meshes, generates raw union surfaces,
+regularizes those surfaces, tetrahedralizes them, validates the TetWild
+boundary, repairs failed boundary surfaces if needed, and finally packages only
+the simulation-ready `.veg` and final `.veg.obj` files.
 
 ```text
-examples/fbms/generated/r128_default/g0_b3/
-examples/fbms/generated/r128_default/g0_b8/
+Source FBMS OBJ files
+        |
+        v
+Prepare assets
+  - copy FBMS shells
+  - generate/copy bounding spheres
+  - generate/copy TPMS baseline shells
+        |
+        v
++-----------------------------+
+| FBMS branch                 |
+| fixed fbms thickness = 0.02 |
++-----------------------------+
+        |
+        v
+Generate FBMS raw union surfaces
+  generateFBMSUnionSurface openvdb
+        |
+        v
+Raw quality gate
+  - 3 components
+  - invalid triangle check
+  - enclosed_volume recorded
+        |
+        +-------------------------------+
+        |                               |
+        v                               v
+Use enclosed_volume as TPMS budget      CGAL isotropic remesh
+        |                               target edge ~= 0.02
+        v                               |
++-----------------------------+         |
+| TPMS baseline branch        |         |
+| volume matched thickness    |         |
++-----------------------------+         |
+        |                               |
+        v                               |
+Generate TPMS raw union surfaces        |
+  generateFBMSUnionSurface openvdb      |
+  --fbms-thickness = -volume            |
+        |                               |
+        v                               |
+CGAL isotropic remesh                   |
+  target edge ~= 0.02                   |
+        |                               |
+        +---------------+---------------+
+                        |
+                        v
+Remesh quality check
+  - full surface check
+  - self-intersections are warnings
+                        |
+                        v
+TetWild tetrahedralization
+  tetMesher, lr = 0.008, epsr = 0.001
+                        |
+                        v
+Final boundary quality check
+  meshQualityCheck full
+                        |
+          +-------------+-------------+
+          |                           |
+          v                           v
+   boundary passed             boundary failed
+          |                           |
+          v                           v
+Use original .veg.obj          Repair boundary surface
+                               repair_tpms_mesh.py
+                               PyMeshFix per component
+                                      |
+                                      v
+                               Repaired quality check
+                                      |
+                         +------------+------------+
+                         |                         |
+                         v                         v
+                  repaired passed           repaired failed
+                         |                         |
+                         v                         v
+        Use .veg.repaired.obj        Keep asset failed/not packageable
+              as final surface
+                         |
+                         v
+Dump 3 components and write volume info
+                         |
+                         v
+Package simulation assets
+  - .veg from TetWild
+  - final .veg.obj from original or repaired surface
+                         |
+                         v
+simulation_package/<case>/<asset>
 ```
 
-## Build The Tools
+For each `g0_b*`, the FBMS branch uses fixed shell thickness. The TPMS baseline
+branch uses volume matching against that FBMS raw union volume, so every case
+gets one FBMS asset plus five comparable TPMS baseline assets.
 
-From the repo root, build the command-line tools used by the pipeline:
+## Directory Layout
+
+`fbms_r512/asset/`
+
+Prepared source assets used by the pipeline. It contains:
+
+- `asset/fbms/{case}.obj`
+- `asset/fbms/{case}_bounding_sphere.obj`
+- `asset/baseline/{shape}_fbms.obj`
+- `asset/baseline/{shape}_fbms_bounding_sphere.obj`
+
+`fbms_r512/raw_mesh_vdb_r512_t002/`
+
+Raw FBMS union surfaces generated with fixed FBMS shell thickness `0.02`.
+
+`fbms_r512/raw_mesh_vdb_r512_vmatch/`
+
+Raw TPMS baseline union surfaces generated in volume-match mode. For each
+`g0_b*`, the target volume is the corresponding FBMS raw union enclosed volume.
+
+`fbms_r512/remesh_cgal_iso_r512_t002_e002/` and
+`fbms_r512/remesh_cgal_iso_r512_vmatch_e002/`
+
+CGAL isotropic remeshed surfaces. The physical target edge length is `0.02`;
+the script converts that to the relative `remeshSurface cgal_iso --edge-length`
+argument using `0.02 / raw_quality.edge_length.mean`.
+
+`fbms_r512/tetmesh_tetwild_r512_t002_lr0008/` and
+`fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/`
+
+TetWild `.veg` outputs, exported boundary `.veg.obj`, quality JSONs, logs, and
+optional repaired boundary surfaces.
+
+`fbms_r512/simulation_package/`
+
+The final packaged simulation assets. This is the directory to consume from
+simulation code. Each case contains:
+
+```text
+simulation_package/
+  g0_b5/
+    fbms/
+      g0_b5.veg
+      g0_b5.veg.obj
+    baseline/
+      tpms_schwarz_p/
+        tpms_schwarz_p.veg
+        tpms_schwarz_p.veg.obj
+      ...
+  package_manifest.json
+```
+
+If a boundary was repaired, the package still exposes it as `{name}.veg.obj`;
+the manifest records that its source was `{name}.veg.repaired.obj`.
+
+## Pipeline Parameters
+
+The r512 configuration lives in:
 
 ```bash
-cmake --preset base_no_mkl
-cmake --build --preset base_no_mkl_release \
-  --target generateFBMSUnionSurface remeshSurface tetMesher runIPCSim convertAnimation \
-  -j 4
+examples/fbms/fbms_r512/pipeline_r512.json
 ```
 
-The commands below assume the tools are available in `build/base_no_mkl/bin/`.
+Current locked parameters:
 
-## 1. Raw Mesh Inputs
+- Raw extraction: `generateFBMSUnionSurface openvdb`
+- Raw resolution: `512`
+- FBMS thickness: `0.02`
+- Sphere thickness: `0.03`
+- Padding ratio: `0.08`
+- Truncation, sphere-boundary projection, and small-component filtering enabled
+- Remesh: `remeshSurface cgal_iso`
+- Remesh physical target edge length: `0.02`
+- Remesh sharp edge angle: `180`
+- Remesh iterations: `10`
+- TetWild: `lr=0.008`, `epsr=0.001`
+- Material: density `1000`, Young's modulus `10000000`, Poisson ratio `0.45`
 
-The tracked raw surface inputs are:
+The configured TPMS baselines are:
 
-```text
-examples/fbms/g0_b3/g0_b3_fbms.obj
-examples/fbms/g0_b8/g0_b8_fbms.obj
-```
+- `tpms_schwarz_p`
+- `tpms_schwarz_d`
+- `tpms_gyroid`
+- `tpms_iwp`
+- `tpms_neovius`
 
-Each raw FBMS mesh is paired with an enclosing sphere:
+## Tool Overview
 
-```text
-examples/fbms/g0_b3/g0_b3_fbms_bounding_sphere.obj
-examples/fbms/g0_b8/g0_b8_fbms_bounding_sphere.obj
-```
+The pipeline is a thin orchestration layer around several local tools.
 
-If the raw mesh changes, regenerate its sphere first. The default sphere generator
-uses an AABB-center sphere with tiny relative padding, matching the current assets.
+`generate_bounding_sphere.py`
+
+Creates a bounding sphere OBJ for an input shell mesh. The FBMS pipeline uses it
+when a `{case}_bounding_sphere.obj` is not already present. The current config
+uses an AABB-based sphere and an icosphere mesh.
+
+`generate_tpms_unit_ball.py`
+
+Generates the five TPMS baseline shell meshes and their bounding spheres. With
+`--flat-output`, it writes files directly as
+`{shape}_fbms.obj` and `{shape}_fbms_bounding_sphere.obj`.
+
+`generateFBMSUnionSurface openvdb`
+
+Builds a surface union between a shell mesh and its bounding sphere shell using
+OpenVDB. Positive `--fbms-thickness` means fixed shell thickness. Negative
+`--fbms-thickness -V` means volume-budget mode: the tool searches for a shell
+thickness whose raw union volume is close to `V`.
+
+`meshQualityCheck surface`
+
+Checks triangle surface quality and writes a JSON report. Raw checks are used
+as hard gates for generated raw union meshes. Full checks are used for remesh
+and final TetWild boundary surfaces. The JSON records component count,
+invalid triangles, manifold/closed/winding status, self-intersections, edge
+length statistics, and enclosed volume when meaningful.
+
+`remeshSurface cgal_iso`
+
+Runs CGAL isotropic surface remeshing. In this pipeline, it regularizes raw
+OpenVDB triangle meshes before TetWild. The tool's `--edge-length` argument is
+relative to the raw mesh mean edge length, so the runner computes a scale from
+the desired physical target edge length.
+
+`tetMesher`
+
+Reads a `tetmesher.json` config, runs the TetWild backend, writes a `.veg`
+volume mesh, and exports a `.veg.obj` boundary surface. The `.veg` is the
+simulation mesh; the `.veg.obj` is the surface used for final quality checks
+and packaging.
+
+`volumetricMeshInfo`
+
+Reads a `.veg` mesh and prints vertex count, element count, and total volume.
+The runner saves this as `{name}.veg.info.txt` and uses it in the summary.
+
+`repair_tpms_mesh.py`
+
+Repairs a failed TetWild boundary OBJ after TetWild has completed. It uses
+PyMeshFix per connected component, preserving components as much as possible.
+It never overwrites the original `.veg` or `.veg.obj`; repaired surfaces are
+written as `{name}.veg.repaired.obj`.
+
+`dump_obj_components.py`
+
+Splits the final boundary surface into connected components and writes a
+`components.json` manifest plus per-component OBJ files. The pipeline requires
+three final components.
+
+`package_fbms_sim_assets.py`
+
+Copies the final simulation assets into `simulation_package`. It chooses the
+original `.veg.obj` when it passed final quality, or `.veg.repaired.obj` when
+repair was needed, and records the source in `package_manifest.json`.
+
+## How The Pipeline Works
+
+### 1. Prepare Assets
+
+The runner discovers all `g0_b*` or `g0b*` OBJ files under
+`source_asset_directory`, copies them into `working_directory/asset/fbms`, and
+ensures each has a bounding sphere.
+
+If TPMS baseline shell/sphere files are missing, the runner can generate them
+with:
+
+- `scripts/generate_bounding_sphere.py`
+- `scripts/generate_tpms_unit_ball.py --flat-output`
+
+The commands generated by the runner look like:
 
 ```bash
-python3 scripts/generate_bounding_sphere.py \
-  --input examples/fbms/g0_b8/g0_b8_fbms.obj \
-  --output examples/fbms/g0_b8/g0_b8_fbms_bounding_sphere.obj \
+uv run python scripts/generate_bounding_sphere.py \
+  --input examples/fbms/fbms_r512/asset/fbms/{case}.obj \
+  --output examples/fbms/fbms_r512/asset/fbms/{case}_bounding_sphere.obj \
   --bounds-method aabb \
   --method icosphere \
-  --subdivisions 5 \
-  --padding 1e-9
+  --subdivisions 8 \
+  --padding 1e-09
 ```
-
-Use `--bounds-method minimal` if you want a smaller enclosing sphere, but keep the
-existing method when reproducing the checked-in FBMS assets.
-
-## 2. Thicken And Union The Surfaces
-
-`generateFBMSUnionSurface` is the raw shell generation tool. It samples the raw
-FBMS surface and the bounding sphere on a uniform SDF grid, turns each into a
-thick shell, unions the two shell fields, and dumps the zero level set as a raw
-marching-cubes OBJ.
-
-For the current `r128_default` g0_b8 asset:
 
 ```bash
-build/base_no_mkl/bin/generateFBMSUnionSurface \
-  --fbms examples/fbms/g0_b8/g0_b8_fbms.obj \
-  --sphere examples/fbms/g0_b8/g0_b8_fbms_bounding_sphere.obj \
-  --fbms-thickness 0.025 \
-  --sphere-thickness 0.025 \
-  --resolution 128 \
-  --padding-ratio 0.08 \
-  --output-surface examples/fbms/generated/r128_default/g0_b8/union_shell_raw.obj
+uv run python scripts/generate_tpms_unit_ball.py \
+  --cells 1.0 \
+  --resolution 512 \
+  --sphere-subdivisions 8 \
+  --out examples/fbms/fbms_r512/asset/baseline \
+  --flat-output
 ```
 
-Important knobs:
+For the current checked-in r512 run, the prepared assets already live under
+`examples/fbms/fbms_r512/asset`.
 
-- `--fbms-thickness`: shell half-width around the raw FBMS surface.
-- `--sphere-thickness`: shell half-width around the enclosing sphere.
-- `--resolution`: uniform SDF grid resolution per axis.
-- `--padding-ratio`: extra grid domain padding after thickness expansion.
-- `--output-surface`: raw union OBJ dumped from marching cubes.
+### 2. Generate FBMS Raw Union Surfaces
 
-## 3. Remesh The Union Surface
+For each `g0_b*`, the runner creates a raw union surface using fixed thickness:
 
-The raw marching-cubes OBJ is usually too grid-like for tetrahedralization. Run
-CGAL isotropic remeshing before generating the simulation mesh:
+```bash
+build/base_no_mkl/bin/generateFBMSUnionSurface openvdb \
+  --fbms examples/fbms/fbms_r512/asset/fbms/{case}.obj \
+  --sphere examples/fbms/fbms_r512/asset/fbms/{case}_bounding_sphere.obj \
+  --fbms-thickness 0.02 \
+  --sphere-thickness 0.03 \
+  --resolution 512 \
+  --padding-ratio 0.08 \
+  --output-surface examples/fbms/fbms_r512/raw_mesh_vdb_r512_t002/fbms/{case}_union.obj \
+  --enable-truncating \
+  --project-fbms-boundary-to-sphere \
+  --filter-small-components \
+  --min-component-triangles 100
+```
+
+Immediately after raw generation, the runner checks quality:
+
+```bash
+build/base_no_mkl/bin/meshQualityCheck surface \
+  --check-level raw \
+  --expected-components 3 \
+  --invalid-triangles-policy warn \
+  --input examples/fbms/fbms_r512/raw_mesh_vdb_r512_t002/fbms/{case}_union.obj \
+  --json examples/fbms/fbms_r512/raw_mesh_vdb_r512_t002/fbms/quality/{case}_union.quality.json
+```
+
+Raw quality is a hard gate. The raw quality JSON also records
+`enclosed_volume`, which becomes the volume budget for that case's TPMS
+baselines.
+
+### 3. Generate Volume-Matched TPMS Baselines
+
+For each `g0_b*` and each TPMS shape, the runner generates a baseline raw union
+surface with negative `--fbms-thickness`:
+
+```bash
+build/base_no_mkl/bin/generateFBMSUnionSurface openvdb \
+  --fbms examples/fbms/fbms_r512/asset/baseline/{shape}_fbms.obj \
+  --sphere examples/fbms/fbms_r512/asset/baseline/{shape}_fbms_bounding_sphere.obj \
+  --fbms-thickness -{fbms_raw_enclosed_volume} \
+  --sphere-thickness 0.03 \
+  --resolution 512 \
+  --padding-ratio 0.08 \
+  --output-surface examples/fbms/fbms_r512/raw_mesh_vdb_r512_vmatch/baseline/{case}/{shape}_union.obj \
+  --enable-truncating \
+  --project-fbms-boundary-to-sphere \
+  --filter-small-components \
+  --min-component-triangles 100
+```
+
+This tells `generateFBMSUnionSurface openvdb` to search for a shell thickness
+that matches the target raw union volume.
+
+### 4. Remesh Surfaces
+
+Each raw union surface is remeshed with CGAL isotropic remeshing. The configured
+physical target edge length is `0.02`, but `remeshSurface cgal_iso` takes a
+relative edge-length scale, so the runner computes:
+
+```text
+edge_length_argument = 0.02 / raw_quality.edge_length.mean
+```
+
+The remesh command template is:
 
 ```bash
 build/base_no_mkl/bin/remeshSurface cgal_iso \
-  --input-mesh examples/fbms/generated/r128_default/g0_b8/union_shell_raw.obj \
-  --output-mesh examples/fbms/generated/r128_default/g0_b8/union_shell_remesh.obj \
-  --edge-length 0.75 \
-  --sharp-edge-angle 180
+  --input-mesh {raw_union_obj} \
+  --output-mesh {remesh_obj} \
+  --edge-length {edge_length_argument} \
+  --sharp-edge-angle 180 \
+  --iterations 10
 ```
 
-`--edge-length` is relative to the input average edge length. The current value
-slightly regularizes/refines the marching-cubes surface without changing the
-overall shell shape.
-
-## 4. Generate Shell Assets With The Batch Script
-
-For normal use, do not run the two raw/remesh commands by hand. Use
-`examples/fbms/generate_shell_assets.py`, which reads `shell_assets.json` and
-runs `generateFBMSUnionSurface` followed by `remeshSurface`.
-
-Preview the current `r128_default` commands:
+The remesh quality command is:
 
 ```bash
-examples/fbms/generate_shell_assets.py \
-  --job r128_default \
-  --overwrite \
-  --dry-run
+build/base_no_mkl/bin/meshQualityCheck surface \
+  --check-level full \
+  --expected-components 3 \
+  --invalid-triangles-policy warn \
+  --input {remesh_obj} \
+  --json {remesh_quality_json} \
+  --self-intersection-backend exact-count \
+  --self-intersection-triangle-limit 900000
 ```
 
-Generate the assets, leaving existing outputs untouched:
+Remesh quality is recorded, but self-intersections at this stage are treated as
+warnings so that TetWild can still attempt recovery.
+
+### 5. Generate Tet Meshes
+
+The runner writes one `tetmesher.json` per asset and invokes:
 
 ```bash
-examples/fbms/generate_shell_assets.py \
-  --job r128_default \
-  --skip-existing
+build/base_no_mkl/bin/tetMesher --config {tet_output_dir}/tetmesher.json
 ```
 
-Regenerate them from scratch:
-
-```bash
-examples/fbms/generate_shell_assets.py \
-  --job r128_default \
-  --overwrite
-```
-
-For each selected case, the asset script writes:
-
-```text
-generated/r128_default/g0_b8/union_shell_raw.obj
-generated/r128_default/g0_b8/union_shell_remesh.obj
-generated/r128_default/g0_b8/stats.json
-```
-
-`shell_assets.json` is split into shared defaults and per-job overrides. The
-defaults define which cases to run, where generated files go, the output
-filenames, and the raw/remesh parameters shared by all jobs:
-
-```json
-{
-  "build_dir": "build/base_no_mkl",
-  "defaults": {
-    "cases": "all",
-    "output_dir": "generated/{job}/{case}",
-    "raw_filename": "union_shell_raw.obj",
-    "remesh_filename": "union_shell_remesh.obj",
-    "stats_filename": "stats.json",
-    "raw": {
-      "padding_ratio": 0.08,
-      "enable_truncating": false
-    },
-    "remesh": {
-      "edge_length": 0.75,
-      "sharp_edge_angle": 180.0
-    }
-  }
-}
-```
-
-The raw parameters map directly to `generateFBMSUnionSurface`:
-
-- `resolution`: uniform SDF grid resolution per axis.
-- `fbms_thickness`: unsigned-distance shell width for the raw FBMS surface. A
-  negative value is treated as a target volume budget passed through to
-  `generateFBMSUnionSurface`.
-- `sphere_thickness`: unsigned-distance shell width for the bounding sphere.
-- `padding_ratio`: extra SDF grid domain padding after thickness expansion.
-- `enable_truncating`: when true, pass `--enable-truncating` so the FBMS shell is
-  clipped to the outer surface of the thickened bounding sphere.
-
-The remesh parameters map directly to `remeshSurface cgal_iso`:
-
-- `edge_length`: target edge length relative to the input average edge length.
-- `sharp_edge_angle`: feature angle passed to the remesher; `180.0` effectively
-  avoids preserving extra sharp features for these smooth shell assets.
-
-Each job supplies the raw parameters that are different for that asset set and
-can optionally override remesh parameters. The current jobs are:
-
-```json
-[
-  {
-    "name": "r64_thick",
-    "raw": {
-      "resolution": 64,
-      "fbms_thickness": 0.05,
-      "sphere_thickness": 0.05
-    },
-    "remesh": {
-      "edge_length": 1.0
-    }
-  },
-  {
-    "name": "r64_default",
-    "raw": {
-      "resolution": 64,
-      "fbms_thickness": 0.02,
-      "sphere_thickness": 0.02
-    }
-  },
-  {
-    "name": "r128_default",
-    "raw": {
-      "resolution": 128,
-      "fbms_thickness": 0.025,
-      "sphere_thickness": 0.025
-    }
-  },
-  {
-    "name": "r256_default",
-    "raw": {
-      "resolution": 256,
-      "fbms_thickness": 0.02,
-      "sphere_thickness": 0.02
-    }
-  }
-]
-```
-
-So the effective `r128_default` parameters are:
-
-```json
-{
-  "raw": {
-    "resolution": 128,
-    "fbms_thickness": 0.025,
-    "sphere_thickness": 0.025,
-    "padding_ratio": 0.08
-  },
-  "remesh": {
-    "edge_length": 0.75,
-    "sharp_edge_angle": 180.0
-  }
-}
-```
-
-## 5. Tetrahedralize The Remeshed Surface
-
-The IPC simulator uses a tetrahedral `.veg` mesh. Tetrahedralization is driven by
-a JSON config stored next to the generated shell assets:
-
-```text
-examples/fbms/generated/r128_default/g0_b8/tetmesh.json
-```
-
-Run:
-
-```bash
-build/base_no_mkl/bin/tetMesher \
-  --config examples/fbms/generated/r128_default/g0_b8/tetmesh.json
-```
-
-The current fTetWild config has this shape:
+The generated `tetmesher.json` has this shape:
 
 ```json
 {
   "version": 1,
   "backend": "tetwild",
-  "input_mesh": "union_shell_remesh.obj",
-  "output_mesh": "union_shell.veg",
-  "output_surface": "union_shell_tet_surface.obj",
+  "input_mesh": "../../../remesh_cgal_iso_r512_vmatch_e002/baseline/g0_b5/tpms_schwarz_p_remesh.obj",
+  "output_mesh": "tpms_schwarz_p.veg",
+  "output_surface": "tpms_schwarz_p.veg.obj",
   "print_stats": true,
-  "quiet": true,
   "tetwild": {
-    "lr": 0.05,
-    "epsr": 0.001,
-    "stop_energy": 10,
-    "max_threads": 8
+    "lr": 0.008,
+    "epsr": 0.001
+  },
+  "material": {
+    "density": 1000,
+    "young_modulus": 10000000,
+    "poisson_ratio": 0.45
   }
 }
 ```
 
-`tetMesher` can also use the TetGen backend. That is useful as a comparison path
-or when you want TetGen's `command` string control over quality/volume flags:
+Each TetWild output directory contains:
 
-```json
-{
-  "version": 1,
-  "backend": "tetgen",
-  "input_mesh": "union_shell_remesh.obj",
-  "output_mesh": "union_shell_tetgen.veg",
-  "output_surface": "union_shell_tetgen_surface.obj",
-  "print_stats": true,
-  "tetgen": {
-    "command": "pq1.414a0.01"
-  }
-}
-```
+- `{name}.veg`
+- `{name}.veg.obj`
+- `{name}.veg.info.txt`
+- `{name}.veg.quality.json`
+- `{name}_tetwild.log`
+- `tetmesher.json`
 
-Run the TetGen config the same way:
+The `.veg` file is the simulation volume mesh. The `.veg.obj` file is the
+surface exported from the TetWild output.
 
-```bash
-build/base_no_mkl/bin/tetMesher \
-  --config examples/fbms/generated/r128_default/g0_b3/tetmesh_tetgen.json
-```
+### 6. Validate And Repair Boundary Surfaces
 
-Relative paths resolve from the config directory. The important outputs are:
+Final boundary quality is checked with `meshQualityCheck surface --check-level
+full`. The final packaged surface must have:
 
-```text
-union_shell.veg
-union_shell_tet_surface.obj
-```
+- 3 edge-connected components
+- no invalid triangles
+- no self-intersections
+- closed/manifold topology
+- consistent winding
 
-`union_shell.veg` is the simulation mesh. `union_shell_tet_surface.obj` is the
-boundary extracted from the tetrahedral mesh and is useful for inspection.
-
-## 6. Run Simulation Cases
-
-Each simulation case is a `runIPCSim` JSON config next to the generated meshes.
-The config refers to:
-
-- `tet-mesh`: the tetrahedral simulation mesh, usually `union_shell.veg`.
-- `surface-mesh`: the embedded/output surface, usually `union_shell_remesh.obj`.
-- `output`: the case output folder.
-- `output-von-mises`: enables per-tet stress JSON output.
-
-Manual run example:
+The final boundary check is:
 
 ```bash
-build/base_no_mkl/bin/runIPCSim \
-  examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-ipc.json \
-  --log
+build/base_no_mkl/bin/meshQualityCheck surface \
+  --check-level full \
+  --expected-components 3 \
+  --invalid-triangles-policy warn \
+  --input {tet_output_dir}/{name}.veg.obj \
+  --json {tet_output_dir}/{name}.veg.quality.json \
+  --self-intersection-backend exact-count \
+  --self-intersection-triangle-limit 900000
 ```
 
-Every current FBMS case runs for 300 frames and writes outputs beside the case
-config:
-
-```text
-case1_pressure_output/
-case2_squash_floor_prototype_output/
-case3_wall_impact_floor_prototype_output/
-```
-
-Inside each output folder:
-
-```text
-states/deformXXXX.u          displacement/state sequence
-surface/retXXXX.obj          deformed surface OBJ sequence
-stress/von_misesXXXX.json    per-tet von Mises stress
-runIPCSim.log                simulator log when --log is used
-```
-
-The three current cases are:
-
-| Case | Config | What It Does |
-| --- | --- | --- |
-| `case1_pressure` | `g0_b*_case1_pressure-ipc.json` | Dynamic stable-Neo simulation with no gravity. A surface pressure force pushes inward toward `center: "auto"`, where the center is computed from the scaled surface mesh bounding box. The current configs omit `ramp-steps`, so the default is `1` and the pressure-derived external force is full strength from the first frame. |
-| `case2_squash_floor_prototype` | `g0_b*_case2_squash_floor-prototype-ipc.json` | Dynamic stable-Neo prototype squeezed between two moving debug floor energies along the x axis. The lower floor moves from `x=-1.05` to `x=-0.75`, and the upper floor moves from `x=1.05` to `x=0.75` over frames `[0, 100]`. |
-| `case3_wall_impact_floor_prototype` | `g0_b*_case3_wall_impact_floor-prototype-ipc.json` | Dynamic stable-Neo impact prototype. The shell starts with velocity `[50, 0, 0]` and hits an upper x-axis debug floor energy at `x=1.2`. |
-
-Important contact limitation:
-
-> The `floors` entries below do not use external IPC contact yet. External IPC
-> contact is not implemented in this runner path. The current floors are a
-> simple debug-only quadratic floor energy on embedded surface vertices,
-> implemented by `EmbeddedSurfaceFloorPotentialEnergy`. This is useful for
-> prototype squeezing/impact tests, but it is not the final external-contact
-> model. Future work should replace these debug floors with real external IPC
-> contact.
-
-`surface-pressure-force` is used by case 1:
-
-```json
-{
-  "surface-pressure-force": {
-    "enabled": true,
-    "center": "auto",
-    "pressure": 1000000.0
-  }
-}
-```
-
-When enabled, this computes a per-surface-vertex force pointing from each rest
-surface vertex toward `center`, weighted by vertex surface area, then projects it
-to simulation DOFs. `center` can be a numeric `[x, y, z]` vector or `"auto"`.
-`"auto"` uses the scaled surface rest-position bounding-box center. `pressure`
-sets the force magnitude scale. `ramp-steps` is optional and defaults to `1`.
-When present, it must be positive and linearly ramps the force from zero to full
-strength over the first frames. `ramp-steps: 1` means full strength on frame 0.
-
-`floors` is used by cases 2 and 3:
-
-```json
-{
-  "floors": [
-    {
-      "axis": "x",
-      "side": "lower",
-      "kappa": 1000000.0,
-      "motion": {
-        "height-start": -1.05,
-        "height-end": -0.75,
-        "frame-start": 0,
-        "frame-end": 100
-      }
-    },
-    {
-      "axis": "x",
-      "side": "upper",
-      "kappa": 1000000.0,
-      "height": 1.2
-    }
-  ]
-}
-```
-
-Each floor entry requires `axis` and `kappa`, plus exactly one of `height` or
-`motion`. `axis` selects `x`, `y`, or `z`. `side: "lower"` penalizes vertices
-below `height` along that axis; `side: "upper"` penalizes vertices above
-`height`. `kappa` is the quadratic penalty stiffness. `height` creates a static
-floor. `motion` linearly interpolates the floor height from `height-start` to
-`height-end` over `[frame-start, frame-end]`, then keeps the endpoint value.
-
-## 7. Dump Alembic Animation
-
-`convertAnimation` turns the simulated surface OBJ sequence into Alembic. The
-FBMS animation configs are named `*-anim.json`.
-
-Example:
+If the original `.veg.obj` fails, the runner uses:
 
 ```bash
-build/base_no_mkl/bin/convertAnimation \
-  examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-anim.json
+uv run python scripts/repair_tpms_mesh.py \
+  {tet_output_dir}/{name}.veg.obj \
+  --out {tet_output_dir}/{name}.veg.repaired.obj \
+  --report {tet_output_dir}/{name}.veg.repair_report.json \
+  --orient-positive
 ```
 
-The config uses `union_shell_remesh.obj` as the driving mesh and reads the
-simulated surface sequence:
-
-```json
-{
-  "output-folder": "case1_pressure_output/abc",
-  "meshes": [
-    {
-      "name": "g0_b8_case1_pressure",
-      "driving-mesh": "union_shell_remesh.obj",
-      "sequence": "case1_pressure_output/surface/ret{:04d}.obj",
-      "sequence-type": "objmesh",
-      "sequence-range": [0, 300]
-    }
-  ]
-}
-```
-
-`output-folder` is resolved relative to the `anim.json` directory. The `.abc`
-files therefore land inside the simulation output folder:
-
-```text
-case1_pressure_output/abc/g0_b8_case1_pressure.abc
-case2_squash_floor_prototype_output/abc/g0_b8_case2_squash_floor_prototype.abc
-case3_wall_impact_floor_prototype_output/abc/g0_b8_case3_wall_impact_floor_prototype.abc
-```
-
-You can still pass a second CLI argument to override the JSON output folder for
-one-off exports:
+Then it checks the repaired surface with the same full quality gate:
 
 ```bash
-build/base_no_mkl/bin/convertAnimation \
-  examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-anim.json \
-  /tmp/fbms_abc_preview
+build/base_no_mkl/bin/meshQualityCheck surface \
+  --check-level full \
+  --expected-components 3 \
+  --invalid-triangles-policy warn \
+  --input {tet_output_dir}/{name}.veg.repaired.obj \
+  --json {tet_output_dir}/{name}.veg.repaired.quality.json \
+  --self-intersection-backend exact-count \
+  --self-intersection-triangle-limit 900000
 ```
 
-## 8. Run Simulation And Postprocessing With The Batch Runner
+This writes:
 
-`scripts/run_sim_batch.py` is the pipeline runner. It reads
-`examples/fbms/fbms_batch.json`, selects a job, then runs that job's stages in
-normalized order:
+- `{name}.veg.repaired.obj`
+- `{name}.veg.repaired.quality.json`
+- `{name}.veg.repair_report.json`
+- `{name}.veg.repaired.bad_edges.csv`
 
-```text
-sim -> abc -> render
-```
+The original `.veg` and `.veg.obj` are never overwritten. If the repaired
+surface passes final quality, it becomes the final surface for packaging. This
+is why the r512 result table may show `pass(repaired)`.
 
-The job declares its stages in JSON:
-
-```json
-{
-  "name": "g0_b8",
-  "stages": ["sim", "abc", "render"],
-  "cases": [
-    "g0_b8_case1_pressure",
-    "g0_b8_case2_squash_floor_prototype",
-    "g0_b8_case3_wall_impact_floor_prototype"
-  ]
-}
-```
-
-Each case maps to the three config files used by the stages:
-
-```json
-{
-  "sim_config": "examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-ipc.json",
-  "anim_config": "g0_b8_case1_pressure-anim.json",
-  "render_config": "g0_b8_case1_pressure-render.json"
-}
-```
-
-Relative `anim_config` and `render_config` paths resolve from the simulation
-config directory. If a job includes `render`, every selected case must provide
-the matching config path.
-
-Preview the full g0_b8 pipeline:
+The runner also captures volume mesh info and dumps final components:
 
 ```bash
-scripts/run_sim_batch.py \
-  --config examples/fbms/fbms_batch.json \
-  --job g0_b8 \
+build/base_no_mkl/bin/volumetricMeshInfo \
+  {tet_output_dir}/{name}.veg \
+  > {tet_output_dir}/{name}.veg.info.txt
+```
+
+```bash
+uv run python scripts/dump_obj_components.py \
+  --input {final_boundary_obj} \
+  --output-dir {component_output_dir} \
+  --overwrite
+```
+
+### 7. Package Simulation Assets
+
+After validation, package the final simulation assets with:
+
+```bash
+uv run python scripts/package_fbms_sim_assets.py \
+  --config examples/fbms/fbms_r512/pipeline_r512.json \
+  --overwrite
+```
+
+The package script copies only the final simulation files:
+
+- `.veg`: always from TetWild
+- `.veg.obj`: original boundary surface if it passed, repaired boundary surface
+  if repair was needed
+
+It writes a `package_manifest.json` with source paths, package paths, repair
+status, and repair volume drift.
+
+## Common Commands
+
+Dry-run the full pipeline:
+
+```bash
+uv run python scripts/run_fbms_all_asset_pipeline.py \
+  --config examples/fbms/fbms_r512/pipeline_r512.json \
   --dry-run
 ```
 
-Run the full g0_b8 pipeline:
+Run or rerun the full pipeline:
 
 ```bash
-scripts/run_sim_batch.py \
-  --config examples/fbms/fbms_batch.json \
-  --job g0_b8 \
+uv run python scripts/run_fbms_all_asset_pipeline.py \
+  --config examples/fbms/fbms_r512/pipeline_r512.json \
+  --overwrite \
+  --update-readme
+```
+
+Rerun only validation and README/summary refresh:
+
+```bash
+uv run python scripts/run_fbms_all_asset_pipeline.py \
+  --config examples/fbms/fbms_r512/pipeline_r512.json \
+  --from-stage validate \
+  --overwrite \
+  --update-readme
+```
+
+Rerun a single case and shape:
+
+```bash
+uv run python scripts/run_fbms_all_asset_pipeline.py \
+  --config examples/fbms/fbms_r512/pipeline_r512.json \
+  --case g0_b15 \
+  --shape tpms_schwarz_p \
+  --from-stage validate \
+  --overwrite \
+  --update-readme
+```
+
+Refresh summary only:
+
+```bash
+uv run python scripts/run_fbms_all_asset_pipeline.py \
+  --config examples/fbms/fbms_r512/pipeline_r512.json \
+  --from-stage summary \
+  --update-readme
+```
+
+Package final simulation assets:
+
+```bash
+uv run python scripts/package_fbms_sim_assets.py \
+  --config examples/fbms/fbms_r512/pipeline_r512.json \
   --overwrite
 ```
 
-Run only postprocessing from existing simulation output:
+Package only one case:
 
 ```bash
-scripts/run_sim_batch.py \
-  --config examples/fbms/fbms_batch.json \
-  --job g0_b8_post
-```
-
-Regenerate only Alembic-rendered GIF previews from existing `.abc` files:
-
-```bash
-scripts/run_sim_batch.py \
-  --config examples/fbms/fbms_batch.json \
-  --job g0_b8_render \
+uv run python scripts/package_fbms_sim_assets.py \
+  --config examples/fbms/fbms_r512/pipeline_r512.json \
+  --case g0_b10 \
   --overwrite
 ```
 
-Useful runner flags:
+## Current r512 Results
 
-- `--dry-run`: print commands without running them.
-- `--overwrite`: allow `runIPCSim` to replace existing output folders and pass
-  `--overwrite` to render postprocessing.
-- `--skip-existing`: skip simulation cases whose output folder already exists.
-- `--all-jobs`: run every job in the batch config.
-
-The batch config currently provides:
-
-```text
-case1_pressure
-case2_squash_floor_prototype
-case3_wall_impact_floor_prototype
-g0_b8
-g0_b3
-all_fbms
-g0_b8_post
-g0_b3_post
-all_fbms_post
-g0_b8_render
-g0_b3_render
-all_fbms_render
-```
-
-## 9. Render Alembic Previews With Blender
-
-`scripts/render_abc_preview.py` is a generic wrapper for rendering an Alembic
-`.abc` animation to PNG frames with Blender, then encoding those frames to a GIF
-with ffmpeg. It is useful for lightweight README previews and can be run directly
-or through the batch runner's `render` stage.
-
-The script expects Blender and ffmpeg to be available. On macOS it automatically
-tries `/Applications/Blender.app/Contents/MacOS/Blender`; otherwise pass
-`--blender` or set `BLENDER`. Pass `--ffmpeg` or set `FFMPEG` if ffmpeg is not
-on `PATH`.
-
-Example:
+The detailed result table is in:
 
 ```bash
-scripts/render_abc_preview.py \
-  --config examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-render.json \
-  --overwrite
+examples/fbms/fbms_r512/README.md
 ```
 
-The render config is resolved relative to the config file:
+Current summary:
 
-```json
-{
-  "abc": "case1_pressure_output/abc/g0_b8_case1_pressure.abc",
-  "frames_dir": "case1_pressure_output/render_frames",
-  "output_gif": "../../../fbms_video/g0b8_case1.gif",
-  "frame_start": 0,
-  "frame_end": 299,
-  "frame_step": 3,
-  "fps": 30,
-  "gif_fps": 10,
-  "width": 960,
-  "height": 540,
-  "samples": 64,
-  "camera": {
-    "mode": "auto",
-    "view": [0.0, -1.0, 0.35],
-    "ortho_scale_multiplier": 2.4
-  }
-}
-```
+- 18 final simulation assets are packaged.
+- Each `g0_b*` has 1 FBMS asset and 5 volume-matched TPMS baseline assets.
+- `g0_b5/tpms_schwarz_p` and `g0_b15/tpms_schwarz_p` use repaired final
+  boundary surfaces.
+- The packaged assets live in `examples/fbms/fbms_r512/simulation_package`.
 
-`frame_step: 3` samples every third Alembic frame from the 300-frame simulation
-and `gif_fps: 10` keeps the preview duration close to the original 10-second
-animation. The intermediate `render_frames` folder is under the case output
-directory and is treated as generated output.
-
-## End-To-End Example
-
-This is the usual g0_b8 workflow from regenerated shell assets through
-postprocessed outputs:
-
-```bash
-# 1. Generate raw union + remeshed shell assets.
-examples/fbms/generate_shell_assets.py \
-  --job r128_default \
-  --skip-existing
-
-# 2. Build the tetrahedral simulation mesh.
-build/base_no_mkl/bin/tetMesher \
-  --config examples/fbms/generated/r128_default/g0_b8/tetmesh.json
-
-# 3. Run all g0_b8 simulations, then dump .abc and GIF outputs.
-scripts/run_sim_batch.py \
-  --config examples/fbms/fbms_batch.json \
-  --job g0_b8 \
-  --overwrite
-```
-
-After that run, inspect:
-
-```text
-examples/fbms/generated/r128_default/g0_b8/case1_pressure_output/
-examples/fbms/generated/r128_default/g0_b8/case2_squash_floor_prototype_output/
-examples/fbms/generated/r128_default/g0_b8/case3_wall_impact_floor_prototype_output/
-```
-
-For DCC animation, use each `abc/*.abc` file. For quick previews, use the GIFs
-under `examples/fbms/fbms_video/`. For volumetric stress visualization, use the
-OpenVDB exporter pipeline.
-
-## Result Previews
-
-The GIFs below are lightweight previews rendered from each case's Alembic `.abc`
-file with `scripts/render_abc_preview.py`. They show the two current FBMS shell
-assets under the three simulation jobs described above. Use the corresponding
-output folders for the full `.abc` animation exports.
-
-### Case 1: Surface Pressure
-
-The pressure case applies an inward surface force with no gravity.
-
-| Asset | Simulation Run Time | Preview Render Time | Preview |
-| --- | --- | --- | --- |
-| `g0_b3` | `29160.31s` (8h 6m 0.31s) | `82.56s` | ![g0_b3 case1 pressure](fbms_video/g0b3_case1.gif) |
-| `g0_b8` | `53875.06s` (14h 57m 55.06s) | `89.59s` | ![g0_b8 case1 pressure](fbms_video/g0b8_case1.gif) |
-
-### Case 2: Squash Between Moving Floors
-
-The squash prototype compresses the shell between two x-axis debug floor
-energies.
-
-| Asset | Simulation Run Time | Preview Render Time | Preview |
-| --- | --- | --- | --- |
-| `g0_b3` | `22916.38s` (6h 21m 56.38s) | `69.87s` | ![g0_b3 case2 squash](fbms_video/g0b3_case2.gif) |
-| `g0_b8` | `42624.27s` (11h 50m 24.27s) | `86.39s` | ![g0_b8 case2 squash](fbms_video/g0b8_case2.gif) |
-
-### Case 3: Wall Impact
-
-The impact prototype gives the shell an initial x velocity and lets it collide
-with an upper x-axis debug floor energy.
-
-| Asset | Simulation Run Time | Preview Render Time | Preview |
-| --- | --- | --- | --- |
-| `g0_b3` | `12786.22s` (3h 33m 6.22s) | `69.12s` | ![g0_b3 case3 wall impact](fbms_video/g0b3_case3.gif) |
-| `g0_b8` | `11847.24s` (3h 17m 27.24s) | `88.56s` | ![g0_b8 case3 wall impact](fbms_video/g0b8_case3.gif) |
+Use `simulation_package/package_manifest.json` when you need exact provenance
+for any packaged `.veg` or `.veg.obj`.

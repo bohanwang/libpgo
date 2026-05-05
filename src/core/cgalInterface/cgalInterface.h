@@ -25,7 +25,6 @@ Mesh::TriMeshGeo simplifyMeshGH(const Mesh::TriMeshGeo &meshIn, const std::strin
 Mesh::TriMeshGeo refineMesh(const Mesh::TriMeshGeo &mesh, double density);
 Mesh::TriMeshGeo refineSharpRegionOnMesh(const Mesh::TriMeshGeo &mesh, double density, double angle);
 Mesh::TriMeshGeo subdivideMesh(const Mesh::TriMeshGeo &meshIn, int nIter, double smallSize = -1);
-
 bool corefineAndComputeUnion(const Mesh::TriMeshGeo &mesh1, const Mesh::TriMeshGeo &mesh2, Mesh::TriMeshGeo &unionMesh);
 bool corefineAndComputeIntersection(const Mesh::TriMeshGeo &mesh1, const Mesh::TriMeshGeo &mesh2, Mesh::TriMeshGeo &intersectionMesh);
 void corefineOnly(Mesh::TriMeshGeo &mesh1, Mesh::TriMeshGeo &mesh2, bool noModify1 = false, bool noModify2 = false, double edgeLengthThreshold = 1e-5);
@@ -42,6 +41,7 @@ void segmentMesh(const Mesh::TriMeshGeo &meshIn, int nClusters, std::vector<int>
 void convexHullMesh(const std::vector<Mesh::TriMeshGeo> &meshes, Mesh::TriMeshGeo &meshOut);
 
 bool isSelfIntersected(const Mesh::TriMeshGeo &meshIn);
+Mesh::TriMeshGeo repairSelfIntersections(const Mesh::TriMeshGeo &meshIn, const std::string &method = "autorefine", bool *allFixed = nullptr);
 bool isManifold(const Mesh::TriMeshGeo &meshIn);
 void getLargestCC(const Mesh::TriMeshGeo &meshIn, Mesh::TriMeshGeo &meshOut);
 

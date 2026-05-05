@@ -1,0 +1,47 @@
+{
+  "bbox": {
+    "max": [
+      1.0342042217825647,
+      1.0184195598518218,
+      1.0285577779088937
+    ],
+    "min": [
+      -1.0453847064996538,
+      -1.0611473136180878,
+      -1.051050666394668
+    ]
+  },
+  "boundary_or_exterior_edges": 0,
+  "check_status": {
+    "basic_geometry": "passed",
+    "self_intersection": "passed",
+    "topology": "passed",
+    "winding": "passed"
+  },
+  "component_triangle_counts_by_edge": [
+    112846,
+    94004,
+    74258
+  ],
+  "components_by_edge": 3,
+  "edge_length": {
+    "max": 0.027355260317662347,
+    "mean": 0.018366295694098575,
+    "min": 0.010469938605159572
+  },
+  "enclosed_volume": 0.544885835090925,
+  "errors": [],
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/remesh_cgal_iso_r512_t002_e002/fbms/g0_b5_remesh.obj",
+  "invalid_triangles": 0,
+  "is_manifold": true,
+  "is_winding_consistent": true,
+  "oriented_boundary_or_exterior_edges": 0,
+  "passed": true,
+  "self_intersection_backend": "exact-count",
+  "self_intersections": 0,
+  "self_intersections_exact": true,
+  "triangles": 281108,
+  "type": "surface",
+  "vertices": 140552,
+  "warnings": []
+}

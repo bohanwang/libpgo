@@ -1,0 +1,251 @@
+{
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.obj",
+  "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.repaired.obj",
+  "before": {
+    "vertices": 56319,
+    "faces": 112714,
+    "edges": 169042,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 29,
+    "winding_conflict_edges": 0,
+    "edge_face_count_histogram": {
+      "2": 169013,
+      "4": 29
+    },
+    "connected_components": 3,
+    "component_face_counts": [
+      40654,
+      36194,
+      35866
+    ],
+    "component_signed_volumes": [
+      4.377526720850743,
+      -3.5026869736894404,
+      -0.26593616135462445
+    ]
+  },
+  "cleanup": {
+    "removed_degenerate_faces": 0,
+    "removed_duplicate_faces": 0
+  },
+  "after_cleanup": {
+    "vertices": 56319,
+    "faces": 112714,
+    "edges": 169042,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 29,
+    "winding_conflict_edges": 0,
+    "edge_face_count_histogram": {
+      "2": 169013,
+      "4": 29
+    },
+    "connected_components": 3,
+    "component_face_counts": [
+      40654,
+      36194,
+      35866
+    ],
+    "component_signed_volumes": [
+      4.377526720850743,
+      -3.5026869736894404,
+      -0.26593616135462445
+    ]
+  },
+  "component_repairs": [
+    {
+      "component": 0,
+      "before": {
+        "vertices": 20329,
+        "faces": 40654,
+        "edges": 60981,
+        "boundary_edges": 0,
+        "nonmanifold_edges": 0,
+        "winding_conflict_edges": 0,
+        "edge_face_count_histogram": {
+          "2": 60981
+        },
+        "connected_components": 1,
+        "component_face_counts": [
+          40654
+        ],
+        "component_signed_volumes": [
+          4.377526720850744
+        ]
+      },
+      "after": {
+        "vertices": 20329,
+        "faces": 40654,
+        "edges": 60981,
+        "boundary_edges": 0,
+        "nonmanifold_edges": 0,
+        "winding_conflict_edges": 0,
+        "edge_face_count_histogram": {
+          "2": 60981
+        },
+        "connected_components": 1,
+        "component_face_counts": [
+          40654
+        ],
+        "component_signed_volumes": [
+          4.377526720850743
+        ]
+      }
+    },
+    {
+      "component": 1,
+      "before": {
+        "vertices": 17935,
+        "faces": 35866,
+        "edges": 53799,
+        "boundary_edges": 0,
+        "nonmanifold_edges": 0,
+        "winding_conflict_edges": 0,
+        "edge_face_count_histogram": {
+          "2": 53799
+        },
+        "connected_components": 1,
+        "component_face_counts": [
+          35866
+        ],
+        "component_signed_volumes": [
+          -3.5026869736894404
+        ]
+      },
+      "after": {
+        "vertices": 17935,
+        "faces": 35866,
+        "edges": 53799,
+        "boundary_edges": 0,
+        "nonmanifold_edges": 0,
+        "winding_conflict_edges": 0,
+        "edge_face_count_histogram": {
+          "2": 53799
+        },
+        "connected_components": 1,
+        "component_face_counts": [
+          35866
+        ],
+        "component_signed_volumes": [
+          -3.5026869736894404
+        ]
+      }
+    },
+    {
+      "component": 2,
+      "before": {
+        "vertices": 18055,
+        "faces": 36194,
+        "edges": 54262,
+        "boundary_edges": 0,
+        "nonmanifold_edges": 29,
+        "winding_conflict_edges": 0,
+        "edge_face_count_histogram": {
+          "2": 54233,
+          "4": 29
+        },
+        "connected_components": 1,
+        "component_face_counts": [
+          36194
+        ],
+        "component_signed_volumes": [
+          -0.26593616135462445
+        ]
+      },
+      "after": {
+        "vertices": 17759,
+        "faces": 35534,
+        "edges": 53301,
+        "boundary_edges": 0,
+        "nonmanifold_edges": 0,
+        "winding_conflict_edges": 0,
+        "edge_face_count_histogram": {
+          "2": 53301
+        },
+        "connected_components": 1,
+        "component_face_counts": [
+          35534
+        ],
+        "component_signed_volumes": [
+          -0.2659389909208487
+        ]
+      }
+    }
+  ],
+  "after_meshfix_by_component": {
+    "vertices": 56023,
+    "faces": 112054,
+    "edges": 168081,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "winding_conflict_edges": 0,
+    "edge_face_count_histogram": {
+      "2": 168081
+    },
+    "connected_components": 3,
+    "component_face_counts": [
+      40654,
+      35866,
+      35534
+    ],
+    "component_signed_volumes": [
+      4.377526720850743,
+      -3.5026869736894404,
+      -0.2659389909208487
+    ]
+  },
+  "orientation": {
+    "component_signed_volumes_before": [
+      4.377526720850743,
+      -3.5026869736894404,
+      -0.2659389909208487
+    ],
+    "flipped_components": [
+      1,
+      2
+    ]
+  },
+  "after_orient_positive": {
+    "vertices": 56023,
+    "faces": 112054,
+    "edges": 168081,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "winding_conflict_edges": 0,
+    "edge_face_count_histogram": {
+      "2": 168081
+    },
+    "connected_components": 3,
+    "component_face_counts": [
+      40654,
+      35866,
+      35534
+    ],
+    "component_signed_volumes": [
+      4.377526720850743,
+      3.5026869736894404,
+      0.26593899092084866
+    ]
+  },
+  "final": {
+    "vertices": 56023,
+    "faces": 112054,
+    "edges": 168081,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "winding_conflict_edges": 0,
+    "edge_face_count_histogram": {
+      "2": 168081
+    },
+    "connected_components": 3,
+    "component_face_counts": [
+      40654,
+      35866,
+      35534
+    ],
+    "component_signed_volumes": [
+      4.377526720850743,
+      3.5026869736894404,
+      0.26593899092084866
+    ]
+  }
+}

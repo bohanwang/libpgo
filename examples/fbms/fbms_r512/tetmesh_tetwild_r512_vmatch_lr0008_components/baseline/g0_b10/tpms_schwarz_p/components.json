@@ -1,0 +1,23 @@
+[
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b10/tpms_schwarz_p/tpms_schwarz_p.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b10/tpms_schwarz_p/tpms_schwarz_p_component_0.obj",
+    "component": 0,
+    "vertices": 20279,
+    "triangles": 40554
+  },
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b10/tpms_schwarz_p/tpms_schwarz_p.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b10/tpms_schwarz_p/tpms_schwarz_p_component_1.obj",
+    "component": 1,
+    "vertices": 17879,
+    "triangles": 35754
+  },
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b10/tpms_schwarz_p/tpms_schwarz_p.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b10/tpms_schwarz_p/tpms_schwarz_p_component_2.obj",
+    "component": 2,
+    "vertices": 17793,
+    "triangles": 35602
+  }
+]

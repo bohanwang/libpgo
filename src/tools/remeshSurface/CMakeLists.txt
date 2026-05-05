@@ -18,3 +18,6 @@ target_link_libraries(mergeCloseVertices PRIVATE argparse::argparse)
 
 add_libpgo_tools(removeIsolatedVertices removeIsolatedVertices.cpp "${AVAILABLE_LIBS}")
 target_link_libraries(removeIsolatedVertices PRIVATE argparse::argparse)
+
+add_libpgo_tools(rawSurfaceCleanup rawSurfaceCleanup.cpp "${AVAILABLE_LIBS}")
+target_link_libraries(rawSurfaceCleanup PRIVATE argparse::argparse nlohmann_json::nlohmann_json)

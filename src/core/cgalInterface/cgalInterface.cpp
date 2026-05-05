@@ -31,6 +31,7 @@ copyright to MIT, USC
 #include <CGAL/Polygon_mesh_processing/triangulate_faces.h>
 #include <CGAL/Polygon_mesh_processing/self_intersections.h>
 #include <CGAL/Polygon_mesh_processing/repair.h>
+#include <CGAL/Polygon_mesh_processing/repair_self_intersections.h>
 #include <CGAL/Polygon_mesh_processing/connected_components.h>
 #include <CGAL/Polygon_mesh_processing/corefinement.h>
 #include <CGAL/Polygon_mesh_processing/compute_normal.h>
@@ -620,6 +621,42 @@ bool pgo::CGALInterface::isSelfIntersected(const Mesh::TriMeshGeo &meshIn)
   bool intersecting = CGAL::Polygon_mesh_processing::does_self_intersect<CGAL::Parallel_if_available_tag>(P, CGAL::parameters::vertex_point_map(CGAL::get(CGAL::vertex_point, P)));
 
   return intersecting;
+}
+
+pgo::Mesh::TriMeshGeo pgo::CGALInterface::repairSelfIntersections(const Mesh::TriMeshGeo &meshIn, const std::string &method, bool *allFixed)
+{
+  using K = KernelInexact;
+  using SM = CGAL::Surface_mesh<K::Point_3>;
+  using vertex_descriptor = boost::graph_traits<SM>::vertex_descriptor;
+
+  SM surfaceMesh;
+  triangleMesh2SurfaceMesh<SM, SM::Property_map<vertex_descriptor, int>>(meshIn, surfaceMesh, nullptr);
+
+  bool fixed = false;
+  if (method == "autorefine") {
+    fixed = CGAL::Polygon_mesh_processing::experimental::autorefine_and_remove_self_intersections(surfaceMesh);
+  }
+  else if (method == "autorefine-only") {
+    CGAL::Polygon_mesh_processing::experimental::autorefine(surfaceMesh);
+    fixed = CGAL::Polygon_mesh_processing::does_self_intersect<CGAL::Parallel_if_available_tag>(surfaceMesh) == false;
+  }
+  else if (method == "remove") {
+    fixed = CGAL::Polygon_mesh_processing::experimental::remove_self_intersections(surfaceMesh);
+  }
+  else {
+    throw std::invalid_argument("Unknown self-intersection repair method: " + method);
+  }
+
+  if (allFixed)
+    *allFixed = fixed;
+
+  CGAL::Polygon_mesh_processing::triangulate_faces(surfaceMesh);
+  CGAL::Polygon_mesh_processing::remove_isolated_vertices(surfaceMesh);
+  surfaceMesh.collect_garbage();
+
+  Mesh::TriMeshGeo meshOut;
+  surfaceMesh2TriangleMesh<K>(surfaceMesh, meshOut);
+  return meshOut;
 }
 
 void pgo::CGALInterface::getLargestCC(const Mesh::TriMeshGeo &meshIn, Mesh::TriMeshGeo &meshOut)

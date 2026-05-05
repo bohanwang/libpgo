@@ -108,3 +108,24 @@ if(TARGET generateFBMSUnionSurface)
   set_property(TARGET generateFBMSUnionSurface_gtest PROPERTY FOLDER "tests/gtest")
   gtest_discover_tests(generateFBMSUnionSurface_gtest)
 endif()
+
+if(TARGET rawSurfaceCleanup)
+  add_executable(rawSurfaceCleanup_gtest rawSurfaceCleanup_gtest.cpp)
+  target_link_libraries(rawSurfaceCleanup_gtest PRIVATE GTest::gtest_main nlohmann_json::nlohmann_json)
+  add_dependencies(rawSurfaceCleanup_gtest rawSurfaceCleanup)
+  target_compile_definitions(rawSurfaceCleanup_gtest PRIVATE
+    PGO_TEST_RAW_SURFACE_CLEANUP_BIN="$<TARGET_FILE:rawSurfaceCleanup>")
+  set_property(TARGET rawSurfaceCleanup_gtest PROPERTY FOLDER "tests/gtest")
+  gtest_discover_tests(rawSurfaceCleanup_gtest)
+endif()
+
+if(TARGET remeshSurface AND TARGET meshQualityCheck)
+  add_executable(remeshSurface_gtest remeshSurface_gtest.cpp)
+  target_link_libraries(remeshSurface_gtest PRIVATE GTest::gtest_main nlohmann_json::nlohmann_json)
+  add_dependencies(remeshSurface_gtest remeshSurface meshQualityCheck)
+  target_compile_definitions(remeshSurface_gtest PRIVATE
+    PGO_TEST_REMESH_SURFACE_BIN="$<TARGET_FILE:remeshSurface>"
+    PGO_TEST_MESH_QUALITY_CHECK_BIN="$<TARGET_FILE:meshQualityCheck>")
+  set_property(TARGET remeshSurface_gtest PROPERTY FOLDER "tests/gtest")
+  gtest_discover_tests(remeshSurface_gtest)
+endif()

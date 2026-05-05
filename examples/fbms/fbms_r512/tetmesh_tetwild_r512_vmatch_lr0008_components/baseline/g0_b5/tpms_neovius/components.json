@@ -1,0 +1,23 @@
+[
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_neovius/tpms_neovius.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b5/tpms_neovius/tpms_neovius_component_0.obj",
+    "component": 0,
+    "vertices": 26972,
+    "triangles": 53984
+  },
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_neovius/tpms_neovius.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b5/tpms_neovius/tpms_neovius_component_1.obj",
+    "component": 1,
+    "vertices": 20205,
+    "triangles": 40406
+  },
+  {
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_neovius/tpms_neovius.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b5/tpms_neovius/tpms_neovius_component_2.obj",
+    "component": 2,
+    "vertices": 17383,
+    "triangles": 34762
+  }
+]

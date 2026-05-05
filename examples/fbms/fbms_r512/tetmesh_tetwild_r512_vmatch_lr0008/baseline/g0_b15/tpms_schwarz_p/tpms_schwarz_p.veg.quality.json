@@ -1,0 +1,51 @@
+{
+  "bbox": {
+    "max": [
+      1.0148577956658662,
+      1.0148299971141805,
+      1.0149186441484699
+    ],
+    "min": [
+      -1.0148818637702015,
+      -1.0148304841867841,
+      -1.0149197516778536
+    ]
+  },
+  "boundary_or_exterior_edges": 29,
+  "check_status": {
+    "basic_geometry": "passed",
+    "self_intersection": "passed",
+    "topology": "failed",
+    "winding": "failed"
+  },
+  "component_triangle_counts_by_edge": [
+    40654,
+    36194,
+    35866
+  ],
+  "components_by_edge": 3,
+  "edge_length": {
+    "max": 0.04974510814776668,
+    "mean": 0.027509707537311048,
+    "min": 0.0037648870468560474
+  },
+  "enclosed_volume": null,
+  "errors": [
+    "Input triangle mesh is not manifold",
+    "Input triangle mesh is not closed",
+    "Input triangle mesh has inconsistent winding"
+  ],
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.obj",
+  "invalid_triangles": 0,
+  "is_manifold": false,
+  "is_winding_consistent": false,
+  "oriented_boundary_or_exterior_edges": 0,
+  "passed": false,
+  "self_intersection_backend": "exact-count",
+  "self_intersections": 0,
+  "self_intersections_exact": true,
+  "triangles": 112714,
+  "type": "surface",
+  "vertices": 56319,
+  "warnings": []
+}

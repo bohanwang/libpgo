@@ -325,3 +325,45 @@ TEST(GenerateFBMSUnionSurfaceCli, OpenVDBUnionKeepsFbmsShellByDefault)
 
   EXPECT_GT(unionMesh.numTriangles(), sphereMesh.numTriangles());
 }
+
+TEST(GenerateFBMSUnionSurfaceCli, OpenVDBSupportsVolumeBudgetThickness)
+{
+  const std::filesystem::path binary = generatorBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(std::filesystem::exists(binary)) << binary;
+
+  ScopedTempDir tempDir;
+  const std::filesystem::path fbms = tempDir.path() / "patch.obj";
+  const std::filesystem::path sphere = tempDir.path() / "sphere.obj";
+  const std::filesystem::path output = tempDir.path() / "union-openvdb-budget.obj";
+  const std::filesystem::path log = tempDir.path() / "union-openvdb-budget.log";
+
+  writeOpenFbmsPatch(fbms);
+  writeHeaderSphereOctahedron(sphere);
+
+  const std::string command =
+    shellExecutable(binary) +
+    " openvdb"
+    " --fbms " + quotePath(fbms) +
+    " --sphere " + quotePath(sphere) +
+    " --fbms-thickness -3.0"
+    " --sphere-thickness 0.20"
+    " --resolution 36"
+    " --padding-ratio 0.02"
+    " --output-surface " + quotePath(output) +
+    " > " + quotePath(log) + " 2>&1";
+
+  const int status = std::system(command.c_str());
+  if (status != 0 && readTextFile(log).find("OpenVDB backend is unavailable") != std::string::npos)
+    GTEST_SKIP() << "OpenVDB backend is unavailable in this build.";
+  ASSERT_EQ(status, 0) << command << "\n" << readTextFile(log);
+  ASSERT_TRUE(std::filesystem::exists(output));
+
+  const std::string logText = readTextFile(log);
+  EXPECT_NE(logText.find("[volume-search] selected thickness"), std::string::npos) << logText;
+
+  pgo::Mesh::TriMeshGeo mesh;
+  ASSERT_TRUE(mesh.load(output.string()));
+  EXPECT_GT(mesh.numVertices(), 0);
+  EXPECT_GT(mesh.numTriangles(), 0);
+}

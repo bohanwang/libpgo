@@ -1,0 +1,57 @@
+{
+  "source_asset_directory": "examples/fbms/fbms_r512/asset",
+  "working_directory": "examples/fbms/fbms_r512",
+  "build_dir": "build/base_no_mkl",
+  "tpms_shapes": [
+    "tpms_schwarz_p",
+    "tpms_schwarz_d",
+    "tpms_gyroid",
+    "tpms_iwp",
+    "tpms_neovius"
+  ],
+  "parameters": {
+    "asset": {
+      "tpms_cells": 1.0,
+      "tpms_resolution": 512,
+      "tpms_sphere_subdivisions": 8,
+      "bounding_sphere_bounds_method": "aabb",
+      "bounding_sphere_method": "icosphere",
+      "bounding_sphere_subdivisions": 8,
+      "bounding_sphere_padding": 1e-9
+    },
+    "raw": {
+      "resolution": 512,
+      "fbms_thickness": 0.02,
+      "sphere_thickness": 0.03,
+      "padding_ratio": 0.08,
+      "enable_truncating": true,
+      "project_fbms_boundary_to_sphere": true,
+      "filter_small_components": true,
+      "min_component_triangles": 100
+    },
+    "remesh": {
+      "target_edge_length": 0.02,
+      "sharp_edge_angle": 180,
+      "iterations": 10
+    },
+    "tetwild": {
+      "lr": 0.008,
+      "epsr": 0.001
+    },
+    "material": {
+      "density": 1000,
+      "young_modulus": 10000000,
+      "poisson_ratio": 0.45
+    },
+    "quality": {
+      "expected_components": 3,
+      "raw_invalid_triangles_policy": "warn",
+      "remesh_invalid_triangles_policy": "warn",
+      "remesh_self_intersection_backend": "exact-count",
+      "remesh_self_intersection_triangle_limit": 900000,
+      "final_invalid_triangles_policy": "warn",
+      "final_self_intersection_backend": "exact-count",
+      "final_self_intersection_triangle_limit": 900000
+    }
+  }
+}

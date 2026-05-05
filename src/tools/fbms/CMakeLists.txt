@@ -10,7 +10,16 @@ if(NOT TARGET libiglInterface)
   return()
 endif()
 
-add_libpgo_tools(generateFBMSUnionSurface generateFBMSUnionSurface.cpp "${AVAILABLE_LIBS}")
+set(GENERATE_FBMS_UNION_SURFACE_SOURCES
+  generateFBMSUnionSurface.cpp
+  generateFBMSUnionSurfaceExtraction.cpp
+  generateFBMSUnionSurfaceField.cpp
+  generateFBMSUnionSurfaceIO.cpp
+  generateFBMSUnionSurfaceOptions.cpp
+  generateFBMSUnionSurfaceSphere.cpp
+  generateFBMSUnionSurfaceVolume.cpp)
+
+add_libpgo_tools(generateFBMSUnionSurface "${GENERATE_FBMS_UNION_SURFACE_SOURCES}" "${AVAILABLE_LIBS}")
 target_link_libraries(generateFBMSUnionSurface PRIVATE argparse::argparse)
 
 if(TARGET openvdb_static)

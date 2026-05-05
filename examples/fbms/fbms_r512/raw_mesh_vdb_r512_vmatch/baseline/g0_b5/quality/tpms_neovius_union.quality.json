@@ -1,0 +1,49 @@
+{
+  "bbox": {
+    "max": [
+      1.0149871110916142,
+      1.0149871110916142,
+      1.0149871110916142
+    ],
+    "min": [
+      -1.0149871110916142,
+      -1.0149871110916142,
+      -1.0149871110916142
+    ]
+  },
+  "boundary_or_exterior_edges": 0,
+  "check_status": {
+    "basic_geometry": "passed",
+    "self_intersection": "skipped",
+    "topology": "passed",
+    "winding": "skipped"
+  },
+  "component_triangle_counts_by_edge": [
+    1950232,
+    1484076,
+    1269448
+  ],
+  "components_by_edge": 3,
+  "edge_length": {
+    "max": 0.009098618289045688,
+    "mean": 0.004855566279148238,
+    "min": 2.980232238658509e-06
+  },
+  "enclosed_volume": 0.5436919534283903,
+  "errors": [],
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/raw_mesh_vdb_r512_vmatch/baseline/g0_b5/tpms_neovius_union.obj",
+  "invalid_triangles": 48,
+  "is_manifold": true,
+  "is_winding_consistent": null,
+  "oriented_boundary_or_exterior_edges": null,
+  "passed": true,
+  "self_intersection_backend": null,
+  "self_intersections": null,
+  "self_intersections_exact": null,
+  "triangles": 4703756,
+  "type": "surface",
+  "vertices": 2351862,
+  "warnings": [
+    "Input triangle mesh contains invalid or degenerate triangles"
+  ]
+}
