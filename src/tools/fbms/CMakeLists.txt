@@ -6,6 +6,11 @@ foreach(lib ${PGO_GLOBAL_LIBRARY_TARGETS})
   endif()
 endforeach()
 
+if(TARGET pgoLogging)
+  add_libpgo_tools(computeStressFieldStats computeStressFieldStats.cpp "pgoLogging")
+  target_link_libraries(computeStressFieldStats PRIVATE argparse::argparse nlohmann_json::nlohmann_json fmt::fmt)
+endif()
+
 if(NOT TARGET libiglInterface)
   return()
 endif()
