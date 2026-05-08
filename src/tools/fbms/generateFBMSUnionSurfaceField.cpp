@@ -80,6 +80,8 @@ void assembleUnionField(const EigenSupport::VXd &fbmsDistance, const SphereParam
           value = fbmsField;
         else if (debugFieldMode == "sphere")
           value = sphereShellField;
+        else if (debugFieldMode == "union-minus-sphere")
+          value = std::max(value, -sphereShellField);
         unionField[index] = value;
         fieldMin = std::min(fieldMin, value);
         fieldMax = std::max(fieldMax, value);

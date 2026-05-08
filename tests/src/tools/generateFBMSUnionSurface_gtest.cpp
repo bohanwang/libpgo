@@ -283,8 +283,10 @@ TEST(GenerateFBMSUnionSurfaceCli, OpenVDBUnionKeepsFbmsShellByDefault)
   const std::filesystem::path sphere = tempDir.path() / "sphere.obj";
   const std::filesystem::path unionOutput = tempDir.path() / "union-openvdb.obj";
   const std::filesystem::path sphereOutput = tempDir.path() / "sphere-openvdb.obj";
+  const std::filesystem::path differenceOutput = tempDir.path() / "difference-openvdb.obj";
   const std::filesystem::path unionLog = tempDir.path() / "union-openvdb.log";
   const std::filesystem::path sphereLog = tempDir.path() / "sphere-openvdb.log";
+  const std::filesystem::path differenceLog = tempDir.path() / "difference-openvdb.log";
 
   writeOpenFbmsPatch(fbms);
   writeHeaderSphereOctahedron(sphere);
@@ -318,12 +320,25 @@ TEST(GenerateFBMSUnionSurfaceCli, OpenVDBUnionKeepsFbmsShellByDefault)
     " > " + quotePath(sphereLog) + " 2>&1";
   ASSERT_EQ(std::system(sphereCommand.c_str()), 0) << sphereCommand << "\n" << readTextFile(sphereLog);
 
+  const std::string differenceCommand =
+    shellExecutable(binary) +
+    " openvdb" +
+    commonArgs +
+    " --surface-mode union-minus-sphere"
+    " --output-surface " + quotePath(differenceOutput) +
+    " > " + quotePath(differenceLog) + " 2>&1";
+  ASSERT_EQ(std::system(differenceCommand.c_str()), 0) << differenceCommand << "\n" << readTextFile(differenceLog);
+
   pgo::Mesh::TriMeshGeo unionMesh;
   pgo::Mesh::TriMeshGeo sphereMesh;
+  pgo::Mesh::TriMeshGeo differenceMesh;
   ASSERT_TRUE(unionMesh.load(unionOutput.string()));
   ASSERT_TRUE(sphereMesh.load(sphereOutput.string()));
+  ASSERT_TRUE(differenceMesh.load(differenceOutput.string()));
 
   EXPECT_GT(unionMesh.numTriangles(), sphereMesh.numTriangles());
+  EXPECT_GT(differenceMesh.numTriangles(), 0);
+  EXPECT_LT(differenceMesh.numTriangles(), unionMesh.numTriangles());
 }
 
 TEST(GenerateFBMSUnionSurfaceCli, OpenVDBSupportsVolumeBudgetThickness)

@@ -170,6 +170,13 @@ void extractSurfaceOpenVDB(const Mesh::TriMeshGeo &fbmsMesh, const SphereParamet
     openvdb::FloatGrid::Ptr sphereShell = createSphereShellGrid(sphere, sphereThickness, voxelSize, halfWidth);
     openvdb::tools::csgUnion(*grid, *sphereShell);
   }
+  else if (debugFieldMode == "union-minus-sphere") {
+    openvdb::FloatGrid::Ptr sphereShellForUnion = createSphereShellGrid(sphere, sphereThickness, voxelSize, halfWidth);
+    openvdb::tools::csgUnion(*grid, *sphereShellForUnion);
+
+    openvdb::FloatGrid::Ptr sphereShellForDifference = createSphereShellGrid(sphere, sphereThickness, voxelSize, halfWidth);
+    openvdb::tools::csgDifference(*grid, *sphereShellForDifference);
+  }
 
   if (!grid)
     throw std::runtime_error("OpenVDB backend failed to create a level-set grid");

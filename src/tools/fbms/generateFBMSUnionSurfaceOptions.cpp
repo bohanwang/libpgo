@@ -59,8 +59,12 @@ void addCommonOptions(argparse::ArgumentParser &program)
     .default_value(false)
     .implicit_value(true);
   program.add_argument("--debug-field-mode")
-    .help("Diagnostic field to polygonize: union, fbms, or sphere")
+    .help("Diagnostic field to polygonize: union, fbms, sphere, or union-minus-sphere")
     .default_value(std::string("union"))
+    .metavar("MODE");
+  program.add_argument("--surface-mode")
+    .help("Surface field to polygonize. Overrides --debug-field-mode when set: union, fbms, sphere, or union-minus-sphere")
+    .default_value(std::string(""))
     .metavar("MODE");
   program.add_argument("--filter-small-components")
     .help("Remove tiny edge-connected triangle components after surface extraction")
@@ -127,6 +131,9 @@ void readCommonOptions(const argparse::ArgumentParser &program, Options &options
   options.enableTruncating = program.get<bool>("--enable-truncating");
   options.projectFBMSBoundaryToSphere = program.get<bool>("--project-fbms-boundary-to-sphere");
   options.debugFieldMode = program.get<std::string>("--debug-field-mode");
+  const std::string surfaceMode = program.get<std::string>("--surface-mode");
+  if (!surfaceMode.empty())
+    options.debugFieldMode = surfaceMode;
   options.filterSmallComponents = program.get<bool>("--filter-small-components");
   options.minComponentTriangles = program.get<int>("--min-component-triangles");
   options.keepLargestComponents = program.get<int>("--keep-largest-components");
@@ -230,8 +237,9 @@ void validateOptions(const Options &options)
     throw std::runtime_error("--resolution must be at least 2");
   if (options.paddingRatio < 0.0 || !std::isfinite(options.paddingRatio))
     throw std::runtime_error("--padding-ratio must be finite and non-negative");
-  if (options.debugFieldMode != "union" && options.debugFieldMode != "fbms" && options.debugFieldMode != "sphere")
-    throw std::runtime_error("--debug-field-mode must be one of: union, fbms, sphere");
+  if (options.debugFieldMode != "union" && options.debugFieldMode != "fbms" &&
+    options.debugFieldMode != "sphere" && options.debugFieldMode != "union-minus-sphere")
+    throw std::runtime_error("--debug-field-mode must be one of: union, fbms, sphere, union-minus-sphere");
   if (options.fbmsThickness < 0.0 && options.debugFieldMode != "union")
     throw std::runtime_error("Volume-budget mode only supports --debug-field-mode union");
   if (options.minComponentTriangles < 1)
