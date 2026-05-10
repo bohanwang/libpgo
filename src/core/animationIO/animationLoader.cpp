@@ -5,6 +5,11 @@
 #include "pgoLogging.h"
 #include "generateSurfaceMesh.h"
 #include "boundingVolumeTree.h"
+#include "EigenSupport.h"
+
+#include <tiny_obj_loader.h>
+
+#include <filesystem>
 
 using namespace pgo;
 using namespace pgo::AnimationIO;
@@ -32,6 +37,8 @@ int AnimationLoader::load(const char *filename)
       aseq.sequenceType = jmesh.at("sequence-type").get<std::string>();
       aseq.scaleString = jmesh.value("scale", "1,1,1");
       aseq.sequenceRange = jmesh.at("sequence-range").get<std::vector<int>>();
+      aseq.sequenceGap = jmesh.value("gap", 1);
+      PGO_ALOG(aseq.sequenceGap >= 1);
       seqs.push_back(aseq);
     }
   }
@@ -69,8 +76,51 @@ int AnimationLoader::load(const char *filename)
     }
 
     if (aseq.displayMeshFilename.length()) {
-      // load obj mesh
-      // scale by embedded scale
+      tinyobj::ObjReaderConfig reader_config;
+      reader_config.mtl_search_path = std::filesystem::path(aseq.displayMeshFilename).parent_path().string();
+      reader_config.triangulate = true;
+
+      tinyobj::ObjReader reader;
+      if (!reader.ParseFromFile(aseq.displayMeshFilename, reader_config)) {
+        if (!reader.Error().empty()) {
+          SPDLOG_LOGGER_ERROR(Logging::lgr(), "TinyObjReader: {}", reader.Error());
+        }
+        SPDLOG_LOGGER_ERROR(Logging::lgr(), "Failed to load display mesh: {}", aseq.displayMeshFilename);
+        return 1;
+      }
+      if (!reader.Warning().empty()) {
+        SPDLOG_LOGGER_WARN(Logging::lgr(), "TinyObjReader: {}", reader.Warning());
+      }
+
+      static_assert(std::is_same<double, tinyobj::real_t>::value);
+
+      const auto &attrib = reader.GetAttrib();
+      const auto &shapes = reader.GetShapes();
+
+      int numV = static_cast<int>(attrib.vertices.size() / 3);
+      aseq.displayMeshV.resize(numV * 3);
+      for (int vi = 0; vi < numV; vi++) {
+        aseq.displayMeshV[vi * 3 + 0] = attrib.vertices[vi * 3 + 0] * embeddedScale;
+        aseq.displayMeshV[vi * 3 + 1] = attrib.vertices[vi * 3 + 1] * embeddedScale;
+        aseq.displayMeshV[vi * 3 + 2] = attrib.vertices[vi * 3 + 2] * embeddedScale;
+      }
+
+      aseq.displayMeshF.clear();
+      for (size_t s = 0; s < shapes.size(); s++) {
+        size_t index_offset = 0;
+        for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
+          size_t fv = static_cast<size_t>(shapes[s].mesh.num_face_vertices[f]);
+          PGO_ALOG(fv == 3ull);
+
+          std::vector<int> tri(3);
+          for (size_t v = 0; v < fv; v++) {
+            tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
+            tri[v] = static_cast<int>(idx.vertex_index);
+          }
+          index_offset += fv;
+          aseq.displayMeshF.emplace_back(std::move(tri));
+        }
+      }
     }
     else {
       if (aseq.drivingMeshFilename.find(".obj") != std::string::npos) {
@@ -115,6 +165,8 @@ int AnimationLoader::load(const char *filename)
 
         std::vector<ES::VXd> disp;
         for (int i = aseq.sequenceRange[0]; i < aseq.sequenceRange[1]; i++) {
+          if (i % aseq.sequenceGap != 0)
+            continue;
           Mesh::TriMeshGeo frameMesh;
           if (frameMesh.load(fmt::format(fmt::runtime(aseq.sequenceName), i)) != true) {
             SPDLOG_LOGGER_WARN(Logging::lgr(), "Failed to load frame mesh: {}", fmt::format(fmt::runtime(aseq.sequenceName), i));
@@ -135,23 +187,45 @@ int AnimationLoader::load(const char *filename)
         }
       }
       else if (aseq.sequenceType == "u") {
-        // for (int i = m.sequenceRange[0]; i < m.sequenceRange[1]; i++) {
-        //   std::string uFilename = fmt::format(m.sequenceName, i);
+        int numDrivingV = 0;
+        if (aseq.triMesh)
+          numDrivingV = aseq.triMesh->numVertices();
+        else if (aseq.tetMesh)
+          numDrivingV = aseq.tetMesh->getNumVertices();
+        PGO_ALOG(numDrivingV > 0);
+        const int expectedRows = numDrivingV * 3;
 
-        //   std::vector<double> mat;
-        //   int nr, nc;
-        //   int ret = ReadMatrixFromDisk(uFilename.c_str(), nr, nc, mat);
-        //   if (ret != 0)
-        //     continue;
+        std::vector<ES::VXd> disp;
+        for (int i = aseq.sequenceRange[0]; i < aseq.sequenceRange[1]; i++) {
+          if (i % aseq.sequenceGap != 0)
+            continue;
+          std::string uFilename = fmt::format(fmt::runtime(aseq.sequenceName), i);
 
-        //   ALOG(static_cast<int>(m.objMesh->getNumVertices()) * 3 == nr && nc == 1);
+          ES::MXd uMat;
+          if (ES::readMatrix(uFilename.c_str(), uMat) != 0) {
+            SPDLOG_LOGGER_WARN(Logging::lgr(), "Failed to read u file: {}", uFilename);
+            continue;
+          }
 
-        //   m.displacements.emplace_back(std::move(mat));
+          if (static_cast<int>(uMat.rows()) != expectedRows) {
+            SPDLOG_LOGGER_ERROR(Logging::lgr(),
+              "u file dim mismatch: {} has {} rows, expected {} (= {} * 3)",
+              uFilename, uMat.rows(), expectedRows, numDrivingV);
+            return 1;
+          }
+          PGO_ALOG(uMat.cols() >= 1);
 
-        //   LG_ << i << ' ';
-        // }
+          disp.emplace_back(uMat.col(0));
+          std::cout << i << ' ' << std::flush;
+        }
+        std::cout << '\n';
 
-        // LG_ << '\n';
+        if (!disp.empty()) {
+          aseq.drivingDisplacements.resize(disp[0].size(), disp.size());
+          for (size_t i = 0; i < disp.size(); i++) {
+            aseq.drivingDisplacements.col(i) = disp[i];
+          }
+        }
       }
       else if (aseq.sequenceType == "uall") {
         // std::string uFilename = m.sequenceName;

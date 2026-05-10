@@ -22,6 +22,7 @@ struct AnimationSequence
   std::string sequenceType;
   std::string scaleString;
   std::vector<int> sequenceRange;
+  int sequenceGap = 1;
 
   //
   std::shared_ptr<Mesh::TriMeshGeo> triMesh;
