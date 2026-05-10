@@ -207,22 +207,25 @@ The pipeline is a thin orchestration layer around several local tools.
 
 `generate_bounding_sphere.py`
 
-Creates a bounding sphere OBJ for an input shell mesh. The FBMS pipeline uses it
-when a `{case}_bounding_sphere.obj` is not already present. The current config
-uses an AABB-based sphere and an icosphere mesh.
+Creates a unit sphere OBJ at the origin (`--bounds-method unit`). Both FBMS
+and TPMS use the same unit sphere so that raw union surfaces are comparable
+across cases.
 
 `generate_tpms_unit_ball.py`
 
-Generates the five TPMS baseline shell meshes and their bounding spheres. With
-`--flat-output`, it writes files directly as
-`{shape}_fbms.obj` and `{shape}_fbms_bounding_sphere.obj`.
+Generates the five TPMS baseline shell meshes and matching unit spheres. With
+`--flat-output`, it writes files directly as `{shape}_fbms.obj` and
+`{shape}_fbms_bounding_sphere.obj`. The TPMS shells are sampled in `[-1,1]^3`.
 
 `generateFBMSUnionSurface openvdb`
 
-Builds a surface union between a shell mesh and its bounding sphere shell using
-OpenVDB. Positive `--fbms-thickness` means fixed shell thickness. Negative
-`--fbms-thickness -V` means volume-budget mode: the tool searches for a shell
-thickness whose raw union volume is close to `V`.
+Builds a CSG union between a thickened shell mesh and a thickened sphere shell
+using OpenVDB. Positive `--fbms-thickness` selects fixed shell thickness.
+Negative `--fbms-thickness -V` triggers volume-budget mode: the tool binary-
+searches for a shell thickness whose raw union volume is close to `V`.
+Truncation clips the FBMS structure to the sphere interior. The raw output is
+filtered to keep only the 3 largest edge-connected components
+(`--filter-small-components --keep-largest-components 3`).
 
 `meshQualityCheck surface`
 
@@ -232,32 +235,30 @@ and final TetWild boundary surfaces. The JSON records component count,
 invalid triangles, manifold/closed/winding status, self-intersections, edge
 length statistics, and enclosed volume when meaningful.
 
-`remeshSurface cgal_iso`
+`remeshSurface cgal_iso` / `remeshSurface geogram`
 
-Runs CGAL isotropic surface remeshing. In this pipeline, it regularizes raw
-OpenVDB triangle meshes before TetWild. The tool's `--edge-length` argument is
-relative to the raw mesh mean edge length, so the runner computes a scale from
-the desired physical target edge length.
+CGAL isotropic remeshing is the default. For noshell targets, if the CGAL
+remesh has self-intersections the runner automatically falls back to geogram
+at the same vertex count. The `--edge-length` argument to CGAL is relative to
+the raw mesh mean edge length, so the runner computes a scale from the desired
+physical target edge length.
 
 `tetMesher`
 
 Reads a `tetmesher.json` config, runs the TetWild backend, writes a `.veg`
-volume mesh, and exports a `.veg.obj` boundary surface. The `.veg` is the
-simulation mesh; the `.veg.obj` is the surface used for final quality checks
-and packaging.
+volume mesh, and exports a `.veg.obj` boundary surface.
 
 `volumetricMeshInfo`
 
 Reads a `.veg` mesh and prints vertex count, element count, and total volume.
-The runner saves this as `{name}.veg.info.txt` and uses it in the summary.
+The runner saves this as `{name}.veg.info.txt`.
 
 `repair_tpms_mesh.py`
 
-Repairs a failed TetWild boundary OBJ after TetWild has completed. It uses
-PyMeshFix per connected component, preserving components as much as possible.
+Repairs a failed TetWild boundary OBJ using PyMeshFix per connected component.
 It never overwrites the original `.veg` or `.veg.obj`; repaired surfaces are
-written as `{name}.veg.repaired.obj`. The pipeline does not force component
-signed volumes to be positive, preserving cavity normal semantics.
+written as `{name}.veg.repaired.obj`. The runner compares mtime of `veg.obj`
+and `repaired.obj` to avoid reusing a stale repair from a previous run.
 
 `dump_obj_components.py`
 
@@ -265,11 +266,16 @@ Splits the final boundary surface into connected components and writes a
 `components.json` manifest plus per-component OBJ files. The pipeline requires
 three final components.
 
+`run_fbms_noshell_from_union.py`
+
+Runs an independent no-shell pipeline from completed union outputs, extracting
+the `union-minus-sphere` surface (FBMS structure with the sphere shell removed).
+
 `package_fbms_sim_assets.py`
 
-Copies the final simulation assets into `simulation_package`. It chooses the
+Copies the final simulation assets into `simulation_package`. Chooses the
 original `.veg.obj` when it passed final quality, or `.veg.repaired.obj` when
-repair was needed, and records the source in `package_manifest.json`.
+repair was needed.
 
 ## How The Pipeline Works
 
@@ -277,37 +283,27 @@ repair was needed, and records the source in `package_manifest.json`.
 
 The runner discovers all `g0_b*` or `g0b*` OBJ files under
 `source_asset_directory`, copies them into `working_directory/asset/fbms`, and
-ensures each has a bounding sphere.
-
-If TPMS baseline shell/sphere files are missing, the runner can generate them
-with:
-
-- `scripts/generate_bounding_sphere.py`
-- `scripts/generate_tpms_unit_ball.py --flat-output`
-
-The commands generated by the runner look like:
+generates a unit sphere for each:
 
 ```bash
-uv run python scripts/generate_bounding_sphere.py \
+python scripts/generate_bounding_sphere.py \
   --input examples/fbms/fbms_r512/asset/fbms/{case}.obj \
   --output examples/fbms/fbms_r512/asset/fbms/{case}_bounding_sphere.obj \
-  --bounds-method aabb \
+  --bounds-method unit \
   --method icosphere \
-  --subdivisions 8 \
-  --padding 1e-09
+  --subdivisions 8
 ```
 
+If TPMS baseline shell/sphere files are missing:
+
 ```bash
-uv run python scripts/generate_tpms_unit_ball.py \
+python scripts/generate_tpms_unit_ball.py \
   --cells 1.0 \
   --resolution 512 \
   --sphere-subdivisions 8 \
   --out examples/fbms/fbms_r512/asset/baseline \
   --flat-output
 ```
-
-For the current checked-in r512 run, the prepared assets already live under
-`examples/fbms/fbms_r512/asset`.
 
 ### 2. Generate FBMS Raw Union Surfaces
 
@@ -325,28 +321,17 @@ build/base_no_mkl/bin/generateFBMSUnionSurface openvdb \
   --enable-truncating \
   --project-fbms-boundary-to-sphere \
   --filter-small-components \
-  --min-component-triangles 100
+  --min-component-triangles 100 \
+  --keep-largest-components 3
 ```
 
-Immediately after raw generation, the runner checks quality:
-
-```bash
-build/base_no_mkl/bin/meshQualityCheck surface \
-  --check-level raw \
-  --expected-components 3 \
-  --invalid-triangles-policy warn \
-  --input examples/fbms/fbms_r512/raw_mesh_vdb_r512_t002/fbms/{case}_union.obj \
-  --json examples/fbms/fbms_r512/raw_mesh_vdb_r512_t002/fbms/quality/{case}_union.quality.json
-```
-
-Raw quality is a hard gate. The raw quality JSON also records
-`enclosed_volume`, which becomes the volume budget for that case's TPMS
-baselines.
+Raw quality is a hard gate. The raw quality JSON records `enclosed_volume`,
+which becomes the volume budget for that case's TPMS baselines.
 
 ### 3. Generate Volume-Matched TPMS Baselines
 
-For each `g0_b*` and each TPMS shape, the runner generates a baseline raw union
-surface with negative `--fbms-thickness`:
+For each `g0_b*` and TPMS shape, the runner generates a baseline raw union
+surface in volume-budget mode (negative `--fbms-thickness`):
 
 ```bash
 build/base_no_mkl/bin/generateFBMSUnionSurface openvdb \
@@ -360,264 +345,111 @@ build/base_no_mkl/bin/generateFBMSUnionSurface openvdb \
   --enable-truncating \
   --project-fbms-boundary-to-sphere \
   --filter-small-components \
-  --min-component-triangles 100
+  --min-component-triangles 100 \
+  --keep-largest-components 3
 ```
-
-This tells `generateFBMSUnionSurface openvdb` to search for a shell thickness
-that matches the target raw union volume.
 
 ### 4. Remesh Surfaces
 
 Each raw union surface is remeshed with CGAL isotropic remeshing. The configured
-physical target edge length is `0.02`, but `remeshSurface cgal_iso` takes a
-relative edge-length scale, so the runner computes:
+physical target edge length is `0.02`, converted to a relative scale:
 
 ```text
 edge_length_argument = 0.02 / raw_quality.edge_length.mean
 ```
 
-The remesh command template is:
-
-```bash
-build/base_no_mkl/bin/remeshSurface cgal_iso \
-  --input-mesh {raw_union_obj} \
-  --output-mesh {remesh_obj} \
-  --edge-length {edge_length_argument} \
-  --sharp-edge-angle 180 \
-  --iterations 10
-```
-
-The remesh quality command is:
-
-```bash
-build/base_no_mkl/bin/meshQualityCheck surface \
-  --check-level full \
-  --expected-components 3 \
-  --invalid-triangles-policy warn \
-  --input {remesh_obj} \
-  --json {remesh_quality_json} \
-  --self-intersection-backend exact-count \
-  --self-intersection-triangle-limit 900000
-```
-
-Remesh quality is recorded, but self-intersections at this stage are treated as
-warnings so that TetWild can still attempt recovery.
+For noshell targets, if the CGAL remesh has self-intersections the runner
+automatically falls back to geogram at the same vertex count.
 
 ### 5. Generate Tet Meshes
 
-The runner writes one `tetmesher.json` per asset and invokes:
-
-```bash
-build/base_no_mkl/bin/tetMesher --config {tet_output_dir}/tetmesher.json
-```
-
-The generated `tetmesher.json` has this shape:
-
-```json
-{
-  "version": 1,
-  "backend": "tetwild",
-  "input_mesh": "../../../remesh_cgal_iso_r512_vmatch_e002/baseline/g0_b5/tpms_schwarz_p_remesh.obj",
-  "output_mesh": "tpms_schwarz_p.veg",
-  "output_surface": "tpms_schwarz_p.veg.obj",
-  "print_stats": true,
-  "tetwild": {
-    "lr": 0.008,
-    "epsr": 0.001
-  },
-  "material": {
-    "density": 1000,
-    "young_modulus": 10000000,
-    "poisson_ratio": 0.45
-  }
-}
-```
-
-Each TetWild output directory contains:
-
-- `{name}.veg`
-- `{name}.veg.obj`
-- `{name}.veg.info.txt`
-- `{name}.veg.quality.json`
-- `{name}_tetwild.log`
-- `tetmesher.json`
-
-The `.veg` file is the simulation volume mesh. The `.veg.obj` file is the
-surface exported from the TetWild output.
+The runner writes one `tetmesher.json` per asset and invokes
+`build/base_no_mkl/bin/tetMesher --config {tetmesher.json}`. Each output
+directory contains `.veg`, `.veg.obj`, `.veg.info.txt`, `.veg.quality.json`,
+and `_tetwild.log`.
 
 ### 6. Validate And Repair Boundary Surfaces
 
-Final boundary quality is checked with `meshQualityCheck surface --check-level
-full`. The final packaged surface must have:
+Final boundary quality requires: 3 edge-connected components, no invalid
+triangles, no self-intersections, closed/manifold topology, consistent winding.
 
-- 3 edge-connected components
-- no invalid triangles
-- no self-intersections
-- closed/manifold topology
-- consistent winding
+If the original `.veg.obj` fails, the runner invokes `repair_tpms_mesh.py`.
+Before running repair, it compares mtime of `veg.obj` and any existing
+`veg.repaired.obj` — if the repaired file is older than the current `veg.obj`,
+it is treated as stale and repair is re-run even without `--overwrite`.
 
-The final boundary check is:
+The runner also captures volume mesh info and dumps final components.
 
-```bash
-build/base_no_mkl/bin/meshQualityCheck surface \
-  --check-level full \
-  --expected-components 3 \
-  --invalid-triangles-policy warn \
-  --input {tet_output_dir}/{name}.veg.obj \
-  --json {tet_output_dir}/{name}.veg.quality.json \
-  --self-intersection-backend exact-count \
-  --self-intersection-triangle-limit 900000
-```
+### 7. No-Shell Pipeline (Separate Entry Point)
 
-If the original `.veg.obj` fails, the runner uses:
+After the main pipeline completes, the no-shell pipeline generates surfaces
+with the sphere shell removed (`union-minus-sphere` mode):
 
 ```bash
-uv run python scripts/repair_tpms_mesh.py \
-  {tet_output_dir}/{name}.veg.obj \
-  --out {tet_output_dir}/{name}.veg.repaired.obj \
-  --report {tet_output_dir}/{name}.veg.repair_report.json
-```
-
-Then it checks the repaired surface with the same full quality gate:
-
-```bash
-build/base_no_mkl/bin/meshQualityCheck surface \
-  --check-level full \
-  --expected-components 3 \
-  --invalid-triangles-policy warn \
-  --input {tet_output_dir}/{name}.veg.repaired.obj \
-  --json {tet_output_dir}/{name}.veg.repaired.quality.json \
-  --self-intersection-backend exact-count \
-  --self-intersection-triangle-limit 900000
-```
-
-This writes:
-
-- `{name}.veg.repaired.obj`
-- `{name}.veg.repaired.quality.json`
-- `{name}.veg.repair_report.json`
-- `{name}.veg.repaired.bad_edges.csv`
-
-The original `.veg` and `.veg.obj` are never overwritten. If the repaired
-surface passes final quality, it becomes the final surface for packaging. This
-is why the r512 result table may show `pass(repaired)`.
-
-The runner also captures volume mesh info and dumps final components:
-
-```bash
-build/base_no_mkl/bin/volumetricMeshInfo \
-  {tet_output_dir}/{name}.veg \
-  > {tet_output_dir}/{name}.veg.info.txt
-```
-
-```bash
-uv run python scripts/dump_obj_components.py \
-  --input {final_boundary_obj} \
-  --output-dir {component_output_dir} \
+python scripts/run_fbms_noshell_from_union.py \
+  --config examples/fbms/fbms_r512/pipeline_r512.json \
+  --case g0_b15 \
+  --include all \
   --overwrite
 ```
 
-### 7. Package Simulation Assets
-
-After validation, package the final simulation assets with:
+### 8. Package Simulation Assets
 
 ```bash
-uv run python scripts/package_fbms_sim_assets.py \
+python scripts/package_fbms_sim_assets.py \
   --config examples/fbms/fbms_r512/pipeline_r512.json \
   --overwrite
 ```
 
-The package script copies only the final simulation files:
-
-- `.veg`: always from TetWild
-- `.veg.obj`: original boundary surface if it passed, repaired boundary surface
-  if repair was needed
-
-It writes a `package_manifest.json` with source paths, package paths, repair
-status, and repair volume drift.
+The package script copies only `.veg` and the final `.veg.obj` (original or
+repaired) for each passing asset and writes `package_manifest.json`.
 
 ## Common Commands
 
-Dry-run the full pipeline:
+All scripts use `_resolve_python()` to prefer the project `.venv/bin/python`
+over the launching interpreter, so child scripts always have their dependencies.
 
 ```bash
-uv run python scripts/run_fbms_all_asset_pipeline.py \
+# Full pipeline
+python scripts/run_fbms_all_asset_pipeline.py \
   --config examples/fbms/fbms_r512/pipeline_r512.json \
-  --dry-run
-```
+  --overwrite --update-readme
 
-Run or rerun the full pipeline:
-
-```bash
-uv run python scripts/run_fbms_all_asset_pipeline.py \
+# Single case, from raw onward
+python scripts/run_fbms_all_asset_pipeline.py \
   --config examples/fbms/fbms_r512/pipeline_r512.json \
-  --overwrite \
-  --update-readme
-```
+  --case g0_b15 --from-stage raw --overwrite
 
-Rerun only validation and README/summary refresh:
-
-```bash
-uv run python scripts/run_fbms_all_asset_pipeline.py \
+# Validate + repair only
+python scripts/run_fbms_all_asset_pipeline.py \
   --config examples/fbms/fbms_r512/pipeline_r512.json \
-  --from-stage validate \
-  --overwrite \
-  --update-readme
-```
+  --case g0_b15 --from-stage validate --overwrite
 
-Rerun a single case and shape:
-
-```bash
-uv run python scripts/run_fbms_all_asset_pipeline.py \
+# Noshell
+python scripts/run_fbms_noshell_from_union.py \
   --config examples/fbms/fbms_r512/pipeline_r512.json \
-  --case g0_b15 \
-  --shape tpms_schwarz_p \
-  --from-stage validate \
-  --overwrite \
-  --update-readme
-```
+  --case g0_b15 --include all --overwrite
 
-Refresh summary only:
-
-```bash
-uv run python scripts/run_fbms_all_asset_pipeline.py \
+# Package
+python scripts/package_fbms_sim_assets.py \
   --config examples/fbms/fbms_r512/pipeline_r512.json \
-  --from-stage summary \
-  --update-readme
-```
+  --case g0_b10 --overwrite
 
-Package final simulation assets:
-
-```bash
-uv run python scripts/package_fbms_sim_assets.py \
+# Refresh summary + results table without re-running
+python scripts/run_fbms_all_asset_pipeline.py \
   --config examples/fbms/fbms_r512/pipeline_r512.json \
-  --overwrite
-```
-
-Package only one case:
-
-```bash
-uv run python scripts/package_fbms_sim_assets.py \
-  --config examples/fbms/fbms_r512/pipeline_r512.json \
-  --case g0_b10 \
-  --overwrite
+  --from-stage summary --update-readme
 ```
 
 ## Current r512 Results
 
-The detailed result table is in:
+The detailed result table is in `fbms_r512/README.md`.
 
-```bash
-examples/fbms/fbms_r512/README.md
-```
+- 18 final simulation assets are packaged across `g0_b5`, `g0_b10`, `g0_b15`.
+- Each case has 1 FBMS asset + 5 volume-matched TPMS baselines.
+- `g0_b5/tpms_schwarz_p` and `g0_b15/tpms_schwarz_p` use repaired final boundary surfaces.
+- FBMS and TPMS baselines use the same unit sphere (center at origin, radius 1).
+- Raw extraction keeps only the 3 largest components per asset.
+- Noshell remesh falls back from CGAL to geogram when self-intersections are detected.
 
-Current summary:
-
-- 18 final simulation assets are packaged.
-- Each `g0_b*` has 1 FBMS asset and 5 volume-matched TPMS baseline assets.
-- `g0_b5/tpms_schwarz_p` and `g0_b15/tpms_schwarz_p` use repaired final
-  boundary surfaces.
-- The packaged assets live in `examples/fbms/fbms_r512/simulation_package`.
-
-Use `simulation_package/package_manifest.json` when you need exact provenance
-for any packaged `.veg` or `.veg.obj`.
+Use `simulation_package/package_manifest.json` for exact provenance of any packaged asset.
