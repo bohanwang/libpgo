@@ -1,23 +1,23 @@
 [
   {
-    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008/fbms/g0_b10/g0_b10.veg.obj",
-    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008_components/fbms/g0_b10/g0_b10_component_0.obj",
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_t002_lr0008/fbms/g0_b10/g0_b10.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_t002_lr0008_components/fbms/g0_b10/g0_b10_component_0.obj",
     "component": 0,
-    "vertices": 28440,
-    "triangles": 56912
+    "vertices": 28095,
+    "triangles": 56222
   },
   {
-    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008/fbms/g0_b10/g0_b10.veg.obj",
-    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008_components/fbms/g0_b10/g0_b10_component_1.obj",
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_t002_lr0008/fbms/g0_b10/g0_b10.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_t002_lr0008_components/fbms/g0_b10/g0_b10_component_1.obj",
     "component": 1,
-    "vertices": 20340,
-    "triangles": 40676
+    "vertices": 20158,
+    "triangles": 40312
   },
   {
-    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008/fbms/g0_b10/g0_b10.veg.obj",
-    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_t002_lr0008_components/fbms/g0_b10/g0_b10_component_2.obj",
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_t002_lr0008/fbms/g0_b10/g0_b10.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_t002_lr0008_components/fbms/g0_b10/g0_b10_component_2.obj",
     "component": 2,
-    "vertices": 16680,
-    "triangles": 33356
+    "vertices": 16700,
+    "triangles": 33396
   }
 ]

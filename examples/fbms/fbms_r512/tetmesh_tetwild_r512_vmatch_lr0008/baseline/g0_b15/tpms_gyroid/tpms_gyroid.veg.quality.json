@@ -1,14 +1,14 @@
 {
   "bbox": {
     "max": [
-      1.0147115443710688,
-      1.0148147594562262,
-      1.0148415677800227
+      1.0148809726792656,
+      1.0148680573990516,
+      1.0148424668787936
     ],
     "min": [
-      -1.014899227048683,
-      -1.0148519682266224,
-      -1.0149026480137464
+      -1.0149048437170858,
+      -1.014912217399369,
+      -1.014922020578746
     ]
   },
   "boundary_or_exterior_edges": 0,
@@ -19,19 +19,19 @@
     "winding": "passed"
   },
   "component_triangle_counts_by_edge": [
-    40304,
-    38590,
-    38578
+    40076,
+    38840,
+    38664
   ],
   "components_by_edge": 3,
   "edge_length": {
-    "max": 0.054583587858215585,
-    "mean": 0.027969227756703956,
-    "min": 0.008635757567384708
+    "max": 0.0532608663332329,
+    "mean": 0.02804559582612839,
+    "min": 0.006978545284721963
   },
-  "enclosed_volume": 0.60843890446442,
+  "enclosed_volume": 0.5613863392556536,
   "errors": [],
-  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_gyroid/tpms_gyroid.veg.obj",
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_gyroid/tpms_gyroid.veg.obj",
   "invalid_triangles": 0,
   "is_manifold": true,
   "is_winding_consistent": true,
@@ -40,8 +40,8 @@
   "self_intersection_backend": "exact-count",
   "self_intersections": 0,
   "self_intersections_exact": true,
-  "triangles": 117472,
+  "triangles": 117580,
   "type": "surface",
-  "vertices": 58734,
+  "vertices": 58788,
   "warnings": []
 }

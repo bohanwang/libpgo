@@ -240,6 +240,8 @@ def raw_command(config: PipelineConfig, target: NoShellTarget) -> CommandSpec:
         argv.append("--project-fbms-boundary-to-sphere")
     if raw.get("filter_small_components", True):
         argv.extend(["--filter-small-components", "--min-component-triangles", str(raw["min_component_triangles"])])
+    if raw.get("keep_largest_components", -1) > 0:
+        argv.extend(["--keep-largest-components", str(raw["keep_largest_components"])])
     return CommandSpec(f"raw-noshell:{target.kind}:{target.case}:{target.name}", argv, target.raw_log)
 
 
@@ -275,6 +277,30 @@ def quality_command(
     if self_intersection_triangle_limit is not None:
         argv.extend(["--self-intersection-triangle-limit", str(self_intersection_triangle_limit)])
     return CommandSpec(label, argv, log_path, allow_failure=allow_failure)
+
+
+def _remesh_has_self_intersections(quality_path: Path) -> bool:
+    if not quality_path.exists():
+        return False
+    q = read_json(quality_path)
+    return q.get("self_intersections", 0) > 0
+
+
+def remesh_geogram_command(config: PipelineConfig, target: NoShellTarget, vertex_count: int) -> CommandSpec:
+    return CommandSpec(
+        f"remesh-geogram-noshell:{target.kind}:{target.case}:{target.name}",
+        [
+            str(tool_path(config, "remesh")),
+            "geogram",
+            "--input-mesh",
+            str(target.raw_obj),
+            "--output-mesh",
+            str(target.remesh_obj),
+            "--target-num-vertices",
+            str(vertex_count),
+        ],
+        target.remesh_log,
+    )
 
 
 def compute_remesh_edge_length_arg(raw_quality: dict[str, Any], target_edge_length: float) -> float:
@@ -366,6 +392,28 @@ def run_noshell_target(config: PipelineConfig, target: NoShellTarget, dry_run: b
             ),
             dry_run=dry_run,
         )
+        if not dry_run and _remesh_has_self_intersections(target.remesh_quality):
+            cgal_quality = read_json(target.remesh_quality)
+            vertex_count = int(cgal_quality["vertices"])
+            log_progress("remesh", target=target_key(target), status="fallback-geogram",
+                         reason="cgal-self-intersections", target_vertices=vertex_count)
+            run_command(remesh_geogram_command(config, target, vertex_count), dry_run=dry_run)
+            run_command(
+                quality_command(
+                    config,
+                    f"remesh-quality-noshell:{target.kind}:{target.case}:{target.name}",
+                    target.remesh_obj,
+                    target.remesh_quality,
+                    target.remesh_quality_log,
+                    "full",
+                    str(quality["remesh_invalid_triangles_policy"]),
+                    allow_failure=True,
+                    expected_components=target.expected_components,
+                    self_intersection_backend=str(quality["remesh_self_intersection_backend"]),
+                    self_intersection_triangle_limit=int(quality["remesh_self_intersection_triangle_limit"]),
+                ),
+                dry_run=dry_run,
+            )
     if not dry_run and not target.remesh_quality.exists():
         raise RuntimeError(f"no-shell remesh quality JSON was not produced for {target_key(target)}")
 

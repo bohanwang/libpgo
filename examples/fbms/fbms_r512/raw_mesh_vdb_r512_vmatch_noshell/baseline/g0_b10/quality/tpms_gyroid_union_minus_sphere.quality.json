@@ -1,0 +1,47 @@
+{
+  "bbox": {
+    "max": [
+      0.9849866628646851,
+      0.9849866628646851,
+      0.9849866628646851
+    ],
+    "min": [
+      -0.9849866628646851,
+      -0.9849866628646851,
+      -0.9849866628646851
+    ]
+  },
+  "boundary_or_exterior_edges": 0,
+  "check_status": {
+    "basic_geometry": "passed",
+    "self_intersection": "skipped",
+    "topology": "passed",
+    "winding": "skipped"
+  },
+  "component_triangle_counts_by_edge": [
+    1715384
+  ],
+  "components_by_edge": 1,
+  "edge_length": {
+    "max": 0.00910565292460492,
+    "mean": 0.004753353743464569,
+    "min": 3.874301909845279e-07
+  },
+  "enclosed_volume": 0.2064815746294214,
+  "errors": [],
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/raw_mesh_vdb_r512_vmatch_noshell/baseline/g0_b10/tpms_gyroid_union_minus_sphere.obj",
+  "invalid_triangles": 41,
+  "is_manifold": true,
+  "is_winding_consistent": null,
+  "oriented_boundary_or_exterior_edges": null,
+  "passed": true,
+  "self_intersection_backend": null,
+  "self_intersections": null,
+  "self_intersections_exact": null,
+  "triangles": 1715384,
+  "type": "surface",
+  "vertices": 857686,
+  "warnings": [
+    "Input triangle mesh contains invalid or degenerate triangles"
+  ]
+}

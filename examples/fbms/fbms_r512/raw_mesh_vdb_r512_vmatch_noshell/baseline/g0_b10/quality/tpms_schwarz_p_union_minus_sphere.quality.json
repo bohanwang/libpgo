@@ -1,0 +1,45 @@
+{
+  "bbox": {
+    "max": [
+      0.8554872870445251,
+      0.8554872870445251,
+      0.8554872870445251
+    ],
+    "min": [
+      -0.8554872870445251,
+      -0.8554872870445251,
+      -0.8554872870445251
+    ]
+  },
+  "boundary_or_exterior_edges": 0,
+  "check_status": {
+    "basic_geometry": "passed",
+    "self_intersection": "skipped",
+    "topology": "passed",
+    "winding": "skipped"
+  },
+  "component_triangle_counts_by_edge": [
+    1672004
+  ],
+  "components_by_edge": 1,
+  "edge_length": {
+    "max": 0.008694930152072136,
+    "mean": 0.004679189970759882,
+    "min": 1.1324882507213196e-05
+  },
+  "enclosed_volume": 0.16792787920956173,
+  "errors": [],
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/raw_mesh_vdb_r512_vmatch_noshell/baseline/g0_b10/tpms_schwarz_p_union_minus_sphere.obj",
+  "invalid_triangles": 0,
+  "is_manifold": true,
+  "is_winding_consistent": null,
+  "oriented_boundary_or_exterior_edges": null,
+  "passed": true,
+  "self_intersection_backend": null,
+  "self_intersections": null,
+  "self_intersections_exact": null,
+  "triangles": 1672004,
+  "type": "surface",
+  "vertices": 835994,
+  "warnings": []
+}

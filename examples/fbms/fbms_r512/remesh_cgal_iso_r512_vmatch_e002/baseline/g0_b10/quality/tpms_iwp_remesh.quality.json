@@ -19,19 +19,19 @@
     "winding": "passed"
   },
   "component_triangle_counts_by_edge": [
-    112878,
+    113128,
     88742,
-    75848
+    75926
   ],
   "components_by_edge": 3,
   "edge_length": {
-    "max": 0.02678177871802515,
-    "mean": 0.0184502649970686,
-    "min": 0.0099640130978771
+    "max": 0.027251696233483513,
+    "mean": 0.018461160397273163,
+    "min": 0.010318115179559896
   },
-  "enclosed_volume": 0.5854087558286297,
+  "enclosed_volume": 0.547195630016154,
   "errors": [],
-  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/remesh_cgal_iso_r512_vmatch_e002/baseline/g0_b10/tpms_iwp_remesh.obj",
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/remesh_cgal_iso_r512_vmatch_e002/baseline/g0_b10/tpms_iwp_remesh.obj",
   "invalid_triangles": 0,
   "is_manifold": true,
   "is_winding_consistent": true,
@@ -40,8 +40,8 @@
   "self_intersection_backend": "exact-count",
   "self_intersections": 0,
   "self_intersections_exact": true,
-  "triangles": 277468,
+  "triangles": 277796,
   "type": "surface",
-  "vertices": 138726,
+  "vertices": 138890,
   "warnings": []
 }

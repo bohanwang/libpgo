@@ -1,14 +1,14 @@
 {
   "bbox": {
     "max": [
-      1.043553709983826,
-      1.044240474700928,
-      1.084292531013489
+      1.0149871110916142,
+      1.0149871110916142,
+      1.0149871110916142
     ],
     "min": [
-      -1.055065631866455,
-      -1.0543798208236697,
-      -1.0143226385116577
+      -1.0149871110916142,
+      -1.0149871110916142,
+      -1.0149871110916142
     ]
   },
   "boundary_or_exterior_edges": 0,
@@ -19,20 +19,20 @@
     "winding": "skipped"
   },
   "component_triangle_counts_by_edge": [
-    2073616,
-    1484740,
-    1220752
+    2062636,
+    1484076,
+    1222604
   ],
   "components_by_edge": 3,
   "edge_length": {
-    "max": 0.009508552278113404,
-    "mean": 0.00499008811691837,
-    "min": 8.940696714088148e-07
+    "max": 0.00921899459099003,
+    "mean": 0.004827854087355971,
+    "min": 7.152557374157098e-07
   },
-  "enclosed_volume": 0.5841104752269035,
+  "enclosed_volume": 0.5458418919656053,
   "errors": [],
-  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/raw_mesh_vdb_r512_t002/fbms/g0_b10_union.obj",
-  "invalid_triangles": 41,
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/raw_mesh_vdb_r512_t002/fbms/g0_b10_union.obj",
+  "invalid_triangles": 26,
   "is_manifold": true,
   "is_winding_consistent": null,
   "oriented_boundary_or_exterior_edges": null,
@@ -40,9 +40,9 @@
   "self_intersection_backend": null,
   "self_intersections": null,
   "self_intersections_exact": null,
-  "triangles": 4779108,
+  "triangles": 4769316,
   "type": "surface",
-  "vertices": 2389542,
+  "vertices": 2384646,
   "warnings": [
     "Input triangle mesh contains invalid or degenerate triangles"
   ]

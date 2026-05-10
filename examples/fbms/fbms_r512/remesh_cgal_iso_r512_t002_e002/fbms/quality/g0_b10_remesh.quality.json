@@ -1,14 +1,14 @@
 {
   "bbox": {
     "max": [
-      1.043522590653785,
-      1.0442033158254098,
-      1.084242301535179
+      1.0149682609811521,
+      1.0149384747049437,
+      1.014933054276654
     ],
     "min": [
-      -1.0550146856492078,
-      -1.0543396923466697,
-      -1.0142715843939298
+      -1.0149558774367229,
+      -1.0149660972768573,
+      -1.014953178720475
     ]
   },
   "boundary_or_exterior_edges": 0,
@@ -19,19 +19,19 @@
     "winding": "passed"
   },
   "component_triangle_counts_by_edge": [
-    132690,
-    95764,
-    78066
+    122482,
+    88742,
+    72490
   ],
   "components_by_edge": 3,
   "edge_length": {
-    "max": 0.02698348158185192,
-    "mean": 0.018364112567939874,
-    "min": 0.008269549222522894
+    "max": 0.027250224454583985,
+    "mean": 0.018449685316408074,
+    "min": 0.00998926232266696
   },
-  "enclosed_volume": 0.585506524918019,
+  "enclosed_volume": 0.5471994226275924,
   "errors": [],
-  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/remesh_cgal_iso_r512_t002_e002/fbms/g0_b10_remesh.obj",
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/remesh_cgal_iso_r512_t002_e002/fbms/g0_b10_remesh.obj",
   "invalid_triangles": 0,
   "is_manifold": true,
   "is_winding_consistent": true,
@@ -40,8 +40,8 @@
   "self_intersection_backend": "exact-count",
   "self_intersections": 0,
   "self_intersections_exact": true,
-  "triangles": 306520,
+  "triangles": 283714,
   "type": "surface",
-  "vertices": 153248,
+  "vertices": 141845,
   "warnings": []
 }

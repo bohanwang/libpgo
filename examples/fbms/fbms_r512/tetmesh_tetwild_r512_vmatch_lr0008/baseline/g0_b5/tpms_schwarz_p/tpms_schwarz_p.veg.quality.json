@@ -1,17 +1,17 @@
 {
   "bbox": {
     "max": [
-      1.0148135561579292,
-      1.0148180057658835,
-      1.0148303469176634
+      1.0149436395206837,
+      1.01485097242875,
+      1.0149070147387935
     ],
     "min": [
-      -1.014908241257144,
-      -1.0148557395345257,
-      -1.01494695353624
+      -1.014853077223515,
+      -1.0149184824969792,
+      -1.0149168656111598
     ]
   },
-  "boundary_or_exterior_edges": 1,
+  "boundary_or_exterior_edges": 9,
   "check_status": {
     "basic_geometry": "passed",
     "self_intersection": "passed",
@@ -19,15 +19,15 @@
     "winding": "failed"
   },
   "component_triangle_counts_by_edge": [
-    40678,
-    37076,
-    36308
+    40538,
+    37862,
+    36432
   ],
   "components_by_edge": 3,
   "edge_length": {
-    "max": 0.04981705297737245,
-    "mean": 0.027530757176715187,
-    "min": 0.0026290101761828836
+    "max": 0.049445736170786576,
+    "mean": 0.027528629662821213,
+    "min": 0.0015642417787575034
   },
   "enclosed_volume": null,
   "errors": [
@@ -44,8 +44,8 @@
   "self_intersection_backend": "exact-count",
   "self_intersections": 0,
   "self_intersections_exact": true,
-  "triangles": 114062,
+  "triangles": 114832,
   "type": "surface",
-  "vertices": 57026,
+  "vertices": 57396,
   "warnings": []
 }

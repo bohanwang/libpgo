@@ -24,6 +24,16 @@ from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+_VENV_PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
+
+
+def _resolve_python() -> str:
+    """Return the project venv python if available, otherwise sys.executable."""
+    if _VENV_PYTHON.is_file():
+        return str(_VENV_PYTHON)
+    return sys.executable
+
+
 DEFAULT_CONFIG = REPO_ROOT / "examples" / "fbms_all" / "pipeline_r512.json"
 STAGES = ("prepare", "raw", "remesh", "tet", "validate", "summary")
 README_RESULTS_START = "<!-- r512-pipeline-results:start -->"
@@ -462,7 +472,7 @@ def prepare_assets(
             cmd = CommandSpec(
                 label=f"prepare-sphere:{case.name}",
                 argv=[
-                    sys.executable,
+                    _resolve_python(),
                     str(REPO_ROOT / "scripts" / "generate_bounding_sphere.py"),
                     "--input",
                     str(dst_obj),
@@ -507,7 +517,7 @@ def prepare_assets(
         cmd = CommandSpec(
             label="prepare-tpms",
             argv=[
-                sys.executable,
+                _resolve_python(),
                 str(REPO_ROOT / "scripts" / "generate_tpms_unit_ball.py"),
                 "--cells",
                 str(params["tpms_cells"]),
@@ -721,6 +731,8 @@ def raw_command(config: PipelineConfig, target: PipelineTarget) -> CommandSpec:
         argv.append("--project-fbms-boundary-to-sphere")
     if raw.get("filter_small_components", True):
         argv.extend(["--filter-small-components", "--min-component-triangles", str(raw["min_component_triangles"])])
+    if raw.get("keep_largest_components", -1) > 0:
+        argv.extend(["--keep-largest-components", str(raw["keep_largest_components"])])
     return CommandSpec(f"raw:{target.case}:{target.name}", argv, target.raw_log)
 
 
@@ -758,11 +770,18 @@ def quality_command(
     return CommandSpec(label, argv, log_path, allow_failure=allow_failure)
 
 
+def _repair_stale(target: PipelineTarget) -> bool:
+    """Return True if the repaired output predates the current veg.obj."""
+    if not target.repaired_veg_obj.exists():
+        return True
+    return target.veg_obj.stat().st_mtime > target.repaired_veg_obj.stat().st_mtime
+
+
 def repair_command(target: PipelineTarget) -> CommandSpec:
     return CommandSpec(
         f"boundary-repair:{target.case}:{target.name}",
         [
-            sys.executable,
+            _resolve_python(),
             str(REPO_ROOT / "scripts" / "repair_tpms_mesh.py"),
             str(target.veg_obj),
             "--out",
@@ -960,7 +979,7 @@ def run_validate_stage(config: PipelineConfig, target: PipelineTarget, dry_run: 
     else:
         log_progress("validate", target=target_key(target), check="boundary-quality", status="skip")
     if not dry_run and not quality_passed(target.veg_quality):
-        if overwrite or not target.repaired_veg_obj.exists() or not target.repaired_veg_quality.exists():
+        if overwrite or not target.repaired_veg_obj.exists() or not target.repaired_veg_quality.exists() or _repair_stale(target):
             run_command(repair_command(target), dry_run=dry_run)
             if target.repaired_veg_obj.exists():
                 run_command(
@@ -992,7 +1011,7 @@ def run_validate_stage(config: PipelineConfig, target: PipelineTarget, dry_run: 
             CommandSpec(
                 f"components:{target.case}:{target.name}",
                 [
-                    sys.executable,
+                    _resolve_python(),
                     str(REPO_ROOT / "scripts" / "dump_obj_components.py"),
                     "--input",
                     str(component_input),

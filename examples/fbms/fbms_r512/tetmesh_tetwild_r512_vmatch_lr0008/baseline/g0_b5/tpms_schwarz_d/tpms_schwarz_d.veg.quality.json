@@ -1,14 +1,14 @@
 {
   "bbox": {
     "max": [
-      1.0148528374359425,
-      1.0148804598892547,
-      1.0148942912286338
+      1.0149344998007908,
+      1.0149341330534025,
+      1.014920197653846
     ],
     "min": [
-      -1.0147438002681548,
-      -1.0149296315487188,
-      -1.0149160104890096
+      -1.014911213274224,
+      -1.014818802492322,
+      -1.014908874128833
     ]
   },
   "boundary_or_exterior_edges": 0,
@@ -19,19 +19,19 @@
     "winding": "passed"
   },
   "component_triangle_counts_by_edge": [
-    44778,
-    40154,
-    34950
+    44674,
+    40222,
+    34906
   ],
   "components_by_edge": 3,
   "edge_length": {
-    "max": 0.05466677858190385,
-    "mean": 0.027933795545000178,
-    "min": 0.008997922995000105
+    "max": 0.05685358696708738,
+    "mean": 0.02796568224024335,
+    "min": 0.00865317702116426
   },
-  "enclosed_volume": 0.5457973513335703,
+  "enclosed_volume": 0.5197418602107426,
   "errors": [],
-  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_schwarz_d/tpms_schwarz_d.veg.obj",
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_schwarz_d/tpms_schwarz_d.veg.obj",
   "invalid_triangles": 0,
   "is_manifold": true,
   "is_winding_consistent": true,
@@ -40,8 +40,8 @@
   "self_intersection_backend": "exact-count",
   "self_intersections": 0,
   "self_intersections_exact": true,
-  "triangles": 119882,
+  "triangles": 119802,
   "type": "surface",
-  "vertices": 59941,
+  "vertices": 59901,
   "warnings": []
 }

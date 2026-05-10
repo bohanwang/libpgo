@@ -19,20 +19,20 @@
     "winding": "skipped"
   },
   "component_triangle_counts_by_edge": [
-    1489456,
-    1489144,
+    1496620,
+    1496400,
     1484076
   ],
   "components_by_edge": 3,
   "edge_length": {
-    "max": 0.009134348974488256,
-    "mean": 0.00480013445101487,
-    "min": 3.874301910400391e-06
+    "max": 0.009182706808855363,
+    "mean": 0.004799946867817618,
+    "min": 8.940696715198371e-07
   },
-  "enclosed_volume": 0.5840089091088397,
+  "enclosed_volume": 0.5457028127758364,
   "errors": [],
-  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/raw_mesh_vdb_r512_vmatch/baseline/g0_b10/tpms_gyroid_union.obj",
-  "invalid_triangles": 96,
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/raw_mesh_vdb_r512_vmatch/baseline/g0_b10/tpms_gyroid_union.obj",
+  "invalid_triangles": 63,
   "is_manifold": true,
   "is_winding_consistent": null,
   "oriented_boundary_or_exterior_edges": null,
@@ -40,9 +40,9 @@
   "self_intersection_backend": null,
   "self_intersections": null,
   "self_intersections_exact": null,
-  "triangles": 4462676,
+  "triangles": 4477096,
   "type": "surface",
-  "vertices": 2231336,
+  "vertices": 2238546,
   "warnings": [
     "Input triangle mesh contains invalid or degenerate triangles"
   ]

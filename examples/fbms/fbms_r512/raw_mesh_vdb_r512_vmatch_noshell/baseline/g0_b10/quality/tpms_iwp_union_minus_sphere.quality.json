@@ -1,0 +1,47 @@
+{
+  "bbox": {
+    "max": [
+      0.831359326839447,
+      0.831359326839447,
+      0.831359326839447
+    ],
+    "min": [
+      -0.831359326839447,
+      -0.831359326839447,
+      -0.831359326839447
+    ]
+  },
+  "boundary_or_exterior_edges": 0,
+  "check_status": {
+    "basic_geometry": "passed",
+    "self_intersection": "skipped",
+    "topology": "passed",
+    "winding": "skipped"
+  },
+  "component_triangle_counts_by_edge": [
+    1871108
+  ],
+  "components_by_edge": 1,
+  "edge_length": {
+    "max": 0.009083944282346561,
+    "mean": 0.004846158296416541,
+    "min": 8.568167686434647e-06
+  },
+  "enclosed_volume": 0.2063903749910875,
+  "errors": [],
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/raw_mesh_vdb_r512_vmatch_noshell/baseline/g0_b10/tpms_iwp_union_minus_sphere.obj",
+  "invalid_triangles": 34,
+  "is_manifold": true,
+  "is_winding_consistent": null,
+  "oriented_boundary_or_exterior_edges": null,
+  "passed": true,
+  "self_intersection_backend": null,
+  "self_intersections": null,
+  "self_intersections_exact": null,
+  "triangles": 1871108,
+  "type": "surface",
+  "vertices": 935542,
+  "warnings": [
+    "Input triangle mesh contains invalid or degenerate triangles"
+  ]
+}

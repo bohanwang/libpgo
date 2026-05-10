@@ -9,6 +9,9 @@ dependencies = [
     "trimesh",
 ]
 
+[project.optional-dependencies]
+test = ["pytest>=6.0"]
+
 [tool.uv]
 package = false
 

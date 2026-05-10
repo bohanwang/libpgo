@@ -1,14 +1,14 @@
 {
   "bbox": {
     "max": [
-      1.0148721782716277,
-      1.014817225115252,
-      1.0149312386348792
+      1.014947719749597,
+      1.0149012827186634,
+      1.0148764384533808
     ],
     "min": [
-      -1.0149182079571897,
-      -1.0149473727483957,
-      -1.0147685376959659
+      -1.0148963906652797,
+      -1.0149494707543825,
+      -1.0148552481199449
     ]
   },
   "boundary_or_exterior_edges": 0,
@@ -19,19 +19,19 @@
     "winding": "passed"
   },
   "component_triangle_counts_by_edge": [
-    53936,
-    40404,
-    34792
+    53728,
+    40120,
+    34592
   ],
   "components_by_edge": 3,
   "edge_length": {
-    "max": 0.053699239525009684,
-    "mean": 0.027700467682593627,
-    "min": 0.00822958721685119
+    "max": 0.05377729233485398,
+    "mean": 0.027830528916552764,
+    "min": 0.00791076335189667
   },
-  "enclosed_volume": 0.5872466869734673,
+  "enclosed_volume": 0.548946817916842,
   "errors": [],
-  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b10/tpms_neovius/tpms_neovius.veg.obj",
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b10/tpms_neovius/tpms_neovius.veg.obj",
   "invalid_triangles": 0,
   "is_manifold": true,
   "is_winding_consistent": true,
@@ -40,8 +40,8 @@
   "self_intersection_backend": "exact-count",
   "self_intersections": 0,
   "self_intersections_exact": true,
-  "triangles": 129132,
+  "triangles": 128440,
   "type": "surface",
-  "vertices": 64550,
+  "vertices": 64204,
   "warnings": []
 }

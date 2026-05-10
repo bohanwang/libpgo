@@ -1,23 +1,23 @@
 [
   {
-    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_iwp/tpms_iwp.veg.obj",
-    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b5/tpms_iwp/tpms_iwp_component_0.obj",
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_iwp/tpms_iwp.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b5/tpms_iwp/tpms_iwp_component_0.obj",
     "component": 0,
-    "vertices": 26081,
-    "triangles": 52186
+    "vertices": 25822,
+    "triangles": 51668
   },
   {
-    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_iwp/tpms_iwp.veg.obj",
-    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b5/tpms_iwp/tpms_iwp_component_1.obj",
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_iwp/tpms_iwp.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b5/tpms_iwp/tpms_iwp_component_1.obj",
     "component": 1,
-    "vertices": 20270,
-    "triangles": 40536
+    "vertices": 19926,
+    "triangles": 39848
   },
   {
-    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_iwp/tpms_iwp.veg.obj",
-    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b5/tpms_iwp/tpms_iwp_component_2.obj",
+    "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b5/tpms_iwp/tpms_iwp.veg.obj",
+    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b5/tpms_iwp/tpms_iwp_component_2.obj",
     "component": 2,
-    "vertices": 17409,
-    "triangles": 34814
+    "vertices": 17181,
+    "triangles": 34358
   }
 ]

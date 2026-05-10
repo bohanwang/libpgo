@@ -1,23 +1,23 @@
 [
   {
     "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.repaired.obj",
-    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.repaired_component_0.obj",
+    "output": "examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.repaired_component_0.obj",
     "component": 0,
-    "vertices": 20329,
-    "triangles": 40654
+    "vertices": 20190,
+    "triangles": 40376
   },
   {
     "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.repaired.obj",
-    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.repaired_component_1.obj",
+    "output": "examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.repaired_component_1.obj",
     "component": 1,
-    "vertices": 17935,
-    "triangles": 35866
+    "vertices": 18250,
+    "triangles": 36516
   },
   {
     "source": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.repaired.obj",
-    "output": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.repaired_component_2.obj",
+    "output": "examples/fbms/fbms_r512/tetmesh_tetwild_r512_vmatch_lr0008_components/baseline/g0_b15/tpms_schwarz_p/tpms_schwarz_p.veg.repaired_component_2.obj",
     "component": 2,
-    "vertices": 17759,
-    "triangles": 35534
+    "vertices": 17936,
+    "triangles": 35868
   }
 ]

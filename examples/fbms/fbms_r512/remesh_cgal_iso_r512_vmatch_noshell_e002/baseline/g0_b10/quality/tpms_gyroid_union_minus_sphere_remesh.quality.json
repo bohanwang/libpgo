@@ -1,0 +1,45 @@
+{
+  "bbox": {
+    "max": [
+      0.9849010109901428,
+      0.9849600791931152,
+      0.9849191978155378
+    ],
+    "min": [
+      -0.9849418388540687,
+      -0.9849600791931152,
+      -0.9849016666412354
+    ]
+  },
+  "boundary_or_exterior_edges": 0,
+  "check_status": {
+    "basic_geometry": "passed",
+    "self_intersection": "passed",
+    "topology": "passed",
+    "winding": "passed"
+  },
+  "component_triangle_counts_by_edge": [
+    95446
+  ],
+  "components_by_edge": 1,
+  "edge_length": {
+    "max": 0.026806409197353442,
+    "mean": 0.018536794862579045,
+    "min": 0.008876073066175619
+  },
+  "enclosed_volume": 0.20507591763702435,
+  "errors": [],
+  "input": "/Users/jinceyang/Desktop/codebase/libpgo/examples/fbms/fbms_r512/remesh_cgal_iso_r512_vmatch_noshell_e002/baseline/g0_b10/tpms_gyroid_union_minus_sphere_remesh.obj",
+  "invalid_triangles": 0,
+  "is_manifold": true,
+  "is_winding_consistent": true,
+  "oriented_boundary_or_exterior_edges": 0,
+  "passed": true,
+  "self_intersection_backend": "exact-count",
+  "self_intersections": 0,
+  "self_intersections_exact": true,
+  "triangles": 95446,
+  "type": "surface",
+  "vertices": 47717,
+  "warnings": []
+}
