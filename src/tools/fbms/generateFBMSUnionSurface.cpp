@@ -1,9 +1,6 @@
-#include "generateFBMSUnionSurfaceExtraction.h"
-#include "generateFBMSUnionSurfaceField.h"
+#include "generateFBMSUnionSurfaceAdapter.h"
 #include "generateFBMSUnionSurfaceIO.h"
 #include "generateFBMSUnionSurfaceOptions.h"
-#include "generateFBMSUnionSurfaceSphere.h"
-#include "generateFBMSUnionSurfaceVolume.h"
 
 #include "boundingBox.h"
 #include "pgoLogging.h"

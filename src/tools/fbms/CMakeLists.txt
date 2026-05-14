@@ -1,36 +1,32 @@
-set(AVAILABLE_LIBS)
-
-foreach(lib ${PGO_GLOBAL_LIBRARY_TARGETS})
-  if(TARGET ${lib})
-    list(APPEND AVAILABLE_LIBS ${lib})
-  endif()
-endforeach()
-
 if(TARGET pgoLogging)
   add_libpgo_tools(computeStressFieldStats computeStressFieldStats.cpp "pgoLogging")
   target_link_libraries(computeStressFieldStats PRIVATE argparse::argparse nlohmann_json::nlohmann_json fmt::fmt)
 endif()
 
-if(NOT TARGET libiglInterface)
+if(NOT TARGET implicitSurface)
+  message(STATUS "generateFBMSUnionSurface tool is not included. Missing: implicitSurface")
   return()
 endif()
 
-set(GENERATE_FBMS_UNION_SURFACE_SOURCES
+set(GENERATE_FBMS_UNION_SURFACE_ADAPTER_SOURCES
   generateFBMSUnionSurface.cpp
-  generateFBMSUnionSurfaceExtraction.cpp
-  generateFBMSUnionSurfaceField.cpp
+  generateFBMSUnionSurfaceAdapter.cpp
   generateFBMSUnionSurfaceIO.cpp
-  generateFBMSUnionSurfaceOptions.cpp
-  generateFBMSUnionSurfaceSphere.cpp
-  generateFBMSUnionSurfaceVolume.cpp)
+  generateFBMSUnionSurfaceOptions.cpp)
 
-add_libpgo_tools(generateFBMSUnionSurface "${GENERATE_FBMS_UNION_SURFACE_SOURCES}" "${AVAILABLE_LIBS}")
-target_link_libraries(generateFBMSUnionSurface PRIVATE argparse::argparse)
+set(GENERATE_FBMS_UNION_SURFACE_ADAPTER_HEADERS
+  generateFBMSUnionSurfaceAdapter.h
+  generateFBMSUnionSurfaceIO.h
+  generateFBMSUnionSurfaceOptions.h
+  generateFBMSUnionSurfaceVolume.h)
 
-if(TARGET openvdb_static)
-  target_link_libraries(generateFBMSUnionSurface PRIVATE openvdb_static)
-  target_compile_definitions(generateFBMSUnionSurface PRIVATE PGO_HAS_OPENVDB)
-elseif(TARGET OpenVDB::openvdb)
-  target_link_libraries(generateFBMSUnionSurface PRIVATE OpenVDB::openvdb)
-  target_compile_definitions(generateFBMSUnionSurface PRIVATE PGO_HAS_OPENVDB)
-endif()
+add_libpgo_tools(generateFBMSUnionSurface
+  "${GENERATE_FBMS_UNION_SURFACE_ADAPTER_SOURCES}"
+  "")
+
+target_sources(generateFBMSUnionSurface PRIVATE
+  ${GENERATE_FBMS_UNION_SURFACE_ADAPTER_HEADERS})
+
+target_link_libraries(generateFBMSUnionSurface PRIVATE
+  implicitSurface
+  argparse::argparse)

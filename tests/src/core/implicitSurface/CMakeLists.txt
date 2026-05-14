@@ -1,0 +1,4 @@
+add_executable(implicitSurface_gtest implicitSurface_gtest.cpp)
+target_link_libraries(implicitSurface_gtest PRIVATE GTest::gtest_main implicitSurface)
+set_property(TARGET implicitSurface_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(implicitSurface_gtest)

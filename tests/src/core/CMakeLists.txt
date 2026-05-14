@@ -28,6 +28,10 @@ if(TARGET simulation)
   gtest_discover_tests(implicitBackwardEulerTimeIntegrator_gtest)
 endif()
 
+if(TARGET implicitSurface)
+  add_subdirectory(implicitSurface)
+endif()
+
 add_subdirectory(basicAlgorithms)
 add_subdirectory(contact)
 add_subdirectory(profiling)

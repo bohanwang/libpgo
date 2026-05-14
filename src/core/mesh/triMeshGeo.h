@@ -328,6 +328,24 @@ void triMeshGeoToMatrices(const TriMeshGeo &mesh, EigenSupport::MXd &vtx, EigenS
 void matricesToTriMeshGeo(const EigenSupport::MXd &vtx, const EigenSupport::MXi &tri, TriMeshGeo &mesh);
 TriMeshGeo matricesToTriMeshGeo(const EigenSupport::MXd &vtx, const EigenSupport::MXi &tri);
 
+// Compute enclosed volume of a closed mesh via the divergence theorem.
+// Returns absolute value: V = |sum (a · (b × c))| / 6 over all triangles.
+double computeMeshVolume(const TriMeshRef mesh);
+
+// Compute the union bounding box of two meshes, expanded by thickness and
+// padding (as a fraction of the union diagonal).
+void computeUnionBBox(const TriMeshRef meshA, const TriMeshRef meshB,
+  double thicknessA, double thicknessB, double paddingRatio,
+  EigenSupport::V3d &bmin, EigenSupport::V3d &bmax);
+
+// Remove small edge-connected triangle components.
+// minComponentTriangles: components with fewer triangles are dropped.
+// keepLargestComponents: if > 0, keep only the largest N after thresholding;
+//   if -1, keep all components above the threshold.
+// Throws if the result is empty.
+void filterSmallComponents(TriMeshGeo &mesh, int minComponentTriangles,
+  int keepLargestComponents);
+
 // =========================================================
 //                  Implementations
 // =========================================================
