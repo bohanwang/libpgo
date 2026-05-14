@@ -71,10 +71,4 @@ paper/*
 
 *_output
 
-examples/fbms/**/*.obj
-examples/fbms/**/*.veg
-
-examples/fbms_all/**/*.obj
-examples/fbms_all/**/*.veg
-
 *.avi

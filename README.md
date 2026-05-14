@@ -209,18 +209,10 @@ The same runner also supports Alembic preview rendering when a case supplies
 Blender to render `.abc` frames and ffmpeg to encode a GIF:
 
 ```bash
-scripts/render_abc_preview.py \
-  --config examples/fbms/generated/r128_default/g0_b8/g0_b8_case1_pressure-render.json \
-  --overwrite
+scripts/render_abc_preview.py --config my_render_config.json --overwrite
 
-scripts/run_sim_batch.py \
-  --config examples/fbms/fbms_batch.json \
-  --job all_fbms_render \
-  --overwrite
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job sim --overwrite
 ```
-
-For the FBMS pipeline, render configs and preview GIFs are documented in
-[`examples/fbms/README.md`](./examples/fbms/README.md).
 
 Run representative IPC cases from the repo root:
 
@@ -356,8 +348,6 @@ Config fields:
 - `tetwild.lr` / `tetwild.la`: relative or absolute fTetWild target edge length
 - `tetwild.epsr`: fTetWild relative envelope tolerance
 - `tetwild.stop_energy`, `tetwild.max_threads`: fTetWild optimization controls
-
-For FBMS shell asset commands and generated example stats, see [`examples/fbms/README.md`](./examples/fbms/README.md).
 
 ### Legacy Non-IPC Examples
 
