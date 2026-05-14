@@ -1,8 +1,3 @@
-if(TARGET pgoLogging)
-  add_libpgo_tools(computeStressFieldStats computeStressFieldStats.cpp "pgoLogging")
-  target_link_libraries(computeStressFieldStats PRIVATE argparse::argparse nlohmann_json::nlohmann_json fmt::fmt)
-endif()
-
 if(NOT TARGET implicitSurface)
   message(STATUS "generateFBMSUnionSurface tool is not included. Missing: implicitSurface")
   return()
