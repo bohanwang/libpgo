@@ -10,9 +10,11 @@ copyright to Bohan Wang
 #include "ipc/geometry/ipcDistancePrimitives.h"
 #include "ipc/geometry/ipcHessianProjection.h"
 #include "ipc/core/surfaceIPCPairs.h"
+#include "ipc/external/obstacleSurface.h"
 #include "ipc/topology/surfaceIPCTopology.h"
 #include "potentialEnergy.h"
 
+#include <memory>
 #include <vector>
 #include <array>
 #include <cmath>
@@ -36,10 +38,11 @@ class SurfaceIPCCore
 public:
   struct Parameters
   {
-    double dhat = 1e-1;
-    double kappa = 0.1;
-    double eps_ee = 0.0;
-    double slackness = 1.0;
+    double dhat          = 1e-1;
+    double dhat_external = 1e-1;  // external pair activation distance; defaults to dhat for self-only numerical invariance
+    double kappa         = 0.1;
+    double eps_ee        = 0.0;
+    double slackness     = 1.0;
   };
 
   SurfaceIPCCore() = default;
@@ -68,6 +71,15 @@ public:
   const std::vector<PTPair> &getPTPairs() const { return ptPairs_; }
   const std::vector<EEPair> &getEEPairs() const { return eePairs_; }
 
+  // Obstacle (external) registration
+  int32_t addObstacleSurface(std::shared_ptr<ObstacleSurface> obs);
+  void    clearObstacleSurfaces();
+  void    updateObstacleStage(double tStart, double tEnd);
+
+  const std::vector<ExternalPTPair> &getExternalPTPairs() const { return extPTPairs_; }
+  const std::vector<ExternalTPPair> &getExternalTPPairs() const { return extTPPairs_; }
+  const std::vector<ExternalEEPair> &getExternalEEPairs() const { return extEEPairs_; }
+
   int getNumSurfaceVertices() const { return topology_.numVerts; }
   int getNumSurfaceDOFs() const { return topology_.numSurfaceDOFs(); }
 
@@ -81,6 +93,7 @@ private:
   }
 
   double dhat = 1e-1;
+  double dhat_external = 1e-1;
   double kappa = 0.1;
   double eps_ee = 0.0;
   double slackness = 1.0;
@@ -89,6 +102,10 @@ private:
   mutable std::vector<EEPair> eePairs_;
   mutable bool hasPreparedState_ = false;
   mutable VXd preparedPositions_;
+  std::vector<std::shared_ptr<ObstacleSurface>> obstacles_;
+  mutable std::vector<ExternalPTPair>           extPTPairs_;
+  mutable std::vector<ExternalTPPair>           extTPPairs_;
+  mutable std::vector<ExternalEEPair>           extEEPairs_;
 };
 
 }  // namespace CIPC

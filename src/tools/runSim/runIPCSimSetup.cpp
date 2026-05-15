@@ -18,6 +18,7 @@
 #include "runSimVolumeMeshIO.h"
 #include "simulationMesh.h"
 #include "ipc/core/surfaceIPCCore.h"
+#include "ipc/external/obstacleSurface.h"
 #include "volumetricMesh.h"
 #include "triMeshPseudoNormal.h"
 
@@ -48,7 +49,7 @@ using pgo::Contact::CIPC::FloorSide;
 void rejectIfPresent(const pgo::ConfigFileJSON &config, const char *field, const char *reason)
 {
   if (config.exist(field))
-    throwConfigError(std::string("runIPCSim phase1D does not support `") + field + "`: " + reason);
+    throwConfigError(std::string("runIPCSim phase2does not support `") + field + "`: " + reason);
 }
 
 ES::SpMatD makeIdentityEmbedding(int n3)
@@ -67,7 +68,7 @@ void validateZeroInitialDisplacement(const pgo::ConfigFileJSON &jconfig)
 {
   const ES::V3d initialDisp = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("init-disp", 1).data());
   if (initialDisp.cwiseAbs().maxCoeff() > 0.0)
-    throwConfigError("runIPCSim phase1D only accepts zero `init-disp`.");
+    throwConfigError("runIPCSim phase2only accepts zero `init-disp`.");
 }
 
 Contact::CIPC::SurfaceIPCCore::Parameters makeShellIPCParams(
@@ -93,6 +94,9 @@ Contact::CIPC::SurfaceIPCCore::Parameters makeShellIPCParams(
   ipcParams.eps_ee = 0.0;
   ipcParams.slackness = 1.0;
 
+  if (jconfig.exist("ipc-dhat-external"))
+    ipcParams.dhat_external = jconfig.getDouble("ipc-dhat-external", 1);
+
   return ipcParams;
 }
 
@@ -101,7 +105,7 @@ Contact::CIPC::SurfaceIPCCore::Parameters makeVolumeIPCParams(const pgo::ConfigF
   const bool ipcHeuristic = jconfig.exist("ipc-heuristic") ? jconfig.getValue<bool>("ipc-heuristic", 1) : false;
   if (ipcHeuristic) {
     throwConfigError(
-      "runIPCSim phase1D tet/cubic IPC currently requires explicit `ipc-dhat` and `ipc-kappa`; `ipc-heuristic=true` is shell-only.");
+      "runIPCSim phase2tet/cubic IPC currently requires explicit `ipc-dhat` and `ipc-kappa`; `ipc-heuristic=true` is shell-only.");
   }
   if (!jconfig.exist("ipc-dhat"))
     throwConfigError("Missing required field `ipc-dhat`.");
@@ -113,6 +117,10 @@ Contact::CIPC::SurfaceIPCCore::Parameters makeVolumeIPCParams(const pgo::ConfigF
   ipcParams.kappa = jconfig.getDouble("ipc-kappa", 1);
   ipcParams.eps_ee = 0.0;
   ipcParams.slackness = 1.0;
+
+  if (jconfig.exist("ipc-dhat-external"))
+    ipcParams.dhat_external = jconfig.getDouble("ipc-dhat-external", 1);
+
   return ipcParams;
 }
 
@@ -175,11 +183,11 @@ SolidDeformationModel::DeformationModelElasticMaterial parseVolumeElasticMateria
     return SolidDeformationModel::DeformationModelElasticMaterial::STVK_VOL;
   if (material == "koiter-stvk") {
     throwConfigError(
-      "runIPCSim phase1D tet/cubic only supports `elastic-material = stable-neo` or `stvk-vol`; `koiter-stvk` is shell-only.");
+      "runIPCSim phase2tet/cubic only supports `elastic-material = stable-neo` or `stvk-vol`; `koiter-stvk` is shell-only.");
   }
 
   throwConfigError(
-    "runIPCSim phase1D tet/cubic only supports `elastic-material = stable-neo` or `stvk-vol`.");
+    "runIPCSim phase2tet/cubic only supports `elastic-material = stable-neo` or `stvk-vol`.");
 }
 
 bool parseEnableMaterialMaxStep(const pgo::ConfigFileJSON &jconfig)
@@ -390,18 +398,71 @@ ES::VXd computeSurfacePressureSimulationForce(const pgo::Mesh::TriMeshGeo &surfa
 
   return simulationForce;
 }
+std::vector<std::shared_ptr<Contact::CIPC::ObstacleSurface>> parseExternalObjects(
+  const pgo::ConfigFileJSON &jconfig, double scale)
+{
+  std::vector<std::shared_ptr<Contact::CIPC::ObstacleSurface>> obstacles;
+  if (!jconfig.exist("external-objects"))
+    return obstacles;
+
+  const auto &extObjs = jconfig.handle()["external-objects"];
+  if (!extObjs.is_array())
+    throwConfigError("`external-objects` must be a JSON array.");
+
+  obstacles.reserve(extObjs.size());
+  for (std::size_t oi = 0; oi < extObjs.size(); ++oi) {
+    const auto &objJson = extObjs.at(oi);
+    if (!objJson.is_object())
+      throwConfigError("Each `external-objects[]` entry must be a JSON object.");
+
+    if (!objJson.contains("filename"))
+      throwConfigError("Missing required field `external-objects[].filename`.");
+    if (!objJson.contains("movement"))
+      throwConfigError("Missing required field `external-objects[].movement`.");
+
+    const std::string filename = jconfig.resolvePath(objJson["filename"].get<std::string>());
+    const std::array<double, 3> movementArr = objJson["movement"].get<std::array<double, 3>>();
+    const double objScale = objJson.contains("scale") ? objJson["scale"].get<double>() : scale;
+
+    // Load obstacle mesh
+    pgo::Mesh::TriMeshGeo obsMesh;
+    if (!obsMesh.load(filename))
+      throw std::runtime_error("Failed to load external object mesh: " + filename);
+    for (int vi = 0; vi < obsMesh.numVertices(); ++vi)
+      obsMesh.pos(vi) *= objScale;
+
+    ES::MXd V(obsMesh.numVertices(), 3);
+    ES::MXi F(obsMesh.numTriangles(), 3);
+    for (int vi = 0; vi < obsMesh.numVertices(); ++vi)
+      V.row(vi) = obsMesh.pos(vi).transpose();
+    for (int fi = 0; fi < obsMesh.numTriangles(); ++fi)
+      F.row(fi) = obsMesh.tri(fi).transpose();
+
+    ES::VXd restFlat(V.rows() * 3);
+    for (int vi = 0; vi < V.rows(); ++vi)
+      restFlat.segment<3>(vi * 3) = V.row(vi).transpose();
+
+    ES::V3d velocity(movementArr[0], movementArr[1], movementArr[2]);
+    auto sampler = Contact::CIPC::makeLinearTrajectorySampler(restFlat, velocity);
+
+    auto obs = std::make_shared<Contact::CIPC::ObstacleSurface>(
+      std::move(V), std::move(F), std::move(sampler));
+    obstacles.push_back(std::move(obs));
+  }
+
+  return obstacles;
+}
 }  // namespace
 
 IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
 {
   validateZeroInitialDisplacement(jconfig);
-  rejectIfPresent(jconfig, "external-objects", "external contact is out of scope for phase1D.");
   const ParsedSurfacePressureForceConfig pressureConfig = parseSurfacePressureForceConfig(jconfig);
   if (pressureConfig.enabled)
     throwConfigError("`surface-pressure-force` is only supported for runIPCSim volume simulations.");
 
   if (jconfig.exist("tet-mesh") || jconfig.exist("cubic-mesh")) {
-    throwConfigError("runIPCSim phase1D shell setup cannot consume tet/cubic mesh inputs.");
+    throwConfigError("runIPCSim phase2shell setup cannot consume tet/cubic mesh inputs.");
   }
   if (!jconfig.exist("fixed-vertices"))
     throwConfigError("Missing required field `fixed-vertices`.");
@@ -411,7 +472,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
 
   const std::string material = jconfig.getString("elastic-material");
   if (material != "koiter-stvk")
-    throwConfigError("runIPCSim phase1D shell path only supports `elastic-material = koiter-stvk`.");
+    throwConfigError("runIPCSim phase2shell path only supports `elastic-material = koiter-stvk`.");
 
   const std::string surfaceMeshFilename = jconfig.getResolvedPath("surface-mesh", 1);
 
@@ -424,11 +485,12 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeShellIPCParams(jconfig, surfaceBox);
   const std::vector<ParsedFloorConfig> floorConfigs = parseFloorsConfig(jconfig);
 
-  std::cout << "runIPCSim phase1D shell IPC parameters: "
+  std::cout << "runIPCSim phase2 shell IPC parameters: "
             << "ipc-heuristic=" << (ipcHeuristic ? "true" : "false") << ", "
             << "source=" << (ipcHeuristic ? "heuristic" : "config") << ", "
             << "enable-material-max-step=" << (enableMaterialMaxStep ? "true" : "false") << ", "
             << "ipc-dhat=" << ipcParams.dhat << ", "
+            << "ipc-dhat-external=" << ipcParams.dhat_external << ", "
             << "ipc-kappa=" << ipcParams.kappa << ", "
             << "eps_ee=" << ipcParams.eps_ee << ", "
             << "slackness=" << ipcParams.slackness << ", "
@@ -540,13 +602,18 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
     context.extraGeneralImplicitForceModels.push_back(
       std::move(floorEnergy));
   }
+  // Register external obstacles
+  auto obstacles = parseExternalObjects(jconfig, 1.0);
+  for (auto &obs : obstacles)
+    context.collisionHandler->addObstacleSurface(std::move(obs));
+  if (!obstacles.empty())
+    std::cout << ", obstacles=" << obstacles.size();
   return context;
 }
 
 IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig)
 {
   validateZeroInitialDisplacement(jconfig);
-  rejectIfPresent(jconfig, "external-objects", "external contact is out of scope for phase1D.");
 
   if (!jconfig.exist("fixed-vertices"))
     throwConfigError("Missing required field `fixed-vertices`.");
@@ -566,11 +633,12 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   ES::VXd surfaceRestPositions;
   loadSurfaceMeshAndRestPositions(resolvedPaths.surfaceMeshFilename, scale, surfaceMesh, surfaceRestPositions);
 
-  std::cout << "runIPCSim phase1D volume IPC parameters: "
+  std::cout << "runIPCSim phase2 volume IPC parameters: "
             << "ipc-heuristic=false, "
             << "source=config, "
             << "enable-material-max-step=" << (enableMaterialMaxStep ? "true" : "false") << ", "
             << "ipc-dhat=" << ipcParams.dhat << ", "
+            << "ipc-dhat-external=" << ipcParams.dhat_external << ", "
             << "ipc-kappa=" << ipcParams.kappa << ", "
             << "eps_ee=" << ipcParams.eps_ee << ", "
             << "slackness=" << ipcParams.slackness << ", "
@@ -600,11 +668,11 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
     surfaceMesh.numVertices(), surfaceRestPositions.data(), volumetricMesh.get());
   ES::SpMatD W = bc.generateInterpolationMatrix();
   if (W.rows() != surfaceMesh.numVertices() * 3)
-    throwConfigError("runIPCSim phase1D volume setup produced an embedding matrix with unexpected row count.");
+    throwConfigError("runIPCSim phase2volume setup produced an embedding matrix with unexpected row count.");
   if (W.cols() != volumetricMesh->getNumVertices() * 3)
-    throwConfigError("runIPCSim phase1D volume setup produced an embedding matrix with unexpected column count.");
+    throwConfigError("runIPCSim phase2volume setup produced an embedding matrix with unexpected column count.");
   if (W.nonZeros() <= 0)
-    throwConfigError("runIPCSim phase1D volume setup produced an empty embedding matrix.");
+    throwConfigError("runIPCSim phase2volume setup produced an empty embedding matrix.");
 
   ES::SpMatD M;
   VolumetricMeshes::GenerateMassMatrix::computeMassMatrix(volumetricMesh.get(), M, true);
@@ -614,7 +682,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
       SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6,
       enableMaterialMaxStep);
   if (W.cols() != initialized.restPosition.size())
-    throwConfigError("runIPCSim phase1D volume setup produced an embedding matrix incompatible with simulation DOFs.");
+    throwConfigError("runIPCSim phase2volume setup produced an embedding matrix incompatible with simulation DOFs.");
 
   ES::VXd zero = ES::VXd::Zero(initialized.restPosition.size());
   ES::SpMatD K;
@@ -660,6 +728,12 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   context.surfacePressureSimulationForce = computeSurfacePressureSimulationForce(
     context.surfaceMesh, context.surfaceFromSimulationDispMap,
     pressureConfig, static_cast<int>(context.simulationRestPosition.size()));
+  // Register external obstacles
+  auto obstacles = parseExternalObjects(jconfig, scale);
+  for (auto &obs : obstacles)
+    context.collisionHandler->addObstacleSurface(std::move(obs));
+  if (!obstacles.empty())
+    std::cout << ", obstacles=" << obstacles.size();
   return context;
 }
 }  // namespace pgo::RunIPCSim

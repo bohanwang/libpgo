@@ -68,6 +68,26 @@ NonlinearOptimization::MaxStepResult EmbeddedSurfaceIPCPotentialEnergy::computeS
   return surfaceIPCCore_.computeMaxStepLimit(surfacePositions, surfaceDisplacements);
 }
 
+int32_t EmbeddedSurfaceIPCPotentialEnergy::addObstacleSurface(std::shared_ptr<ObstacleSurface> obs)
+{
+  return surfaceIPCCore_.addObstacleSurface(std::move(obs));
+}
+
+void EmbeddedSurfaceIPCPotentialEnergy::clearObstacleSurfaces()
+{
+  surfaceIPCCore_.clearObstacleSurfaces();
+}
+
+void EmbeddedSurfaceIPCPotentialEnergy::updateObstacleStage(double tStart, double tEnd)
+{
+  surfaceIPCCore_.updateObstacleStage(tStart, tEnd);
+}
+
+void EmbeddedSurfaceIPCPotentialEnergy::invalidatePreparedState()
+{
+  surfaceIPCCore_.invalidatePreparedState();
+}
+
 }  // namespace CIPC
 }  // namespace Contact
 }  // namespace pgo

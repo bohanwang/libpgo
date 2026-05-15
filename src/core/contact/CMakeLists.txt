@@ -10,6 +10,7 @@ set(CONTACT_HEADERS
   ipc/core/surfaceIPCMaxStep.h
   ipc/core/surfaceIPCCore.h
   ipc/core/surfaceIPCPairs.h
+	  ipc/external/obstacleSurface.h
   ipc/geometry/ipcBarrier.h
   ipc/geometry/ipcCCD.h
   ipc/geometry/ipcDistancePrimitives.h
@@ -39,6 +40,7 @@ set(CONTACT_SOURCES
   ipc/core/surfaceIPCCore.cpp
   ipc/geometry/ipcBarrier.cpp
   ipc/geometry/ipcCCD.cpp
+	  ipc/external/obstacleSurface.cpp
   ipc/geometry/ipcDistancePrimitives.cpp
   ipc/geometry/ipcHessianProjection.cpp
   ipc/topology/surfaceIPCTopology.cpp

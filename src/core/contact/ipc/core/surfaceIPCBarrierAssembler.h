@@ -6,7 +6,9 @@ copyright to Bohan Wang
 
 #include "EigenDef.h"
 #include "ipc/core/surfaceIPCPairs.h"
+#include "ipc/external/obstacleSurface.h"
 
+#include <memory>
 #include <vector>
 
 namespace pgo
@@ -53,6 +55,55 @@ public:
     const std::vector<PTPair> &ptPairs,
     const std::vector<EEPair> &eePairs,
     int numVerts,
+    double dhat,
+    double kappa,
+    double eps_ee,
+    double &energy,
+    EigenSupport::VXd &grad,
+    EigenSupport::SpMatD &hess) const;
+
+  // External pair contributions (dynamic-only block scatter)
+  double computeExternalEnergy(
+    EigenSupport::ConstRefVecXd dynPos,
+    const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+    const std::vector<ExternalPTPair> &extPTPairs,
+    const std::vector<ExternalTPPair> &extTPPairs,
+    const std::vector<ExternalEEPair> &extEEPairs,
+    double dhat,
+    double kappa,
+    double eps_ee) const;
+
+  void computeExternalGradient(
+    EigenSupport::ConstRefVecXd dynPos,
+    const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+    const std::vector<ExternalPTPair> &extPTPairs,
+    const std::vector<ExternalTPPair> &extTPPairs,
+    const std::vector<ExternalEEPair> &extEEPairs,
+    int numDynVerts,
+    double dhat,
+    double kappa,
+    double eps_ee,
+    EigenSupport::RefVecXd grad) const;
+
+  void computeExternalHessian(
+    EigenSupport::ConstRefVecXd dynPos,
+    const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+    const std::vector<ExternalPTPair> &extPTPairs,
+    const std::vector<ExternalTPPair> &extTPPairs,
+    const std::vector<ExternalEEPair> &extEEPairs,
+    int numDynVerts,
+    double dhat,
+    double kappa,
+    double eps_ee,
+    EigenSupport::SpMatD &hess) const;
+
+  void computeExternalAll(
+    EigenSupport::ConstRefVecXd dynPos,
+    const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+    const std::vector<ExternalPTPair> &extPTPairs,
+    const std::vector<ExternalTPPair> &extTPPairs,
+    const std::vector<ExternalEEPair> &extEEPairs,
+    int numDynVerts,
     double dhat,
     double kappa,
     double eps_ee,

@@ -1,1 +1,2 @@
 add_subdirectory(testMesh)
+add_subdirectory(testIPCExternal)
