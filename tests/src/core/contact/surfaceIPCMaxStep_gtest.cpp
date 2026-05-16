@@ -10,7 +10,6 @@ namespace
 {
 namespace ES = pgo::EigenSupport;
 using pgo::Contact::CIPC::SurfaceIPCCore;
-using pgo::Contact::CIPC::SurfaceIPCMaxStep;
 using pgo::Contact::CIPC::SurfaceIPCTopology;
 using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
@@ -36,7 +35,7 @@ TEST(SurfaceIPCMaxStepGTest, HelperMatchesSurfaceIPCCoreMaxStep)
   core.setParameters(params);
   core.setMesh(V, F);
 
-  const double helperAlpha = SurfaceIPCMaxStep().compute(topology, x, dx, params.dhat, params.slackness);
+  const double helperAlpha = computeSelfMaxStep(topology, x, dx, params.dhat, params.slackness);
   const double coreAlpha = core.computeMaxStepLimit(x, dx).alpha;
 
   EXPECT_GT(helperAlpha, 0.0);

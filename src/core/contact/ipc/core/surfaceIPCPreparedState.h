@@ -3,8 +3,6 @@
 #include "EigenDef.h"
 #include "ipc/core/surfaceIPCPairs.h"
 
-#include <vector>
-
 namespace pgo
 {
 namespace Contact

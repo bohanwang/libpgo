@@ -22,8 +22,6 @@ namespace Contact
 namespace CIPC
 {
 
-using namespace pgo::EigenSupport;
-
 // =========================================================================
 //  Surface-space IPC core
 // =========================================================================
@@ -47,17 +45,17 @@ public:
   void setParameters(const Parameters &params);
   Parameters getParameters() const;
 
-  void setMesh(const MXd &V, const MXi &F);
+  void setMesh(const EigenSupport::MXd &V, const EigenSupport::MXi &F);
   void prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_surf) const;
 
   double computeEnergy(EigenSupport::ConstRefVecXd x_surf) const;
   void computeGradient(EigenSupport::ConstRefVecXd x_surf, EigenSupport::RefVecXd g_surf) const;
   void computeHessian(EigenSupport::ConstRefVecXd x_surf, EigenSupport::SpMatD &H_surf) const;
-  void computeAll(EigenSupport::ConstRefVecXd x_surf, double &energy, VXd &g_surf, SpMatD &H_surf) const;
-    double computeEnergyWithPreparedPairs() const;
+  void computeAll(EigenSupport::ConstRefVecXd x_surf, double &energy, EigenSupport::VXd &g_surf, EigenSupport::SpMatD &H_surf) const;
+  double computeEnergyWithPreparedPairs() const;
   void computeGradientWithPreparedPairs(EigenSupport::RefVecXd g_surf) const;
   void computeHessianWithPreparedPairs(EigenSupport::SpMatD &H_surf) const;
-  void computeAllWithPreparedPairs(double &energy, VXd &g_surf, SpMatD &H_surf) const;
+  void computeAllWithPreparedPairs(double &energy, EigenSupport::VXd &g_surf, EigenSupport::SpMatD &H_surf) const;
   NonlinearOptimization::MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x_surf, EigenSupport::ConstRefVecXd dx_surf) const;
 
   SurfaceIPCPreparedState& preparedState() const { return preparedState_; }
@@ -69,7 +67,7 @@ public:
   void    updateObstacleStage(double tStart, double tEnd);
 
 private:
-  void findCollisionPairs(const VXd &positions) const;
+  void findCollisionPairs(const EigenSupport::VXd &positions) const;
 
   double dhat = 1e-1;
   double dhat_external = 1e-1;
