@@ -16,21 +16,15 @@ struct SurfaceIPCPreparedState
 {
   bool hasState = false;
   EigenSupport::VXd positions;
-  std::vector<PTPair> ptPairs;
-  std::vector<EEPair> eePairs;
-  std::vector<ExternalPTPair> externalPTPairs;
-  std::vector<ExternalTPPair> externalTPPairs;
-  std::vector<ExternalEEPair> externalEEPairs;
+  SelfPairSet selfPairs;
+  ExternalPairSet externalPairs;
 
   void clear()
   {
     hasState = false;
     positions.resize(0);
-    ptPairs.clear();
-    eePairs.clear();
-    externalPTPairs.clear();
-    externalTPPairs.clear();
-    externalEEPairs.clear();
+    selfPairs.clear();
+    externalPairs.clear();
   }
 
   bool isPreparedFor(EigenSupport::ConstRefVecXd x) const

@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "ipc/broadPhase/surfaceIPCSelfBroadPhase.h"
+#include "ipc/broadPhase/surfaceIPCBroadPhase.h"
 #include "ipc/core/surfaceIPCBarrierAssembler.h"
 #include "ipc/topology/surfaceIPCTopology.h"
 #include "ipc/core/surfaceIPCCore.h"
@@ -12,9 +12,9 @@ namespace
 namespace ES = pgo::EigenSupport;
 using pgo::Contact::CIPC::EEPair;
 using pgo::Contact::CIPC::PTPair;
+using pgo::Contact::CIPC::SelfPairSet;
 using pgo::Contact::CIPC::SurfaceIPCBarrierAssembler;
 using pgo::Contact::CIPC::SurfaceIPCCore;
-using pgo::Contact::CIPC::SurfaceIPCSelfBroadPhase;
 using pgo::Contact::CIPC::SurfaceIPCTopology;
 using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
@@ -33,16 +33,15 @@ TEST(SurfaceIPCBarrierAssemblerGTest, HelperMatchesSurfaceIPCCoreAssembly)
   constexpr double dhat = 0.1;
   constexpr double kappa = 1.0;
   constexpr double epsEE = 0.0;
-  std::vector<PTPair> ptPairs;
-  std::vector<EEPair> eePairs;
-  SurfaceIPCSelfBroadPhase().buildPairs(topology, x, dhat, ptPairs, eePairs);
+  SelfPairSet pairs;
+  buildSelfPairs(topology, x, dhat, pairs);
 
   const SurfaceIPCBarrierAssembler assembler;
-  const double helperEnergy = assembler.computeEnergy(x, ptPairs, eePairs, topology.numVerts, dhat, kappa, epsEE);
+  const double helperEnergy = assembler.computeSelfEnergy(x, pairs, topology.numVerts, dhat, kappa, epsEE);
   ES::VXd helperGradient(x.size());
-  assembler.computeGradient(x, ptPairs, eePairs, topology.numVerts, dhat, kappa, epsEE, helperGradient);
+  assembler.computeSelfGradient(x, pairs, topology.numVerts, dhat, kappa, epsEE, helperGradient);
   ES::SpMatD helperHessian;
-  assembler.computeHessian(x, ptPairs, eePairs, topology.numVerts, dhat, kappa, epsEE, helperHessian);
+  assembler.computeSelfHessian(x, pairs, topology.numVerts, dhat, kappa, epsEE, helperHessian);
 
   SurfaceIPCCore core;
   SurfaceIPCCore::Parameters params;

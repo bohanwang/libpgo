@@ -70,10 +70,6 @@ public:
 
 private:
   void findCollisionPairs(const VXd &positions) const;
-  static V3d vtx(const VXd &x, int i)
-  {
-    return x.segment<3>(3 * i);
-  }
 
   double dhat = 1e-1;
   double dhat_external = 1e-1;

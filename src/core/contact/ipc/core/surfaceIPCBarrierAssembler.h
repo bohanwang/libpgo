@@ -21,39 +21,36 @@ namespace CIPC
 class SurfaceIPCBarrierAssembler
 {
 public:
-  double computeEnergy(
-    EigenSupport::ConstRefVecXd pos,
-    const std::vector<PTPair> &ptPairs,
-    const std::vector<EEPair> &eePairs,
+  // --- Self pair assembly ---
+  double computeSelfEnergy(
+    EigenSupport::ConstRefVecXd dynPos,
+    const SelfPairSet &pairs,
     int numVerts,
     double dhat,
     double kappa,
     double eps_ee) const;
 
-  void computeGradient(
-    EigenSupport::ConstRefVecXd pos,
-    const std::vector<PTPair> &ptPairs,
-    const std::vector<EEPair> &eePairs,
+  void computeSelfGradient(
+    EigenSupport::ConstRefVecXd dynPos,
+    const SelfPairSet &pairs,
     int numVerts,
     double dhat,
     double kappa,
     double eps_ee,
     EigenSupport::RefVecXd grad) const;
 
-  void computeHessian(
-    EigenSupport::ConstRefVecXd pos,
-    const std::vector<PTPair> &ptPairs,
-    const std::vector<EEPair> &eePairs,
+  void computeSelfHessian(
+    EigenSupport::ConstRefVecXd dynPos,
+    const SelfPairSet &pairs,
     int numVerts,
     double dhat,
     double kappa,
     double eps_ee,
     EigenSupport::SpMatD &hess) const;
 
-  void computeAll(
-    EigenSupport::ConstRefVecXd x,
-    const std::vector<PTPair> &ptPairs,
-    const std::vector<EEPair> &eePairs,
+  void computeSelfAll(
+    EigenSupport::ConstRefVecXd dynPos,
+    const SelfPairSet &pairs,
     int numVerts,
     double dhat,
     double kappa,
@@ -62,13 +59,11 @@ public:
     EigenSupport::VXd &grad,
     EigenSupport::SpMatD &hess) const;
 
-  // External pair contributions (dynamic-only block scatter)
+  // --- External pair assembly (dynamic-only block scatter) ---
   double computeExternalEnergy(
     EigenSupport::ConstRefVecXd dynPos,
     const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
-    const std::vector<ExternalPTPair> &extPTPairs,
-    const std::vector<ExternalTPPair> &extTPPairs,
-    const std::vector<ExternalEEPair> &extEEPairs,
+    const ExternalPairSet &pairs,
     double dhat,
     double kappa,
     double eps_ee) const;
@@ -76,9 +71,7 @@ public:
   void computeExternalGradient(
     EigenSupport::ConstRefVecXd dynPos,
     const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
-    const std::vector<ExternalPTPair> &extPTPairs,
-    const std::vector<ExternalTPPair> &extTPPairs,
-    const std::vector<ExternalEEPair> &extEEPairs,
+    const ExternalPairSet &pairs,
     int numDynVerts,
     double dhat,
     double kappa,
@@ -88,9 +81,7 @@ public:
   void computeExternalHessian(
     EigenSupport::ConstRefVecXd dynPos,
     const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
-    const std::vector<ExternalPTPair> &extPTPairs,
-    const std::vector<ExternalTPPair> &extTPPairs,
-    const std::vector<ExternalEEPair> &extEEPairs,
+    const ExternalPairSet &pairs,
     int numDynVerts,
     double dhat,
     double kappa,
@@ -100,9 +91,7 @@ public:
   void computeExternalAll(
     EigenSupport::ConstRefVecXd dynPos,
     const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
-    const std::vector<ExternalPTPair> &extPTPairs,
-    const std::vector<ExternalTPPair> &extTPPairs,
-    const std::vector<ExternalEEPair> &extEEPairs,
+    const ExternalPairSet &pairs,
     int numDynVerts,
     double dhat,
     double kappa,

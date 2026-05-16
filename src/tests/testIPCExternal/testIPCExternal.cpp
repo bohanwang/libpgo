@@ -156,9 +156,9 @@ static void test_surfaceIPCCore_external_register_clear()
     SurfaceIPCCore core(params);
     core.setMesh(V, F);
 
-    if (core.preparedState().externalPTPairs.size() != 0) throw std::runtime_error("should have no ext PT pairs initially");
-    if (core.preparedState().externalTPPairs.size() != 0) throw std::runtime_error("should have no ext TP pairs initially");
-    if (core.preparedState().externalEEPairs.size() != 0) throw std::runtime_error("should have no ext EE pairs initially");
+    if (core.preparedState().externalPairs.ptPairs.size() != 0) throw std::runtime_error("should have no ext PT pairs initially");
+    if (core.preparedState().externalPairs.tpPairs.size() != 0) throw std::runtime_error("should have no ext TP pairs initially");
+    if (core.preparedState().externalPairs.eePairs.size() != 0) throw std::runtime_error("should have no ext EE pairs initially");
 
     auto [obsV, obsF] = makeSmallBoxObstacle(2.0);
     ES::VXd obsRest(obsV.rows() * 3);
@@ -179,9 +179,9 @@ static void test_surfaceIPCCore_external_register_clear()
     for (int vi = 0; vi < V.rows(); ++vi)
       x.segment<3>(vi * 3) = V.row(vi).transpose();
     core.prepareForSurfacePositions(x);
-    if (core.preparedState().externalPTPairs.size() != 0) throw std::runtime_error("still has ext PT pairs after clear");
-    if (core.preparedState().externalTPPairs.size() != 0) throw std::runtime_error("still has ext TP pairs after clear");
-    if (core.preparedState().externalEEPairs.size() != 0) throw std::runtime_error("still has ext EE pairs after clear");
+    if (core.preparedState().externalPairs.ptPairs.size() != 0) throw std::runtime_error("still has ext PT pairs after clear");
+    if (core.preparedState().externalPairs.tpPairs.size() != 0) throw std::runtime_error("still has ext TP pairs after clear");
+    if (core.preparedState().externalPairs.eePairs.size() != 0) throw std::runtime_error("still has ext EE pairs after clear");
   } ENDTEST;
 }
 
@@ -265,9 +265,9 @@ static void test_surfaceIPCCore_external_box_contact()
 
     // Prepare and check pairs
     core.prepareForSurfacePositions(x);
-    const auto &ptPairs = core.preparedState().externalPTPairs;
-    const auto &tpPairs = core.preparedState().externalTPPairs;
-    const auto &eePairs = core.preparedState().externalEEPairs;
+    const auto &ptPairs = core.preparedState().externalPairs.ptPairs;
+    const auto &tpPairs = core.preparedState().externalPairs.tpPairs;
+    const auto &eePairs = core.preparedState().externalPairs.eePairs;
 
     if (ptPairs.empty() && tpPairs.empty() && eePairs.empty())
       throw std::runtime_error("no external pairs activated for overlapping meshes");
@@ -333,15 +333,15 @@ static void test_surfaceIPCCore_external_multi_obstacle()
 
     // Check that pairs from different obstacles are separated
     bool hasId0 = false, hasId1 = false;
-    for (const auto &p : core.preparedState().externalPTPairs) {
+    for (const auto &p : core.preparedState().externalPairs.ptPairs) {
       if (p.obstacleObjectId == 0) hasId0 = true;
       if (p.obstacleObjectId == 1) hasId1 = true;
     }
-    for (const auto &p : core.preparedState().externalTPPairs) {
+    for (const auto &p : core.preparedState().externalPairs.tpPairs) {
       if (p.obstacleObjectId == 0) hasId0 = true;
       if (p.obstacleObjectId == 1) hasId1 = true;
     }
-    for (const auto &p : core.preparedState().externalEEPairs) {
+    for (const auto &p : core.preparedState().externalPairs.eePairs) {
       if (p.obstacleObjectId == 0) hasId0 = true;
       if (p.obstacleObjectId == 1) hasId1 = true;
     }

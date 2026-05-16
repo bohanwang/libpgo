@@ -5,7 +5,7 @@ set(CONTACT_HEADERS
   embeddedSurfaceFloorPotentialEnergy.h
   embeddedSurfaceIPCPotentialEnergy.h
   ipc/broadPhase/spatialHashGrid.h
-  ipc/broadPhase/surfaceIPCSelfBroadPhase.h
+  ipc/broadPhase/surfaceIPCBroadPhase.h
   ipc/core/surfaceIPCBarrierAssembler.h
   ipc/core/surfaceIPCMaxStep.h
   ipc/core/surfaceIPCCore.h
@@ -35,7 +35,7 @@ set(CONTACT_SOURCES
   embeddedSurfaceFloorPotentialEnergy.cpp
   embeddedSurfaceIPCPotentialEnergy.cpp
   ipc/broadPhase/spatialHashGrid.cpp
-  ipc/broadPhase/surfaceIPCSelfBroadPhase.cpp
+  ipc/broadPhase/surfaceIPCBroadPhase.cpp
   ipc/core/surfaceIPCBarrierAssembler.cpp
   ipc/core/surfaceIPCMaxStep.cpp
   ipc/core/surfaceIPCCore.cpp

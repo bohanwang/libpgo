@@ -171,7 +171,7 @@ void CIPCPotentialEnergy::hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupp
   ensurePreparedForSurfacePositions(x_surf);
   core.computeHessianWithPreparedPairs(hess);
   if (auto logger = Logging::lgr(); logger)
-    SPDLOG_LOGGER_INFO(logger, "Computing Hessian with {} PT pairs and {} EE pairs", core.preparedState().ptPairs.size(), core.preparedState().eePairs.size());
+    SPDLOG_LOGGER_INFO(logger, "Computing Hessian with {} PT pairs and {} EE pairs", core.preparedState().selfPairs.ptPairs.size(), core.preparedState().selfPairs.eePairs.size());
   addFloorHessian(x_surf, hess);
 }
 

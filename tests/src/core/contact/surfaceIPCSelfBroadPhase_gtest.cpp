@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "ipc/broadPhase/surfaceIPCSelfBroadPhase.h"
+#include "ipc/broadPhase/surfaceIPCBroadPhase.h"
 #include "ipc/topology/surfaceIPCTopology.h"
 #include "ipc/core/surfaceIPCCore.h"
 
@@ -15,8 +15,8 @@ namespace
 namespace ES = pgo::EigenSupport;
 using pgo::Contact::CIPC::EEPair;
 using pgo::Contact::CIPC::PTPair;
+using pgo::Contact::CIPC::SelfPairSet;
 using pgo::Contact::CIPC::SurfaceIPCCore;
-using pgo::Contact::CIPC::SurfaceIPCSelfBroadPhase;
 using pgo::Contact::CIPC::SurfaceIPCTopology;
 using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
@@ -50,9 +50,8 @@ TEST(SurfaceIPCSelfBroadPhaseGTest, BuilderMatchesSurfaceIPCCorePairSet)
   SurfaceIPCTopology topology;
   topology.setMesh(V, F);
 
-  std::vector<PTPair> broadPhasePTPairs;
-  std::vector<EEPair> broadPhaseEEPairs;
-  SurfaceIPCSelfBroadPhase().buildPairs(topology, x, 0.1, broadPhasePTPairs, broadPhaseEEPairs);
+  SelfPairSet broadPhasePairs;
+  buildSelfPairs(topology, x, 0.1, broadPhasePairs);
 
   SurfaceIPCCore core;
   SurfaceIPCCore::Parameters params;
@@ -64,6 +63,6 @@ TEST(SurfaceIPCSelfBroadPhaseGTest, BuilderMatchesSurfaceIPCCorePairSet)
   core.setMesh(V, F);
   core.computeEnergy(x);
 
-  EXPECT_EQ(canonicalPT(broadPhasePTPairs), canonicalPT(core.preparedState().ptPairs));
-  EXPECT_EQ(canonicalEE(broadPhaseEEPairs), canonicalEE(core.preparedState().eePairs));
+  EXPECT_EQ(canonicalPT(broadPhasePairs.ptPairs), canonicalPT(core.preparedState().selfPairs.ptPairs));
+  EXPECT_EQ(canonicalEE(broadPhasePairs.eePairs), canonicalEE(core.preparedState().selfPairs.eePairs));
 }

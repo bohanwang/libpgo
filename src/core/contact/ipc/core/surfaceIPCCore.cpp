@@ -7,7 +7,7 @@ copyright to Bohan Wang
 
 #include "ipc/core/surfaceIPCCore.h"
 #include "scopedProfileSection.h"
-#include "ipc/broadPhase/surfaceIPCSelfBroadPhase.h"
+#include "ipc/broadPhase/surfaceIPCBroadPhase.h"
 #include "ipc/broadPhase/spatialHashGrid.h"
 #include "ipc/core/surfaceIPCBarrierAssembler.h"
 #include "ipc/core/surfaceIPCMaxStep.h"
@@ -98,251 +98,16 @@ void SurfaceIPCCore::setMesh(const MXd &V, const MXi &F)
 //  Broad phase: find candidate PT and EE pairs using spatial hashing
 //  Uses insert-then-query: insert one type, query with the other.
 // =========================================================================
-static V3d obsVtx(const VXd &pos, int i)
-{
-  return pos.segment<3>(3 * i);
-}
-
 void SurfaceIPCCore::findCollisionPairs(const VXd &positions) const
 {
-  SurfaceIPCSelfBroadPhase().buildPairs(topology_, positions, dhat, preparedState_.ptPairs, preparedState_.eePairs);
+  buildSelfPairs(topology_, positions, dhat, preparedState_.selfPairs);
 
-  preparedState_.externalPTPairs.clear();
-  preparedState_.externalTPPairs.clear();
-  preparedState_.externalEEPairs.clear();
+  preparedState_.externalPairs.clear();
 
   if (obstacles_.empty())
     return;
 
-  const double inflate = dhat_external;
-  const double dhat2 = dhat_external * dhat_external;
-
-  auto getV = [&](int i) -> V3d {
-    return positions.segment<3>(3 * i);
-  };
-
-  int nDynTri = (int)topology_.triangles.size();
-  int nDynEdge = (int)topology_.edges.size();
-
-  // Build dynamic-side AABBs
-  std::vector<SpatialHashGrid::AABB> dynVertBox(topology_.numVerts);
-  tbb::parallel_for(tbb::blocked_range<int>(0, topology_.numVerts),
-    [&](const tbb::blocked_range<int> &r) {
-      for (int vi = r.begin(); vi < r.end(); ++vi)
-        dynVertBox[vi].init(getV(vi), inflate);
-    });
-
-  std::vector<SpatialHashGrid::AABB> dynTriBox(nDynTri);
-  tbb::parallel_for(tbb::blocked_range<int>(0, nDynTri),
-    [&](const tbb::blocked_range<int> &r) {
-      for (int fi = r.begin(); fi < r.end(); ++fi) {
-        auto &tri = topology_.triangles[fi];
-        dynTriBox[fi].init(getV(tri[0]), inflate);
-        dynTriBox[fi].expand(getV(tri[1]), inflate);
-        dynTriBox[fi].expand(getV(tri[2]), inflate);
-      }
-    });
-
-  std::vector<SpatialHashGrid::AABB> dynEdgeBox(nDynEdge);
-  tbb::parallel_for(tbb::blocked_range<int>(0, nDynEdge),
-    [&](const tbb::blocked_range<int> &r) {
-      for (int ei = r.begin(); ei < r.end(); ++ei) {
-        dynEdgeBox[ei].init(getV(topology_.edges[ei][0]), inflate);
-        dynEdgeBox[ei].expand(getV(topology_.edges[ei][1]), inflate);
-      }
-    });
-
-  for (const auto &obs : obstacles_) {
-    const VXd &obsPos = obs->currentPositions();
-    int nObsVert = (int)obsPos.size() / 3;
-    int nObsTri = (int)obs->triangles().rows();
-    int nObsEdge = (int)obs->uniqueEdges().rows();
-
-    int32_t obsId = obs->objectId();
-
-    // Precompute obstacle triangle areas and edge lengths from current positions
-    std::vector<double> obsTriArea(nObsTri, 0.0);
-    for (int fi = 0; fi < nObsTri; ++fi) {
-      V3d v0 = obsVtx(obsPos, obs->triangles()(fi, 0));
-      V3d v1 = obsVtx(obsPos, obs->triangles()(fi, 1));
-      V3d v2 = obsVtx(obsPos, obs->triangles()(fi, 2));
-      obsTriArea[fi] = 0.5 * (v1 - v0).cross(v2 - v0).norm();
-    }
-    std::vector<double> obsEdgeLen(nObsEdge, 0.0);
-    for (int ei = 0; ei < nObsEdge; ++ei) {
-      V3d e0 = obsVtx(obsPos, obs->uniqueEdges()(ei, 0));
-      V3d e1 = obsVtx(obsPos, obs->uniqueEdges()(ei, 1));
-      obsEdgeLen[ei] = (e1 - e0).norm();
-    }
-
-    // Build obstacle AABBs
-    std::vector<SpatialHashGrid::AABB> obsVertBox(nObsVert);
-    tbb::parallel_for(tbb::blocked_range<int>(0, nObsVert),
-      [&](const tbb::blocked_range<int> &r) {
-        for (int vi = r.begin(); vi < r.end(); ++vi)
-          obsVertBox[vi].init(obsVtx(obsPos, vi), inflate);
-      });
-
-    std::vector<SpatialHashGrid::AABB> obsTriBox(nObsTri);
-    tbb::parallel_for(tbb::blocked_range<int>(0, nObsTri),
-      [&](const tbb::blocked_range<int> &r) {
-        for (int fi = r.begin(); fi < r.end(); ++fi) {
-          obsTriBox[fi].init(obsVtx(obsPos, obs->triangles()(fi, 0)), inflate);
-          obsTriBox[fi].expand(obsVtx(obsPos, obs->triangles()(fi, 1)), inflate);
-          obsTriBox[fi].expand(obsVtx(obsPos, obs->triangles()(fi, 2)), inflate);
-        }
-      });
-
-    std::vector<SpatialHashGrid::AABB> obsEdgeBox(nObsEdge);
-    tbb::parallel_for(tbb::blocked_range<int>(0, nObsEdge),
-      [&](const tbb::blocked_range<int> &r) {
-        for (int ei = r.begin(); ei < r.end(); ++ei) {
-          obsEdgeBox[ei].init(obsVtx(obsPos, obs->uniqueEdges()(ei, 0)), inflate);
-          obsEdgeBox[ei].expand(obsVtx(obsPos, obs->uniqueEdges()(ei, 1)), inflate);
-        }
-      });
-
-    // Compute cell size for this obstacle
-    double avgBoxDiag = 0.0;
-    for (const auto &aabb : obsTriBox)
-      avgBoxDiag += (aabb.hi - aabb.lo).norm();
-    double cellSize = nObsTri > 0 ? std::max(avgBoxDiag / nObsTri, 1e-6) : std::max(1e-6, dhat_external);
-
-    // ---- External PT: dyn vertex × obs triangle ----
-    {
-      SpatialHashGrid obsTriHash(nObsTri);
-      obsTriHash.setCellSize(cellSize);
-      for (int fi = 0; fi < nObsTri; ++fi)
-        obsTriHash.insert(obsTriBox[fi], fi);
-
-      tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
-        [nObsTri]() { return std::vector<int>(nObsTri, 0); });
-      tbb::enumerable_thread_specific<std::vector<int>> tls_candidates;
-      tbb::enumerable_thread_specific<std::vector<ExternalPTPair>> tls_pairs;
-
-      tbb::parallel_for(tbb::blocked_range<int>(0, topology_.numVerts),
-        [&](const tbb::blocked_range<int> &range) {
-          auto &visited = tls_visited.local();
-          auto &candidates = tls_candidates.local();
-          auto &localPairs = tls_pairs.local();
-
-          for (int vi = range.begin(); vi < range.end(); ++vi) {
-            candidates.clear();
-            obsTriHash.query(dynVertBox[vi], -1, visited, vi + 1, candidates);
-
-            for (int fi : candidates) {
-              if (!dynVertBox[vi].overlaps(obsTriBox[fi]))
-                continue;
-
-              V3d vp = getV(vi);
-              V3d vt0 = obsVtx(obsPos, obs->triangles()(fi, 0));
-              V3d vt1 = obsVtx(obsPos, obs->triangles()(fi, 1));
-              V3d vt2 = obsVtx(obsPos, obs->triangles()(fi, 2));
-              double d2 = distance::computePTSqDist(vp, vt0, vt1, vt2);
-              if (d2 < dhat2 && d2 > 0.0) {
-                double w = topology_.vertexArea[vi] * obsTriArea[fi];
-                localPairs.push_back({ obsId, vi,
-                  {{ obs->triangles()(fi, 0), obs->triangles()(fi, 1), obs->triangles()(fi, 2) }},
-                  w });
-              }
-            }
-          }
-        });
-
-      for (auto &lp : tls_pairs)
-        preparedState_.externalPTPairs.insert(preparedState_.externalPTPairs.end(), lp.begin(), lp.end());
-    }
-
-    // ---- External TP: obs vertex × dyn triangle ----
-    {
-      SpatialHashGrid dynTriHash(nDynTri);
-      dynTriHash.setCellSize(cellSize);
-      for (int fi = 0; fi < nDynTri; ++fi)
-        dynTriHash.insert(dynTriBox[fi], fi);
-
-      tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
-        [nDynTri]() { return std::vector<int>(nDynTri, 0); });
-      tbb::enumerable_thread_specific<std::vector<int>> tls_candidates;
-      tbb::enumerable_thread_specific<std::vector<ExternalTPPair>> tls_pairs;
-
-      tbb::parallel_for(tbb::blocked_range<int>(0, nObsVert),
-        [&](const tbb::blocked_range<int> &range) {
-          auto &visited = tls_visited.local();
-          auto &candidates = tls_candidates.local();
-          auto &localPairs = tls_pairs.local();
-
-          for (int ovi = range.begin(); ovi < range.end(); ++ovi) {
-            candidates.clear();
-            dynTriHash.query(obsVertBox[ovi], -1, visited, ovi + 1, candidates);
-
-            for (int fi : candidates) {
-              if (!obsVertBox[ovi].overlaps(dynTriBox[fi]))
-                continue;
-
-              auto &tri = topology_.triangles[fi];
-              V3d vp = obsVtx(obsPos, ovi);
-              V3d vt0 = getV(tri[0]);
-              V3d vt1 = getV(tri[1]);
-              V3d vt2 = getV(tri[2]);
-              double d2 = distance::computePTSqDist(vp, vt0, vt1, vt2);
-              if (d2 < dhat2 && d2 > 0.0) {
-                double w = 1.0 * topology_.triArea[fi];
-                localPairs.push_back({ obsId,
-                  {{ tri[0], tri[1], tri[2] }}, ovi, w });
-              }
-            }
-          }
-        });
-
-      for (auto &lp : tls_pairs)
-        preparedState_.externalTPPairs.insert(preparedState_.externalTPPairs.end(), lp.begin(), lp.end());
-    }
-
-    // ---- External EE: dyn edge × obs edge ----
-    {
-      SpatialHashGrid obsEdgeHash(nObsEdge);
-      obsEdgeHash.setCellSize(cellSize);
-      for (int ei = 0; ei < nObsEdge; ++ei)
-        obsEdgeHash.insert(obsEdgeBox[ei], ei);
-
-      tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
-        [nObsEdge]() { return std::vector<int>(nObsEdge, 0); });
-      tbb::enumerable_thread_specific<std::vector<int>> tls_candidates;
-      tbb::enumerable_thread_specific<std::vector<ExternalEEPair>> tls_pairs;
-
-      tbb::parallel_for(tbb::blocked_range<int>(0, nDynEdge),
-        [&](const tbb::blocked_range<int> &range) {
-          auto &visited = tls_visited.local();
-          auto &candidates = tls_candidates.local();
-          auto &localPairs = tls_pairs.local();
-
-          for (int ei = range.begin(); ei < range.end(); ++ei) {
-            candidates.clear();
-            obsEdgeHash.query(dynEdgeBox[ei], -1, visited, ei + 1, candidates);
-
-            int a0 = topology_.edges[ei][0], a1 = topology_.edges[ei][1];
-            for (int ej : candidates) {
-              if (!dynEdgeBox[ei].overlaps(obsEdgeBox[ej]))
-                continue;
-
-              int b0 = obs->uniqueEdges()(ej, 0);
-              int b1 = obs->uniqueEdges()(ej, 1);
-              V3d va0 = getV(a0), va1 = getV(a1);
-              V3d vb0 = obsVtx(obsPos, b0), vb1 = obsVtx(obsPos, b1);
-              double d2 = distance::computeEESqDist(va0, va1, vb0, vb1);
-              if (d2 < dhat2 && d2 > 0.0) {
-                double w = topology_.edgeLength[ei] * obsEdgeLen[ej];
-                localPairs.push_back({ obsId,
-                  {{ a0, a1 }}, {{ b0, b1 }}, w });
-              }
-            }
-          }
-        });
-
-      for (auto &lp : tls_pairs)
-        preparedState_.externalEEPairs.insert(preparedState_.externalEEPairs.end(), lp.begin(), lp.end());
-    }
-  }
+  buildExternalPairs(topology_, positions, obstacles_, dhat_external, preparedState_.externalPairs);
 }
 
 void SurfaceIPCCore::prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_surf) const
@@ -351,12 +116,12 @@ void SurfaceIPCCore::prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_su
   preparedState_.positions = x_surf;
   findCollisionPairs(preparedState_.positions);
   if (auto logger = Logging::lgr(); logger) {
-    const size_t selfTotal = preparedState_.ptPairs.size() + preparedState_.eePairs.size();
-    const size_t externalTotal = preparedState_.externalPTPairs.size() + preparedState_.externalTPPairs.size() + preparedState_.externalEEPairs.size();
+    const size_t selfTotal = preparedState_.selfPairs.ptPairs.size() + preparedState_.selfPairs.eePairs.size();
+    const size_t externalTotal = preparedState_.externalPairs.ptPairs.size() + preparedState_.externalPairs.tpPairs.size() + preparedState_.externalPairs.eePairs.size();
     SPDLOG_LOGGER_INFO(logger,
       "SurfaceIPCCore active pairs: selfPT={} selfEE={} selfTotal={} externalPT={} externalTP={} externalEE={} externalTotal={}",
-      preparedState_.ptPairs.size(), preparedState_.eePairs.size(), selfTotal,
-      preparedState_.externalPTPairs.size(), preparedState_.externalTPPairs.size(), preparedState_.externalEEPairs.size(), externalTotal);
+      preparedState_.selfPairs.ptPairs.size(), preparedState_.selfPairs.eePairs.size(), selfTotal,
+      preparedState_.externalPairs.ptPairs.size(), preparedState_.externalPairs.tpPairs.size(), preparedState_.externalPairs.eePairs.size(), externalTotal);
   }
   preparedState_.hasState = true;
 }
@@ -659,10 +424,10 @@ double SurfaceIPCCore::computeEnergyWithPreparedPairs() const
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedEnergy);
   if (!preparedState_.hasState)
     throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
-  double e = SurfaceIPCBarrierAssembler().computeEnergy(preparedState_.positions, preparedState_.ptPairs, preparedState_.eePairs, topology_.numVerts, dhat, kappa, eps_ee);
+  double e = SurfaceIPCBarrierAssembler().computeSelfEnergy(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee);
   if (!obstacles_.empty()) {
     e += SurfaceIPCBarrierAssembler().computeExternalEnergy(
-      preparedState_.positions, obstacles_, preparedState_.externalPTPairs, preparedState_.externalTPPairs, preparedState_.externalEEPairs, dhat_external, kappa, eps_ee);
+      preparedState_.positions, obstacles_, preparedState_.externalPairs, dhat_external, kappa, eps_ee);
   }
   return e;
 }
@@ -682,10 +447,10 @@ void SurfaceIPCCore::computeGradientWithPreparedPairs(EigenSupport::RefVecXd gra
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedGradient);
   if (!preparedState_.hasState)
     throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
-  SurfaceIPCBarrierAssembler().computeGradient(preparedState_.positions, preparedState_.ptPairs, preparedState_.eePairs, topology_.numVerts, dhat, kappa, eps_ee, grad);
+  SurfaceIPCBarrierAssembler().computeSelfGradient(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, grad);
   if (!obstacles_.empty()) {
     SurfaceIPCBarrierAssembler().computeExternalGradient(
-      preparedState_.positions, obstacles_, preparedState_.externalPTPairs, preparedState_.externalTPPairs, preparedState_.externalEEPairs, topology_.numVerts, dhat_external, kappa, eps_ee, grad);
+      preparedState_.positions, obstacles_, preparedState_.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, grad);
   }
 }
 
@@ -704,10 +469,10 @@ void SurfaceIPCCore::computeHessianWithPreparedPairs(SpMatD &hess) const
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedHessian);
   if (!preparedState_.hasState)
     throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
-  SurfaceIPCBarrierAssembler().computeHessian(preparedState_.positions, preparedState_.ptPairs, preparedState_.eePairs, topology_.numVerts, dhat, kappa, eps_ee, hess);
+  SurfaceIPCBarrierAssembler().computeSelfHessian(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, hess);
   if (!obstacles_.empty()) {
     SurfaceIPCBarrierAssembler().computeExternalHessian(
-      preparedState_.positions, obstacles_, preparedState_.externalPTPairs, preparedState_.externalTPPairs, preparedState_.externalEEPairs, topology_.numVerts, dhat_external, kappa, eps_ee, hess);
+      preparedState_.positions, obstacles_, preparedState_.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, hess);
   }
   if (auto logger = Logging::lgr(); logger)
     SPDLOG_LOGGER_INFO(logger, "# nonzeros in Hessian: {}", hess.nonZeros());
@@ -728,11 +493,11 @@ void SurfaceIPCCore::computeAllWithPreparedPairs(double &energy, VXd &grad, SpMa
 {
   if (!preparedState_.hasState)
     throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
-  SurfaceIPCBarrierAssembler().computeAll(preparedState_.positions, preparedState_.ptPairs, preparedState_.eePairs, topology_.numVerts, dhat, kappa, eps_ee, energy, grad, hess);
+  SurfaceIPCBarrierAssembler().computeSelfAll(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, energy, grad, hess);
   if (!obstacles_.empty()) {
     double extEnergy = 0.0;
     SurfaceIPCBarrierAssembler().computeExternalAll(
-      preparedState_.positions, obstacles_, preparedState_.externalPTPairs, preparedState_.externalTPPairs, preparedState_.externalEEPairs, topology_.numVerts, dhat_external, kappa, eps_ee, extEnergy, grad, hess);
+      preparedState_.positions, obstacles_, preparedState_.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, extEnergy, grad, hess);
     energy += extEnergy;
   }
   if (auto logger = Logging::lgr(); logger)

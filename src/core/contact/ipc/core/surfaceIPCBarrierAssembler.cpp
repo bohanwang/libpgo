@@ -30,10 +30,9 @@ static V3d vtx(ConstRefVecXd x, int i)
 // =========================================================================
 //  2)  Energy
 // =========================================================================
-double SurfaceIPCBarrierAssembler::computeEnergy(
-  EigenSupport::ConstRefVecXd pos,
-  const std::vector<PTPair> &ptPairs,
-  const std::vector<EEPair> &eePairs,
+double SurfaceIPCBarrierAssembler::computeSelfEnergy(
+  EigenSupport::ConstRefVecXd dynPos,
+  const SelfPairSet &pairs,
   int numVerts,
   double dhat,
   double kappa,
@@ -45,14 +44,14 @@ double SurfaceIPCBarrierAssembler::computeEnergy(
 
   // PT pairs
   double ptEnergy = tbb::parallel_reduce(
-    tbb::blocked_range<int>(0, (int)ptPairs.size()), 0.0,
+    tbb::blocked_range<int>(0, (int)pairs.ptPairs.size()), 0.0,
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = ptPairs[i];
-        V3d p = vtx(pos, pair.p);
-        V3d t0 = vtx(pos, pair.t0);
-        V3d t1 = vtx(pos, pair.t1);
-        V3d t2 = vtx(pos, pair.t2);
+        auto &pair = pairs.ptPairs[i];
+        V3d p = vtx(dynPos, pair.p);
+        V3d t0 = vtx(dynPos, pair.t0);
+        V3d t1 = vtx(dynPos, pair.t1);
+        V3d t2 = vtx(dynPos, pair.t2);
         double d2 = distance::computePTSqDist(p, t0, t1, t2);
         if (d2 < dhat2 && d2 > 0.0)
           localE += pair.weight * kappa * barrier::b(d2, dhat2);
@@ -63,14 +62,14 @@ double SurfaceIPCBarrierAssembler::computeEnergy(
 
   // EE pairs
   double eeEnergy = tbb::parallel_reduce(
-    tbb::blocked_range<int>(0, (int)eePairs.size()), 0.0,
+    tbb::blocked_range<int>(0, (int)pairs.eePairs.size()), 0.0,
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = eePairs[i];
-        V3d ea0 = vtx(pos, pair.ea0);
-        V3d ea1 = vtx(pos, pair.ea1);
-        V3d eb0 = vtx(pos, pair.eb0);
-        V3d eb1 = vtx(pos, pair.eb1);
+        auto &pair = pairs.eePairs[i];
+        V3d ea0 = vtx(dynPos, pair.ea0);
+        V3d ea1 = vtx(dynPos, pair.ea1);
+        V3d eb0 = vtx(dynPos, pair.eb0);
+        V3d eb1 = vtx(dynPos, pair.eb1);
         double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
         if (d2 < dhat2 && d2 > 0.0) {
           double m = 1.0;
@@ -89,10 +88,9 @@ double SurfaceIPCBarrierAssembler::computeEnergy(
 // =========================================================================
 //  2)  Gradient
 // =========================================================================
-void SurfaceIPCBarrierAssembler::computeGradient(
-  EigenSupport::ConstRefVecXd pos,
-  const std::vector<PTPair> &ptPairs,
-  const std::vector<EEPair> &eePairs,
+void SurfaceIPCBarrierAssembler::computeSelfGradient(
+  EigenSupport::ConstRefVecXd dynPos,
+  const SelfPairSet &pairs,
   int numVerts,
   double dhat,
   double kappa,
@@ -119,14 +117,14 @@ void SurfaceIPCBarrierAssembler::computeGradient(
 
   // PT pairs
   tbb::parallel_for(
-    tbb::blocked_range<int>(0, (int)ptPairs.size()),
+    tbb::blocked_range<int>(0, (int)pairs.ptPairs.size()),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = ptPairs[i];
-        V3d p = vtx(pos, pair.p);
-        V3d t0 = vtx(pos, pair.t0);
-        V3d t1 = vtx(pos, pair.t1);
-        V3d t2 = vtx(pos, pair.t2);
+        auto &pair = pairs.ptPairs[i];
+        V3d p = vtx(dynPos, pair.p);
+        V3d t0 = vtx(dynPos, pair.t0);
+        V3d t1 = vtx(dynPos, pair.t1);
+        V3d t2 = vtx(dynPos, pair.t2);
 
         double d2 = distance::computePTSqDist(p, t0, t1, t2);
         if (d2 >= dhat2 || d2 <= 0.0)
@@ -144,14 +142,14 @@ void SurfaceIPCBarrierAssembler::computeGradient(
   // EE pairs
   double ee_eps = eps_ee;
   tbb::parallel_for(
-    tbb::blocked_range<int>(0, (int)eePairs.size()),
+    tbb::blocked_range<int>(0, (int)pairs.eePairs.size()),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = eePairs[i];
-        V3d ea0 = vtx(pos, pair.ea0);
-        V3d ea1 = vtx(pos, pair.ea1);
-        V3d eb0 = vtx(pos, pair.eb0);
-        V3d eb1 = vtx(pos, pair.eb1);
+        auto &pair = pairs.eePairs[i];
+        V3d ea0 = vtx(dynPos, pair.ea0);
+        V3d ea1 = vtx(dynPos, pair.ea1);
+        V3d eb0 = vtx(dynPos, pair.eb0);
+        V3d eb1 = vtx(dynPos, pair.eb1);
 
         double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
         if (d2 >= dhat2 || d2 <= 0.0)
@@ -182,10 +180,9 @@ void SurfaceIPCBarrierAssembler::computeGradient(
 // =========================================================================
 //  2)  Sparse Hessian
 // =========================================================================
-void SurfaceIPCBarrierAssembler::computeHessian(
-  EigenSupport::ConstRefVecXd pos,
-  const std::vector<PTPair> &ptPairs,
-  const std::vector<EEPair> &eePairs,
+void SurfaceIPCBarrierAssembler::computeSelfHessian(
+  EigenSupport::ConstRefVecXd dynPos,
+  const SelfPairSet &pairs,
   int numVerts,
   double dhat,
   double kappa,
@@ -193,8 +190,8 @@ void SurfaceIPCBarrierAssembler::computeHessian(
   SpMatD &hess) const
 {
   int n = 3 * numVerts;
-  int nPT = (int)ptPairs.size();
-  int nEE = (int)eePairs.size();
+  int nPT = (int)pairs.ptPairs.size();
+  int nEE = (int)pairs.eePairs.size();
   int totalPairs = nPT + nEE;
 
   // Preallocate exactly 144 triplet slots per pair (12x12 block).
@@ -229,11 +226,11 @@ void SurfaceIPCBarrierAssembler::computeHessian(
     tbb::blocked_range<int>(0, nPT),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = ptPairs[i];
-        V3d p = vtx(pos, pair.p);
-        V3d t0 = vtx(pos, pair.t0);
-        V3d t1 = vtx(pos, pair.t1);
-        V3d t2 = vtx(pos, pair.t2);
+        auto &pair = pairs.ptPairs[i];
+        V3d p = vtx(dynPos, pair.p);
+        V3d t0 = vtx(dynPos, pair.t0);
+        V3d t1 = vtx(dynPos, pair.t1);
+        V3d t2 = vtx(dynPos, pair.t2);
 
         double d2 = distance::computePTSqDist(p, t0, t1, t2);
         if (d2 >= dhat2 || d2 <= 0.0)
@@ -258,11 +255,11 @@ void SurfaceIPCBarrierAssembler::computeHessian(
     tbb::blocked_range<int>(0, nEE),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = eePairs[i];
-        V3d ea0 = vtx(pos, pair.ea0);
-        V3d ea1 = vtx(pos, pair.ea1);
-        V3d eb0 = vtx(pos, pair.eb0);
-        V3d eb1 = vtx(pos, pair.eb1);
+        auto &pair = pairs.eePairs[i];
+        V3d ea0 = vtx(dynPos, pair.ea0);
+        V3d ea1 = vtx(dynPos, pair.ea1);
+        V3d eb0 = vtx(dynPos, pair.eb0);
+        V3d eb1 = vtx(dynPos, pair.eb1);
 
         double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
         if (d2 >= dhat2 || d2 <= 0.0)
@@ -301,10 +298,9 @@ void SurfaceIPCBarrierAssembler::computeHessian(
 // =========================================================================
 //  Combined computation (single broad-phase pass)
 // =========================================================================
-void SurfaceIPCBarrierAssembler::computeAll(
-  EigenSupport::ConstRefVecXd x,
-  const std::vector<PTPair> &ptPairs,
-  const std::vector<EEPair> &eePairs,
+void SurfaceIPCBarrierAssembler::computeSelfAll(
+  EigenSupport::ConstRefVecXd dynPos,
+  const SelfPairSet &pairs,
   int numVerts,
   double dhat,
   double kappa,
@@ -314,8 +310,8 @@ void SurfaceIPCBarrierAssembler::computeAll(
   SpMatD &hess) const
 {
   int n = 3 * numVerts;
-  int nPT = (int)ptPairs.size();
-  int nEE = (int)eePairs.size();
+  int nPT = (int)pairs.ptPairs.size();
+  int nEE = (int)pairs.eePairs.size();
   int totalPairs = nPT + nEE;
 
   energy = 0.0;
@@ -358,11 +354,11 @@ void SurfaceIPCBarrierAssembler::computeAll(
     tbb::blocked_range<int>(0, nPT), 0.0,
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = ptPairs[i];
-        V3d p = vtx(x, pair.p);
-        V3d t0 = vtx(x, pair.t0);
-        V3d t1 = vtx(x, pair.t1);
-        V3d t2 = vtx(x, pair.t2);
+        auto &pair = pairs.ptPairs[i];
+        V3d p = vtx(dynPos, pair.p);
+        V3d t0 = vtx(dynPos, pair.t0);
+        V3d t1 = vtx(dynPos, pair.t1);
+        V3d t2 = vtx(dynPos, pair.t2);
 
         double d2 = distance::computePTSqDist(p, t0, t1, t2);
         if (d2 >= dhat2 || d2 <= 0.0)
@@ -396,11 +392,11 @@ void SurfaceIPCBarrierAssembler::computeAll(
     tbb::blocked_range<int>(0, nEE), 0.0,
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = eePairs[i];
-        V3d ea0 = vtx(x, pair.ea0);
-        V3d ea1 = vtx(x, pair.ea1);
-        V3d eb0 = vtx(x, pair.eb0);
-        V3d eb1 = vtx(x, pair.eb1);
+        auto &pair = pairs.eePairs[i];
+        V3d ea0 = vtx(dynPos, pair.ea0);
+        V3d ea1 = vtx(dynPos, pair.ea1);
+        V3d eb0 = vtx(dynPos, pair.eb0);
+        V3d eb1 = vtx(dynPos, pair.eb1);
 
         double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
         if (d2 >= dhat2 || d2 <= 0.0)
@@ -559,9 +555,7 @@ static void scatterExternalEEHessian(int tripletOffset, const M12d &localH, cons
 double SurfaceIPCBarrierAssembler::computeExternalEnergy(
   ConstRefVecXd dynPos,
   const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
-  const std::vector<ExternalPTPair> &extPTPairs,
-  const std::vector<ExternalTPPair> &extTPPairs,
-  const std::vector<ExternalEEPair> &extEEPairs,
+  const ExternalPairSet &pairs,
   double dhat,
   double kappa,
   double eps_ee) const
@@ -570,10 +564,10 @@ double SurfaceIPCBarrierAssembler::computeExternalEnergy(
   double dhat2 = dhat * dhat;
 
   double ptEnergy = tbb::parallel_reduce(
-    tbb::blocked_range<int>(0, (int)extPTPairs.size()), 0.0,
+    tbb::blocked_range<int>(0, (int)pairs.ptPairs.size()), 0.0,
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = extPTPairs[i];
+        auto &pair = pairs.ptPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
         V3d p = dynVtx(dynPos, pair.dynVertex);
         V3d t0 = obsVtx(obsP, pair.obsTri[0]);
@@ -588,10 +582,10 @@ double SurfaceIPCBarrierAssembler::computeExternalEnergy(
     std::plus<double>());
 
   double tpEnergy = tbb::parallel_reduce(
-    tbb::blocked_range<int>(0, (int)extTPPairs.size()), 0.0,
+    tbb::blocked_range<int>(0, (int)pairs.tpPairs.size()), 0.0,
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = extTPPairs[i];
+        auto &pair = pairs.tpPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
         V3d p = obsVtx(obsP, pair.obsVertex);
         V3d t0 = dynVtx(dynPos, pair.dynTri[0]);
@@ -606,10 +600,10 @@ double SurfaceIPCBarrierAssembler::computeExternalEnergy(
     std::plus<double>());
 
   double eeEnergy = tbb::parallel_reduce(
-    tbb::blocked_range<int>(0, (int)extEEPairs.size()), 0.0,
+    tbb::blocked_range<int>(0, (int)pairs.eePairs.size()), 0.0,
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = extEEPairs[i];
+        auto &pair = pairs.eePairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
         V3d ea0 = dynVtx(dynPos, pair.dynEdge[0]);
         V3d ea1 = dynVtx(dynPos, pair.dynEdge[1]);
@@ -633,9 +627,7 @@ double SurfaceIPCBarrierAssembler::computeExternalEnergy(
 void SurfaceIPCBarrierAssembler::computeExternalGradient(
   ConstRefVecXd dynPos,
   const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
-  const std::vector<ExternalPTPair> &extPTPairs,
-  const std::vector<ExternalTPPair> &extTPPairs,
-  const std::vector<ExternalEEPair> &extEEPairs,
+  const ExternalPairSet &pairs,
   int numDynVerts,
   double dhat,
   double kappa,
@@ -650,10 +642,10 @@ void SurfaceIPCBarrierAssembler::computeExternalGradient(
 
   // PT pairs
   tbb::parallel_for(
-    tbb::blocked_range<int>(0, (int)extPTPairs.size()),
+    tbb::blocked_range<int>(0, (int)pairs.ptPairs.size()),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = extPTPairs[i];
+        auto &pair = pairs.ptPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
         V3d p = dynVtx(dynPos, pair.dynVertex);
         V3d t0 = obsVtx(obsP, pair.obsTri[0]);
@@ -673,10 +665,10 @@ void SurfaceIPCBarrierAssembler::computeExternalGradient(
 
   // TP pairs
   tbb::parallel_for(
-    tbb::blocked_range<int>(0, (int)extTPPairs.size()),
+    tbb::blocked_range<int>(0, (int)pairs.tpPairs.size()),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = extTPPairs[i];
+        auto &pair = pairs.tpPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
         V3d p = obsVtx(obsP, pair.obsVertex);
         V3d t0 = dynVtx(dynPos, pair.dynTri[0]);
@@ -697,10 +689,10 @@ void SurfaceIPCBarrierAssembler::computeExternalGradient(
   // EE pairs
   double ee_eps = eps_ee;
   tbb::parallel_for(
-    tbb::blocked_range<int>(0, (int)extEEPairs.size()),
+    tbb::blocked_range<int>(0, (int)pairs.eePairs.size()),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = extEEPairs[i];
+        auto &pair = pairs.eePairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
         V3d ea0 = dynVtx(dynPos, pair.dynEdge[0]);
         V3d ea1 = dynVtx(dynPos, pair.dynEdge[1]);
@@ -734,9 +726,7 @@ void SurfaceIPCBarrierAssembler::computeExternalGradient(
 void SurfaceIPCBarrierAssembler::computeExternalHessian(
   ConstRefVecXd dynPos,
   const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
-  const std::vector<ExternalPTPair> &extPTPairs,
-  const std::vector<ExternalTPPair> &extTPPairs,
-  const std::vector<ExternalEEPair> &extEEPairs,
+  const ExternalPairSet &pairs,
   int numDynVerts,
   double dhat,
   double kappa,
@@ -744,9 +734,9 @@ void SurfaceIPCBarrierAssembler::computeExternalHessian(
   SpMatD &hess) const
 {
   int n = 3 * numDynVerts;
-  int nPT = (int)extPTPairs.size();
-  int nTP = (int)extTPPairs.size();
-  int nEE = (int)extEEPairs.size();
+  int nPT = (int)pairs.ptPairs.size();
+  int nTP = (int)pairs.tpPairs.size();
+  int nEE = (int)pairs.eePairs.size();
 
   ExtHessianScatterState state;
   state.pairCount = nPT * 9 + nTP * 81 + nEE * 36;
@@ -759,7 +749,7 @@ void SurfaceIPCBarrierAssembler::computeExternalHessian(
     tbb::blocked_range<int>(0, nPT),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = extPTPairs[i];
+        auto &pair = pairs.ptPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
         V3d p = dynVtx(dynPos, pair.dynVertex);
         V3d t0 = obsVtx(obsP, pair.obsTri[0]);
@@ -786,7 +776,7 @@ void SurfaceIPCBarrierAssembler::computeExternalHessian(
     tbb::blocked_range<int>(0, nTP),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = extTPPairs[i];
+        auto &pair = pairs.tpPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
         V3d p = obsVtx(obsP, pair.obsVertex);
         V3d t0 = dynVtx(dynPos, pair.dynTri[0]);
@@ -814,7 +804,7 @@ void SurfaceIPCBarrierAssembler::computeExternalHessian(
     tbb::blocked_range<int>(0, nEE),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = extEEPairs[i];
+        auto &pair = pairs.eePairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
         V3d ea0 = dynVtx(dynPos, pair.dynEdge[0]);
         V3d ea1 = dynVtx(dynPos, pair.dynEdge[1]);
@@ -863,9 +853,7 @@ void SurfaceIPCBarrierAssembler::computeExternalHessian(
 void SurfaceIPCBarrierAssembler::computeExternalAll(
   ConstRefVecXd dynPos,
   const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
-  const std::vector<ExternalPTPair> &extPTPairs,
-  const std::vector<ExternalTPPair> &extTPPairs,
-  const std::vector<ExternalEEPair> &extEEPairs,
+  const ExternalPairSet &pairs,
   int numDynVerts,
   double dhat,
   double kappa,
@@ -875,9 +863,9 @@ void SurfaceIPCBarrierAssembler::computeExternalAll(
   SpMatD &hess) const
 {
   int n = 3 * numDynVerts;
-  int nPT = (int)extPTPairs.size();
-  int nTP = (int)extTPPairs.size();
-  int nEE = (int)extEEPairs.size();
+  int nPT = (int)pairs.ptPairs.size();
+  int nTP = (int)pairs.tpPairs.size();
+  int nEE = (int)pairs.eePairs.size();
 
   energy = 0.0;
   if (grad.size() != n)
@@ -894,7 +882,7 @@ void SurfaceIPCBarrierAssembler::computeExternalAll(
     tbb::blocked_range<int>(0, nPT), 0.0,
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = extPTPairs[i];
+        auto &pair = pairs.ptPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
         V3d p = dynVtx(dynPos, pair.dynVertex);
         V3d t0 = obsVtx(obsP, pair.obsTri[0]);
@@ -928,7 +916,7 @@ void SurfaceIPCBarrierAssembler::computeExternalAll(
     tbb::blocked_range<int>(0, nTP), 0.0,
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = extTPPairs[i];
+        auto &pair = pairs.tpPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
         V3d p = obsVtx(obsP, pair.obsVertex);
         V3d t0 = dynVtx(dynPos, pair.dynTri[0]);
@@ -963,7 +951,7 @@ void SurfaceIPCBarrierAssembler::computeExternalAll(
     tbb::blocked_range<int>(0, nEE), 0.0,
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = extEEPairs[i];
+        auto &pair = pairs.eePairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
         V3d ea0 = dynVtx(dynPos, pair.dynEdge[0]);
         V3d ea1 = dynVtx(dynPos, pair.dynEdge[1]);

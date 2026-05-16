@@ -51,8 +51,8 @@ public:
   virtual int isHessianTopologyFixed() const override { return 0; }
   virtual void hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const override;
 
-  const std::vector<PTPair> &getPTPairs() const { return core.preparedState().ptPairs; }
-  const std::vector<EEPair> &getEEPairs() const { return core.preparedState().eePairs; }
+  const std::vector<PTPair> &getPTPairs() const { return core.preparedState().selfPairs.ptPairs; }
+  const std::vector<EEPair> &getEEPairs() const { return core.preparedState().selfPairs.eePairs; }
 
 private:
   void syncCoreParametersFromWrapper() const;
