@@ -2,10 +2,16 @@
 
 #include "ipc/broadPhase/surfaceIPCBroadPhase.h"
 #include "ipc/core/surfaceIPCSelfBarrierAssembler.h"
+#include "ipc/core/surfaceIPCBarrierKernels.h"
+#include "ipc/geometry/ipcBarrier.h"
+#include "ipc/geometry/ipcDistancePrimitives.h"
+#include "ipc/geometry/ipcHessianProjection.h"
 #include "ipc/topology/surfaceIPCTopology.h"
 #include "ipc/core/surfaceIPCCore.h"
 
 #include "testCIPCHelpers.h"
+
+#include <cmath>
 
 namespace
 {
@@ -19,6 +25,7 @@ using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
 using pgo::Contact::CIPCTest::relativeError;
 using pgo::Contact::CIPCTest::sparseToDense;
+namespace kernels = pgo::Contact::CIPC::barrier_kernels;
 }  // namespace
 
 TEST(SurfaceIPCBarrierAssemblerGTest, HelperMatchesSurfaceIPCCoreAssembly)

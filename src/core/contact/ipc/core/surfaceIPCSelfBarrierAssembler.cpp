@@ -20,6 +20,35 @@ static V3d vtx(ConstRefVecXd x, int i)
   return x.segment<3>(3 * i);
 }
 
+static void scatterSelfGrad(const V12d &local, const int idx[4], RefVecXd grad)
+{
+  double *gdata = grad.data();
+  for (int i = 0; i < 4; ++i)
+    if (idx[i] >= 0)
+      for (int d = 0; d < 3; ++d)
+        std::atomic_ref<double>(gdata[3 * idx[i] + d])
+          .fetch_add(local[3 * i + d], std::memory_order_relaxed);
+}
+
+static void scatterSelfHessian(int pairIdx, const M12d &localH, const int idx[4],
+  std::vector<TripletD> &triplets)
+{
+  TripletD *base = triplets.data() + 144 * pairIdx;
+  int k = 0;
+  for (int i = 0; i < 4; ++i) {
+    int ri = (idx[i] >= 0) ? 3 * idx[i] : 0;
+    bool vi = (idx[i] >= 0);
+    for (int j = 0; j < 4; ++j) {
+      int cj = (idx[j] >= 0) ? 3 * idx[j] : 0;
+      bool valid = vi && (idx[j] >= 0);
+      for (int di = 0; di < 3; ++di)
+        for (int dj = 0; dj < 3; ++dj, ++k)
+          base[k] = TripletD(ri + di, cj + dj,
+            valid ? localH(3 * i + di, 3 * j + dj) : 0.0);
+    }
+  }
+}
+
 // =========================================================================
 //  Self Energy
 // =========================================================================
@@ -89,15 +118,6 @@ void computeSelfGradient(
 
   grad.setZero();
 
-  auto scatter = [&](const V12d &local, const int idx[4]) {
-    double *gdata = grad.data();
-    for (int i = 0; i < 4; ++i)
-      if (idx[i] >= 0)
-        for (int d = 0; d < 3; ++d)
-          std::atomic_ref<double>(gdata[3 * idx[i] + d])
-            .fetch_add(local[3 * i + d], std::memory_order_relaxed);
-  };
-
   double dhat2 = dhat * dhat;
 
   // PT pairs
@@ -112,7 +132,7 @@ void computeSelfGradient(
         if (!k.active)
           continue;
         int idx[4] = { pair.p, pair.t0, pair.t1, pair.t2 };
-        scatter(k.gradient, idx);
+        scatterSelfGrad(k.gradient, idx, grad);
       }
     });
 
@@ -128,7 +148,7 @@ void computeSelfGradient(
         if (!k.active)
           continue;
         int idx[4] = { pair.ea0, pair.ea1, pair.eb0, pair.eb1 };
-        scatter(k.gradient, idx);
+        scatterSelfGrad(k.gradient, idx, grad);
       }
     });
 }
@@ -153,26 +173,6 @@ void computeSelfHessian(
 
   std::vector<TripletD> triplets(144 * totalPairs, TripletD(0, 0, 0.0));
 
-  auto scatterH = [&](int pairIdx, const M12d &localH, const int idx[4]) {
-    TripletD *base = triplets.data() + 144 * pairIdx;
-    int k = 0;
-    for (int i = 0; i < 4; ++i) {
-      int ri = (idx[i] >= 0) ? 3 * idx[i] : 0;
-      bool vi = (idx[i] >= 0);
-      for (int j = 0; j < 4; ++j) {
-        int cj = (idx[j] >= 0) ? 3 * idx[j] : 0;
-        bool valid = vi && (idx[j] >= 0);
-
-        for (int di = 0; di < 3; ++di) {
-          for (int dj = 0; dj < 3; ++dj, ++k) {
-            base[k] = TripletD(ri + di, cj + dj,
-              valid ? localH(3 * i + di, 3 * j + dj) : 0.0);
-          }
-        }
-      }
-    }
-  };
-
   double dhat2 = dhat * dhat;
 
   // PT pairs
@@ -187,7 +187,7 @@ void computeSelfHessian(
         if (!k.active)
           continue;
         int idx[4] = { pair.p, pair.t0, pair.t1, pair.t2 };
-        scatterH(i, k.hessian, idx);
+        scatterSelfHessian(i, k.hessian, idx, triplets);
       }
     });
 
@@ -203,7 +203,7 @@ void computeSelfHessian(
         if (!k.active)
           continue;
         int idx[4] = { pair.ea0, pair.ea1, pair.eb0, pair.eb1 };
-        scatterH(nPT + i, k.hessian, idx);
+        scatterSelfHessian(nPT + i, k.hessian, idx, triplets);
       }
     });
 
@@ -235,32 +235,6 @@ void computeSelfAll(
   grad.setZero(n);
   std::vector<TripletD> triplets(144 * totalPairs, TripletD(0, 0, 0.0));
 
-  auto scatterG = [&](const V12d &local, const int idx[4]) {
-    double *gdata = grad.data();
-    for (int i = 0; i < 4; ++i)
-      if (idx[i] >= 0)
-        for (int d = 0; d < 3; ++d)
-          std::atomic_ref<double>(gdata[3 * idx[i] + d])
-            .fetch_add(local[3 * i + d], std::memory_order_relaxed);
-  };
-
-  auto scatterH = [&](int pairIdx, const M12d &localH, const int idx[4]) {
-    TripletD *base = triplets.data() + 144 * pairIdx;
-    int k = 0;
-    for (int i = 0; i < 4; ++i) {
-      int ri = (idx[i] >= 0) ? 3 * idx[i] : 0;
-      bool vi = (idx[i] >= 0);
-      for (int j = 0; j < 4; ++j) {
-        int cj = (idx[j] >= 0) ? 3 * idx[j] : 0;
-        bool valid = vi && (idx[j] >= 0);
-        for (int di = 0; di < 3; ++di)
-          for (int dj = 0; dj < 3; ++dj, ++k)
-            base[k] = TripletD(ri + di, cj + dj,
-              valid ? localH(3 * i + di, 3 * j + dj) : 0.0);
-      }
-    }
-  };
-
   double dhat2 = dhat * dhat;
 
   // ---- PT pairs ----
@@ -276,8 +250,8 @@ void computeSelfAll(
           continue;
         localE += k.energy;
         int idx[4] = { pair.p, pair.t0, pair.t1, pair.t2 };
-        scatterG(k.gradient, idx);
-        scatterH(i, k.hessian, idx);
+        scatterSelfGrad(k.gradient, idx, grad);
+        scatterSelfHessian(i, k.hessian, idx, triplets);
       }
       return localE;
     },
@@ -296,8 +270,8 @@ void computeSelfAll(
           continue;
         localE += k.energy;
         int idx[4] = { pair.ea0, pair.ea1, pair.eb0, pair.eb1 };
-        scatterG(k.gradient, idx);
-        scatterH(nPT + i, k.hessian, idx);
+        scatterSelfGrad(k.gradient, idx, grad);
+        scatterSelfHessian(nPT + i, k.hessian, idx, triplets);
       }
       return localE;
     },
