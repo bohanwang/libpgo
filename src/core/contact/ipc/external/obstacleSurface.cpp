@@ -20,6 +20,9 @@ ObstacleSurface::ObstacleSurface(
 {
   if (triangles_.cols() != 3)
     throw std::invalid_argument("ObstacleSurface: triangles must be an N x 3 matrix.");
+  if (!sampler_)
+    throw std::invalid_argument("ObstacleSurface: trajectory sampler must not be empty.");
+
   if (triangles_.size() > 0) {
     if (triangles_.minCoeff() < 0 || triangles_.maxCoeff() >= restVertices.rows())
       throw std::invalid_argument("ObstacleSurface: triangle index out of range.");

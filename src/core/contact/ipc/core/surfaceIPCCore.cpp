@@ -11,6 +11,7 @@ copyright to Bohan Wang
 #include "ipc/broadPhase/spatialHashGrid.h"
 #include "ipc/core/surfaceIPCBarrierAssembler.h"
 #include "ipc/core/surfaceIPCMaxStep.h"
+#include "ipc/geometry/ipcCCD.h"
 #include "ipc/geometry/ipcDistancePrimitives.h"
 #include "ipc/profiling/surfaceIPCProfiling.h"
 
@@ -775,6 +776,9 @@ void SurfaceIPCCore::computeAllWithPreparedPairs(double &energy, VXd &grad, SpMa
 // =========================================================================
 int32_t SurfaceIPCCore::addObstacleSurface(std::shared_ptr<ObstacleSurface> obs)
 {
+  if (!obs)
+    throw std::invalid_argument("SurfaceIPCCore::addObstacleSurface: obstacle must not be null.");
+
   int32_t id = static_cast<int32_t>(obstacles_.size());
   obstacles_.push_back(std::move(obs));
   obstacles_.back()->setObjectId(id);

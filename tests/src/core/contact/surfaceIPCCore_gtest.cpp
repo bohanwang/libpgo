@@ -226,6 +226,24 @@ TEST(SurfaceIPCCoreGTest, PreparedPairsMatchDirectEnergyGradientHessian)
   EXPECT_LT(relativeError(sparseToDense(preparedHessian), sparseToDense(directHessian)), 1e-12);
 }
 
+TEST(SurfaceIPCCoreGTest, AddNullObstacleThrows)
+{
+  SurfaceIPCCore core;
+  EXPECT_THROW(core.addObstacleSurface(nullptr), std::invalid_argument);
+}
+
+TEST(SurfaceIPCCoreGTest, ObstacleSurfaceEmptySamplerThrows)
+{
+  ES::MXd V(3, 3);
+  V.setZero();
+  ES::MXi F(1, 3);
+  F << 0, 1, 2;
+
+  EXPECT_THROW(
+    pgo::Contact::CIPC::ObstacleSurface(V, F, pgo::Contact::CIPC::ObstacleSurface::TrajectorySampler{}),
+    std::invalid_argument);
+}
+
 TEST(SurfaceIPCCoreGTest, PreparedPairConsumersRequirePreparedState)
 {
   SurfaceIPCCore core = makeConfiguredCore();

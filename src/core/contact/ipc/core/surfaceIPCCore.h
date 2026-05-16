@@ -5,21 +5,14 @@ copyright to Bohan Wang
 #pragma once
 
 #include "EigenDef.h"
-#include "ipc/geometry/ipcBarrier.h"
-#include "ipc/geometry/ipcCCD.h"
-#include "ipc/geometry/ipcDistancePrimitives.h"
-#include "ipc/geometry/ipcHessianProjection.h"
 #include "ipc/core/surfaceIPCPairs.h"
 #include "ipc/external/obstacleSurface.h"
 #include "ipc/topology/surfaceIPCTopology.h"
-#include "potentialEnergy.h"
+#include "solveDiagnostics.h"
 
+#include <cstdint>
 #include <memory>
 #include <vector>
-#include <array>
-#include <cmath>
-#include <algorithm>
-#include <cstdint>
 
 namespace pgo
 {
