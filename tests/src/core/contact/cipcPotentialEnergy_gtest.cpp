@@ -145,7 +145,7 @@ TEST(CIPCPotentialEnergyGTest, BarrierAndFloorActiveMatchesCorePlusFloorContribu
   EXPECT_LT(relativeError(sparseToDense(wrapperH), sparseToDense(coreH) + floorH), 1e-12);
 }
 
-TEST(CIPCPotentialEnergyGTest, ReusesPreparedPairsAcrossEnergyGradientHessianForSameState)
+TEST(CIPCPotentialEnergyGTest, SeparateEvaluationsBuildIndependentActiveSetsForSameState)
 {
   const auto [V, F] = makeTwoTriangleMesh();
   const ES::VXd x = flattenPositions(V);
@@ -169,13 +169,13 @@ TEST(CIPCPotentialEnergyGTest, ReusesPreparedPairsAcrossEnergyGradientHessianFor
   wrapper.hessianDirect(x, hessian1);
 
   const auto stats = pgo::Profiling::snapshotProfileStatistics();
-  const ProfileStat *pairBuild = findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kPairBuildStatic);
+  const ProfileStat *activeSetBuild = findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kBuildActiveSet);
 
   pgo::Profiling::setProfilingEnabled(false);
   pgo::Profiling::resetProfileStatistics();
 
-  ASSERT_NE(pairBuild, nullptr);
-  EXPECT_EQ(pairBuild->callCount, 1u);
+  ASSERT_NE(activeSetBuild, nullptr);
+  EXPECT_EQ(activeSetBuild->callCount, 6u);
   EXPECT_NEAR(energy1, energy0, 1e-12);
   EXPECT_LT(relativeError(gradient1, gradient0), 1e-12);
   EXPECT_LT(relativeError(sparseToDense(hessian1), sparseToDense(hessian0)), 1e-12);

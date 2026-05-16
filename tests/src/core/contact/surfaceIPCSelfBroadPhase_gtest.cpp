@@ -61,8 +61,8 @@ TEST(SurfaceIPCSelfBroadPhaseGTest, BuilderMatchesSurfaceIPCCorePairSet)
   params.slackness = 0.9;
   core.setParameters(params);
   core.setMesh(V, F);
-  core.computeEnergy(x);
+  const auto activeSet = core.buildActiveSet(x);
 
-  EXPECT_EQ(canonicalPT(broadPhasePairs.ptPairs), canonicalPT(core.preparedState().selfPairs.ptPairs));
-  EXPECT_EQ(canonicalEE(broadPhasePairs.eePairs), canonicalEE(core.preparedState().selfPairs.eePairs));
+  EXPECT_EQ(canonicalPT(broadPhasePairs.ptPairs), canonicalPT(activeSet.selfPairs.ptPairs));
+  EXPECT_EQ(canonicalEE(broadPhasePairs.eePairs), canonicalEE(activeSet.selfPairs.eePairs));
 }

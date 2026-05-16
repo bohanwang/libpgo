@@ -53,7 +53,6 @@ public:
 
 private:
   void syncCoreParametersFromWrapper() const;
-  void ensurePreparedForSurfacePositions(const VXd &x_surf) const;
   VXd toSurfacePositions(EigenSupport::ConstRefVecXd x) const;
   VXd toSurfaceDisplacements(EigenSupport::ConstRefVecXd dx) const;
   double computeFloorEnergy(const VXd &x_surf) const;

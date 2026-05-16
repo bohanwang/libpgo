@@ -33,7 +33,6 @@ SurfaceIPCCore::SurfaceIPCCore(const SurfaceIPCCore &other):
   eps_ee(other.eps_ee),
   slackness(other.slackness),
   topology_(other.topology_),
-  preparedState_(other.preparedState_),
   obstacles_(other.obstacles_)
 {
 }
@@ -49,7 +48,6 @@ SurfaceIPCCore &SurfaceIPCCore::operator=(const SurfaceIPCCore &other)
   eps_ee = other.eps_ee;
   slackness = other.slackness;
   topology_ = other.topology_;
-  preparedState_ = other.preparedState_;
   obstacles_ = other.obstacles_;
   return *this;
 }
@@ -61,7 +59,6 @@ void SurfaceIPCCore::setParameters(const Parameters &params)
   kappa = params.kappa;
   eps_ee = params.eps_ee;
   slackness = params.slackness;
-  preparedState_.clear();
 }
 
 SurfaceIPCCore::Parameters SurfaceIPCCore::getParameters() const
@@ -82,7 +79,6 @@ SurfaceIPCCore::Parameters SurfaceIPCCore::getParameters() const
 void SurfaceIPCCore::setMesh(const MXd &V, const MXi &F)
 {
   topology_.setMesh(V, F);
-  preparedState_.clear();
 }
 
 // =========================================================================
@@ -93,37 +89,27 @@ void SurfaceIPCCore::setMesh(const MXd &V, const MXi &F)
 //  Broad phase: find candidate PT and EE pairs using spatial hashing
 //  Uses insert-then-query: insert one type, query with the other.
 // =========================================================================
-void SurfaceIPCCore::findCollisionPairs(const VXd &positions) const
+SurfaceIPCActiveSet SurfaceIPCCore::buildActiveSet(EigenSupport::ConstRefVecXd x_surf) const
 {
-  buildSelfPairs(topology_, positions, dhat, preparedState_.selfPairs);
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kBuildActiveSet);
 
-  preparedState_.externalPairs.clear();
+  SurfaceIPCActiveSet activeSet;
+  activeSet.positions = x_surf;
+  buildSelfPairs(topology_, activeSet.positions, dhat, activeSet.selfPairs);
 
-  if (obstacles_.empty())
-    return;
+  if (!obstacles_.empty())
+    buildExternalPairs(topology_, activeSet.positions, obstacles_, dhat_external, activeSet.externalPairs);
 
-  buildExternalPairs(topology_, positions, obstacles_, dhat_external, preparedState_.externalPairs);
-}
-
-void SurfaceIPCCore::prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_surf) const
-{
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPrepareActivePairs);
-  preparedState_.positions = x_surf;
-  findCollisionPairs(preparedState_.positions);
   if (auto logger = Logging::lgr(); logger) {
-    const size_t selfTotal = preparedState_.selfPairs.ptPairs.size() + preparedState_.selfPairs.eePairs.size();
-    const size_t externalTotal = preparedState_.externalPairs.ptPairs.size() + preparedState_.externalPairs.tpPairs.size() + preparedState_.externalPairs.eePairs.size();
+    const size_t selfTotal = activeSet.selfPairs.size();
+    const size_t externalTotal = activeSet.externalPairs.size();
     SPDLOG_LOGGER_INFO(logger,
       "SurfaceIPCCore active pairs: selfPT={} selfEE={} selfTotal={} externalPT={} externalTP={} externalEE={} externalTotal={}",
-      preparedState_.selfPairs.ptPairs.size(), preparedState_.selfPairs.eePairs.size(), selfTotal,
-      preparedState_.externalPairs.ptPairs.size(), preparedState_.externalPairs.tpPairs.size(), preparedState_.externalPairs.eePairs.size(), externalTotal);
+      activeSet.selfPairs.ptPairs.size(), activeSet.selfPairs.eePairs.size(), selfTotal,
+      activeSet.externalPairs.ptPairs.size(), activeSet.externalPairs.tpPairs.size(), activeSet.externalPairs.eePairs.size(), externalTotal);
   }
-  preparedState_.hasState = true;
-}
 
-void SurfaceIPCCore::invalidatePreparedState() const
-{
-  preparedState_.clear();
+  return activeSet;
 }
 
 // =========================================================================
@@ -159,19 +145,16 @@ NonlinearOptimization::MaxStepResult SurfaceIPCCore::computeMaxStepLimit(EigenSu
 double SurfaceIPCCore::computeEnergy(EigenSupport::ConstRefVecXd pos) const
 {
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kEnergy);
-  prepareForSurfacePositions(pos);
-  return computeEnergyWithPreparedPairs();
+  return computeEnergy(buildActiveSet(pos));
 }
 
-double SurfaceIPCCore::computeEnergyWithPreparedPairs() const
+double SurfaceIPCCore::computeEnergy(const SurfaceIPCActiveSet &activeSet) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedEnergy);
-  if (!preparedState_.hasState)
-    throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
-  double e = computeSelfEnergy(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee);
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kActiveSetEnergy);
+  double e = computeSelfEnergy(activeSet.positions, activeSet.selfPairs, topology_.numVerts, dhat, kappa, eps_ee);
   if (!obstacles_.empty()) {
     e += computeExternalEnergy(
-      preparedState_.positions, obstacles_, preparedState_.externalPairs, dhat_external, kappa, eps_ee);
+      activeSet.positions, obstacles_, activeSet.externalPairs, dhat_external, kappa, eps_ee);
   }
   return e;
 }
@@ -182,19 +165,16 @@ double SurfaceIPCCore::computeEnergyWithPreparedPairs() const
 void SurfaceIPCCore::computeGradient(EigenSupport::ConstRefVecXd pos, EigenSupport::RefVecXd grad) const
 {
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kGradient);
-  prepareForSurfacePositions(pos);
-  computeGradientWithPreparedPairs(grad);
+  computeGradient(buildActiveSet(pos), grad);
 }
 
-void SurfaceIPCCore::computeGradientWithPreparedPairs(EigenSupport::RefVecXd grad) const
+void SurfaceIPCCore::computeGradient(const SurfaceIPCActiveSet &activeSet, EigenSupport::RefVecXd grad) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedGradient);
-  if (!preparedState_.hasState)
-    throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
-  computeSelfGradient(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, grad);
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kActiveSetGradient);
+  computeSelfGradient(activeSet.positions, activeSet.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, grad);
   if (!obstacles_.empty()) {
     computeExternalGradient(
-      preparedState_.positions, obstacles_, preparedState_.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, grad);
+      activeSet.positions, obstacles_, activeSet.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, grad);
   }
 }
 
@@ -204,19 +184,16 @@ void SurfaceIPCCore::computeGradientWithPreparedPairs(EigenSupport::RefVecXd gra
 void SurfaceIPCCore::computeHessian(EigenSupport::ConstRefVecXd pos, SpMatD &hess) const
 {
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kHessian);
-  prepareForSurfacePositions(pos);
-  computeHessianWithPreparedPairs(hess);
+  computeHessian(buildActiveSet(pos), hess);
 }
 
-void SurfaceIPCCore::computeHessianWithPreparedPairs(SpMatD &hess) const
+void SurfaceIPCCore::computeHessian(const SurfaceIPCActiveSet &activeSet, SpMatD &hess) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedHessian);
-  if (!preparedState_.hasState)
-    throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
-  computeSelfHessian(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, hess);
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kActiveSetHessian);
+  computeSelfHessian(activeSet.positions, activeSet.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, hess);
   if (!obstacles_.empty()) {
     computeExternalHessian(
-      preparedState_.positions, obstacles_, preparedState_.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, hess);
+      activeSet.positions, obstacles_, activeSet.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, hess);
   }
   if (auto logger = Logging::lgr(); logger)
     SPDLOG_LOGGER_INFO(logger, "# nonzeros in Hessian: {}", hess.nonZeros());
@@ -229,19 +206,17 @@ void SurfaceIPCCore::computeAll(EigenSupport::ConstRefVecXd x,
   double &energy, VXd &grad, SpMatD &hess) const
 {
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kCombined);
-  prepareForSurfacePositions(x);
-  computeAllWithPreparedPairs(energy, grad, hess);
+  computeAll(buildActiveSet(x), energy, grad, hess);
 }
 
-void SurfaceIPCCore::computeAllWithPreparedPairs(double &energy, VXd &grad, SpMatD &hess) const
+void SurfaceIPCCore::computeAll(const SurfaceIPCActiveSet &activeSet, double &energy, VXd &grad, SpMatD &hess) const
 {
-  if (!preparedState_.hasState)
-    throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
-  computeSelfAll(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, energy, grad, hess);
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kActiveSetCombined);
+  computeSelfAll(activeSet.positions, activeSet.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, energy, grad, hess);
   if (!obstacles_.empty()) {
     double extEnergy = 0.0;
     computeExternalAll(
-      preparedState_.positions, obstacles_, preparedState_.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, extEnergy, grad, hess);
+      activeSet.positions, obstacles_, activeSet.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, extEnergy, grad, hess);
     energy += extEnergy;
   }
   if (auto logger = Logging::lgr(); logger)
@@ -256,14 +231,12 @@ void SurfaceIPCCore::setObstacles(std::vector<ObstacleSurface> obstacles)
   obstacles_ = std::move(obstacles);
   for (std::size_t slot = 0; slot < obstacles_.size(); ++slot)
     obstacles_[slot].setObjectId(static_cast<int32_t>(slot));
-  preparedState_.clear();
 }
 
 void SurfaceIPCCore::updateObstacleStage(double tStart, double tEnd)
 {
   for (auto &obs : obstacles_)
     obs.update(tStart, tEnd);
-  preparedState_.clear();
 }
 
 }  // namespace CIPC

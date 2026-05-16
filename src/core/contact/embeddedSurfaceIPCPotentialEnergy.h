@@ -30,7 +30,6 @@ public:
     std::vector<ObstacleSurface> obstacleSurfaces = {});
 
   void updateObstacleStage(double tStart, double tEnd);
-  void invalidatePreparedState();
 
 private:
   virtual double computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const override;
@@ -40,11 +39,18 @@ private:
   virtual void computeSurfaceHessian(
     EigenSupport::ConstRefVecXd surfacePositions,
     EigenSupport::SpMatD &surfaceHessian) const override;
+  virtual void computeSurfaceFuncGrad(
+    EigenSupport::ConstRefVecXd surfacePositions,
+    double &surfaceEnergy,
+    EigenSupport::RefVecXd surfaceGradient) const override;
+  virtual void computeSurfaceAll(
+    EigenSupport::ConstRefVecXd surfacePositions,
+    double &surfaceEnergy,
+    EigenSupport::RefVecXd surfaceGradient,
+    EigenSupport::SpMatD &surfaceHessian) const override;
   virtual NonlinearOptimization::MaxStepResult computeSurfaceMaxStepLimit(
     EigenSupport::ConstRefVecXd surfacePositions,
     EigenSupport::ConstRefVecXd surfaceDisplacements) const override;
-
-  void ensurePreparedForSurfacePositions(EigenSupport::ConstRefVecXd surfacePositions) const;
 
   SurfaceIPCCore surfaceIPCCore_;
 };

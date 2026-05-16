@@ -160,8 +160,8 @@ static void test_surfaceIPCCore_external_default_empty()
     ES::VXd x(V.rows() * 3);
     for (int vi = 0; vi < V.rows(); ++vi)
       x.segment<3>(vi * 3) = V.row(vi).transpose();
-    emptyCore.prepareForSurfacePositions(x);
-    if (emptyCore.preparedState().externalPairs.size() != 0)
+    const auto emptyActiveSet = emptyCore.buildActiveSet(x);
+    if (emptyActiveSet.externalPairs.size() != 0)
       throw std::runtime_error("default-constructed core should have no external pairs");
 
     auto [obsV, obsF] = makeSmallBoxObstacle(2.0);
@@ -175,9 +175,9 @@ static void test_surfaceIPCCore_external_default_empty()
     SurfaceIPCCore core(params, std::move(obstacles));
     core.setMesh(V, F);
     core.updateObstacleStage(0.0, 0.0);
-    core.prepareForSurfacePositions(x);
+    const auto activeSet = core.buildActiveSet(x);
     // The far obstacle should not produce pairs, but slot 0 should be assigned.
-    if (core.preparedState().externalPairs.size() != 0)
+    if (activeSet.externalPairs.size() != 0)
       throw std::runtime_error("far obstacle should not produce pairs");
   } ENDTEST;
 }
@@ -260,11 +260,10 @@ static void test_surfaceIPCCore_external_box_contact()
     for (int vi = 0; vi < V.rows(); ++vi)
       x.segment<3>(vi * 3) = V.row(vi).transpose();
 
-    // Prepare and check pairs
-    core.prepareForSurfacePositions(x);
-    const auto &ptPairs = core.preparedState().externalPairs.ptPairs;
-    const auto &tpPairs = core.preparedState().externalPairs.tpPairs;
-    const auto &eePairs = core.preparedState().externalPairs.eePairs;
+    const auto activeSet = core.buildActiveSet(x);
+    const auto &ptPairs = activeSet.externalPairs.ptPairs;
+    const auto &tpPairs = activeSet.externalPairs.tpPairs;
+    const auto &eePairs = activeSet.externalPairs.eePairs;
 
     if (ptPairs.empty() && tpPairs.empty() && eePairs.empty())
       throw std::runtime_error("no external pairs activated for overlapping meshes");
@@ -318,19 +317,19 @@ static void test_surfaceIPCCore_external_multi_obstacle()
     for (int vi = 0; vi < V.rows(); ++vi)
       x.segment<3>(vi * 3) = V.row(vi).transpose();
 
-    core.prepareForSurfacePositions(x);
+    const auto activeSet = core.buildActiveSet(x);
 
     // Check that pairs from different obstacles are separated
     bool hasId0 = false, hasId1 = false;
-    for (const auto &p : core.preparedState().externalPairs.ptPairs) {
+    for (const auto &p : activeSet.externalPairs.ptPairs) {
       if (p.obstacleSlot == 0) hasId0 = true;
       if (p.obstacleSlot == 1) hasId1 = true;
     }
-    for (const auto &p : core.preparedState().externalPairs.tpPairs) {
+    for (const auto &p : activeSet.externalPairs.tpPairs) {
       if (p.obstacleSlot == 0) hasId0 = true;
       if (p.obstacleSlot == 1) hasId1 = true;
     }
-    for (const auto &p : core.preparedState().externalPairs.eePairs) {
+    for (const auto &p : activeSet.externalPairs.eePairs) {
       if (p.obstacleSlot == 0) hasId0 = true;
       if (p.obstacleSlot == 1) hasId1 = true;
     }

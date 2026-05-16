@@ -123,7 +123,7 @@ TEST(SurfaceIPCExternalBroadPhaseGTest, BuilderMatchesSurfaceIPCCoreExternalPair
   core.setMesh(V, F);
 
   const ES::VXd x = flattenRows(V);
-  core.prepareForSurfacePositions(x);
+  const auto activeSet = core.buildActiveSet(x);
 
   SurfaceIPCTopology topology;
   topology.setMesh(V, F);
@@ -134,9 +134,9 @@ TEST(SurfaceIPCExternalBroadPhaseGTest, BuilderMatchesSurfaceIPCCoreExternalPair
   ExternalPairSet pairs;
   buildExternalPairs(topology, x, obstacles, params.dhat_external, pairs);
 
-  EXPECT_EQ(canonicalPT(pairs.ptPairs), canonicalPT(core.preparedState().externalPairs.ptPairs));
-  EXPECT_EQ(canonicalTP(pairs.tpPairs), canonicalTP(core.preparedState().externalPairs.tpPairs));
-  EXPECT_EQ(canonicalEE(pairs.eePairs), canonicalEE(core.preparedState().externalPairs.eePairs));
+  EXPECT_EQ(canonicalPT(pairs.ptPairs), canonicalPT(activeSet.externalPairs.ptPairs));
+  EXPECT_EQ(canonicalTP(pairs.tpPairs), canonicalTP(activeSet.externalPairs.tpPairs));
+  EXPECT_EQ(canonicalEE(pairs.eePairs), canonicalEE(activeSet.externalPairs.eePairs));
   EXPECT_GT(pairs.size(), 0u);
 }
 

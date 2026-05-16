@@ -3,11 +3,15 @@
 #include "pgoLogging.h"
 #include "ipc/core/surfaceIPCCore.h"
 #include "ipc/external/obstacleSurface.h"
+#include "ipc/profiling/surfaceIPCProfiling.h"
+#include "scopedProfileSection.h"
 
 #include "testCIPCHelpers.h"
 
+#include <algorithm>
 #include <stdexcept>
-#include <type_traits>
+#include <string_view>
+#include <vector>
 
 namespace
 {
@@ -24,6 +28,7 @@ using pgo::Contact::CIPCTest::relativeError;
 using pgo::Contact::CIPCTest::sparseToDense;
 using pgo::NonlinearOptimization::MaxStepResult;
 using pgo::NonlinearOptimization::SolveDiagnostics;
+using pgo::Profiling::ProfileStat;
 
 constexpr double kFDStep = 1e-5;
 constexpr double kGradTol = 1e-4;
@@ -52,6 +57,13 @@ void initializeLogging()
     return true;
   }();
   (void)initialized;
+}
+
+const ProfileStat *findStat(const std::vector<ProfileStat> &stats, std::string_view name)
+{
+  const auto it = std::find_if(stats.begin(), stats.end(),
+    [name](const ProfileStat &stat) { return stat.name == name; });
+  return it == stats.end() ? nullptr : &(*it);
 }
 }  // namespace
 
@@ -178,34 +190,26 @@ TEST(SurfaceIPCCoreGTest, SmallContactAlphaWarnsAndDiagnosticsResetClearsStats)
   EXPECT_DOUBLE_EQ(diagnostics.minContactFeasibleAlpha, 1.0);
 }
 
-TEST(SurfaceIPCCoreGTest, PairAccessorsRemainReadableAcrossComputes)
+TEST(SurfaceIPCCoreGTest, BuildActiveSetCapturesPositionsAndPairs)
 {
   SurfaceIPCCore core = makeConfiguredCore();
-  const auto [V, _] = makeTwoTriangleMesh();
+  const auto [V, F] = makeTwoTriangleMesh();
+  (void)F;
   const ES::VXd x = flattenPositions(V);
 
-  const double energy = core.computeEnergy(x);
-  EXPECT_GT(energy, 0.0);
-  ASSERT_FALSE(core.preparedState().selfPairs.ptPairs.empty());
+  const auto activeSet = core.buildActiveSet(x);
 
-  const std::size_t ptCount = core.preparedState().selfPairs.ptPairs.size();
-  const std::size_t eeCount = core.preparedState().selfPairs.eePairs.size();
-
-  ES::VXd grad(x.size());
-  core.computeGradient(x, grad);
-  EXPECT_EQ(core.preparedState().selfPairs.ptPairs.size(), ptCount);
-  EXPECT_EQ(core.preparedState().selfPairs.eePairs.size(), eeCount);
-
-  ES::SpMatD H;
-  core.computeHessian(x, H);
-  EXPECT_EQ(core.preparedState().selfPairs.ptPairs.size(), ptCount);
-  EXPECT_EQ(core.preparedState().selfPairs.eePairs.size(), eeCount);
+  EXPECT_TRUE(activeSet.positions.isApprox(x));
+  ASSERT_FALSE(activeSet.selfPairs.ptPairs.empty());
+  EXPECT_GT(activeSet.selfPairs.size(), 0u);
+  EXPECT_EQ(activeSet.externalPairs.size(), 0u);
 }
 
-TEST(SurfaceIPCCoreGTest, PreparedPairsMatchDirectEnergyGradientHessian)
+TEST(SurfaceIPCCoreGTest, ActiveSetConsumersMatchStatelessEnergyGradientHessian)
 {
   SurfaceIPCCore core = makeConfiguredCore();
-  const auto [V, _] = makeTwoTriangleMesh();
+  const auto [V, F] = makeTwoTriangleMesh();
+  (void)F;
   const ES::VXd x = flattenPositions(V);
 
   const double directEnergy = core.computeEnergy(x);
@@ -214,36 +218,45 @@ TEST(SurfaceIPCCoreGTest, PreparedPairsMatchDirectEnergyGradientHessian)
   ES::SpMatD directHessian;
   core.computeHessian(x, directHessian);
 
-  core.prepareForSurfacePositions(x);
-  EXPECT_TRUE(core.preparedState().isPreparedFor(x));
+  const auto activeSet = core.buildActiveSet(x);
 
-  const double preparedEnergy = core.computeEnergyWithPreparedPairs();
-  ES::VXd preparedGradient = ES::VXd::Zero(x.size());
-  core.computeGradientWithPreparedPairs(preparedGradient);
-  ES::SpMatD preparedHessian;
-  core.computeHessianWithPreparedPairs(preparedHessian);
+  const double activeSetEnergy = core.computeEnergy(activeSet);
+  ES::VXd activeSetGradient = ES::VXd::Zero(x.size());
+  core.computeGradient(activeSet, activeSetGradient);
+  ES::SpMatD activeSetHessian;
+  core.computeHessian(activeSet, activeSetHessian);
 
-  EXPECT_NEAR(preparedEnergy, directEnergy, 1e-12);
-  EXPECT_LT(relativeError(preparedGradient, directGradient), 1e-12);
-  EXPECT_LT(relativeError(sparseToDense(preparedHessian), sparseToDense(directHessian)), 1e-12);
+  EXPECT_NEAR(activeSetEnergy, directEnergy, 1e-12);
+  EXPECT_LT(relativeError(activeSetGradient, directGradient), 1e-12);
+  EXPECT_LT(relativeError(sparseToDense(activeSetHessian), sparseToDense(directHessian)), 1e-12);
 }
 
-TEST(SurfaceIPCCoreGTest, PreparedStateAccessorIsReadOnlyAndExplicitlyInvalidated)
+TEST(SurfaceIPCCoreGTest, ComputeAllBuildsActiveSetOnce)
 {
-  static_assert(
-    std::is_same_v<decltype(std::declval<const SurfaceIPCCore &>().preparedState()),
-      const pgo::Contact::CIPC::SurfaceIPCPreparedState &>);
-
   SurfaceIPCCore core = makeConfiguredCore();
-  const auto [V, _] = makeTwoTriangleMesh();
+  const auto [V, F] = makeTwoTriangleMesh();
+  (void)F;
   const ES::VXd x = flattenPositions(V);
 
-  core.prepareForSurfacePositions(x);
-  ASSERT_TRUE(core.preparedState().hasState);
+  pgo::Profiling::setProfilingEnabled(true);
+  pgo::Profiling::resetProfileStatistics();
 
-  const SurfaceIPCCore &constCore = core;
-  constCore.invalidatePreparedState();
-  EXPECT_FALSE(core.preparedState().hasState);
+  double energy = 0.0;
+  ES::VXd gradient = ES::VXd::Zero(x.size());
+  ES::SpMatD hessian;
+  core.computeAll(x, energy, gradient, hessian);
+
+  const auto stats = pgo::Profiling::snapshotProfileStatistics();
+  const ProfileStat *activeSetBuild = findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kBuildActiveSet);
+
+  pgo::Profiling::setProfilingEnabled(false);
+  pgo::Profiling::resetProfileStatistics();
+
+  ASSERT_NE(activeSetBuild, nullptr);
+  EXPECT_EQ(activeSetBuild->callCount, 1u);
+  EXPECT_GT(energy, 0.0);
+  EXPECT_EQ(gradient.size(), x.size());
+  EXPECT_EQ(hessian.rows(), x.size());
 }
 
 TEST(SurfaceIPCCoreGTest, ConstructorInjectedObstaclesAssignSequentialSlots)
@@ -289,7 +302,7 @@ TEST(SurfaceIPCCoreGTest, ConstructorInjectedObstaclesAssignSequentialSlots)
   core.setMesh(dynV, dynF);
 
   const ES::VXd x = flattenPositions(dynV);
-  core.prepareForSurfacePositions(x);
+  const auto activeSet = core.buildActiveSet(x);
 
   bool sawSlot0 = false;
   bool sawSlot1 = false;
@@ -299,9 +312,9 @@ TEST(SurfaceIPCCoreGTest, ConstructorInjectedObstaclesAssignSequentialSlots)
       if (pair.obstacleSlot == 1) sawSlot1 = true;
     }
   };
-  scanSlots(core.preparedState().externalPairs.ptPairs);
-  scanSlots(core.preparedState().externalPairs.tpPairs);
-  scanSlots(core.preparedState().externalPairs.eePairs);
+  scanSlots(activeSet.externalPairs.ptPairs);
+  scanSlots(activeSet.externalPairs.tpPairs);
+  scanSlots(activeSet.externalPairs.eePairs);
   EXPECT_TRUE(sawSlot0);
   EXPECT_TRUE(sawSlot1);
 }
@@ -345,10 +358,4 @@ TEST(SurfaceIPCCoreGTest, ObstacleSurfaceInvalidVertexColumnCountThrows)
 
   auto sampler = [](double, ES::RefVecXd out) { out.setZero(); };
   EXPECT_THROW(ObstacleSurface(V, F, sampler), std::invalid_argument);
-}
-
-TEST(SurfaceIPCCoreGTest, PreparedPairConsumersRequirePreparedState)
-{
-  SurfaceIPCCore core = makeConfiguredCore();
-  EXPECT_THROW(core.computeEnergyWithPreparedPairs(), std::logic_error);
 }

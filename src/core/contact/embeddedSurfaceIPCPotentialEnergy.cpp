@@ -33,33 +33,45 @@ EmbeddedSurfaceIPCPotentialEnergy::EmbeddedSurfaceIPCPotentialEnergy(
   surfaceIPCCore_.setMesh(surfaceRestVertices, surfaceTriangles);
 }
 
-void EmbeddedSurfaceIPCPotentialEnergy::ensurePreparedForSurfacePositions(
-  EigenSupport::ConstRefVecXd surfacePositions) const
-{
-  if (!surfaceIPCCore_.preparedState().isPreparedFor(surfacePositions))
-    surfaceIPCCore_.prepareForSurfacePositions(surfacePositions);
-}
-
 double EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const
 {
-  ensurePreparedForSurfacePositions(surfacePositions);
-  return surfaceIPCCore_.computeEnergyWithPreparedPairs();
+  return surfaceIPCCore_.computeEnergy(surfacePositions);
 }
 
 void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceGradient(
   EigenSupport::ConstRefVecXd surfacePositions,
   EigenSupport::RefVecXd surfaceGradient) const
 {
-  ensurePreparedForSurfacePositions(surfacePositions);
-  surfaceIPCCore_.computeGradientWithPreparedPairs(surfaceGradient);
+  surfaceIPCCore_.computeGradient(surfacePositions, surfaceGradient);
 }
 
 void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceHessian(
   EigenSupport::ConstRefVecXd surfacePositions,
   EigenSupport::SpMatD &surfaceHessian) const
 {
-  ensurePreparedForSurfacePositions(surfacePositions);
-  surfaceIPCCore_.computeHessianWithPreparedPairs(surfaceHessian);
+  surfaceIPCCore_.computeHessian(surfacePositions, surfaceHessian);
+}
+
+void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceFuncGrad(
+  EigenSupport::ConstRefVecXd surfacePositions,
+  double &surfaceEnergy,
+  EigenSupport::RefVecXd surfaceGradient) const
+{
+  const SurfaceIPCActiveSet activeSet = surfaceIPCCore_.buildActiveSet(surfacePositions);
+  surfaceEnergy = surfaceIPCCore_.computeEnergy(activeSet);
+  surfaceIPCCore_.computeGradient(activeSet, surfaceGradient);
+}
+
+void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceAll(
+  EigenSupport::ConstRefVecXd surfacePositions,
+  double &surfaceEnergy,
+  EigenSupport::RefVecXd surfaceGradient,
+  EigenSupport::SpMatD &surfaceHessian) const
+{
+  const SurfaceIPCActiveSet activeSet = surfaceIPCCore_.buildActiveSet(surfacePositions);
+  EigenSupport::VXd localGradient = EigenSupport::VXd::Zero(surfaceGradient.size());
+  surfaceIPCCore_.computeAll(activeSet, surfaceEnergy, localGradient, surfaceHessian);
+  surfaceGradient = localGradient;
 }
 
 NonlinearOptimization::MaxStepResult EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceMaxStepLimit(
@@ -72,11 +84,6 @@ NonlinearOptimization::MaxStepResult EmbeddedSurfaceIPCPotentialEnergy::computeS
 void EmbeddedSurfaceIPCPotentialEnergy::updateObstacleStage(double tStart, double tEnd)
 {
   surfaceIPCCore_.updateObstacleStage(tStart, tEnd);
-}
-
-void EmbeddedSurfaceIPCPotentialEnergy::invalidatePreparedState()
-{
-  surfaceIPCCore_.invalidatePreparedState();
 }
 
 }  // namespace CIPC

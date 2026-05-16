@@ -5,8 +5,8 @@ copyright to Bohan Wang
 #pragma once
 
 #include "EigenDef.h"
+#include "ipc/core/surfaceIPCActiveSet.h"
 #include "ipc/core/surfaceIPCPairs.h"
-#include "ipc/core/surfaceIPCPreparedState.h"
 #include "ipc/external/obstacleSurface.h"
 #include "ipc/topology/surfaceIPCTopology.h"
 #include "solveDiagnostics.h"
@@ -50,27 +50,24 @@ public:
   Parameters getParameters() const;
 
   void setMesh(const EigenSupport::MXd &V, const EigenSupport::MXi &F);
-  void prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_surf) const;
+  SurfaceIPCActiveSet buildActiveSet(EigenSupport::ConstRefVecXd x_surf) const;
 
   double computeEnergy(EigenSupport::ConstRefVecXd x_surf) const;
   void computeGradient(EigenSupport::ConstRefVecXd x_surf, EigenSupport::RefVecXd g_surf) const;
   void computeHessian(EigenSupport::ConstRefVecXd x_surf, EigenSupport::SpMatD &H_surf) const;
   void computeAll(EigenSupport::ConstRefVecXd x_surf, double &energy, EigenSupport::VXd &g_surf, EigenSupport::SpMatD &H_surf) const;
-  double computeEnergyWithPreparedPairs() const;
-  void computeGradientWithPreparedPairs(EigenSupport::RefVecXd g_surf) const;
-  void computeHessianWithPreparedPairs(EigenSupport::SpMatD &H_surf) const;
-  void computeAllWithPreparedPairs(double &energy, EigenSupport::VXd &g_surf, EigenSupport::SpMatD &H_surf) const;
+  double computeEnergy(const SurfaceIPCActiveSet &activeSet) const;
+  void computeGradient(const SurfaceIPCActiveSet &activeSet, EigenSupport::RefVecXd g_surf) const;
+  void computeHessian(const SurfaceIPCActiveSet &activeSet, EigenSupport::SpMatD &H_surf) const;
+  void computeAll(const SurfaceIPCActiveSet &activeSet, double &energy, EigenSupport::VXd &g_surf, EigenSupport::SpMatD &H_surf) const;
   NonlinearOptimization::MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x_surf, EigenSupport::ConstRefVecXd dx_surf) const;
 
-  void invalidatePreparedState() const;
-  const SurfaceIPCPreparedState& preparedState() const { return preparedState_; }
   const SurfaceIPCTopology& topology() const { return topology_; }
 
   void updateObstacleStage(double tStart, double tEnd);
 
 private:
   void setObstacles(std::vector<ObstacleSurface> obstacles);
-  void findCollisionPairs(const EigenSupport::VXd &positions) const;
 
   double dhat = 1e-1;
   double dhat_external = 1e-1;
@@ -78,7 +75,6 @@ private:
   double eps_ee = 0.0;
   double slackness = 1.0;
   SurfaceIPCTopology topology_;
-  mutable SurfaceIPCPreparedState preparedState_;
   std::vector<ObstacleSurface> obstacles_;
 };
 

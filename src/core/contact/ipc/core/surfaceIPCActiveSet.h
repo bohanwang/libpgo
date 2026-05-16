@@ -3,6 +3,8 @@
 #include "EigenDef.h"
 #include "ipc/core/surfaceIPCPairs.h"
 
+#include <cstddef>
+
 namespace pgo
 {
 namespace Contact
@@ -10,26 +12,22 @@ namespace Contact
 namespace CIPC
 {
 
-struct SurfaceIPCPreparedState
+struct SurfaceIPCActiveSet
 {
-  bool hasState = false;
   EigenSupport::VXd positions;
   SelfPairSet selfPairs;
   ExternalPairSet externalPairs;
 
   void clear()
   {
-    hasState = false;
     positions.resize(0);
     selfPairs.clear();
     externalPairs.clear();
   }
 
-  bool isPreparedFor(EigenSupport::ConstRefVecXd x) const
+  std::size_t size() const
   {
-    return hasState &&
-      positions.size() == x.size() &&
-      (positions.array() == x.array()).all();
+    return selfPairs.size() + externalPairs.size();
   }
 };
 
