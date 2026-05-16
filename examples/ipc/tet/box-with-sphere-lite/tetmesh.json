@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "backend": "tetgen",
+  "input_mesh": "box-with-sphere_small.obj",
+  "output_mesh": "box-with-sphere.veg",
+  "tetgen": {
+    "command": "pq1.2a0.05"
+  },
+  "print_stats": true
+}
