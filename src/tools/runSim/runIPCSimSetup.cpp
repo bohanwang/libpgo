@@ -398,10 +398,10 @@ ES::VXd computeSurfacePressureSimulationForce(const pgo::Mesh::TriMeshGeo &surfa
 
   return simulationForce;
 }
-std::vector<std::shared_ptr<Contact::CIPC::ObstacleSurface>> parseExternalObjects(
+std::vector<Contact::CIPC::ObstacleSurface> parseExternalObjects(
   const pgo::ConfigFileJSON &jconfig, double scale)
 {
-  std::vector<std::shared_ptr<Contact::CIPC::ObstacleSurface>> obstacles;
+  std::vector<Contact::CIPC::ObstacleSurface> obstacles;
   if (!jconfig.exist("external-objects"))
     return obstacles;
 
@@ -445,9 +445,7 @@ std::vector<std::shared_ptr<Contact::CIPC::ObstacleSurface>> parseExternalObject
     ES::V3d velocity(movementArr[0], movementArr[1], movementArr[2]);
     auto sampler = Contact::CIPC::makeLinearTrajectorySampler(restFlat, velocity);
 
-    auto obs = std::make_shared<Contact::CIPC::ObstacleSurface>(
-      std::move(V), std::move(F), std::move(sampler));
-    obstacles.push_back(std::move(obs));
+    obstacles.emplace_back(std::move(V), std::move(F), std::move(sampler));
   }
 
   return obstacles;
@@ -592,8 +590,11 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   context.pullingTargets = std::move(pullingTargets);
   context.pullingTargetRests = std::move(pullingTargetRests);
   context.surfaceMesh = std::move(surfaceMesh);
+  auto obstacles = parseExternalObjects(jconfig, 1.0);
+  const std::size_t obstacleCount = obstacles.size();
   context.collisionHandler =
-    std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(V, F, context.surfaceFromSimulationDispMap, ipcParams);
+    std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(
+      V, F, context.surfaceFromSimulationDispMap, ipcParams, std::move(obstacles));
   for (const ParsedFloorConfig &floorConfig : floorConfigs) {
     auto floorEnergy =
       std::make_shared<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params);
@@ -602,12 +603,8 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
     context.extraGeneralImplicitForceModels.push_back(
       std::move(floorEnergy));
   }
-  // Register external obstacles
-  auto obstacles = parseExternalObjects(jconfig, 1.0);
-  for (auto &obs : obstacles)
-    context.collisionHandler->addObstacleSurface(std::move(obs));
-  if (!obstacles.empty())
-    std::cout << ", obstacles=" << obstacles.size();
+  if (obstacleCount > 0)
+    std::cout << ", obstacles=" << obstacleCount;
   return context;
 }
 
@@ -713,8 +710,11 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   context.pullingTargets = std::move(pullingTargets);
   context.pullingTargetRests = std::move(pullingTargetRests);
   context.surfaceMesh = std::move(surfaceMesh);
+  auto obstacles = parseExternalObjects(jconfig, scale);
+  const std::size_t obstacleCount = obstacles.size();
   context.collisionHandler =
-    std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(V, F, context.surfaceFromSimulationDispMap, ipcParams);
+    std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(
+      V, F, context.surfaceFromSimulationDispMap, ipcParams, std::move(obstacles));
   for (const ParsedFloorConfig &floorConfig : floorConfigs) {
     auto floorEnergy =
       std::make_shared<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params);
@@ -728,12 +728,8 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   context.surfacePressureSimulationForce = computeSurfacePressureSimulationForce(
     context.surfaceMesh, context.surfaceFromSimulationDispMap,
     pressureConfig, static_cast<int>(context.simulationRestPosition.size()));
-  // Register external obstacles
-  auto obstacles = parseExternalObjects(jconfig, scale);
-  for (auto &obs : obstacles)
-    context.collisionHandler->addObstacleSurface(std::move(obs));
-  if (!obstacles.empty())
-    std::cout << ", obstacles=" << obstacles.size();
+  if (obstacleCount > 0)
+    std::cout << ", obstacles=" << obstacleCount;
   return context;
 }
 }  // namespace pgo::RunIPCSim

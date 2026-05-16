@@ -14,10 +14,11 @@ ObstacleSurface::ObstacleSurface(
   EigenSupport::MXd restVertices,
   EigenSupport::MXi triangles,
   TrajectorySampler sampler):
-  rest_(restVertices.reshaped()),
   triangles_(std::move(triangles)),
   sampler_(std::move(sampler))
 {
+  if (restVertices.cols() != 3)
+    throw std::invalid_argument("ObstacleSurface: restVertices must be an N x 3 vertex matrix.");
   if (triangles_.cols() != 3)
     throw std::invalid_argument("ObstacleSurface: triangles must be an N x 3 matrix.");
   if (!sampler_)
@@ -29,6 +30,9 @@ ObstacleSurface::ObstacleSurface(
   }
 
   const int numVerts = static_cast<int>(restVertices.rows());
+  rest_.resize(numVerts * 3);
+  for (int vi = 0; vi < numVerts; ++vi)
+    rest_.segment<3>(3 * vi) = restVertices.row(vi).transpose();
 
   // Derive unique edges from triangles
   std::set<std::pair<int, int>> edgeSet;

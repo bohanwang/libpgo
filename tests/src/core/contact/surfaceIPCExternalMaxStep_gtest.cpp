@@ -5,7 +5,7 @@
 
 #include <gtest/gtest.h>
 
-#include <memory>
+#include <utility>
 #include <vector>
 
 namespace ES = pgo::EigenSupport;
@@ -37,18 +37,21 @@ TEST(SurfaceIPCExternalMaxStepGTest, HelperMatchesSurfaceIPCCoreExternalContribu
   for (int vi = 0; vi < obsV.rows(); ++vi)
     obsRest.segment<3>(3 * vi) = obsV.row(vi).transpose();
 
-  auto obs = std::make_shared<ObstacleSurface>(
-    obsV, obsF,
-    pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d(0.0, -1.0, 0.0)));
-  obs->update(0.0, 1.0);
+  auto makeObs = [&]() {
+    ObstacleSurface o(obsV, obsF,
+      pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d(0.0, -1.0, 0.0)));
+    o.update(0.0, 1.0);
+    return o;
+  };
 
   SurfaceIPCCore::Parameters params;
   params.dhat_external = 0.5;
   params.slackness = 1.0;
 
-  SurfaceIPCCore core(params);
+  std::vector<ObstacleSurface> coreObstacles;
+  coreObstacles.emplace_back(makeObs());
+  SurfaceIPCCore core(params, std::move(coreObstacles));
   core.setMesh(V, F);
-  core.addObstacleSurface(obs);
 
   ES::VXd x(V.rows() * 3);
   for (int vi = 0; vi < V.rows(); ++vi)
@@ -57,7 +60,9 @@ TEST(SurfaceIPCExternalMaxStepGTest, HelperMatchesSurfaceIPCCoreExternalContribu
 
   SurfaceIPCTopology topology;
   topology.setMesh(V, F);
-  const std::vector<std::shared_ptr<ObstacleSurface>> obstacles = { obs };
+  std::vector<ObstacleSurface> obstacles;
+  obstacles.emplace_back(makeObs());
+  obstacles.front().setObjectId(0);
 
   const double selfAlpha = computeSelfMaxStep(topology, x, dx, params.dhat, params.slackness);
   ASSERT_NEAR(selfAlpha, 1.0, 1e-12);

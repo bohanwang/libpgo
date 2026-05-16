@@ -5,7 +5,6 @@
 #include "ipc/external/obstacleSurface.h"
 #include "ipc/topology/surfaceIPCTopology.h"
 
-#include <memory>
 #include <vector>
 
 namespace pgo
@@ -24,7 +23,7 @@ void buildSelfPairs(
 void buildExternalPairs(
   const SurfaceIPCTopology &topology,
   EigenSupport::ConstRefVecXd positions,
-  const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+  const std::vector<ObstacleSurface> &obstacles,
   double dhatExternal,
   ExternalPairSet &pairs);
 

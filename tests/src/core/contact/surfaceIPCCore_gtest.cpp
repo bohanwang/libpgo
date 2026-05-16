@@ -2,10 +2,12 @@
 
 #include "pgoLogging.h"
 #include "ipc/core/surfaceIPCCore.h"
+#include "ipc/external/obstacleSurface.h"
 
 #include "testCIPCHelpers.h"
 
 #include <stdexcept>
+#include <type_traits>
 
 namespace
 {
@@ -226,10 +228,82 @@ TEST(SurfaceIPCCoreGTest, PreparedPairsMatchDirectEnergyGradientHessian)
   EXPECT_LT(relativeError(sparseToDense(preparedHessian), sparseToDense(directHessian)), 1e-12);
 }
 
-TEST(SurfaceIPCCoreGTest, AddNullObstacleThrows)
+TEST(SurfaceIPCCoreGTest, PreparedStateAccessorIsReadOnlyAndExplicitlyInvalidated)
 {
-  SurfaceIPCCore core;
-  EXPECT_THROW(core.addObstacleSurface(nullptr), std::invalid_argument);
+  static_assert(
+    std::is_same_v<decltype(std::declval<const SurfaceIPCCore &>().preparedState()),
+      const pgo::Contact::CIPC::SurfaceIPCPreparedState &>);
+
+  SurfaceIPCCore core = makeConfiguredCore();
+  const auto [V, _] = makeTwoTriangleMesh();
+  const ES::VXd x = flattenPositions(V);
+
+  core.prepareForSurfacePositions(x);
+  ASSERT_TRUE(core.preparedState().hasState);
+
+  const SurfaceIPCCore &constCore = core;
+  constCore.invalidatePreparedState();
+  EXPECT_FALSE(core.preparedState().hasState);
+}
+
+TEST(SurfaceIPCCoreGTest, ConstructorInjectedObstaclesAssignSequentialSlots)
+{
+  using pgo::Contact::CIPC::ObstacleSurface;
+
+  ES::MXd dynV(4, 3);
+  dynV << 0.0, 0.0, 0.0,
+          1.0, 0.0, 0.0,
+          0.0, 1.0, 0.0,
+          1.0, 1.0, 0.0;
+  ES::MXi dynF(2, 3);
+  dynF << 0, 1, 2,
+          1, 3, 2;
+
+  auto buildPlaneObstacle = [](double zOffset) {
+    ES::MXd obsV(3, 3);
+    obsV << 0.0, 0.0, zOffset,
+            1.0, 0.0, zOffset,
+            0.0, 1.0, zOffset;
+    ES::MXi obsF(1, 3);
+    obsF << 0, 1, 2;
+    ES::VXd rest(obsV.rows() * 3);
+    for (int vi = 0; vi < obsV.rows(); ++vi)
+      rest.segment<3>(3 * vi) = obsV.row(vi).transpose();
+    return ObstacleSurface(obsV, obsF,
+      pgo::Contact::CIPC::makeLinearTrajectorySampler(rest, ES::V3d::Zero()));
+  };
+
+  std::vector<ObstacleSurface> obstacles;
+  obstacles.emplace_back(buildPlaneObstacle( 0.3));
+  obstacles.emplace_back(buildPlaneObstacle(-0.3));
+  for (auto &obs : obstacles)
+    obs.update(0.0, 0.0);
+
+  SurfaceIPCCore::Parameters params;
+  params.dhat = 0.1;
+  params.dhat_external = 1.0;
+  params.kappa = 1.0;
+  params.eps_ee = 0.0;
+  params.slackness = 0.9;
+  SurfaceIPCCore core(params, std::move(obstacles));
+  core.setMesh(dynV, dynF);
+
+  const ES::VXd x = flattenPositions(dynV);
+  core.prepareForSurfacePositions(x);
+
+  bool sawSlot0 = false;
+  bool sawSlot1 = false;
+  auto scanSlots = [&](auto &&vec) {
+    for (const auto &pair : vec) {
+      if (pair.obstacleSlot == 0) sawSlot0 = true;
+      if (pair.obstacleSlot == 1) sawSlot1 = true;
+    }
+  };
+  scanSlots(core.preparedState().externalPairs.ptPairs);
+  scanSlots(core.preparedState().externalPairs.tpPairs);
+  scanSlots(core.preparedState().externalPairs.eePairs);
+  EXPECT_TRUE(sawSlot0);
+  EXPECT_TRUE(sawSlot1);
 }
 
 TEST(SurfaceIPCCoreGTest, ObstacleSurfaceEmptySamplerThrows)
@@ -242,6 +316,35 @@ TEST(SurfaceIPCCoreGTest, ObstacleSurfaceEmptySamplerThrows)
   EXPECT_THROW(
     pgo::Contact::CIPC::ObstacleSurface(V, F, pgo::Contact::CIPC::ObstacleSurface::TrajectorySampler{}),
     std::invalid_argument);
+}
+
+TEST(SurfaceIPCCoreGTest, ObstacleSurfaceStoresRestPositionsRowWise)
+{
+  using pgo::Contact::CIPC::ObstacleSurface;
+
+  ES::MXd V(2, 3);
+  V << 1.0, 2.0, 3.0,
+       4.0, 5.0, 6.0;
+  ES::MXi F(0, 3);
+
+  auto sampler = [](double, ES::RefVecXd out) { out.setZero(); };
+  ObstacleSurface obs(V, F, sampler);
+
+  ES::VXd expected(6);
+  expected << 1.0, 2.0, 3.0, 4.0, 5.0, 6.0;
+  EXPECT_TRUE(obs.restPositions().isApprox(expected));
+}
+
+TEST(SurfaceIPCCoreGTest, ObstacleSurfaceInvalidVertexColumnCountThrows)
+{
+  using pgo::Contact::CIPC::ObstacleSurface;
+
+  ES::MXd V(2, 4);
+  V.setZero();
+  ES::MXi F(0, 3);
+
+  auto sampler = [](double, ES::RefVecXd out) { out.setZero(); };
+  EXPECT_THROW(ObstacleSurface(V, F, sampler), std::invalid_argument);
 }
 
 TEST(SurfaceIPCCoreGTest, PreparedPairConsumersRequirePreparedState)

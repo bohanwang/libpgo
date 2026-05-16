@@ -4,7 +4,6 @@
 #include "ipc/core/surfaceIPCPairs.h"
 #include "ipc/external/obstacleSurface.h"
 
-#include <memory>
 #include <vector>
 
 namespace pgo
@@ -16,7 +15,7 @@ namespace CIPC
 
 double computeExternalEnergy(
   EigenSupport::ConstRefVecXd dynPos,
-  const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+  const std::vector<ObstacleSurface> &obstacles,
   const ExternalPairSet &pairs,
   double dhat,
   double kappa,
@@ -24,7 +23,7 @@ double computeExternalEnergy(
 
 void computeExternalGradient(
   EigenSupport::ConstRefVecXd dynPos,
-  const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+  const std::vector<ObstacleSurface> &obstacles,
   const ExternalPairSet &pairs,
   int numDynVerts,
   double dhat,
@@ -34,7 +33,7 @@ void computeExternalGradient(
 
 void computeExternalHessian(
   EigenSupport::ConstRefVecXd dynPos,
-  const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+  const std::vector<ObstacleSurface> &obstacles,
   const ExternalPairSet &pairs,
   int numDynVerts,
   double dhat,
@@ -44,7 +43,7 @@ void computeExternalHessian(
 
 void computeExternalAll(
   EigenSupport::ConstRefVecXd dynPos,
-  const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+  const std::vector<ObstacleSurface> &obstacles,
   const ExternalPairSet &pairs,
   int numDynVerts,
   double dhat,

@@ -12,7 +12,6 @@ copyright to Bohan Wang
 #include "solveDiagnostics.h"
 
 #include <cstdint>
-#include <memory>
 #include <vector>
 
 namespace pgo
@@ -39,6 +38,11 @@ public:
 
   SurfaceIPCCore() = default;
   explicit SurfaceIPCCore(const Parameters &params) { setParameters(params); }
+  SurfaceIPCCore(const Parameters &params, std::vector<ObstacleSurface> obstacles)
+  {
+    setParameters(params);
+    setObstacles(std::move(obstacles));
+  }
   SurfaceIPCCore(const SurfaceIPCCore &other);
   SurfaceIPCCore &operator=(const SurfaceIPCCore &other);
 
@@ -58,15 +62,14 @@ public:
   void computeAllWithPreparedPairs(double &energy, EigenSupport::VXd &g_surf, EigenSupport::SpMatD &H_surf) const;
   NonlinearOptimization::MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x_surf, EigenSupport::ConstRefVecXd dx_surf) const;
 
-  SurfaceIPCPreparedState& preparedState() const { return preparedState_; }
+  void invalidatePreparedState() const;
+  const SurfaceIPCPreparedState& preparedState() const { return preparedState_; }
   const SurfaceIPCTopology& topology() const { return topology_; }
 
-  // Obstacle (external) registration
-  int32_t addObstacleSurface(std::shared_ptr<ObstacleSurface> obs);
-  void    clearObstacleSurfaces();
-  void    updateObstacleStage(double tStart, double tEnd);
+  void updateObstacleStage(double tStart, double tEnd);
 
 private:
+  void setObstacles(std::vector<ObstacleSurface> obstacles);
   void findCollisionPairs(const EigenSupport::VXd &positions) const;
 
   double dhat = 1e-1;
@@ -76,7 +79,7 @@ private:
   double slackness = 1.0;
   SurfaceIPCTopology topology_;
   mutable SurfaceIPCPreparedState preparedState_;
-  std::vector<std::shared_ptr<ObstacleSurface>> obstacles_;
+  std::vector<ObstacleSurface> obstacles_;
 };
 
 }  // namespace CIPC

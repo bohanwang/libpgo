@@ -8,7 +8,6 @@ copyright to Bohan Wang
 #include "ipc/core/surfaceIPCCore.h"
 #include "ipc/external/obstacleSurface.h"
 
-#include <memory>
 #include <vector>
 
 namespace pgo
@@ -27,13 +26,11 @@ public:
     const EigenSupport::MXd &surfaceRestVertices,
     const EigenSupport::MXi &surfaceTriangles,
     const EigenSupport::SpMatD &surfaceFromSimulationDispMap,
-    const SurfaceIPCCore::Parameters &ipcParams = {});
+    const SurfaceIPCCore::Parameters &ipcParams = {},
+    std::vector<ObstacleSurface> obstacleSurfaces = {});
 
-  // Obstacle (external) registration
-  int32_t addObstacleSurface(std::shared_ptr<ObstacleSurface> obs);
-  void    clearObstacleSurfaces();
-  void    updateObstacleStage(double tStart, double tEnd);
-  void    invalidatePreparedState();
+  void updateObstacleStage(double tStart, double tEnd);
+  void invalidatePreparedState();
 
 private:
   virtual double computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const override;

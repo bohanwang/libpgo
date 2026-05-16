@@ -97,6 +97,9 @@ static void test_obstacleSurface_basic()
 
     obs.update(0.0, 1.0);
 
+    if ((obs.restPositions() - restFlat).norm() > 1e-12)
+      throw std::runtime_error("restPositions not row-wise flat");
+
     // Check unique_edges derived correctly
     if (obs.uniqueEdges().rows() <= 0) throw std::runtime_error("uniqueEdges empty");
 
@@ -147,40 +150,35 @@ static void test_obstacleSurface_zero_velocity()
 // 2. SurfaceIPCCore external registration tests
 // ---------------------------------------------------------------------------
 
-static void test_surfaceIPCCore_external_register_clear()
+static void test_surfaceIPCCore_external_default_empty()
 {
-  TEST("SurfaceIPCCore add/clear obstacle surfaces") {
+  TEST("SurfaceIPCCore default-constructed has no external pairs and assigns slot 0") {
     auto [V, F] = makeUnitSquareMesh();
     SurfaceIPCCore::Parameters params;
-    SurfaceIPCCore core(params);
-    core.setMesh(V, F);
-
-    if (core.preparedState().externalPairs.ptPairs.size() != 0) throw std::runtime_error("should have no ext PT pairs initially");
-    if (core.preparedState().externalPairs.tpPairs.size() != 0) throw std::runtime_error("should have no ext TP pairs initially");
-    if (core.preparedState().externalPairs.eePairs.size() != 0) throw std::runtime_error("should have no ext EE pairs initially");
+    SurfaceIPCCore emptyCore(params);
+    emptyCore.setMesh(V, F);
+    ES::VXd x(V.rows() * 3);
+    for (int vi = 0; vi < V.rows(); ++vi)
+      x.segment<3>(vi * 3) = V.row(vi).transpose();
+    emptyCore.prepareForSurfacePositions(x);
+    if (emptyCore.preparedState().externalPairs.size() != 0)
+      throw std::runtime_error("default-constructed core should have no external pairs");
 
     auto [obsV, obsF] = makeSmallBoxObstacle(2.0);
     ES::VXd obsRest(obsV.rows() * 3);
     for (int vi = 0; vi < obsV.rows(); ++vi)
       obsRest.segment<3>(vi * 3) = obsV.row(vi).transpose();
 
-    auto sampler = makeLinearTrajectorySampler(obsRest, ES::V3d::Zero());
-    auto obs = std::make_shared<ObstacleSurface>(std::move(obsV), std::move(obsF), std::move(sampler));
-    obs->update(0.0, 0.0);
-
-    int32_t id = core.addObstacleSurface(obs);
-    if (id != 0) throw std::runtime_error("first obstacle id should be 0");
-    if (obs->objectId() != 0) throw std::runtime_error("obstacle objectId not set");
-
-    core.clearObstacleSurfaces();
-    // After clear, no pairs
-    ES::VXd x(V.rows() * 3);
-    for (int vi = 0; vi < V.rows(); ++vi)
-      x.segment<3>(vi * 3) = V.row(vi).transpose();
+    std::vector<ObstacleSurface> obstacles;
+    obstacles.emplace_back(std::move(obsV), std::move(obsF),
+      makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
+    SurfaceIPCCore core(params, std::move(obstacles));
+    core.setMesh(V, F);
+    core.updateObstacleStage(0.0, 0.0);
     core.prepareForSurfacePositions(x);
-    if (core.preparedState().externalPairs.ptPairs.size() != 0) throw std::runtime_error("still has ext PT pairs after clear");
-    if (core.preparedState().externalPairs.tpPairs.size() != 0) throw std::runtime_error("still has ext TP pairs after clear");
-    if (core.preparedState().externalPairs.eePairs.size() != 0) throw std::runtime_error("still has ext EE pairs after clear");
+    // The far obstacle should not produce pairs, but slot 0 should be assigned.
+    if (core.preparedState().externalPairs.size() != 0)
+      throw std::runtime_error("far obstacle should not produce pairs");
   } ENDTEST;
 }
 
@@ -195,8 +193,6 @@ static void test_surfaceIPCCore_external_static_plane()
     SurfaceIPCCore::Parameters params;
     params.dhat_external = 0.5;
     params.kappa = 1.0;
-    SurfaceIPCCore core(params);
-    core.setMesh(V, F);
 
     // Make a plane obstacle below the mesh
     ES::MXd obsV(4, 3);
@@ -212,10 +208,12 @@ static void test_surfaceIPCCore_external_static_plane()
     for (int vi = 0; vi < obsV.rows(); ++vi)
       obsRest.segment<3>(vi * 3) = obsV.row(vi).transpose();
 
-    auto sampler = makeLinearTrajectorySampler(obsRest, ES::V3d::Zero());
-    auto obs = std::make_shared<ObstacleSurface>(std::move(obsV), std::move(obsF), std::move(sampler));
-    obs->update(0.0, 0.0);
-    core.addObstacleSurface(obs);
+    std::vector<ObstacleSurface> obstacles;
+    obstacles.emplace_back(std::move(obsV), std::move(obsF),
+      makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
+    SurfaceIPCCore core(params, std::move(obstacles));
+    core.setMesh(V, F);
+    core.updateObstacleStage(0.0, 0.0);
 
     ES::VXd x(V.rows() * 3);
     for (int vi = 0; vi < V.rows(); ++vi)
@@ -244,8 +242,6 @@ static void test_surfaceIPCCore_external_box_contact()
     SurfaceIPCCore::Parameters params;
     params.dhat_external = 1.0;  // large to ensure pairs activate
     params.kappa = 0.1;
-    SurfaceIPCCore core(params);
-    core.setMesh(V, F);
 
     // Small box obstacle overlapping the mesh (z-offset at 0 so it intersects)
     auto [obsV, obsF] = makeSmallBoxObstacle(0.0);
@@ -253,10 +249,12 @@ static void test_surfaceIPCCore_external_box_contact()
     for (int vi = 0; vi < obsV.rows(); ++vi)
       obsRest.segment<3>(vi * 3) = obsV.row(vi).transpose();
 
-    auto sampler = makeLinearTrajectorySampler(obsRest, ES::V3d::Zero());
-    auto obs = std::make_shared<ObstacleSurface>(std::move(obsV), std::move(obsF), std::move(sampler));
-    obs->update(0.0, 0.0);
-    core.addObstacleSurface(obs);
+    std::vector<ObstacleSurface> obstacles;
+    obstacles.emplace_back(std::move(obsV), std::move(obsF),
+      makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
+    SurfaceIPCCore core(params, std::move(obstacles));
+    core.setMesh(V, F);
+    core.updateObstacleStage(0.0, 0.0);
 
     ES::VXd x(V.rows() * 3);
     for (int vi = 0; vi < V.rows(); ++vi)
@@ -273,11 +271,11 @@ static void test_surfaceIPCCore_external_box_contact()
 
     // Verify pair identity: all pairs reference a valid obstacle id
     for (const auto &p : ptPairs)
-      if (p.obstacleObjectId != 0) throw std::runtime_error("PT pair has wrong obstacle id");
+      if (p.obstacleSlot != 0) throw std::runtime_error("PT pair has wrong obstacle id");
     for (const auto &p : tpPairs)
-      if (p.obstacleObjectId != 0) throw std::runtime_error("TP pair has wrong obstacle id");
+      if (p.obstacleSlot != 0) throw std::runtime_error("TP pair has wrong obstacle id");
     for (const auto &p : eePairs)
-      if (p.obstacleObjectId != 0) throw std::runtime_error("EE pair has wrong obstacle id");
+      if (p.obstacleSlot != 0) throw std::runtime_error("EE pair has wrong obstacle id");
 
     // Energy, gradient, hessian should be computable
     double e = core.computeEnergy(x);
@@ -294,35 +292,27 @@ static void test_surfaceIPCCore_external_box_contact()
 
 static void test_surfaceIPCCore_external_multi_obstacle()
 {
-  TEST("SurfaceIPCCore multi-obstacle — obstacleObjectId distinguishes") {
+  TEST("SurfaceIPCCore multi-obstacle — obstacleSlot distinguishes") {
     auto [V, F] = makeUnitSquareMesh();
     SurfaceIPCCore::Parameters params;
     params.dhat_external = 1.0;
     params.kappa = 0.1;
-    SurfaceIPCCore core(params);
+
+    auto buildObs = [](double zOffset) {
+      auto [obsV, obsF] = makeSmallBoxObstacle(zOffset);
+      ES::VXd rest(obsV.rows() * 3);
+      for (int vi = 0; vi < obsV.rows(); ++vi)
+        rest.segment<3>(vi * 3) = obsV.row(vi).transpose();
+      return ObstacleSurface(std::move(obsV), std::move(obsF),
+        makeLinearTrajectorySampler(rest, ES::V3d::Zero()));
+    };
+
+    std::vector<ObstacleSurface> obstacles;
+    obstacles.emplace_back(buildObs(0.0));
+    obstacles.emplace_back(buildObs(0.75));
+    SurfaceIPCCore core(params, std::move(obstacles));
     core.setMesh(V, F);
-
-    // Register two obstacles with different z-offsets
-    auto [obsV1, obsF1] = makeSmallBoxObstacle(0.0);
-    ES::VXd obsRest1(obsV1.rows() * 3);
-    for (int vi = 0; vi < obsV1.rows(); ++vi)
-      obsRest1.segment<3>(vi * 3) = obsV1.row(vi).transpose();
-    auto obs1 = std::make_shared<ObstacleSurface>(std::move(obsV1), std::move(obsF1),
-      makeLinearTrajectorySampler(obsRest1, ES::V3d::Zero()));
-    obs1->update(0.0, 0.0);
-
-    auto [obsV2, obsF2] = makeSmallBoxObstacle(0.75);
-    ES::VXd obsRest2(obsV2.rows() * 3);
-    for (int vi = 0; vi < obsV2.rows(); ++vi)
-      obsRest2.segment<3>(vi * 3) = obsV2.row(vi).transpose();
-    auto obs2 = std::make_shared<ObstacleSurface>(std::move(obsV2), std::move(obsF2),
-      makeLinearTrajectorySampler(obsRest2, ES::V3d::Zero()));
-    obs2->update(0.0, 0.0);
-
-    int32_t id1 = core.addObstacleSurface(obs1);
-    int32_t id2 = core.addObstacleSurface(obs2);
-    if (id1 != 0) throw std::runtime_error("first obstacle id should be 0");
-    if (id2 != 1) throw std::runtime_error("second obstacle id should be 1");
+    core.updateObstacleStage(0.0, 0.0);
 
     ES::VXd x(V.rows() * 3);
     for (int vi = 0; vi < V.rows(); ++vi)
@@ -333,16 +323,16 @@ static void test_surfaceIPCCore_external_multi_obstacle()
     // Check that pairs from different obstacles are separated
     bool hasId0 = false, hasId1 = false;
     for (const auto &p : core.preparedState().externalPairs.ptPairs) {
-      if (p.obstacleObjectId == 0) hasId0 = true;
-      if (p.obstacleObjectId == 1) hasId1 = true;
+      if (p.obstacleSlot == 0) hasId0 = true;
+      if (p.obstacleSlot == 1) hasId1 = true;
     }
     for (const auto &p : core.preparedState().externalPairs.tpPairs) {
-      if (p.obstacleObjectId == 0) hasId0 = true;
-      if (p.obstacleObjectId == 1) hasId1 = true;
+      if (p.obstacleSlot == 0) hasId0 = true;
+      if (p.obstacleSlot == 1) hasId1 = true;
     }
     for (const auto &p : core.preparedState().externalPairs.eePairs) {
-      if (p.obstacleObjectId == 0) hasId0 = true;
-      if (p.obstacleObjectId == 1) hasId1 = true;
+      if (p.obstacleSlot == 0) hasId0 = true;
+      if (p.obstacleSlot == 1) hasId1 = true;
     }
 
     if (!hasId0) throw std::runtime_error("no pairs from obstacle 0");
@@ -376,17 +366,17 @@ static void test_surfaceIPCCore_external_self_equivalence()
     extParams.dhat_external = 0.5;
     extParams.kappa = 0.1;
     extParams.dhat = 0.5;
-    SurfaceIPCCore extCore(extParams);
-    extCore.setMesh(dynV, dynF);
 
     ES::VXd obsRest(obsV.rows() * 3);
     for (int vi = 0; vi < obsV.rows(); ++vi)
       obsRest.segment<3>(vi * 3) = obsV.row(vi).transpose();
 
-    auto obs = std::make_shared<ObstacleSurface>(obsV, obsF,
+    std::vector<ObstacleSurface> extObstacles;
+    extObstacles.emplace_back(obsV, obsF,
       makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
-    obs->update(0.0, 0.0);
-    extCore.addObstacleSurface(obs);
+    SurfaceIPCCore extCore(extParams, std::move(extObstacles));
+    extCore.setMesh(dynV, dynF);
+    extCore.updateObstacleStage(0.0, 0.0);
 
     ES::VXd xDyn(dynV.rows() * 3);
     for (int vi = 0; vi < dynV.rows(); ++vi)
@@ -447,8 +437,6 @@ static void test_surfaceIPCCore_external_ccd_kinematic()
     params.dhat_external = 0.5;
     params.kappa = 0.1;
     params.slackness = 1.0;
-    SurfaceIPCCore core(params);
-    core.setMesh(V, F);
 
     // Plane obstacle above the mesh, moving downward
     ES::MXd obsV(4, 3);
@@ -465,10 +453,12 @@ static void test_surfaceIPCCore_external_ccd_kinematic()
       obsRest.segment<3>(vi * 3) = obsV.row(vi).transpose();
 
     ES::V3d vel(0.0, -1.0, 0.0);  // moving downward
-    auto sampler = makeLinearTrajectorySampler(obsRest, vel, 0.0);
-    auto obs = std::make_shared<ObstacleSurface>(std::move(obsV), std::move(obsF), std::move(sampler));
-    obs->update(0.0, 1.0);  // obs moves from y=0.5 to y=-0.5 in this stage
-    core.addObstacleSurface(obs);
+    std::vector<ObstacleSurface> obstacles;
+    obstacles.emplace_back(std::move(obsV), std::move(obsF),
+      makeLinearTrajectorySampler(obsRest, vel, 0.0));
+    SurfaceIPCCore core(params, std::move(obstacles));
+    core.setMesh(V, F);
+    core.updateObstacleStage(0.0, 1.0);  // obs moves from y=0.5 to y=-0.5 in this stage
 
     ES::VXd x(V.rows() * 3);
     for (int vi = 0; vi < V.rows(); ++vi)
@@ -495,8 +485,6 @@ static void test_surfaceIPCCore_external_ccd_alpha_symmetry()
     params.dhat_external = 0.5;
     params.kappa = 0.1;
     params.slackness = 1.0;
-    SurfaceIPCCore core(params);
-    core.setMesh(V, F);
 
     // Plane obstacle at y=0.5, stationary (velocity = 0)
     ES::MXd obsV(4, 3);
@@ -512,10 +500,12 @@ static void test_surfaceIPCCore_external_ccd_alpha_symmetry()
     for (int vi = 0; vi < obsV.rows(); ++vi)
       obsRest.segment<3>(vi * 3) = obsV.row(vi).transpose();
 
-    auto obs = std::make_shared<ObstacleSurface>(std::move(obsV), std::move(obsF),
+    std::vector<ObstacleSurface> obstacles;
+    obstacles.emplace_back(std::move(obsV), std::move(obsF),
       makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
-    obs->update(0.0, 0.0);
-    core.addObstacleSurface(obs);
+    SurfaceIPCCore core(params, std::move(obstacles));
+    core.setMesh(V, F);
+    core.updateObstacleStage(0.0, 0.0);
 
     ES::VXd x(V.rows() * 3);
     for (int vi = 0; vi < V.rows(); ++vi)
@@ -549,7 +539,7 @@ static void test_surfaceIPCCore_external_ccd_alpha_symmetry()
 
 static void test_embeddedSurfaceIPCPotentialEnergy_external()
 {
-  TEST("EmbeddedSurfaceIPCPotentialEnergy wrapper — obstacle registration") {
+  TEST("EmbeddedSurfaceIPCPotentialEnergy wrapper — constructor-injected obstacle") {
     auto [V, F] = makeUnitSquareMesh();
     int n3 = V.rows() * 3;
     ES::SpMatD W(n3, n3);
@@ -562,18 +552,16 @@ static void test_embeddedSurfaceIPCPotentialEnergy_external()
     params.dhat_external = 0.5;
     params.kappa = 0.1;
 
-    EmbeddedSurfaceIPCPotentialEnergy wrapper(V, F, W, params);
-
     auto [obsV, obsF] = makeSmallBoxObstacle(0.0);
     ES::VXd obsRest(obsV.rows() * 3);
     for (int vi = 0; vi < obsV.rows(); ++vi)
       obsRest.segment<3>(vi * 3) = obsV.row(vi).transpose();
-    auto obs = std::make_shared<ObstacleSurface>(std::move(obsV), std::move(obsF),
+    std::vector<ObstacleSurface> obstacles;
+    obstacles.emplace_back(std::move(obsV), std::move(obsF),
       makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
-    obs->update(0.0, 0.0);
 
-    int32_t id = wrapper.addObstacleSurface(obs);
-    if (id != 0) throw std::runtime_error("wrapper addObstacleSurface returned wrong id");
+    EmbeddedSurfaceIPCPotentialEnergy wrapper(V, F, W, params, std::move(obstacles));
+    wrapper.updateObstacleStage(0.0, 0.0);
 
     ES::VXd u = ES::VXd::Zero(n3);
 
@@ -588,8 +576,6 @@ static void test_embeddedSurfaceIPCPotentialEnergy_external()
     ES::SpMatD H;
     wrapper.hessianDirect(u, H);
     if (H.rows() != n3) throw std::runtime_error("wrapper hessian size mismatch");
-
-    wrapper.clearObstacleSurfaces();
   } ENDTEST;
 }
 
@@ -609,17 +595,19 @@ static void test_embeddedSurfaceIPCPotentialEnergy_wrapper_vs_core()
     params.dhat_external = 0.5;
     params.kappa = 0.1;
 
-    // Wrapper path
-    EmbeddedSurfaceIPCPotentialEnergy wrapper(V, F, W, params);
+    auto buildBoxObstacles = []() {
+      auto [obsV, obsF] = makeSmallBoxObstacle(0.0);
+      ES::VXd rest(obsV.rows() * 3);
+      for (int vi = 0; vi < obsV.rows(); ++vi)
+        rest.segment<3>(vi * 3) = obsV.row(vi).transpose();
+      std::vector<ObstacleSurface> v;
+      v.emplace_back(std::move(obsV), std::move(obsF),
+        makeLinearTrajectorySampler(rest, ES::V3d::Zero()));
+      return v;
+    };
 
-    auto [obsV, obsF] = makeSmallBoxObstacle(0.0);
-    ES::VXd obsRest(obsV.rows() * 3);
-    for (int vi = 0; vi < obsV.rows(); ++vi)
-      obsRest.segment<3>(vi * 3) = obsV.row(vi).transpose();
-    auto obs = std::make_shared<ObstacleSurface>(std::move(obsV), std::move(obsF),
-      makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
-    obs->update(0.0, 0.0);
-    wrapper.addObstacleSurface(obs);
+    // Wrapper path
+    EmbeddedSurfaceIPCPotentialEnergy wrapper(V, F, W, params, buildBoxObstacles());
     wrapper.updateObstacleStage(0.0, 0.0);
 
     ES::VXd x(n3);
@@ -633,17 +621,9 @@ static void test_embeddedSurfaceIPCPotentialEnergy_wrapper_vs_core()
     wrapper.gradient(u, wrapperG);
 
     // Direct core path
-    auto [obsV2, obsF2] = makeSmallBoxObstacle(0.0);
-    ES::VXd obsRest2(obsV2.rows() * 3);
-    for (int vi = 0; vi < obsV2.rows(); ++vi)
-      obsRest2.segment<3>(vi * 3) = obsV2.row(vi).transpose();
-    auto obs2 = std::make_shared<ObstacleSurface>(std::move(obsV2), std::move(obsF2),
-      makeLinearTrajectorySampler(obsRest2, ES::V3d::Zero()));
-    obs2->update(0.0, 0.0);
-
-    SurfaceIPCCore core(params);
+    SurfaceIPCCore core(params, buildBoxObstacles());
     core.setMesh(V, F);
-    core.addObstacleSurface(obs2);
+    core.updateObstacleStage(0.0, 0.0);
 
     double coreE = core.computeEnergy(x);
     ES::VXd coreG(n3);
@@ -666,7 +646,7 @@ int main()
   test_obstacleSurface_zero_velocity();
 
   std::cout << "\n=== SurfaceIPCCore Registration Tests ===" << std::endl;
-  test_surfaceIPCCore_external_register_clear();
+  test_surfaceIPCCore_external_default_empty();
 
   std::cout << "\n=== External Barrier Tests ===" << std::endl;
   test_surfaceIPCCore_external_static_plane();

@@ -208,7 +208,7 @@ double computeExternalMaxStep(
   const SurfaceIPCTopology &topology,
   EigenSupport::ConstRefVecXd x,
   EigenSupport::ConstRefVecXd dx,
-  const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+  const std::vector<ObstacleSurface> &obstacles,
   double dhatExternal,
   double slackness)
 {
@@ -270,11 +270,11 @@ double computeExternalMaxStep(
     });
 
   for (const auto &obs : obstacles) {
-    const VXd &obsCur = obs->currentPositions();
-    const VXd &obsPrev = obs->previousPositions();
+    const VXd &obsCur = obs.currentPositions();
+    const VXd &obsPrev = obs.previousPositions();
     int nObsVert = (int)obsCur.size() / 3;
-    int nObsTri = (int)obs->triangles().rows();
-    int nObsEdge = (int)obs->uniqueEdges().rows();
+    int nObsTri = (int)obs.triangles().rows();
+    int nObsEdge = (int)obs.uniqueEdges().rows();
 
     auto obsV = [&](int i) -> V3d { return obsPrev.segment<3>(3 * i); };
     auto obsDisp = [&](int i) -> V3d { return obsCur.segment<3>(3 * i) - obsPrev.segment<3>(3 * i); };
@@ -296,12 +296,12 @@ double computeExternalMaxStep(
     tbb::parallel_for(tbb::blocked_range<int>(0, nObsTri),
       [&](const tbb::blocked_range<int> &r) {
         for (int fi = r.begin(); fi < r.end(); ++fi) {
-          V3d v0 = obsV(obs->triangles()(fi, 0));
-          V3d v1 = obsV(obs->triangles()(fi, 1));
-          V3d v2 = obsV(obs->triangles()(fi, 2));
-          V3d d0 = obsDisp(obs->triangles()(fi, 0));
-          V3d d1 = obsDisp(obs->triangles()(fi, 1));
-          V3d d2 = obsDisp(obs->triangles()(fi, 2));
+          V3d v0 = obsV(obs.triangles()(fi, 0));
+          V3d v1 = obsV(obs.triangles()(fi, 1));
+          V3d v2 = obsV(obs.triangles()(fi, 2));
+          V3d d0 = obsDisp(obs.triangles()(fi, 0));
+          V3d d1 = obsDisp(obs.triangles()(fi, 1));
+          V3d d2 = obsDisp(obs.triangles()(fi, 2));
           obsTriBox[fi].init(v0, 0.0);
           obsTriBox[fi].expand(v1);
           obsTriBox[fi].expand(v2);
@@ -314,10 +314,10 @@ double computeExternalMaxStep(
     tbb::parallel_for(tbb::blocked_range<int>(0, nObsEdge),
       [&](const tbb::blocked_range<int> &r) {
         for (int ei = r.begin(); ei < r.end(); ++ei) {
-          V3d a0 = obsV(obs->uniqueEdges()(ei, 0));
-          V3d a1 = obsV(obs->uniqueEdges()(ei, 1));
-          V3d da0 = obsDisp(obs->uniqueEdges()(ei, 0));
-          V3d da1 = obsDisp(obs->uniqueEdges()(ei, 1));
+          V3d a0 = obsV(obs.uniqueEdges()(ei, 0));
+          V3d a1 = obsV(obs.uniqueEdges()(ei, 1));
+          V3d da0 = obsDisp(obs.uniqueEdges()(ei, 0));
+          V3d da1 = obsDisp(obs.uniqueEdges()(ei, 1));
           obsEdgeBox[ei].init(a0, 0.0);
           obsEdgeBox[ei].expand(a1);
           obsEdgeBox[ei].expand(a0 + da0);
@@ -362,12 +362,12 @@ double computeExternalMaxStep(
                 continue;
 
               V3d p = getV(vi), dp = getdV(vi);
-              V3d t0 = obsV(obs->triangles()(fi, 0));
-              V3d t1 = obsV(obs->triangles()(fi, 1));
-              V3d t2 = obsV(obs->triangles()(fi, 2));
-              V3d dt0 = obsDisp(obs->triangles()(fi, 0));
-              V3d dt1 = obsDisp(obs->triangles()(fi, 1));
-              V3d dt2 = obsDisp(obs->triangles()(fi, 2));
+              V3d t0 = obsV(obs.triangles()(fi, 0));
+              V3d t1 = obsV(obs.triangles()(fi, 1));
+              V3d t2 = obsV(obs.triangles()(fi, 2));
+              V3d dt0 = obsDisp(obs.triangles()(fi, 0));
+              V3d dt1 = obsDisp(obs.triangles()(fi, 1));
+              V3d dt2 = obsDisp(obs.triangles()(fi, 2));
 
               double toi = ccd::pointTriangleCCD(p, t0, t1, t2,
                 dp, dt0, dt1, dt2, 0.0, localAlpha);
@@ -451,8 +451,8 @@ double computeExternalMaxStep(
               if (!dynEdgeBox[ei].overlaps(obsEdgeBox[ej]))
                 continue;
 
-              int b0 = obs->uniqueEdges()(ej, 0);
-              int b1 = obs->uniqueEdges()(ej, 1);
+              int b0 = obs.uniqueEdges()(ej, 0);
+              int b1 = obs.uniqueEdges()(ej, 1);
               V3d va0 = getV(a0), va1 = getV(a1);
               V3d vb0 = obsV(b0), vb1 = obsV(b1);
               V3d da0 = getdV(a0), da1 = getdV(a1);

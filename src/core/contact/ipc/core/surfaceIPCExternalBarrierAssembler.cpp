@@ -20,10 +20,10 @@ using namespace pgo::EigenSupport;
 // =========================================================================
 
 static const VXd &obsPositions(
-  const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
-  int32_t obsId)
+  const std::vector<ObstacleSurface> &obstacles,
+  int32_t slot)
 {
-  return obstacles[static_cast<std::size_t>(obsId)]->currentPositions();
+  return obstacles.at(static_cast<std::size_t>(slot)).currentPositions();
 }
 
 static V3d obsVtx(const VXd &pos, int i)
@@ -119,7 +119,7 @@ static void scatterExternalEEHessian(int tripletOffset, const M12d &localH, cons
 
 double computeExternalEnergy(
   ConstRefVecXd dynPos,
-  const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+  const std::vector<ObstacleSurface> &obstacles,
   const ExternalPairSet &pairs,
   double dhat,
   double kappa,
@@ -133,7 +133,7 @@ double computeExternalEnergy(
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
+        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
         auto k = barrier_kernels::pointTriangle(
           dynVtx(dynPos, pair.dynVertex),
           obsVtx(obsP, pair.obsTri[0]),
@@ -152,7 +152,7 @@ double computeExternalEnergy(
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.tpPairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
+        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
         auto k = barrier_kernels::pointTriangle(
           obsVtx(obsP, pair.obsVertex),
           dynVtx(dynPos, pair.dynTri[0]),
@@ -171,7 +171,7 @@ double computeExternalEnergy(
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
+        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
         auto k = barrier_kernels::edgeEdge(
           dynVtx(dynPos, pair.dynEdge[0]),
           dynVtx(dynPos, pair.dynEdge[1]),
@@ -194,7 +194,7 @@ double computeExternalEnergy(
 
 void computeExternalGradient(
   ConstRefVecXd dynPos,
-  const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+  const std::vector<ObstacleSurface> &obstacles,
   const ExternalPairSet &pairs,
   int numDynVerts,
   double dhat,
@@ -214,7 +214,7 @@ void computeExternalGradient(
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
+        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
         auto k = barrier_kernels::pointTriangle(
           dynVtx(dynPos, pair.dynVertex),
           obsVtx(obsP, pair.obsTri[0]),
@@ -233,7 +233,7 @@ void computeExternalGradient(
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.tpPairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
+        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
         auto k = barrier_kernels::pointTriangle(
           obsVtx(obsP, pair.obsVertex),
           dynVtx(dynPos, pair.dynTri[0]),
@@ -252,7 +252,7 @@ void computeExternalGradient(
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
+        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
         auto k = barrier_kernels::edgeEdge(
           dynVtx(dynPos, pair.dynEdge[0]),
           dynVtx(dynPos, pair.dynEdge[1]),
@@ -272,7 +272,7 @@ void computeExternalGradient(
 
 void computeExternalHessian(
   ConstRefVecXd dynPos,
-  const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+  const std::vector<ObstacleSurface> &obstacles,
   const ExternalPairSet &pairs,
   int numDynVerts,
   double dhat,
@@ -297,7 +297,7 @@ void computeExternalHessian(
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
+        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
         auto k = barrier_kernels::pointTriangle(
           dynVtx(dynPos, pair.dynVertex),
           obsVtx(obsP, pair.obsTri[0]),
@@ -316,7 +316,7 @@ void computeExternalHessian(
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.tpPairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
+        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
         auto k = barrier_kernels::pointTriangle(
           obsVtx(obsP, pair.obsVertex),
           dynVtx(dynPos, pair.dynTri[0]),
@@ -335,7 +335,7 @@ void computeExternalHessian(
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
+        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
         auto k = barrier_kernels::edgeEdge(
           dynVtx(dynPos, pair.dynEdge[0]),
           dynVtx(dynPos, pair.dynEdge[1]),
@@ -364,7 +364,7 @@ void computeExternalHessian(
 
 void computeExternalAll(
   ConstRefVecXd dynPos,
-  const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+  const std::vector<ObstacleSurface> &obstacles,
   const ExternalPairSet &pairs,
   int numDynVerts,
   double dhat,
@@ -395,7 +395,7 @@ void computeExternalAll(
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
+        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
         auto k = barrier_kernels::pointTriangle(
           dynVtx(dynPos, pair.dynVertex),
           obsVtx(obsP, pair.obsTri[0]),
@@ -418,7 +418,7 @@ void computeExternalAll(
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.tpPairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
+        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
         auto k = barrier_kernels::pointTriangle(
           obsVtx(obsP, pair.obsVertex),
           dynVtx(dynPos, pair.dynTri[0]),
@@ -441,7 +441,7 @@ void computeExternalAll(
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
+        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
         auto k = barrier_kernels::edgeEdge(
           dynVtx(dynPos, pair.dynEdge[0]),
           dynVtx(dynPos, pair.dynEdge[1]),

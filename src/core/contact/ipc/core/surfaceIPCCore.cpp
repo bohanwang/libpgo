@@ -18,6 +18,7 @@ copyright to Bohan Wang
 #include <algorithm>
 #include <cstdint>
 #include <stdexcept>
+#include <utility>
 
 namespace pgo {
 namespace Contact {
@@ -118,6 +119,11 @@ void SurfaceIPCCore::prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_su
       preparedState_.externalPairs.ptPairs.size(), preparedState_.externalPairs.tpPairs.size(), preparedState_.externalPairs.eePairs.size(), externalTotal);
   }
   preparedState_.hasState = true;
+}
+
+void SurfaceIPCCore::invalidatePreparedState() const
+{
+  preparedState_.clear();
 }
 
 // =========================================================================
@@ -245,28 +251,18 @@ void SurfaceIPCCore::computeAllWithPreparedPairs(double &energy, VXd &grad, SpMa
 // =========================================================================
 //  Obstacle (external) registration
 // =========================================================================
-int32_t SurfaceIPCCore::addObstacleSurface(std::shared_ptr<ObstacleSurface> obs)
+void SurfaceIPCCore::setObstacles(std::vector<ObstacleSurface> obstacles)
 {
-  if (!obs)
-    throw std::invalid_argument("SurfaceIPCCore::addObstacleSurface: obstacle must not be null.");
-
-  int32_t id = static_cast<int32_t>(obstacles_.size());
-  obstacles_.push_back(std::move(obs));
-  obstacles_.back()->setObjectId(id);
-  preparedState_.clear();
-  return id;
-}
-
-void SurfaceIPCCore::clearObstacleSurfaces()
-{
-  obstacles_.clear();
+  obstacles_ = std::move(obstacles);
+  for (std::size_t slot = 0; slot < obstacles_.size(); ++slot)
+    obstacles_[slot].setObjectId(static_cast<int32_t>(slot));
   preparedState_.clear();
 }
 
 void SurfaceIPCCore::updateObstacleStage(double tStart, double tEnd)
 {
   for (auto &obs : obstacles_)
-    obs->update(tStart, tEnd);
+    obs.update(tStart, tEnd);
   preparedState_.clear();
 }
 

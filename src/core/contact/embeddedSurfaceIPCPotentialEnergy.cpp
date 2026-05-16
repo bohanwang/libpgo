@@ -17,9 +17,10 @@ EmbeddedSurfaceIPCPotentialEnergy::EmbeddedSurfaceIPCPotentialEnergy(
   const EigenSupport::MXd &surfaceRestVertices,
   const EigenSupport::MXi &surfaceTriangles,
   const EigenSupport::SpMatD &surfaceFromSimulationDispMap,
-  const SurfaceIPCCore::Parameters &ipcParams):
+  const SurfaceIPCCore::Parameters &ipcParams,
+  std::vector<ObstacleSurface> obstacleSurfaces):
   MappedSurfacePotentialEnergy(surfaceRestVertices, surfaceFromSimulationDispMap),
-  surfaceIPCCore_(ipcParams)
+  surfaceIPCCore_(ipcParams, std::move(obstacleSurfaces))
 {
   if (surfaceTriangles.cols() != 3)
     throw std::invalid_argument("surfaceTriangles must be an M x 3 triangle index matrix.");
@@ -68,16 +69,6 @@ NonlinearOptimization::MaxStepResult EmbeddedSurfaceIPCPotentialEnergy::computeS
   return surfaceIPCCore_.computeMaxStepLimit(surfacePositions, surfaceDisplacements);
 }
 
-int32_t EmbeddedSurfaceIPCPotentialEnergy::addObstacleSurface(std::shared_ptr<ObstacleSurface> obs)
-{
-  return surfaceIPCCore_.addObstacleSurface(std::move(obs));
-}
-
-void EmbeddedSurfaceIPCPotentialEnergy::clearObstacleSurfaces()
-{
-  surfaceIPCCore_.clearObstacleSurfaces();
-}
-
 void EmbeddedSurfaceIPCPotentialEnergy::updateObstacleStage(double tStart, double tEnd)
 {
   surfaceIPCCore_.updateObstacleStage(tStart, tEnd);
@@ -85,7 +76,7 @@ void EmbeddedSurfaceIPCPotentialEnergy::updateObstacleStage(double tStart, doubl
 
 void EmbeddedSurfaceIPCPotentialEnergy::invalidatePreparedState()
 {
-  surfaceIPCCore_.preparedState().clear();
+  surfaceIPCCore_.invalidatePreparedState();
 }
 
 }  // namespace CIPC

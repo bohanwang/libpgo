@@ -4,7 +4,6 @@
 #include "ipc/external/obstacleSurface.h"
 #include "ipc/topology/surfaceIPCTopology.h"
 
-#include <memory>
 #include <vector>
 
 namespace pgo
@@ -25,7 +24,7 @@ double computeExternalMaxStep(
   const SurfaceIPCTopology &topology,
   EigenSupport::ConstRefVecXd x,
   EigenSupport::ConstRefVecXd dx,
-  const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+  const std::vector<ObstacleSurface> &obstacles,
   double dhatExternal,
   double slackness);
 

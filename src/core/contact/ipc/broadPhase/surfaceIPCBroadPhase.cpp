@@ -184,7 +184,7 @@ static EigenSupport::V3d obsVtx(const EigenSupport::VXd &pos, int i)
 void buildExternalPairs(
   const SurfaceIPCTopology &topology,
   EigenSupport::ConstRefVecXd positions,
-  const std::vector<std::shared_ptr<ObstacleSurface>> &obstacles,
+  const std::vector<ObstacleSurface> &obstacles,
   double dhatExternal,
   ExternalPairSet &pairs)
 {
@@ -232,15 +232,15 @@ void buildExternalPairs(
     });
 
   for (const auto &obs : obstacles) {
-    const EigenSupport::VXd &obsPos = obs->currentPositions();
+    const EigenSupport::VXd &obsPos = obs.currentPositions();
     int nObsVert = (int)obsPos.size() / 3;
-    int nObsTri = (int)obs->triangles().rows();
-    int nObsEdge = (int)obs->uniqueEdges().rows();
+    int nObsTri = (int)obs.triangles().rows();
+    int nObsEdge = (int)obs.uniqueEdges().rows();
 
-    int32_t obsId = obs->objectId();
+    int32_t obsId = obs.objectId();
 
-    const std::vector<double> &obsTriArea = obs->triAreas();
-    const std::vector<double> &obsEdgeLen = obs->edgeLengths();
+    const std::vector<double> &obsTriArea = obs.triAreas();
+    const std::vector<double> &obsEdgeLen = obs.edgeLengths();
 
     // Build obstacle AABBs
     std::vector<SpatialHashGrid::AABB> obsVertBox(nObsVert);
@@ -254,9 +254,9 @@ void buildExternalPairs(
     tbb::parallel_for(tbb::blocked_range<int>(0, nObsTri),
       [&](const tbb::blocked_range<int> &r) {
         for (int fi = r.begin(); fi < r.end(); ++fi) {
-          obsTriBox[fi].init(obsVtx(obsPos, obs->triangles()(fi, 0)), inflate);
-          obsTriBox[fi].expand(obsVtx(obsPos, obs->triangles()(fi, 1)), inflate);
-          obsTriBox[fi].expand(obsVtx(obsPos, obs->triangles()(fi, 2)), inflate);
+          obsTriBox[fi].init(obsVtx(obsPos, obs.triangles()(fi, 0)), inflate);
+          obsTriBox[fi].expand(obsVtx(obsPos, obs.triangles()(fi, 1)), inflate);
+          obsTriBox[fi].expand(obsVtx(obsPos, obs.triangles()(fi, 2)), inflate);
         }
       });
 
@@ -264,8 +264,8 @@ void buildExternalPairs(
     tbb::parallel_for(tbb::blocked_range<int>(0, nObsEdge),
       [&](const tbb::blocked_range<int> &r) {
         for (int ei = r.begin(); ei < r.end(); ++ei) {
-          obsEdgeBox[ei].init(obsVtx(obsPos, obs->uniqueEdges()(ei, 0)), inflate);
-          obsEdgeBox[ei].expand(obsVtx(obsPos, obs->uniqueEdges()(ei, 1)), inflate);
+          obsEdgeBox[ei].init(obsVtx(obsPos, obs.uniqueEdges()(ei, 0)), inflate);
+          obsEdgeBox[ei].expand(obsVtx(obsPos, obs.uniqueEdges()(ei, 1)), inflate);
         }
       });
 
@@ -302,14 +302,14 @@ void buildExternalPairs(
                 continue;
 
               EigenSupport::V3d vp = getV(vi);
-              EigenSupport::V3d vt0 = obsVtx(obsPos, obs->triangles()(fi, 0));
-              EigenSupport::V3d vt1 = obsVtx(obsPos, obs->triangles()(fi, 1));
-              EigenSupport::V3d vt2 = obsVtx(obsPos, obs->triangles()(fi, 2));
+              EigenSupport::V3d vt0 = obsVtx(obsPos, obs.triangles()(fi, 0));
+              EigenSupport::V3d vt1 = obsVtx(obsPos, obs.triangles()(fi, 1));
+              EigenSupport::V3d vt2 = obsVtx(obsPos, obs.triangles()(fi, 2));
               double d2 = distance::computePTSqDist(vp, vt0, vt1, vt2);
               if (d2 < dhat2 && d2 > 0.0) {
                 double w = topology.vertexArea[vi] * obsTriArea[fi];
                 localPairs.push_back({ obsId, vi,
-                  {{ obs->triangles()(fi, 0), obs->triangles()(fi, 1), obs->triangles()(fi, 2) }},
+                  {{ obs.triangles()(fi, 0), obs.triangles()(fi, 1), obs.triangles()(fi, 2) }},
                   w });
               }
             }
@@ -392,8 +392,8 @@ void buildExternalPairs(
               if (!dynEdgeBox[ei].overlaps(obsEdgeBox[ej]))
                 continue;
 
-              int b0 = obs->uniqueEdges()(ej, 0);
-              int b1 = obs->uniqueEdges()(ej, 1);
+              int b0 = obs.uniqueEdges()(ej, 0);
+              int b1 = obs.uniqueEdges()(ej, 1);
               EigenSupport::V3d va0 = getV(a0), va1 = getV(a1);
               EigenSupport::V3d vb0 = obsVtx(obsPos, b0), vb1 = obsVtx(obsPos, b1);
               double d2 = distance::computeEESqDist(va0, va1, vb0, vb1);
