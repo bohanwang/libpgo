@@ -239,20 +239,8 @@ void buildExternalPairs(
 
     int32_t obsId = obs->objectId();
 
-    // Precompute obstacle triangle areas and edge lengths from current positions
-    std::vector<double> obsTriArea(nObsTri, 0.0);
-    for (int fi = 0; fi < nObsTri; ++fi) {
-      EigenSupport::V3d v0 = obsVtx(obsPos, obs->triangles()(fi, 0));
-      EigenSupport::V3d v1 = obsVtx(obsPos, obs->triangles()(fi, 1));
-      EigenSupport::V3d v2 = obsVtx(obsPos, obs->triangles()(fi, 2));
-      obsTriArea[fi] = 0.5 * (v1 - v0).cross(v2 - v0).norm();
-    }
-    std::vector<double> obsEdgeLen(nObsEdge, 0.0);
-    for (int ei = 0; ei < nObsEdge; ++ei) {
-      EigenSupport::V3d e0 = obsVtx(obsPos, obs->uniqueEdges()(ei, 0));
-      EigenSupport::V3d e1 = obsVtx(obsPos, obs->uniqueEdges()(ei, 1));
-      obsEdgeLen[ei] = (e1 - e0).norm();
-    }
+    const std::vector<double> &obsTriArea = obs->triAreas();
+    const std::vector<double> &obsEdgeLen = obs->edgeLengths();
 
     // Build obstacle AABBs
     std::vector<SpatialHashGrid::AABB> obsVertBox(nObsVert);

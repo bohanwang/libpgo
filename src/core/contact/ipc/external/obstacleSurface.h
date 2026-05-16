@@ -1,9 +1,11 @@
 #pragma once
 
 #include "EigenDef.h"
+#include "ipc/external/obstacleSurfaceView.h"
 
 #include <cstdint>
 #include <functional>
+#include <vector>
 
 namespace pgo
 {
@@ -30,8 +32,11 @@ public:
   const EigenSupport::VXd &        previousPositions()const{ return previous_; }
   const EigenSupport::MXi &        triangles()       const { return triangles_; }
   const EigenSupport::MXi &        uniqueEdges()     const { return uniqueEdges_; }
+  const std::vector<double> &       triAreas()        const { return triAreas_; }
+  const std::vector<double> &       edgeLengths()     const { return edgeLengths_; }
 
   void setObjectId(int32_t id) { objectId_ = id; }
+  ObstacleSurfaceView view() const;
 
 private:
   int32_t              objectId_ = -1;
@@ -41,6 +46,8 @@ private:
   EigenSupport::MXi    triangles_;       // local 0-based indices
   EigenSupport::MXi    uniqueEdges_;     // derived from triangles_
   TrajectorySampler    sampler_;
+  std::vector<double>  triAreas_;        // cached from current_ positions
+  std::vector<double>  edgeLengths_;     // cached from current_ positions
 };
 
 ObstacleSurface::TrajectorySampler makeLinearTrajectorySampler(

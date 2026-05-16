@@ -49,10 +49,28 @@ ObstacleSurface::ObstacleSurface(
     ++row;
   }
 
+  const int nTri = static_cast<int>(triangles_.rows());
+  const int nEdge = static_cast<int>(uniqueEdges_.rows());
+  triAreas_.resize(nTri, 0.0);
+  edgeLengths_.resize(nEdge, 0.0);
+
   previous_.resize(numVerts * 3);
   current_.resize(numVerts * 3);
   previous_.setZero();
   current_.setZero();
+}
+
+ObstacleSurfaceView ObstacleSurface::view() const
+{
+  return {
+    objectId_,
+    &previous_,
+    &current_,
+    &triangles_,
+    &uniqueEdges_,
+    &triAreas_,
+    &edgeLengths_,
+  };
 }
 
 void ObstacleSurface::update(double tStart, double tEnd)
@@ -60,6 +78,19 @@ void ObstacleSurface::update(double tStart, double tEnd)
   const int n3 = static_cast<int>(rest_.size());
   sampler_(tStart, previous_);
   sampler_(tEnd, current_);
+
+  // Cache tri areas and edge lengths from current positions
+  for (int fi = 0; fi < triangles_.rows(); ++fi) {
+    EigenSupport::V3d v0 = current_.segment<3>(3 * triangles_(fi, 0));
+    EigenSupport::V3d v1 = current_.segment<3>(3 * triangles_(fi, 1));
+    EigenSupport::V3d v2 = current_.segment<3>(3 * triangles_(fi, 2));
+    triAreas_[fi] = 0.5 * (v1 - v0).cross(v2 - v0).norm();
+  }
+  for (int ei = 0; ei < uniqueEdges_.rows(); ++ei) {
+    EigenSupport::V3d e0 = current_.segment<3>(3 * uniqueEdges_(ei, 0));
+    EigenSupport::V3d e1 = current_.segment<3>(3 * uniqueEdges_(ei, 1));
+    edgeLengths_[ei] = (e1 - e0).norm();
+  }
 }
 
 ObstacleSurface::TrajectorySampler makeLinearTrajectorySampler(

@@ -14,6 +14,7 @@ set(CONTACT_HEADERS
   ipc/core/surfaceIPCPreparedState.h
   ipc/core/surfaceIPCPairs.h
   ipc/external/obstacleSurface.h
+  ipc/external/obstacleSurfaceView.h
   ipc/geometry/ipcBarrier.h
   ipc/geometry/ipcCCD.h
   ipc/geometry/ipcDistancePrimitives.h
