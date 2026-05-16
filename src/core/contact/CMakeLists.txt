@@ -9,6 +9,7 @@ set(CONTACT_HEADERS
   ipc/core/surfaceIPCBarrierAssembler.h
   ipc/core/surfaceIPCMaxStep.h
   ipc/core/surfaceIPCCore.h
+  ipc/core/surfaceIPCPreparedState.h
   ipc/core/surfaceIPCPairs.h
   ipc/external/obstacleSurface.h
   ipc/geometry/ipcBarrier.h

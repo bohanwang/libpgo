@@ -6,6 +6,7 @@ copyright to Bohan Wang
 
 #include "EigenDef.h"
 #include "ipc/core/surfaceIPCPairs.h"
+#include "ipc/core/surfaceIPCPreparedState.h"
 #include "ipc/external/obstacleSurface.h"
 #include "ipc/topology/surfaceIPCTopology.h"
 #include "solveDiagnostics.h"
@@ -47,39 +48,28 @@ public:
   Parameters getParameters() const;
 
   void setMesh(const MXd &V, const MXi &F);
+  void prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_surf) const;
 
   double computeEnergy(EigenSupport::ConstRefVecXd x_surf) const;
   void computeGradient(EigenSupport::ConstRefVecXd x_surf, EigenSupport::RefVecXd g_surf) const;
   void computeHessian(EigenSupport::ConstRefVecXd x_surf, EigenSupport::SpMatD &H_surf) const;
   void computeAll(EigenSupport::ConstRefVecXd x_surf, double &energy, VXd &g_surf, SpMatD &H_surf) const;
-  void prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_surf) const;
-  bool isPreparedFor(EigenSupport::ConstRefVecXd x_surf) const;
-  void invalidatePreparedState() const;
-  double computeEnergyWithPreparedPairs() const;
+    double computeEnergyWithPreparedPairs() const;
   void computeGradientWithPreparedPairs(EigenSupport::RefVecXd g_surf) const;
   void computeHessianWithPreparedPairs(EigenSupport::SpMatD &H_surf) const;
   void computeAllWithPreparedPairs(double &energy, VXd &g_surf, SpMatD &H_surf) const;
   NonlinearOptimization::MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x_surf, EigenSupport::ConstRefVecXd dx_surf) const;
 
-  const std::vector<PTPair> &getPTPairs() const { return ptPairs_; }
-  const std::vector<EEPair> &getEEPairs() const { return eePairs_; }
+  SurfaceIPCPreparedState& preparedState() const { return preparedState_; }
+  const SurfaceIPCTopology& topology() const { return topology_; }
 
   // Obstacle (external) registration
   int32_t addObstacleSurface(std::shared_ptr<ObstacleSurface> obs);
   void    clearObstacleSurfaces();
   void    updateObstacleStage(double tStart, double tEnd);
 
-  const std::vector<ExternalPTPair> &getExternalPTPairs() const { return extPTPairs_; }
-  const std::vector<ExternalTPPair> &getExternalTPPairs() const { return extTPPairs_; }
-  const std::vector<ExternalEEPair> &getExternalEEPairs() const { return extEEPairs_; }
-
-  int getNumSurfaceVertices() const { return topology_.numVerts; }
-  int getNumSurfaceDOFs() const { return topology_.numSurfaceDOFs(); }
-
 private:
   void findCollisionPairs(const VXd &positions) const;
-  void requirePreparedState() const;
-
   static V3d vtx(const VXd &x, int i)
   {
     return x.segment<3>(3 * i);
@@ -91,14 +81,8 @@ private:
   double eps_ee = 0.0;
   double slackness = 1.0;
   SurfaceIPCTopology topology_;
-  mutable std::vector<PTPair> ptPairs_;
-  mutable std::vector<EEPair> eePairs_;
-  mutable bool hasPreparedState_ = false;
-  mutable VXd preparedPositions_;
+  mutable SurfaceIPCPreparedState preparedState_;
   std::vector<std::shared_ptr<ObstacleSurface>> obstacles_;
-  mutable std::vector<ExternalPTPair>           extPTPairs_;
-  mutable std::vector<ExternalTPPair>           extTPPairs_;
-  mutable std::vector<ExternalEEPair>           extEEPairs_;
 };
 
 }  // namespace CIPC

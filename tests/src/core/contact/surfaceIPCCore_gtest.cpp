@@ -184,20 +184,20 @@ TEST(SurfaceIPCCoreGTest, PairAccessorsRemainReadableAcrossComputes)
 
   const double energy = core.computeEnergy(x);
   EXPECT_GT(energy, 0.0);
-  ASSERT_FALSE(core.getPTPairs().empty());
+  ASSERT_FALSE(core.preparedState().ptPairs.empty());
 
-  const std::size_t ptCount = core.getPTPairs().size();
-  const std::size_t eeCount = core.getEEPairs().size();
+  const std::size_t ptCount = core.preparedState().ptPairs.size();
+  const std::size_t eeCount = core.preparedState().eePairs.size();
 
   ES::VXd grad(x.size());
   core.computeGradient(x, grad);
-  EXPECT_EQ(core.getPTPairs().size(), ptCount);
-  EXPECT_EQ(core.getEEPairs().size(), eeCount);
+  EXPECT_EQ(core.preparedState().ptPairs.size(), ptCount);
+  EXPECT_EQ(core.preparedState().eePairs.size(), eeCount);
 
   ES::SpMatD H;
   core.computeHessian(x, H);
-  EXPECT_EQ(core.getPTPairs().size(), ptCount);
-  EXPECT_EQ(core.getEEPairs().size(), eeCount);
+  EXPECT_EQ(core.preparedState().ptPairs.size(), ptCount);
+  EXPECT_EQ(core.preparedState().eePairs.size(), eeCount);
 }
 
 TEST(SurfaceIPCCoreGTest, PreparedPairsMatchDirectEnergyGradientHessian)
@@ -213,7 +213,7 @@ TEST(SurfaceIPCCoreGTest, PreparedPairsMatchDirectEnergyGradientHessian)
   core.computeHessian(x, directHessian);
 
   core.prepareForSurfacePositions(x);
-  EXPECT_TRUE(core.isPreparedFor(x));
+  EXPECT_TRUE(core.preparedState().isPreparedFor(x));
 
   const double preparedEnergy = core.computeEnergyWithPreparedPairs();
   ES::VXd preparedGradient = ES::VXd::Zero(x.size());

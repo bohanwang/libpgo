@@ -57,7 +57,7 @@ void CIPCPotentialEnergy::syncCoreParametersFromWrapper() const
 
 void CIPCPotentialEnergy::ensurePreparedForSurfacePositions(const VXd &x_surf) const
 {
-  if (!core.isPreparedFor(x_surf))
+  if (!core.preparedState().isPreparedFor(x_surf))
     core.prepareForSurfacePositions(x_surf);
 }
 
@@ -171,7 +171,7 @@ void CIPCPotentialEnergy::hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupp
   ensurePreparedForSurfacePositions(x_surf);
   core.computeHessianWithPreparedPairs(hess);
   if (auto logger = Logging::lgr(); logger)
-    SPDLOG_LOGGER_INFO(logger, "Computing Hessian with {} PT pairs and {} EE pairs", core.getPTPairs().size(), core.getEEPairs().size());
+    SPDLOG_LOGGER_INFO(logger, "Computing Hessian with {} PT pairs and {} EE pairs", core.preparedState().ptPairs.size(), core.preparedState().eePairs.size());
   addFloorHessian(x_surf, hess);
 }
 

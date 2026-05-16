@@ -64,6 +64,6 @@ TEST(SurfaceIPCSelfBroadPhaseGTest, BuilderMatchesSurfaceIPCCorePairSet)
   core.setMesh(V, F);
   core.computeEnergy(x);
 
-  EXPECT_EQ(canonicalPT(broadPhasePTPairs), canonicalPT(core.getPTPairs()));
-  EXPECT_EQ(canonicalEE(broadPhaseEEPairs), canonicalEE(core.getEEPairs()));
+  EXPECT_EQ(canonicalPT(broadPhasePTPairs), canonicalPT(core.preparedState().ptPairs));
+  EXPECT_EQ(canonicalEE(broadPhaseEEPairs), canonicalEE(core.preparedState().eePairs));
 }

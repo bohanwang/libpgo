@@ -35,7 +35,7 @@ EmbeddedSurfaceIPCPotentialEnergy::EmbeddedSurfaceIPCPotentialEnergy(
 void EmbeddedSurfaceIPCPotentialEnergy::ensurePreparedForSurfacePositions(
   EigenSupport::ConstRefVecXd surfacePositions) const
 {
-  if (!surfaceIPCCore_.isPreparedFor(surfacePositions))
+  if (!surfaceIPCCore_.preparedState().isPreparedFor(surfacePositions))
     surfaceIPCCore_.prepareForSurfacePositions(surfacePositions);
 }
 
@@ -85,7 +85,7 @@ void EmbeddedSurfaceIPCPotentialEnergy::updateObstacleStage(double tStart, doubl
 
 void EmbeddedSurfaceIPCPotentialEnergy::invalidatePreparedState()
 {
-  surfaceIPCCore_.invalidatePreparedState();
+  surfaceIPCCore_.preparedState().clear();
 }
 
 }  // namespace CIPC
