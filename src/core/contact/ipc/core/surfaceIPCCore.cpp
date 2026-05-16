@@ -8,7 +8,8 @@ copyright to Bohan Wang
 #include "ipc/core/surfaceIPCCore.h"
 #include "scopedProfileSection.h"
 #include "ipc/broadPhase/surfaceIPCBroadPhase.h"
-#include "ipc/core/surfaceIPCBarrierAssembler.h"
+#include "ipc/core/surfaceIPCSelfBarrierAssembler.h"
+#include "ipc/core/surfaceIPCExternalBarrierAssembler.h"
 #include "ipc/core/surfaceIPCMaxStep.h"
 #include "ipc/profiling/surfaceIPCProfiling.h"
 
@@ -161,9 +162,9 @@ double SurfaceIPCCore::computeEnergyWithPreparedPairs() const
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedEnergy);
   if (!preparedState_.hasState)
     throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
-  double e = SurfaceIPCBarrierAssembler().computeSelfEnergy(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee);
+  double e = computeSelfEnergy(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee);
   if (!obstacles_.empty()) {
-    e += SurfaceIPCBarrierAssembler().computeExternalEnergy(
+    e += computeExternalEnergy(
       preparedState_.positions, obstacles_, preparedState_.externalPairs, dhat_external, kappa, eps_ee);
   }
   return e;
@@ -184,9 +185,9 @@ void SurfaceIPCCore::computeGradientWithPreparedPairs(EigenSupport::RefVecXd gra
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedGradient);
   if (!preparedState_.hasState)
     throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
-  SurfaceIPCBarrierAssembler().computeSelfGradient(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, grad);
+  computeSelfGradient(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, grad);
   if (!obstacles_.empty()) {
-    SurfaceIPCBarrierAssembler().computeExternalGradient(
+    computeExternalGradient(
       preparedState_.positions, obstacles_, preparedState_.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, grad);
   }
 }
@@ -206,9 +207,9 @@ void SurfaceIPCCore::computeHessianWithPreparedPairs(SpMatD &hess) const
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedHessian);
   if (!preparedState_.hasState)
     throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
-  SurfaceIPCBarrierAssembler().computeSelfHessian(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, hess);
+  computeSelfHessian(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, hess);
   if (!obstacles_.empty()) {
-    SurfaceIPCBarrierAssembler().computeExternalHessian(
+    computeExternalHessian(
       preparedState_.positions, obstacles_, preparedState_.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, hess);
   }
   if (auto logger = Logging::lgr(); logger)
@@ -230,10 +231,10 @@ void SurfaceIPCCore::computeAllWithPreparedPairs(double &energy, VXd &grad, SpMa
 {
   if (!preparedState_.hasState)
     throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
-  SurfaceIPCBarrierAssembler().computeSelfAll(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, energy, grad, hess);
+  computeSelfAll(preparedState_.positions, preparedState_.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, energy, grad, hess);
   if (!obstacles_.empty()) {
     double extEnergy = 0.0;
-    SurfaceIPCBarrierAssembler().computeExternalAll(
+    computeExternalAll(
       preparedState_.positions, obstacles_, preparedState_.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, extEnergy, grad, hess);
     energy += extEnergy;
   }

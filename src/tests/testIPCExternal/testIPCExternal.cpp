@@ -1,6 +1,5 @@
 #include "ipc/external/obstacleSurface.h"
 #include "ipc/core/surfaceIPCCore.h"
-#include "ipc/core/surfaceIPCBarrierAssembler.h"
 #include "embeddedSurfaceIPCPotentialEnergy.h"
 #include "pgoLogging.h"
 
