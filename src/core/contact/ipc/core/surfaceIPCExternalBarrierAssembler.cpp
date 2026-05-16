@@ -1,8 +1,5 @@
 #include "ipc/core/surfaceIPCExternalBarrierAssembler.h"
-
-#include "../geometry/ipcBarrier.h"
-#include "../geometry/ipcDistancePrimitives.h"
-#include "../geometry/ipcHessianProjection.h"
+#include "ipc/core/surfaceIPCBarrierKernels.h"
 
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
@@ -137,13 +134,14 @@ double computeExternalEnergy(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
-        V3d p = dynVtx(dynPos, pair.dynVertex);
-        V3d t0 = obsVtx(obsP, pair.obsTri[0]);
-        V3d t1 = obsVtx(obsP, pair.obsTri[1]);
-        V3d t2 = obsVtx(obsP, pair.obsTri[2]);
-        double d2 = distance::computePTSqDist(p, t0, t1, t2);
-        if (d2 < dhat2 && d2 > 0.0)
-          localE += pair.weight * kappa * barrier::b(d2, dhat2);
+        auto k = barrier_kernels::pointTriangle(
+          dynVtx(dynPos, pair.dynVertex),
+          obsVtx(obsP, pair.obsTri[0]),
+          obsVtx(obsP, pair.obsTri[1]),
+          obsVtx(obsP, pair.obsTri[2]),
+          pair.weight, dhat2, kappa, false, false);
+        if (k.active)
+          localE += k.energy;
       }
       return localE;
     },
@@ -155,13 +153,14 @@ double computeExternalEnergy(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.tpPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
-        V3d p = obsVtx(obsP, pair.obsVertex);
-        V3d t0 = dynVtx(dynPos, pair.dynTri[0]);
-        V3d t1 = dynVtx(dynPos, pair.dynTri[1]);
-        V3d t2 = dynVtx(dynPos, pair.dynTri[2]);
-        double d2 = distance::computePTSqDist(p, t0, t1, t2);
-        if (d2 < dhat2 && d2 > 0.0)
-          localE += pair.weight * kappa * barrier::b(d2, dhat2);
+        auto k = barrier_kernels::pointTriangle(
+          obsVtx(obsP, pair.obsVertex),
+          dynVtx(dynPos, pair.dynTri[0]),
+          dynVtx(dynPos, pair.dynTri[1]),
+          dynVtx(dynPos, pair.dynTri[2]),
+          pair.weight, dhat2, kappa, false, false);
+        if (k.active)
+          localE += k.energy;
       }
       return localE;
     },
@@ -173,17 +172,14 @@ double computeExternalEnergy(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
-        V3d ea0 = dynVtx(dynPos, pair.dynEdge[0]);
-        V3d ea1 = dynVtx(dynPos, pair.dynEdge[1]);
-        V3d eb0 = obsVtx(obsP, pair.obsEdge[0]);
-        V3d eb1 = obsVtx(obsP, pair.obsEdge[1]);
-        double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
-        if (d2 < dhat2 && d2 > 0.0) {
-          double m = 1.0;
-          if (eps_ee > 0.0)
-            m = distance::eeMollifier(ea0, ea1, eb0, eb1, eps_ee);
-          localE += pair.weight * kappa * m * barrier::b(d2, dhat2);
-        }
+        auto k = barrier_kernels::edgeEdge(
+          dynVtx(dynPos, pair.dynEdge[0]),
+          dynVtx(dynPos, pair.dynEdge[1]),
+          obsVtx(obsP, pair.obsEdge[0]),
+          obsVtx(obsP, pair.obsEdge[1]),
+          pair.weight, dhat2, kappa, eps_ee, false, false);
+        if (k.active)
+          localE += k.energy;
       }
       return localE;
     },
@@ -219,19 +215,15 @@ void computeExternalGradient(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
-        V3d p = dynVtx(dynPos, pair.dynVertex);
-        V3d t0 = obsVtx(obsP, pair.obsTri[0]);
-        V3d t1 = obsVtx(obsP, pair.obsTri[1]);
-        V3d t2 = obsVtx(obsP, pair.obsTri[2]);
-
-        double d2 = distance::computePTSqDist(p, t0, t1, t2);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::pointTriangle(
+          dynVtx(dynPos, pair.dynVertex),
+          obsVtx(obsP, pair.obsTri[0]),
+          obsVtx(obsP, pair.obsTri[1]),
+          obsVtx(obsP, pair.obsTri[2]),
+          pair.weight, dhat2, kappa, true, false);
+        if (!k.active)
           continue;
-
-        V12d gd2 = distance::computePTSqDistGrad(p, t0, t1, t2);
-        double coeff = pair.weight * kappa * barrier::dbds(d2, dhat2);
-        V12d gE = coeff * gd2;
-        scatterExternalPTGrad(gE, pair.dynVertex, grad);
+        scatterExternalPTGrad(k.gradient, pair.dynVertex, grad);
       }
     });
 
@@ -242,55 +234,34 @@ void computeExternalGradient(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.tpPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
-        V3d p = obsVtx(obsP, pair.obsVertex);
-        V3d t0 = dynVtx(dynPos, pair.dynTri[0]);
-        V3d t1 = dynVtx(dynPos, pair.dynTri[1]);
-        V3d t2 = dynVtx(dynPos, pair.dynTri[2]);
-
-        double d2 = distance::computePTSqDist(p, t0, t1, t2);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::pointTriangle(
+          obsVtx(obsP, pair.obsVertex),
+          dynVtx(dynPos, pair.dynTri[0]),
+          dynVtx(dynPos, pair.dynTri[1]),
+          dynVtx(dynPos, pair.dynTri[2]),
+          pair.weight, dhat2, kappa, true, false);
+        if (!k.active)
           continue;
-
-        V12d gd2 = distance::computePTSqDistGrad(p, t0, t1, t2);
-        double coeff = pair.weight * kappa * barrier::dbds(d2, dhat2);
-        V12d gE = coeff * gd2;
-        scatterExternalTPGrad(gE, pair.dynTri, grad);
+        scatterExternalTPGrad(k.gradient, pair.dynTri, grad);
       }
     });
 
   // EE pairs
-  double ee_eps = eps_ee;
   tbb::parallel_for(
     tbb::blocked_range<int>(0, (int)pairs.eePairs.size()),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
-        V3d ea0 = dynVtx(dynPos, pair.dynEdge[0]);
-        V3d ea1 = dynVtx(dynPos, pair.dynEdge[1]);
-        V3d eb0 = obsVtx(obsP, pair.obsEdge[0]);
-        V3d eb1 = obsVtx(obsP, pair.obsEdge[1]);
-
-        double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::edgeEdge(
+          dynVtx(dynPos, pair.dynEdge[0]),
+          dynVtx(dynPos, pair.dynEdge[1]),
+          obsVtx(obsP, pair.obsEdge[0]),
+          obsVtx(obsP, pair.obsEdge[1]),
+          pair.weight, dhat2, kappa, eps_ee, true, false);
+        if (!k.active)
           continue;
-
-        double wk = pair.weight * kappa;
-        V12d gd2 = distance::computeEESqDistGrad(ea0, ea1, eb0, eb1);
-        double b_val = barrier::b(d2, dhat2);
-        double dbv = barrier::dbds(d2, dhat2);
-
-        V12d gE;
-        if (ee_eps > 0.0) {
-          double m = distance::eeMollifier(ea0, ea1, eb0, eb1, ee_eps);
-          V12d gm = distance::eeMollifierGrad(ea0, ea1, eb0, eb1, ee_eps);
-          gE = wk * (gm * b_val + m * dbv * gd2);
-        }
-        else {
-          gE = wk * dbv * gd2;
-        }
-
-        scatterExternalEEGrad(gE, pair.dynEdge, grad);
+        scatterExternalEEGrad(k.gradient, pair.dynEdge, grad);
       }
     });
 }
@@ -327,23 +298,15 @@ void computeExternalHessian(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
-        V3d p = dynVtx(dynPos, pair.dynVertex);
-        V3d t0 = obsVtx(obsP, pair.obsTri[0]);
-        V3d t1 = obsVtx(obsP, pair.obsTri[1]);
-        V3d t2 = obsVtx(obsP, pair.obsTri[2]);
-
-        double d2 = distance::computePTSqDist(p, t0, t1, t2);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::pointTriangle(
+          dynVtx(dynPos, pair.dynVertex),
+          obsVtx(obsP, pair.obsTri[0]),
+          obsVtx(obsP, pair.obsTri[1]),
+          obsVtx(obsP, pair.obsTri[2]),
+          pair.weight, dhat2, kappa, false, true);
+        if (!k.active)
           continue;
-
-        V12d gd2 = distance::computePTSqDistGrad(p, t0, t1, t2);
-        M12d Hd2 = distance::computePTSqDistHess(p, t0, t1, t2);
-        double wk = pair.weight * kappa;
-        double gp = barrier::dbds(d2, dhat2);
-        double gpp = barrier::d2bds2(d2, dhat2);
-        M12d localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
-        localH = projectToPSD(localH);
-        scatterExternalPTHessian(9 * i, localH, pair.dynVertex, state);
+        scatterExternalPTHessian(9 * i, k.hessian, pair.dynVertex, state);
       }
     });
 
@@ -354,64 +317,34 @@ void computeExternalHessian(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.tpPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
-        V3d p = obsVtx(obsP, pair.obsVertex);
-        V3d t0 = dynVtx(dynPos, pair.dynTri[0]);
-        V3d t1 = dynVtx(dynPos, pair.dynTri[1]);
-        V3d t2 = dynVtx(dynPos, pair.dynTri[2]);
-
-        double d2 = distance::computePTSqDist(p, t0, t1, t2);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::pointTriangle(
+          obsVtx(obsP, pair.obsVertex),
+          dynVtx(dynPos, pair.dynTri[0]),
+          dynVtx(dynPos, pair.dynTri[1]),
+          dynVtx(dynPos, pair.dynTri[2]),
+          pair.weight, dhat2, kappa, false, true);
+        if (!k.active)
           continue;
-
-        V12d gd2 = distance::computePTSqDistGrad(p, t0, t1, t2);
-        M12d Hd2 = distance::computePTSqDistHess(p, t0, t1, t2);
-        double wk = pair.weight * kappa;
-        double gp = barrier::dbds(d2, dhat2);
-        double gpp = barrier::d2bds2(d2, dhat2);
-        M12d localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
-        localH = projectToPSD(localH);
-        scatterExternalTPHessian(9 * nPT + 81 * i, localH, pair.dynTri, state);
+        scatterExternalTPHessian(9 * nPT + 81 * i, k.hessian, pair.dynTri, state);
       }
     });
 
   // EE pairs
-  double ee_eps = eps_ee;
   tbb::parallel_for(
     tbb::blocked_range<int>(0, nEE),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
-        V3d ea0 = dynVtx(dynPos, pair.dynEdge[0]);
-        V3d ea1 = dynVtx(dynPos, pair.dynEdge[1]);
-        V3d eb0 = obsVtx(obsP, pair.obsEdge[0]);
-        V3d eb1 = obsVtx(obsP, pair.obsEdge[1]);
-
-        double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::edgeEdge(
+          dynVtx(dynPos, pair.dynEdge[0]),
+          dynVtx(dynPos, pair.dynEdge[1]),
+          obsVtx(obsP, pair.obsEdge[0]),
+          obsVtx(obsP, pair.obsEdge[1]),
+          pair.weight, dhat2, kappa, eps_ee, false, true);
+        if (!k.active)
           continue;
-
-        double wk = pair.weight * kappa;
-        V12d gd2 = distance::computeEESqDistGrad(ea0, ea1, eb0, eb1);
-        M12d Hd2 = distance::computeEESqDistHess(ea0, ea1, eb0, eb1);
-        double gp = barrier::dbds(d2, dhat2);
-        double gpp = barrier::d2bds2(d2, dhat2);
-
-        M12d localH;
-        if (ee_eps > 0.0) {
-          double m = distance::eeMollifier(ea0, ea1, eb0, eb1, ee_eps);
-          V12d gm = distance::eeMollifierGrad(ea0, ea1, eb0, eb1, ee_eps);
-          M12d Hm = distance::eeMollifierHess(ea0, ea1, eb0, eb1, ee_eps);
-          double bv = barrier::b(d2, dhat2);
-          double dbv = barrier::dbds(d2, dhat2);
-          V12d gb = dbv * gd2;
-          localH = wk * (bv * Hm + gm * gb.transpose() + gb * gm.transpose() + m * (gpp * gd2 * gd2.transpose() + gp * Hd2));
-        }
-        else {
-          localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
-        }
-        localH = projectToPSD(localH);
-        scatterExternalEEHessian(9 * nPT + 81 * nTP + 36 * i, localH, pair.dynEdge, state);
+        scatterExternalEEHessian(9 * nPT + 81 * nTP + 36 * i, k.hessian, pair.dynEdge, state);
       }
     });
 
@@ -463,28 +396,17 @@ void computeExternalAll(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
-        V3d p = dynVtx(dynPos, pair.dynVertex);
-        V3d t0 = obsVtx(obsP, pair.obsTri[0]);
-        V3d t1 = obsVtx(obsP, pair.obsTri[1]);
-        V3d t2 = obsVtx(obsP, pair.obsTri[2]);
-
-        double d2 = distance::computePTSqDist(p, t0, t1, t2);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::pointTriangle(
+          dynVtx(dynPos, pair.dynVertex),
+          obsVtx(obsP, pair.obsTri[0]),
+          obsVtx(obsP, pair.obsTri[1]),
+          obsVtx(obsP, pair.obsTri[2]),
+          pair.weight, dhat2, kappa, true, true);
+        if (!k.active)
           continue;
-
-        double wk = pair.weight * kappa;
-        localE += wk * barrier::b(d2, dhat2);
-
-        V12d gd2 = distance::computePTSqDistGrad(p, t0, t1, t2);
-        double gp = barrier::dbds(d2, dhat2);
-        V12d gE = wk * gp * gd2;
-        scatterExternalPTGrad(gE, pair.dynVertex, grad);
-
-        M12d Hd2 = distance::computePTSqDistHess(p, t0, t1, t2);
-        double gpp = barrier::d2bds2(d2, dhat2);
-        M12d localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
-        localH = projectToPSD(localH);
-        scatterExternalPTHessian(9 * i, localH, pair.dynVertex, hState);
+        localE += k.energy;
+        scatterExternalPTGrad(k.gradient, pair.dynVertex, grad);
+        scatterExternalPTHessian(9 * i, k.hessian, pair.dynVertex, hState);
       }
       return localE;
     },
@@ -497,83 +419,40 @@ void computeExternalAll(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.tpPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
-        V3d p = obsVtx(obsP, pair.obsVertex);
-        V3d t0 = dynVtx(dynPos, pair.dynTri[0]);
-        V3d t1 = dynVtx(dynPos, pair.dynTri[1]);
-        V3d t2 = dynVtx(dynPos, pair.dynTri[2]);
-
-        double d2 = distance::computePTSqDist(p, t0, t1, t2);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::pointTriangle(
+          obsVtx(obsP, pair.obsVertex),
+          dynVtx(dynPos, pair.dynTri[0]),
+          dynVtx(dynPos, pair.dynTri[1]),
+          dynVtx(dynPos, pair.dynTri[2]),
+          pair.weight, dhat2, kappa, true, true);
+        if (!k.active)
           continue;
-
-        double wk = pair.weight * kappa;
-        localE += wk * barrier::b(d2, dhat2);
-
-        V12d gd2 = distance::computePTSqDistGrad(p, t0, t1, t2);
-        double gp = barrier::dbds(d2, dhat2);
-        V12d gE = wk * gp * gd2;
-        scatterExternalTPGrad(gE, pair.dynTri, grad);
-
-        M12d Hd2 = distance::computePTSqDistHess(p, t0, t1, t2);
-        double gpp = barrier::d2bds2(d2, dhat2);
-        M12d localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
-        localH = projectToPSD(localH);
-        scatterExternalTPHessian(9 * nPT + 81 * i, localH, pair.dynTri, hState);
+        localE += k.energy;
+        scatterExternalTPGrad(k.gradient, pair.dynTri, grad);
+        scatterExternalTPHessian(9 * nPT + 81 * i, k.hessian, pair.dynTri, hState);
       }
       return localE;
     },
     std::plus<double>());
 
   // EE pairs
-  double ee_eps = eps_ee;
   double eeEnergy = tbb::parallel_reduce(
     tbb::blocked_range<int>(0, nEE), 0.0,
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleObjectId);
-        V3d ea0 = dynVtx(dynPos, pair.dynEdge[0]);
-        V3d ea1 = dynVtx(dynPos, pair.dynEdge[1]);
-        V3d eb0 = obsVtx(obsP, pair.obsEdge[0]);
-        V3d eb1 = obsVtx(obsP, pair.obsEdge[1]);
-
-        double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::edgeEdge(
+          dynVtx(dynPos, pair.dynEdge[0]),
+          dynVtx(dynPos, pair.dynEdge[1]),
+          obsVtx(obsP, pair.obsEdge[0]),
+          obsVtx(obsP, pair.obsEdge[1]),
+          pair.weight, dhat2, kappa, eps_ee, true, true);
+        if (!k.active)
           continue;
-
-        double wk = pair.weight * kappa;
-        double m = 1.0;
-        V12d gm;
-        gm.setZero();
-        M12d Hm;
-        Hm.setZero();
-        if (ee_eps > 0.0) {
-          m = distance::eeMollifier(ea0, ea1, eb0, eb1, ee_eps);
-          gm = distance::eeMollifierGrad(ea0, ea1, eb0, eb1, ee_eps);
-          Hm = distance::eeMollifierHess(ea0, ea1, eb0, eb1, ee_eps);
-        }
-
-        double bv = barrier::b(d2, dhat2);
-        localE += wk * m * bv;
-
-        V12d gd2 = distance::computeEESqDistGrad(ea0, ea1, eb0, eb1);
-        double dbv = barrier::dbds(d2, dhat2);
-        V12d gE = wk * (gm * bv + m * dbv * gd2);
-        scatterExternalEEGrad(gE, pair.dynEdge, grad);
-
-        M12d Hd2 = distance::computeEESqDistHess(ea0, ea1, eb0, eb1);
-        double gp = barrier::dbds(d2, dhat2);
-        double gpp = barrier::d2bds2(d2, dhat2);
-        V12d gb = dbv * gd2;
-        M12d localH;
-        if (ee_eps > 0.0) {
-          localH = wk * (bv * Hm + gm * gb.transpose() + gb * gm.transpose() + m * (gpp * gd2 * gd2.transpose() + gp * Hd2));
-        }
-        else {
-          localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
-        }
-        localH = projectToPSD(localH);
-        scatterExternalEEHessian(9 * nPT + 81 * nTP + 36 * i, localH, pair.dynEdge, hState);
+        localE += k.energy;
+        scatterExternalEEGrad(k.gradient, pair.dynEdge, grad);
+        scatterExternalEEHessian(9 * nPT + 81 * nTP + 36 * i, k.hessian, pair.dynEdge, hState);
       }
       return localE;
     },

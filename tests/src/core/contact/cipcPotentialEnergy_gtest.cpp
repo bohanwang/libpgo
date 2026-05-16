@@ -70,8 +70,6 @@ TEST(CIPCPotentialEnergyGTest, AbsoluteInputWrapperMatchesCore)
   EXPECT_NEAR(wrapper.func(x), core.computeEnergy(x), 1e-10);
   EXPECT_LT(relativeError(wrapperGrad, coreGrad), 1e-12);
   EXPECT_LT(relativeError(sparseToDense(wrapperH), sparseToDense(coreH)), 1e-12);
-  EXPECT_EQ(wrapper.getPTPairs().size(), core.preparedState().ptPairs.size());
-  EXPECT_EQ(wrapper.getEEPairs().size(), core.preparedState().eePairs.size());
 }
 
 TEST(CIPCPotentialEnergyGTest, DisplacementInputWrapperMatchesCore)

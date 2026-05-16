@@ -1,8 +1,5 @@
 #include "surfaceIPCSelfBarrierAssembler.h"
-
-#include "../geometry/ipcBarrier.h"
-#include "../geometry/ipcDistancePrimitives.h"
-#include "../geometry/ipcHessianProjection.h"
+#include "surfaceIPCBarrierKernels.h"
 
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
@@ -36,7 +33,6 @@ double computeSelfEnergy(
   double eps_ee)
 {
   (void)numVerts;
-  double ee_eps = eps_ee;
   double dhat2 = dhat * dhat;
 
   // PT pairs
@@ -45,13 +41,11 @@ double computeSelfEnergy(
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
-        V3d p = vtx(dynPos, pair.p);
-        V3d t0 = vtx(dynPos, pair.t0);
-        V3d t1 = vtx(dynPos, pair.t1);
-        V3d t2 = vtx(dynPos, pair.t2);
-        double d2 = distance::computePTSqDist(p, t0, t1, t2);
-        if (d2 < dhat2 && d2 > 0.0)
-          localE += pair.weight * kappa * barrier::b(d2, dhat2);
+        auto k = barrier_kernels::pointTriangle(
+          vtx(dynPos, pair.p), vtx(dynPos, pair.t0), vtx(dynPos, pair.t1), vtx(dynPos, pair.t2),
+          pair.weight, dhat2, kappa, false, false);
+        if (k.active)
+          localE += k.energy;
       }
       return localE;
     },
@@ -63,17 +57,11 @@ double computeSelfEnergy(
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
-        V3d ea0 = vtx(dynPos, pair.ea0);
-        V3d ea1 = vtx(dynPos, pair.ea1);
-        V3d eb0 = vtx(dynPos, pair.eb0);
-        V3d eb1 = vtx(dynPos, pair.eb1);
-        double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
-        if (d2 < dhat2 && d2 > 0.0) {
-          double m = 1.0;
-          if (ee_eps > 0.0)
-            m = distance::eeMollifier(ea0, ea1, eb0, eb1, ee_eps);
-          localE += pair.weight * kappa * m * barrier::b(d2, dhat2);
-        }
+        auto k = barrier_kernels::edgeEdge(
+          vtx(dynPos, pair.ea0), vtx(dynPos, pair.ea1), vtx(dynPos, pair.eb0), vtx(dynPos, pair.eb1),
+          pair.weight, dhat2, kappa, eps_ee, false, false);
+        if (k.active)
+          localE += k.energy;
       }
       return localE;
     },
@@ -118,57 +106,29 @@ void computeSelfGradient(
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
-        V3d p = vtx(dynPos, pair.p);
-        V3d t0 = vtx(dynPos, pair.t0);
-        V3d t1 = vtx(dynPos, pair.t1);
-        V3d t2 = vtx(dynPos, pair.t2);
-
-        double d2 = distance::computePTSqDist(p, t0, t1, t2);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::pointTriangle(
+          vtx(dynPos, pair.p), vtx(dynPos, pair.t0), vtx(dynPos, pair.t1), vtx(dynPos, pair.t2),
+          pair.weight, dhat2, kappa, true, false);
+        if (!k.active)
           continue;
-
-        V12d gd2 = distance::computePTSqDistGrad(p, t0, t1, t2);
-        double coeff = pair.weight * kappa * barrier::dbds(d2, dhat2);
-        V12d gE = coeff * gd2;
-
         int idx[4] = { pair.p, pair.t0, pair.t1, pair.t2 };
-        scatter(gE, idx);
+        scatter(k.gradient, idx);
       }
     });
 
   // EE pairs
-  double ee_eps = eps_ee;
   tbb::parallel_for(
     tbb::blocked_range<int>(0, (int)pairs.eePairs.size()),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
-        V3d ea0 = vtx(dynPos, pair.ea0);
-        V3d ea1 = vtx(dynPos, pair.ea1);
-        V3d eb0 = vtx(dynPos, pair.eb0);
-        V3d eb1 = vtx(dynPos, pair.eb1);
-
-        double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::edgeEdge(
+          vtx(dynPos, pair.ea0), vtx(dynPos, pair.ea1), vtx(dynPos, pair.eb0), vtx(dynPos, pair.eb1),
+          pair.weight, dhat2, kappa, eps_ee, true, false);
+        if (!k.active)
           continue;
-
-        double wk = pair.weight * kappa;
-        V12d gd2 = distance::computeEESqDistGrad(ea0, ea1, eb0, eb1);
-        double b_val = barrier::b(d2, dhat2);
-        double dbv = barrier::dbds(d2, dhat2);
-
-        V12d gE;
-        if (ee_eps > 0.0) {
-          double m = distance::eeMollifier(ea0, ea1, eb0, eb1, ee_eps);
-          V12d gm = distance::eeMollifierGrad(ea0, ea1, eb0, eb1, ee_eps);
-          gE = wk * (gm * b_val + m * dbv * gd2);
-        }
-        else {
-          gE = wk * dbv * gd2;
-        }
-
         int idx[4] = { pair.ea0, pair.ea1, pair.eb0, pair.eb1 };
-        scatter(gE, idx);
+        scatter(k.gradient, idx);
       }
     });
 }
@@ -221,67 +181,29 @@ void computeSelfHessian(
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
-        V3d p = vtx(dynPos, pair.p);
-        V3d t0 = vtx(dynPos, pair.t0);
-        V3d t1 = vtx(dynPos, pair.t1);
-        V3d t2 = vtx(dynPos, pair.t2);
-
-        double d2 = distance::computePTSqDist(p, t0, t1, t2);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::pointTriangle(
+          vtx(dynPos, pair.p), vtx(dynPos, pair.t0), vtx(dynPos, pair.t1), vtx(dynPos, pair.t2),
+          pair.weight, dhat2, kappa, false, true);
+        if (!k.active)
           continue;
-
-        V12d gd2 = distance::computePTSqDistGrad(p, t0, t1, t2);
-        M12d Hd2 = distance::computePTSqDistHess(p, t0, t1, t2);
-        double wk = pair.weight * kappa;
-        double gp = barrier::dbds(d2, dhat2);
-        double gpp = barrier::d2bds2(d2, dhat2);
-        M12d localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
-        localH = projectToPSD(localH);
-
         int idx[4] = { pair.p, pair.t0, pair.t1, pair.t2 };
-        scatterH(i, localH, idx);
+        scatterH(i, k.hessian, idx);
       }
     });
 
   // EE pairs
-  double ee_eps = eps_ee;
   tbb::parallel_for(
     tbb::blocked_range<int>(0, nEE),
     [&](const tbb::blocked_range<int> &range) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
-        V3d ea0 = vtx(dynPos, pair.ea0);
-        V3d ea1 = vtx(dynPos, pair.ea1);
-        V3d eb0 = vtx(dynPos, pair.eb0);
-        V3d eb1 = vtx(dynPos, pair.eb1);
-
-        double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::edgeEdge(
+          vtx(dynPos, pair.ea0), vtx(dynPos, pair.ea1), vtx(dynPos, pair.eb0), vtx(dynPos, pair.eb1),
+          pair.weight, dhat2, kappa, eps_ee, false, true);
+        if (!k.active)
           continue;
-
-        double wk = pair.weight * kappa;
-        V12d gd2 = distance::computeEESqDistGrad(ea0, ea1, eb0, eb1);
-        M12d Hd2 = distance::computeEESqDistHess(ea0, ea1, eb0, eb1);
-        double gp = barrier::dbds(d2, dhat2);
-        double gpp = barrier::d2bds2(d2, dhat2);
-
-        M12d localH;
-        if (ee_eps > 0.0) {
-          double m = distance::eeMollifier(ea0, ea1, eb0, eb1, ee_eps);
-          V12d gm = distance::eeMollifierGrad(ea0, ea1, eb0, eb1, ee_eps);
-          M12d Hm = distance::eeMollifierHess(ea0, ea1, eb0, eb1, ee_eps);
-          double bv = barrier::b(d2, dhat2);
-          double dbv = barrier::dbds(d2, dhat2);
-          V12d gb = dbv * gd2;
-          localH = wk * (bv * Hm + gm * gb.transpose() + gb * gm.transpose() + m * (gpp * gd2 * gd2.transpose() + gp * Hd2));
-        }
-        else {
-          localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
-        }
-        localH = projectToPSD(localH);
-
         int idx[4] = { pair.ea0, pair.ea1, pair.eb0, pair.eb1 };
-        scatterH(nPT + i, localH, idx);
+        scatterH(nPT + i, k.hessian, idx);
       }
     });
 
@@ -339,7 +261,6 @@ void computeSelfAll(
     }
   };
 
-  double ee_eps = eps_ee;
   double dhat2 = dhat * dhat;
 
   // ---- PT pairs ----
@@ -348,33 +269,15 @@ void computeSelfAll(
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
-        V3d p = vtx(dynPos, pair.p);
-        V3d t0 = vtx(dynPos, pair.t0);
-        V3d t1 = vtx(dynPos, pair.t1);
-        V3d t2 = vtx(dynPos, pair.t2);
-
-        double d2 = distance::computePTSqDist(p, t0, t1, t2);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::pointTriangle(
+          vtx(dynPos, pair.p), vtx(dynPos, pair.t0), vtx(dynPos, pair.t1), vtx(dynPos, pair.t2),
+          pair.weight, dhat2, kappa, true, true);
+        if (!k.active)
           continue;
-
-        double wk = pair.weight * kappa;
-
-        // energy
-        localE += wk * barrier::b(d2, dhat2);
-
-        // gradient
-        V12d gd2 = distance::computePTSqDistGrad(p, t0, t1, t2);
-        double gp = barrier::dbds(d2, dhat2);
-        V12d gE = wk * gp * gd2;
+        localE += k.energy;
         int idx[4] = { pair.p, pair.t0, pair.t1, pair.t2 };
-        scatterG(gE, idx);
-
-        // hessian
-        M12d Hd2 = distance::computePTSqDistHess(p, t0, t1, t2);
-        double gpp = barrier::d2bds2(d2, dhat2);
-        M12d localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
-        localH = projectToPSD(localH);
-        scatterH(i, localH, idx);
+        scatterG(k.gradient, idx);
+        scatterH(i, k.hessian, idx);
       }
       return localE;
     },
@@ -386,53 +289,15 @@ void computeSelfAll(
     [&](const tbb::blocked_range<int> &range, double localE) {
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
-        V3d ea0 = vtx(dynPos, pair.ea0);
-        V3d ea1 = vtx(dynPos, pair.ea1);
-        V3d eb0 = vtx(dynPos, pair.eb0);
-        V3d eb1 = vtx(dynPos, pair.eb1);
-
-        double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
-        if (d2 >= dhat2 || d2 <= 0.0)
+        auto k = barrier_kernels::edgeEdge(
+          vtx(dynPos, pair.ea0), vtx(dynPos, pair.ea1), vtx(dynPos, pair.eb0), vtx(dynPos, pair.eb1),
+          pair.weight, dhat2, kappa, eps_ee, true, true);
+        if (!k.active)
           continue;
-
-        double wk = pair.weight * kappa;
-        double m = 1.0;
-        V12d gm;
-        gm.setZero();
-        M12d Hm;
-        Hm.setZero();
-        if (ee_eps > 0.0) {
-          m = distance::eeMollifier(ea0, ea1, eb0, eb1, ee_eps);
-          gm = distance::eeMollifierGrad(ea0, ea1, eb0, eb1, ee_eps);
-          Hm = distance::eeMollifierHess(ea0, ea1, eb0, eb1, ee_eps);
-        }
-
-        double bv = barrier::b(d2, dhat2);
-
-        // energy
-        localE += wk * m * bv;
-
-        // gradient
-        V12d gd2 = distance::computeEESqDistGrad(ea0, ea1, eb0, eb1);
-        double dbv = barrier::dbds(d2, dhat2);
-        V12d gE = wk * (gm * bv + m * dbv * gd2);
+        localE += k.energy;
         int idx[4] = { pair.ea0, pair.ea1, pair.eb0, pair.eb1 };
-        scatterG(gE, idx);
-
-        // hessian
-        M12d Hd2 = distance::computeEESqDistHess(ea0, ea1, eb0, eb1);
-        double gp = barrier::dbds(d2, dhat2);
-        double gpp = barrier::d2bds2(d2, dhat2);
-        V12d gb = dbv * gd2;
-        M12d localH;
-        if (ee_eps > 0.0) {
-          localH = wk * (bv * Hm + gm * gb.transpose() + gb * gm.transpose() + m * (gpp * gd2 * gd2.transpose() + gp * Hd2));
-        }
-        else {
-          localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
-        }
-        localH = projectToPSD(localH);
-        scatterH(nPT + i, localH, idx);
+        scatterG(k.gradient, idx);
+        scatterH(nPT + i, k.hessian, idx);
       }
       return localE;
     },

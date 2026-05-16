@@ -8,6 +8,7 @@ set(CONTACT_HEADERS
   ipc/broadPhase/surfaceIPCBroadPhase.h
   ipc/core/surfaceIPCSelfBarrierAssembler.h
   ipc/core/surfaceIPCExternalBarrierAssembler.h
+  ipc/core/surfaceIPCBarrierKernels.h
   ipc/core/surfaceIPCMaxStep.h
   ipc/core/surfaceIPCCore.h
   ipc/core/surfaceIPCPreparedState.h
@@ -39,6 +40,7 @@ set(CONTACT_SOURCES
   ipc/broadPhase/surfaceIPCBroadPhase.cpp
   ipc/core/surfaceIPCSelfBarrierAssembler.cpp
   ipc/core/surfaceIPCExternalBarrierAssembler.cpp
+  ipc/core/surfaceIPCBarrierKernels.cpp
   ipc/core/surfaceIPCMaxStep.cpp
   ipc/core/surfaceIPCCore.cpp
   ipc/geometry/ipcBarrier.cpp
