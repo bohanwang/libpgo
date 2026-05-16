@@ -19,8 +19,6 @@ set(CONTACT_HEADERS
   ipc/geometry/ipcCCD.h
   ipc/geometry/ipcDistancePrimitives.h
   ipc/geometry/ipcHessianProjection.h
-  ipc/geometry/generated/CIPC_autogen.h
-  ipc/geometry/generated/CIPC_autogen_ll.h
   ipc/profiling/surfaceIPCProfiling.h
   ipc/topology/surfaceIPCTopology.h
   pointPenetrationEnergy.h
