@@ -21,6 +21,78 @@ namespace CIPC
 {
 
 // =========================================================================
+//  Helper: build AABBs (parallel)
+// =========================================================================
+
+template <typename GetV>
+static void buildVertexAABBs(
+  std::vector<SpatialHashGrid::AABB> &boxes, int n,
+  GetV &&getV, double inflate)
+{
+  tbb::parallel_for(tbb::blocked_range<int>(0, n),
+    [&](const tbb::blocked_range<int> &r) {
+      for (int i = r.begin(); i < r.end(); ++i)
+        boxes[i].init(getV(i), inflate);
+    });
+}
+
+template <typename GetV, typename Triangles>
+static void buildTriangleAABBs(
+  std::vector<SpatialHashGrid::AABB> &boxes, int n,
+  const Triangles &triangles, GetV &&getV, double inflate)
+{
+  tbb::parallel_for(tbb::blocked_range<int>(0, n),
+    [&](const tbb::blocked_range<int> &r) {
+      for (int fi = r.begin(); fi < r.end(); ++fi) {
+        auto &tri = triangles[fi];
+        boxes[fi].init(getV(tri[0]), inflate);
+        boxes[fi].expand(getV(tri[1]), inflate);
+        boxes[fi].expand(getV(tri[2]), inflate);
+      }
+    });
+}
+
+template <typename GetV, typename Edges>
+static void buildEdgeAABBs(
+  std::vector<SpatialHashGrid::AABB> &boxes, int n,
+  const Edges &edges, GetV &&getV, double inflate)
+{
+  tbb::parallel_for(tbb::blocked_range<int>(0, n),
+    [&](const tbb::blocked_range<int> &r) {
+      for (int ei = r.begin(); ei < r.end(); ++ei) {
+        boxes[ei].init(getV(edges[ei][0]), inflate);
+        boxes[ei].expand(getV(edges[ei][1]), inflate);
+      }
+    });
+}
+
+// =========================================================================
+//  Helper: TLS parallel query + collect + merge
+// =========================================================================
+
+template <typename PairType, typename Body>
+static void collectPairsParallel(
+  int nTarget, int queryBegin, int queryEnd,
+  Body &&body, std::vector<PairType> &outputPairs)
+{
+  tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
+    [nTarget]() { return std::vector<int>(nTarget, 0); });
+  tbb::enumerable_thread_specific<std::vector<int>> tls_candidates;
+  tbb::enumerable_thread_specific<std::vector<PairType>> tls_pairs;
+
+  tbb::parallel_for(tbb::blocked_range<int>(queryBegin, queryEnd),
+    [&](const tbb::blocked_range<int> &range) {
+      auto &visited = tls_visited.local();
+      auto &candidates = tls_candidates.local();
+      auto &localPairs = tls_pairs.local();
+      body(range, visited, candidates, localPairs);
+    });
+
+  for (auto &lp : tls_pairs)
+    outputPairs.insert(outputPairs.end(), lp.begin(), lp.end());
+}
+
+// =========================================================================
 //  Self broad phase: buildSelfPairs
 // =========================================================================
 
@@ -45,33 +117,16 @@ void buildSelfPairs(
   int nTri = (int)topology.triangles.size();
   int nEdge = (int)topology.edges.size();
 
-  // --- Build AABBs (parallel) ---
+  // --- Build AABBs ---
   std::vector<SpatialHashGrid::AABB> vertBox(topology.numVerts);
-  tbb::parallel_for(tbb::blocked_range<int>(0, topology.numVerts),
-    [&](const tbb::blocked_range<int> &r) {
-      for (int vi = r.begin(); vi < r.end(); ++vi)
-        vertBox[vi].init(getV(vi), inflate);
-    });
-
   std::vector<SpatialHashGrid::AABB> triBox(nTri);
-  tbb::parallel_for(tbb::blocked_range<int>(0, nTri),
-    [&](const tbb::blocked_range<int> &r) {
-      for (int fi = r.begin(); fi < r.end(); ++fi) {
-        auto &tri = topology.triangles[fi];
-        triBox[fi].init(getV(tri[0]), inflate);
-        triBox[fi].expand(getV(tri[1]), inflate);
-        triBox[fi].expand(getV(tri[2]), inflate);
-      }
-    });
-
   std::vector<SpatialHashGrid::AABB> edgeBox(nEdge);
-  tbb::parallel_for(tbb::blocked_range<int>(0, nEdge),
-    [&](const tbb::blocked_range<int> &r) {
-      for (int ei = r.begin(); ei < r.end(); ++ei) {
-        edgeBox[ei].init(getV(topology.edges[ei][0]), inflate);
-        edgeBox[ei].expand(getV(topology.edges[ei][1]), inflate);
-      }
-    });
+  {
+    Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildSelfAABB);
+    buildVertexAABBs(vertBox, topology.numVerts, getV, inflate);
+    buildTriangleAABBs(triBox, nTri, topology.triangles, getV, inflate);
+    buildEdgeAABBs(edgeBox, nEdge, topology.edges, getV, inflate);
+  }
 
   double avgBoxDiag = 0;
   for (const auto &aabb : triBox) {
@@ -81,24 +136,19 @@ void buildSelfPairs(
   double cellSize = nTri > 0 ? std::max(avgBoxDiag / nTri, 1e-6) : std::max(1e-6, dhat);
   double dhat2 = dhat * dhat;
 
-  // --- PT pairs: insert triangles (serial), query with vertices (parallel) ---
+  // --- PT pairs ---
   {
+    Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildSelfPTHashQuery);
     SpatialHashGrid triHash(nTri);
     triHash.setCellSize(cellSize);
     for (int fi = 0; fi < nTri; ++fi)
       triHash.insert(triBox[fi], fi);
 
-    tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
-      [nTri]() { return std::vector<int>(nTri, 0); });
-    tbb::enumerable_thread_specific<std::vector<int>> tls_candidates;
-    tbb::enumerable_thread_specific<std::vector<PTPair>> tls_pairs;
-
-    tbb::parallel_for(tbb::blocked_range<int>(0, topology.numVerts),
-      [&](const tbb::blocked_range<int> &range) {
-        auto &visited = tls_visited.local();
-        auto &candidates = tls_candidates.local();
-        auto &localPairs = tls_pairs.local();
-
+    collectPairsParallel<PTPair>(nTri, 0, topology.numVerts,
+      [&](const tbb::blocked_range<int> &range,
+          std::vector<int> &visited,
+          std::vector<int> &candidates,
+          std::vector<PTPair> &localPairs) {
         for (int vi = range.begin(); vi < range.end(); ++vi) {
           candidates.clear();
           triHash.query(vertBox[vi], -1, visited, vi + 1, candidates);
@@ -118,30 +168,22 @@ void buildSelfPairs(
                 topology.vertexArea[vi] * topology.triArea[fi] });
           }
         }
-      });
-
-    for (auto &lp : tls_pairs)
-      pairs.ptPairs.insert(pairs.ptPairs.end(), lp.begin(), lp.end());
+      }, pairs.ptPairs);
   }
 
-  // --- EE pairs: insert edges (serial), query with edges (parallel) ---
+  // --- EE pairs ---
   {
+    Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildSelfEEHashQuery);
     SpatialHashGrid edgeHash(nEdge);
     edgeHash.setCellSize(cellSize);
     for (int ei = 0; ei < nEdge; ++ei)
       edgeHash.insert(edgeBox[ei], ei);
 
-    tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
-      [nEdge]() { return std::vector<int>(nEdge, 0); });
-    tbb::enumerable_thread_specific<std::vector<int>> tls_candidates;
-    tbb::enumerable_thread_specific<std::vector<EEPair>> tls_pairs;
-
-    tbb::parallel_for(tbb::blocked_range<int>(0, nEdge),
-      [&](const tbb::blocked_range<int> &range) {
-        auto &visited = tls_visited.local();
-        auto &candidates = tls_candidates.local();
-        auto &localPairs = tls_pairs.local();
-
+    collectPairsParallel<EEPair>(nEdge, 0, nEdge,
+      [&](const tbb::blocked_range<int> &range,
+          std::vector<int> &visited,
+          std::vector<int> &candidates,
+          std::vector<EEPair> &localPairs) {
         for (int ei = range.begin(); ei < range.end(); ++ei) {
           candidates.clear();
           edgeHash.query(edgeBox[ei], ei, visited, ei + 1, candidates);
@@ -165,10 +207,7 @@ void buildSelfPairs(
                 topology.edgeLength[ei] * topology.edgeLength[ej] });
           }
         }
-      });
-
-    for (auto &lp : tls_pairs)
-      pairs.eePairs.insert(pairs.eePairs.end(), lp.begin(), lp.end());
+      }, pairs.eePairs);
   }
 }
 
@@ -193,6 +232,8 @@ void buildExternalPairs(
   if (obstacles.empty())
     return;
 
+  Profiling::ScopedProfileSection scopedExternalProfile(SurfaceIPCProfileSections::kPairBuildExternal);
+
   const double inflate = dhatExternal;
   const double dhat2 = dhatExternal * dhatExternal;
 
@@ -205,31 +246,14 @@ void buildExternalPairs(
 
   // Build dynamic-side AABBs
   std::vector<SpatialHashGrid::AABB> dynVertBox(topology.numVerts);
-  tbb::parallel_for(tbb::blocked_range<int>(0, topology.numVerts),
-    [&](const tbb::blocked_range<int> &r) {
-      for (int vi = r.begin(); vi < r.end(); ++vi)
-        dynVertBox[vi].init(getV(vi), inflate);
-    });
-
   std::vector<SpatialHashGrid::AABB> dynTriBox(nDynTri);
-  tbb::parallel_for(tbb::blocked_range<int>(0, nDynTri),
-    [&](const tbb::blocked_range<int> &r) {
-      for (int fi = r.begin(); fi < r.end(); ++fi) {
-        auto &tri = topology.triangles[fi];
-        dynTriBox[fi].init(getV(tri[0]), inflate);
-        dynTriBox[fi].expand(getV(tri[1]), inflate);
-        dynTriBox[fi].expand(getV(tri[2]), inflate);
-      }
-    });
-
   std::vector<SpatialHashGrid::AABB> dynEdgeBox(nDynEdge);
-  tbb::parallel_for(tbb::blocked_range<int>(0, nDynEdge),
-    [&](const tbb::blocked_range<int> &r) {
-      for (int ei = r.begin(); ei < r.end(); ++ei) {
-        dynEdgeBox[ei].init(getV(topology.edges[ei][0]), inflate);
-        dynEdgeBox[ei].expand(getV(topology.edges[ei][1]), inflate);
-      }
-    });
+  {
+    Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildExternalAABB);
+    buildVertexAABBs(dynVertBox, topology.numVerts, getV, inflate);
+    buildTriangleAABBs(dynTriBox, nDynTri, topology.triangles, getV, inflate);
+    buildEdgeAABBs(dynEdgeBox, nDynEdge, topology.edges, getV, inflate);
+  }
 
   for (const auto &obs : obstacles) {
     const EigenSupport::VXd &obsPos = obs.currentPositions();
@@ -243,11 +267,6 @@ void buildExternalPairs(
     const std::vector<double> &obsTriArea = poseCache.triAreas;
     const std::vector<double> &obsEdgeLen = poseCache.edgeLengths;
 
-    // Obstacle-side AABBs, spatial hashes, and cell size are cached on
-    // ObstacleSurface (rebuilt by update()) so we just borrow them here.
-    // The cache is un-inflated; the dyn-side query boxes are already inflated
-    // by `dhatExternal` above, which is enough by Minkowski-sum equivalence to
-    // catch every pair within `dhatExternal`.
     const std::vector<SpatialHashGrid::AABB> &obsVertBox = poseCache.vertBoxes;
     const std::vector<SpatialHashGrid::AABB> &obsTriBox = poseCache.triBoxes;
     const std::vector<SpatialHashGrid::AABB> &obsEdgeBox = poseCache.edgeBoxes;
@@ -255,19 +274,14 @@ void buildExternalPairs(
 
     // ---- External PT: dyn vertex x obs triangle ----
     {
+      Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildExternalPT);
       const SpatialHashGrid &obsTriHash = poseCache.triHash;
 
-      tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
-        [nObsTri]() { return std::vector<int>(nObsTri, 0); });
-      tbb::enumerable_thread_specific<std::vector<int>> tls_candidates;
-      tbb::enumerable_thread_specific<std::vector<ExternalPTPair>> tls_pairs;
-
-      tbb::parallel_for(tbb::blocked_range<int>(0, topology.numVerts),
-        [&](const tbb::blocked_range<int> &range) {
-          auto &visited = tls_visited.local();
-          auto &candidates = tls_candidates.local();
-          auto &localPairs = tls_pairs.local();
-
+      collectPairsParallel<ExternalPTPair>(nObsTri, 0, topology.numVerts,
+        [&](const tbb::blocked_range<int> &range,
+            std::vector<int> &visited,
+            std::vector<int> &candidates,
+            std::vector<ExternalPTPair> &localPairs) {
           for (int vi = range.begin(); vi < range.end(); ++vi) {
             candidates.clear();
             obsTriHash.query(dynVertBox[vi], -1, visited, vi + 1, candidates);
@@ -289,30 +303,22 @@ void buildExternalPairs(
               }
             }
           }
-        });
-
-      for (auto &lp : tls_pairs)
-        pairs.ptPairs.insert(pairs.ptPairs.end(), lp.begin(), lp.end());
+        }, pairs.ptPairs);
     }
 
     // ---- External TP: obs vertex x dyn triangle ----
     {
+      Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildExternalTP);
       SpatialHashGrid dynTriHash(nDynTri);
       dynTriHash.setCellSize(cellSize);
       for (int fi = 0; fi < nDynTri; ++fi)
         dynTriHash.insert(dynTriBox[fi], fi);
 
-      tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
-        [nDynTri]() { return std::vector<int>(nDynTri, 0); });
-      tbb::enumerable_thread_specific<std::vector<int>> tls_candidates;
-      tbb::enumerable_thread_specific<std::vector<ExternalTPPair>> tls_pairs;
-
-      tbb::parallel_for(tbb::blocked_range<int>(0, nObsVert),
-        [&](const tbb::blocked_range<int> &range) {
-          auto &visited = tls_visited.local();
-          auto &candidates = tls_candidates.local();
-          auto &localPairs = tls_pairs.local();
-
+      collectPairsParallel<ExternalTPPair>(nDynTri, 0, nObsVert,
+        [&](const tbb::blocked_range<int> &range,
+            std::vector<int> &visited,
+            std::vector<int> &candidates,
+            std::vector<ExternalTPPair> &localPairs) {
           for (int ovi = range.begin(); ovi < range.end(); ++ovi) {
             candidates.clear();
             dynTriHash.query(obsVertBox[ovi], -1, visited, ovi + 1, candidates);
@@ -334,27 +340,19 @@ void buildExternalPairs(
               }
             }
           }
-        });
-
-      for (auto &lp : tls_pairs)
-        pairs.tpPairs.insert(pairs.tpPairs.end(), lp.begin(), lp.end());
+        }, pairs.tpPairs);
     }
 
     // ---- External EE: dyn edge x obs edge ----
     {
+      Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildExternalEE);
       const SpatialHashGrid &obsEdgeHash = poseCache.edgeHash;
 
-      tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
-        [nObsEdge]() { return std::vector<int>(nObsEdge, 0); });
-      tbb::enumerable_thread_specific<std::vector<int>> tls_candidates;
-      tbb::enumerable_thread_specific<std::vector<ExternalEEPair>> tls_pairs;
-
-      tbb::parallel_for(tbb::blocked_range<int>(0, nDynEdge),
-        [&](const tbb::blocked_range<int> &range) {
-          auto &visited = tls_visited.local();
-          auto &candidates = tls_candidates.local();
-          auto &localPairs = tls_pairs.local();
-
+      collectPairsParallel<ExternalEEPair>(nObsEdge, 0, nDynEdge,
+        [&](const tbb::blocked_range<int> &range,
+            std::vector<int> &visited,
+            std::vector<int> &candidates,
+            std::vector<ExternalEEPair> &localPairs) {
           for (int ei = range.begin(); ei < range.end(); ++ei) {
             candidates.clear();
             obsEdgeHash.query(dynEdgeBox[ei], -1, visited, ei + 1, candidates);
@@ -376,10 +374,7 @@ void buildExternalPairs(
               }
             }
           }
-        });
-
-      for (auto &lp : tls_pairs)
-        pairs.eePairs.insert(pairs.eePairs.end(), lp.begin(), lp.end());
+        }, pairs.eePairs);
     }
   }
 }

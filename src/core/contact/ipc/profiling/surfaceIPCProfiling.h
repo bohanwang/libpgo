@@ -7,6 +7,14 @@ namespace pgo::Contact::SurfaceIPCProfileSections
 
 inline constexpr std::string_view kPairBuildStatic = "contact.surface.pair_build.static";
 inline constexpr std::string_view kPairBuildSwept = "contact.surface.pair_build.swept";
+inline constexpr std::string_view kPairBuildSelfAABB = "contact.surface.pair_build.self_aabb";
+inline constexpr std::string_view kPairBuildSelfPTHashQuery = "contact.surface.pair_build.self_pt_hash_query";
+inline constexpr std::string_view kPairBuildSelfEEHashQuery = "contact.surface.pair_build.self_ee_hash_query";
+inline constexpr std::string_view kPairBuildExternal = "contact.surface.pair_build.external";
+inline constexpr std::string_view kPairBuildExternalAABB = "contact.surface.pair_build.external_aabb";
+inline constexpr std::string_view kPairBuildExternalPT = "contact.surface.pair_build.external_pt";
+inline constexpr std::string_view kPairBuildExternalTP = "contact.surface.pair_build.external_tp";
+inline constexpr std::string_view kPairBuildExternalEE = "contact.surface.pair_build.external_ee";
 inline constexpr std::string_view kMaxStepPT = "contact.surface.max_step_pt";
 inline constexpr std::string_view kMaxStepEE = "contact.surface.max_step_ee";
 inline constexpr std::string_view kEnergy = "contact.surface.energy";

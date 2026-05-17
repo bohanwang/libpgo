@@ -3,6 +3,7 @@
 #include "EigenSupport.h"
 #include "lineSearch.h"
 #include "pgoLogging.h"
+#include "scopedProfileSection.h"
 
 #include <cmath>
 #include <iostream>
@@ -310,14 +311,23 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     }
 
 #if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
-    solver->factorize(A11);
-    solver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
+    {
+      Profiling::ScopedProfileSection scopedProfile("solver.linear_solve");
+      solver->factorize(A11);
+      solver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
+    }
 #elif defined(PGO_HAS_ORIG_PARDISO)
-    solver->factorize(A11);
-    solver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
+    {
+      Profiling::ScopedProfileSection scopedProfile("solver.linear_solve");
+      solver->factorize(A11);
+      solver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
+    }
 #else
-    solver->factorize(A11);
-    deltaxSmall.noalias() = solver->solve(rhs);
+    {
+      Profiling::ScopedProfileSection scopedProfile("solver.linear_solve");
+      solver->factorize(A11);
+      deltaxSmall.noalias() = solver->solve(rhs);
+    }
 #endif
 
     if (fixedHessianTopology) {
