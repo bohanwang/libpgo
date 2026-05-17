@@ -24,5 +24,6 @@
   "ipc-dhat": 0.002,
   "ipc-kappa": 3000.0,
   "ipc-dhat-external": 0.005,
-  "enable-material-max-step": true
+  "enable-material-max-step": true,
+  "profiling": true
 }

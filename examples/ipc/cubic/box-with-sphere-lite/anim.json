@@ -5,7 +5,7 @@
       "driving-mesh": "box-with-sphere.obj",
       "sequence": "ret-box-with-sphere-lite-ipc/surface/ret{:04d}.obj",
       "sequence-type": "objmesh",
-      "sequence-range": [0, 200]
+      "sequence-range": [0, 199]
     }
   ]
 }
