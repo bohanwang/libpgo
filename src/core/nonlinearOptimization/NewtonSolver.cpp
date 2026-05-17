@@ -171,25 +171,16 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     if (verbose >= 2 && iter % printGap == 0)
       std::cout << "    Iter=" << iter << std::endl;
 
-    double eng = energy->func(x);
+    // we solve f(x_i) + K(x_i) deltax = 0
+    memset(grad.data(), 0, sizeof(double) * grad.size());
+    double eng = energy->func_grad_hessian(x, grad, sysFull);
     if (!std::isfinite(eng)) {
       status = static_cast<int>(SolveStatus::NonFinite);
       if (verbose >= 1)
         std::cout << "    Iter=" << iter << "; energy is non-finite; status=" << solveStatusToString(status) << std::endl;
       break;
     }
-
-    const bool fixedHessianTopology = energy->isHessianTopologyFixed();
-
-    // we solve f(x_i) + K(x_i) deltax = 0
-    memset(grad.data(), 0, sizeof(double) * grad.size());
-    if (fixedHessianTopology) {
-      energy->gradient(x, grad);
-    }
-    else {
-      energy->gradient_hessian(x, grad, sysFull);
-      sysFull.makeCompressed();
-    }
+    sysFull.makeCompressed();
     filterVector(grad);
 
     double gradMaxNorm = grad.cwiseAbs().maxCoeff();
@@ -234,11 +225,6 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
       }
     }
 
-    if (fixedHessianTopology) {
-      memset(sysFull.valuePtr(), 0, sizeof(double) * sysFull.nonZeros());
-      energy->hessian(x, sysFull);
-    }
-
     // grad too small, we don't need damping
     if (gradMaxNorm < 1e-4) {
       lambdaScale = 0.0;
@@ -266,6 +252,7 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     // std::cout << "        Damping lambda=" << lambda << std::endl;
 
     // remove column rows
+    const bool fixedHessianTopology = energy->isHessianTopologyFixed();
     if (fixedHessianTopology) {
       ES::transferBigToSmall(sysFull, A11, A11Mapping, 1);
     }

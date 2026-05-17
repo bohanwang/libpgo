@@ -141,10 +141,14 @@ void buildSelfPairs(
     Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildSelfPTHashQuery);
     SpatialHashGrid triHash(nTri);
     triHash.setCellSize(cellSize);
-    for (int fi = 0; fi < nTri; ++fi)
-      triHash.insert(triBox[fi], fi);
-
-    collectPairsParallel<PTPair>(nTri, 0, topology.numVerts,
+    {
+      Profiling::ScopedProfileSection hashProfile(SurfaceIPCProfileSections::kPairBuildSelfPTHashInsert);
+      for (int fi = 0; fi < nTri; ++fi)
+        triHash.insert(triBox[fi], fi);
+    }
+    {
+      Profiling::ScopedProfileSection queryProfile(SurfaceIPCProfileSections::kPairBuildSelfPTQuery);
+      collectPairsParallel<PTPair>(nTri, 0, topology.numVerts,
       [&](const tbb::blocked_range<int> &range,
           std::vector<int> &visited,
           std::vector<int> &candidates,
@@ -169,6 +173,7 @@ void buildSelfPairs(
           }
         }
       }, pairs.ptPairs);
+    }
   }
 
   // --- EE pairs ---
@@ -176,10 +181,14 @@ void buildSelfPairs(
     Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildSelfEEHashQuery);
     SpatialHashGrid edgeHash(nEdge);
     edgeHash.setCellSize(cellSize);
-    for (int ei = 0; ei < nEdge; ++ei)
-      edgeHash.insert(edgeBox[ei], ei);
-
-    collectPairsParallel<EEPair>(nEdge, 0, nEdge,
+    {
+      Profiling::ScopedProfileSection hashProfile(SurfaceIPCProfileSections::kPairBuildSelfEEHashInsert);
+      for (int ei = 0; ei < nEdge; ++ei)
+        edgeHash.insert(edgeBox[ei], ei);
+    }
+    {
+      Profiling::ScopedProfileSection queryProfile(SurfaceIPCProfileSections::kPairBuildSelfEEQuery);
+      collectPairsParallel<EEPair>(nEdge, 0, nEdge,
       [&](const tbb::blocked_range<int> &range,
           std::vector<int> &visited,
           std::vector<int> &candidates,
@@ -208,6 +217,7 @@ void buildSelfPairs(
           }
         }
       }, pairs.eePairs);
+    }
   }
 }
 
