@@ -1,11 +1,10 @@
 #pragma once
 
 #include "EigenDef.h"
-#include "ipc/external/obstacleSurfaceView.h"
+#include "ipc/external/obstaclePoseCache.h"
 
 #include <cstdint>
 #include <functional>
-#include <vector>
 
 namespace pgo
 {
@@ -24,21 +23,21 @@ public:
     EigenSupport::MXi triangles,       // num_obstacle_tris   x 3, local index
     TrajectorySampler sampler);        // sampler(t, out) writes 3*num_vertices
 
-  // Sample the obstacle pose at absolute time t and refresh cached triangle
-  // areas / edge lengths. The obstacle has no notion of a "previous" pose;
-  // line-search CCD treats the obstacle as fixed at this pose.
+  // Sample the obstacle pose at absolute time t and rebuild the pose-derived
+  // cache (areas, lengths, AABBs, spatial hashes, cell size). Treat the
+  // obstacle as fixed at this pose for the subsequent solve; broad-phase /
+  // max-step callers should read derived state via `cache()` rather than
+  // rebuilding it themselves.
   void update(double t);
 
-  int32_t                          objectId()        const { return objectId_; }
-  const EigenSupport::VXd &        restPositions()   const { return rest_; }
-  const EigenSupport::VXd &        currentPositions()const { return current_; }
-  const EigenSupport::MXi &        triangles()       const { return triangles_; }
-  const EigenSupport::MXi &        uniqueEdges()     const { return uniqueEdges_; }
-  const std::vector<double> &       triAreas()        const { return triAreas_; }
-  const std::vector<double> &       edgeLengths()     const { return edgeLengths_; }
+  int32_t                  objectId()         const { return objectId_; }
+  const EigenSupport::VXd &restPositions()    const { return rest_; }
+  const EigenSupport::VXd &currentPositions() const { return current_; }
+  const EigenSupport::MXi &triangles()        const { return triangles_; }
+  const EigenSupport::MXi &uniqueEdges()      const { return uniqueEdges_; }
+  const ObstaclePoseCache &cache()            const { return cache_; }
 
   void setObjectId(int32_t id) { objectId_ = id; }
-  ObstacleSurfaceView view() const;
 
 private:
   int32_t              objectId_ = -1;
@@ -47,8 +46,7 @@ private:
   EigenSupport::MXi    triangles_;       // local 0-based indices
   EigenSupport::MXi    uniqueEdges_;     // derived from triangles_
   TrajectorySampler    sampler_;
-  std::vector<double>  triAreas_;        // cached from current_ positions
-  std::vector<double>  edgeLengths_;     // cached from current_ positions
+  ObstaclePoseCache    cache_;
 };
 
 ObstacleSurface::TrajectorySampler makeLinearTrajectorySampler(

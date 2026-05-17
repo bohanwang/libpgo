@@ -34,7 +34,8 @@ SurfaceIPCCore::SurfaceIPCCore(const SurfaceIPCCore &other):
   slackness(other.slackness),
   ccd_thickness(other.ccd_thickness),
   topology_(other.topology_),
-  obstacles_(other.obstacles_)
+  obstacles_(other.obstacles_),
+  staticObstacles_(other.staticObstacles_)
 {
 }
 
@@ -51,6 +52,7 @@ SurfaceIPCCore &SurfaceIPCCore::operator=(const SurfaceIPCCore &other)
   ccd_thickness = other.ccd_thickness;
   topology_ = other.topology_;
   obstacles_ = other.obstacles_;
+  staticObstacles_ = other.staticObstacles_;
   return *this;
 }
 
@@ -233,14 +235,25 @@ void SurfaceIPCCore::computeAll(const SurfaceIPCActiveSet &activeSet, double &en
 void SurfaceIPCCore::setObstacles(std::vector<ObstacleSurface> obstacles)
 {
   obstacles_ = std::move(obstacles);
+  staticObstacles_.assign(obstacles_.size(), false);
   for (std::size_t slot = 0; slot < obstacles_.size(); ++slot)
     obstacles_[slot].setObjectId(static_cast<int32_t>(slot));
 }
 
+void SurfaceIPCCore::markObstacleStatic(int32_t objectId)
+{
+  if (objectId < 0 || static_cast<std::size_t>(objectId) >= obstacles_.size())
+    return;
+  staticObstacles_[static_cast<std::size_t>(objectId)] = true;
+  obstacles_[static_cast<std::size_t>(objectId)].update(0.0);
+}
+
 void SurfaceIPCCore::setObstacleTime(double t)
 {
-  for (auto &obs : obstacles_)
-    obs.update(t);
+  for (std::size_t i = 0; i < obstacles_.size(); ++i) {
+    if (!staticObstacles_[i])
+      obstacles_[i].update(t);
+  }
 }
 
 }  // namespace CIPC

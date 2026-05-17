@@ -284,58 +284,20 @@ double computeExternalMaxStep(
     auto obsV = [&](int i) -> V3d { return obsCur.segment<3>(3 * i); };
     auto obsDisp = [](int) -> V3d { return V3d::Zero(); };
 
-    // Build obstacle AABBs from the fixed current pose (no sweep), inflated by
-    // `thickness` so the prune stays sound for min-separation CCD.
-    std::vector<SpatialHashGrid::AABB> obsVertBox(nObsVert);
-    std::vector<SpatialHashGrid::AABB> obsTriBox(nObsTri);
-    std::vector<SpatialHashGrid::AABB> obsEdgeBox(nObsEdge);
-
-    tbb::parallel_for(tbb::blocked_range<int>(0, nObsVert),
-      [&](const tbb::blocked_range<int> &r) {
-        for (int vi = r.begin(); vi < r.end(); ++vi) {
-          obsVertBox[vi].init(obsV(vi), thickness);
-        }
-      });
-
-    tbb::parallel_for(tbb::blocked_range<int>(0, nObsTri),
-      [&](const tbb::blocked_range<int> &r) {
-        for (int fi = r.begin(); fi < r.end(); ++fi) {
-          V3d v0 = obsV(obs.triangles()(fi, 0));
-          V3d v1 = obsV(obs.triangles()(fi, 1));
-          V3d v2 = obsV(obs.triangles()(fi, 2));
-          obsTriBox[fi].init(v0, thickness);
-          obsTriBox[fi].expand(v1, thickness);
-          obsTriBox[fi].expand(v2, thickness);
-        }
-      });
-
-    tbb::parallel_for(tbb::blocked_range<int>(0, nObsEdge),
-      [&](const tbb::blocked_range<int> &r) {
-        for (int ei = r.begin(); ei < r.end(); ++ei) {
-          V3d a0 = obsV(obs.uniqueEdges()(ei, 0));
-          V3d a1 = obsV(obs.uniqueEdges()(ei, 1));
-          obsEdgeBox[ei].init(a0, thickness);
-          obsEdgeBox[ei].expand(a1, thickness);
-        }
-      });
-
-    // Cell size
-    double avgBoxDiag = tbb::parallel_reduce(
-      tbb::blocked_range<int>(0, nObsTri), 0.0,
-      [&](const tbb::blocked_range<int> &r, double sum) {
-        for (int fi = r.begin(); fi < r.end(); ++fi)
-          sum += (obsTriBox[fi].hi - obsTriBox[fi].lo).norm();
-        return sum;
-      },
-      std::plus<double>());
-    double cellSize = nObsTri > 0 ? std::max(avgBoxDiag / nObsTri, 1e-6) : std::max(1e-6, dhatExternal);
+    // Obstacle AABBs, hashes, and cell size are cached on ObstacleSurface
+    // (rebuilt by update()); they are stored un-inflated. The dyn-side swept
+    // AABBs above already include the `thickness` margin, which by Minkowski
+    // equivalence is enough to keep this broad-phase sound under min-separation
+    // CCD (and is exact when thickness == 0).
+    const ObstaclePoseCache &poseCache = obs.cache();
+    const std::vector<SpatialHashGrid::AABB> &obsVertBox = poseCache.vertBoxes;
+    const std::vector<SpatialHashGrid::AABB> &obsTriBox = poseCache.triBoxes;
+    const std::vector<SpatialHashGrid::AABB> &obsEdgeBox = poseCache.edgeBoxes;
+    const double cellSize = poseCache.cellSize > 0.0 ? poseCache.cellSize : std::max(1e-6, dhatExternal);
 
     // --- External PT CCD ---
     {
-      SpatialHashGrid obsTriHash(nObsTri);
-      obsTriHash.setCellSize(cellSize);
-      for (int fi = 0; fi < nObsTri; ++fi)
-        obsTriHash.insert(obsTriBox[fi], fi);
+      const SpatialHashGrid &obsTriHash = poseCache.triHash;
 
       tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
         [nObsTri]() { return std::vector<int>(nObsTri, 0); });
@@ -421,10 +383,7 @@ double computeExternalMaxStep(
 
     // --- External EE CCD ---
     {
-      SpatialHashGrid obsEdgeHash(nObsEdge);
-      obsEdgeHash.setCellSize(cellSize);
-      for (int ei = 0; ei < nObsEdge; ++ei)
-        obsEdgeHash.insert(obsEdgeBox[ei], ei);
+      const SpatialHashGrid &obsEdgeHash = poseCache.edgeHash;
 
       tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
         [nObsEdge]() { return std::vector<int>(nObsEdge, 0); });

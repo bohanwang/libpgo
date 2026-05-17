@@ -72,7 +72,14 @@ public:
   // Sample all registered obstacles at absolute time t. The obstacle pose is
   // treated as fixed during the subsequent solve / line-search; intra-frame
   // swept obstacle CCD is not performed.
+  // Obstacles marked static via markObstacleStatic() are skipped — their
+  // cache was built once during the markObstacleStatic call.
   void setObstacleTime(double t);
+
+  // Mark the obstacle at the given slot as having a static (time-invariant)
+  // pose, and immediately call update(0.0) to populate its cache exactly once.
+  // Subsequent setObstacleTime() calls skip this obstacle.
+  void markObstacleStatic(int32_t objectId);
 
 private:
   void setObstacles(std::vector<ObstacleSurface> obstacles);
@@ -85,6 +92,7 @@ private:
   double ccd_thickness = 0.0;
   SurfaceIPCTopology topology_;
   std::vector<ObstacleSurface> obstacles_;
+  std::vector<bool> staticObstacles_;
 };
 
 }  // namespace CIPC

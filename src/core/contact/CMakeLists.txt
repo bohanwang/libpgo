@@ -14,7 +14,7 @@ set(CONTACT_HEADERS
   ipc/core/surfaceIPCActiveSet.h
   ipc/core/surfaceIPCPairs.h
   ipc/external/obstacleSurface.h
-  ipc/external/obstacleSurfaceView.h
+  ipc/external/obstaclePoseCache.h
   ipc/geometry/ipcBarrier.h
   ipc/geometry/ipcCCD.h
   ipc/geometry/ipcDistancePrimitives.h
@@ -45,6 +45,7 @@ set(CONTACT_SOURCES
   ipc/geometry/ipcBarrier.cpp
   ipc/geometry/ipcCCD.cpp
   ipc/external/obstacleSurface.cpp
+  ipc/external/obstaclePoseCache.cpp
   ipc/geometry/ipcDistancePrimitives.cpp
   ipc/geometry/ipcHessianProjection.cpp
   ipc/topology/surfaceIPCTopology.cpp

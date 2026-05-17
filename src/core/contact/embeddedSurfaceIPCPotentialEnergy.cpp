@@ -96,6 +96,11 @@ void EmbeddedSurfaceIPCPotentialEnergy::setObstacleTime(double t)
   surfaceIPCCore_.setObstacleTime(t);
 }
 
+void EmbeddedSurfaceIPCPotentialEnergy::markObstacleStatic(int32_t objectId)
+{
+  surfaceIPCCore_.markObstacleStatic(objectId);
+}
+
 }  // namespace CIPC
 }  // namespace Contact
 }  // namespace pgo

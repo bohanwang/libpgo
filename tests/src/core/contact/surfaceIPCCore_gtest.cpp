@@ -359,3 +359,69 @@ TEST(SurfaceIPCCoreGTest, ObstacleSurfaceInvalidVertexColumnCountThrows)
   auto sampler = [](double, ES::RefVecXd out) { out.setZero(); };
   EXPECT_THROW(ObstacleSurface(V, F, sampler), std::invalid_argument);
 }
+
+// update(t) must refresh every pose-derived cache so that downstream broad
+// phase / max-step can borrow them without rebuilding. Verify shapes, tight
+// AABB containment, positive cellSize, and hash hit on a query box that
+// covers a known triangle.
+TEST(SurfaceIPCCoreGTest, ObstacleSurfaceUpdateRefreshesBroadPhaseCache)
+{
+  using pgo::Contact::CIPC::ObstacleSurface;
+  using pgo::Contact::CIPC::SpatialHashGrid;
+
+  ES::MXd V(4, 3);
+  V << 0.0, 0.0, 0.0,
+       1.0, 0.0, 0.0,
+       0.0, 1.0, 0.0,
+       1.0, 1.0, 0.0;
+  ES::MXi F(2, 3);
+  F << 0, 1, 2,
+       1, 3, 2;
+
+  ES::VXd rest(V.rows() * 3);
+  for (int vi = 0; vi < V.rows(); ++vi)
+    rest.segment<3>(3 * vi) = V.row(vi).transpose();
+
+  ObstacleSurface obs(V, F,
+    pgo::Contact::CIPC::makeLinearTrajectorySampler(rest, ES::V3d(0.0, 0.0, 1.0)));
+  obs.update(0.5);  // moves obstacle by +z 0.5
+  const auto &cache = obs.cache();
+
+  // Vector sizes match primitive counts.
+  ASSERT_EQ(static_cast<int>(cache.vertBoxes.size()), V.rows());
+  ASSERT_EQ(static_cast<int>(cache.triBoxes.size()), F.rows());
+  ASSERT_EQ(static_cast<int>(cache.edgeBoxes.size()), obs.uniqueEdges().rows());
+  EXPECT_GT(cache.cellSize, 0.0);
+
+  // Each tri box exactly contains its 3 sampled vertices (un-inflated).
+  for (int fi = 0; fi < F.rows(); ++fi) {
+    const auto &box = cache.triBoxes[fi];
+    for (int j = 0; j < 3; ++j) {
+      const ES::V3d v = obs.currentPositions().segment<3>(3 * F(fi, j));
+      EXPECT_LE(box.lo.x(), v.x()); EXPECT_GE(box.hi.x(), v.x());
+      EXPECT_LE(box.lo.y(), v.y()); EXPECT_GE(box.hi.y(), v.y());
+      EXPECT_LE(box.lo.z(), v.z()); EXPECT_GE(box.hi.z(), v.z());
+    }
+  }
+
+  // triHash query with a box covering triangle 0 must return 0.
+  SpatialHashGrid::AABB queryBox;
+  queryBox.init(obs.currentPositions().segment<3>(3 * F(0, 0)), 1e-3);
+  queryBox.expand(obs.currentPositions().segment<3>(3 * F(0, 1)), 1e-3);
+  queryBox.expand(obs.currentPositions().segment<3>(3 * F(0, 2)), 1e-3);
+  std::vector<int> visited(F.rows(), 0);
+  std::vector<int> candidates;
+  cache.triHash.query(queryBox, -1, visited, 1, candidates);
+  EXPECT_NE(std::find(candidates.begin(), candidates.end(), 0), candidates.end());
+
+  // A second update(t) overwrites the cache cleanly (no stale entries).
+  obs.update(1.0);
+  const auto &cache2 = obs.cache();
+  EXPECT_EQ(static_cast<int>(cache2.triBoxes.size()), F.rows());
+  for (int fi = 0; fi < F.rows(); ++fi) {
+    const auto &box = cache2.triBoxes[fi];
+    const ES::V3d v0 = obs.currentPositions().segment<3>(3 * F(fi, 0));
+    EXPECT_LE(box.lo.z(), v0.z());
+    EXPECT_GE(box.hi.z(), v0.z());
+  }
+}

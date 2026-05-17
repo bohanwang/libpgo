@@ -30,6 +30,7 @@ public:
     std::vector<ObstacleSurface> obstacleSurfaces = {});
 
   void setObstacleTime(double t);
+  void markObstacleStatic(int32_t objectId);
 
 private:
   virtual double computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const override;

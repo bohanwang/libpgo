@@ -239,48 +239,23 @@ void buildExternalPairs(
 
     int32_t obsId = obs.objectId();
 
-    const std::vector<double> &obsTriArea = obs.triAreas();
-    const std::vector<double> &obsEdgeLen = obs.edgeLengths();
+    const ObstaclePoseCache &poseCache = obs.cache();
+    const std::vector<double> &obsTriArea = poseCache.triAreas;
+    const std::vector<double> &obsEdgeLen = poseCache.edgeLengths;
 
-    // Build obstacle AABBs
-    std::vector<SpatialHashGrid::AABB> obsVertBox(nObsVert);
-    tbb::parallel_for(tbb::blocked_range<int>(0, nObsVert),
-      [&](const tbb::blocked_range<int> &r) {
-        for (int vi = r.begin(); vi < r.end(); ++vi)
-          obsVertBox[vi].init(obsVtx(obsPos, vi), inflate);
-      });
-
-    std::vector<SpatialHashGrid::AABB> obsTriBox(nObsTri);
-    tbb::parallel_for(tbb::blocked_range<int>(0, nObsTri),
-      [&](const tbb::blocked_range<int> &r) {
-        for (int fi = r.begin(); fi < r.end(); ++fi) {
-          obsTriBox[fi].init(obsVtx(obsPos, obs.triangles()(fi, 0)), inflate);
-          obsTriBox[fi].expand(obsVtx(obsPos, obs.triangles()(fi, 1)), inflate);
-          obsTriBox[fi].expand(obsVtx(obsPos, obs.triangles()(fi, 2)), inflate);
-        }
-      });
-
-    std::vector<SpatialHashGrid::AABB> obsEdgeBox(nObsEdge);
-    tbb::parallel_for(tbb::blocked_range<int>(0, nObsEdge),
-      [&](const tbb::blocked_range<int> &r) {
-        for (int ei = r.begin(); ei < r.end(); ++ei) {
-          obsEdgeBox[ei].init(obsVtx(obsPos, obs.uniqueEdges()(ei, 0)), inflate);
-          obsEdgeBox[ei].expand(obsVtx(obsPos, obs.uniqueEdges()(ei, 1)), inflate);
-        }
-      });
-
-    // Compute cell size for this obstacle
-    double avgBoxDiag = 0.0;
-    for (const auto &aabb : obsTriBox)
-      avgBoxDiag += (aabb.hi - aabb.lo).norm();
-    double cellSize = nObsTri > 0 ? std::max(avgBoxDiag / nObsTri, 1e-6) : std::max(1e-6, dhatExternal);
+    // Obstacle-side AABBs, spatial hashes, and cell size are cached on
+    // ObstacleSurface (rebuilt by update()) so we just borrow them here.
+    // The cache is un-inflated; the dyn-side query boxes are already inflated
+    // by `dhatExternal` above, which is enough by Minkowski-sum equivalence to
+    // catch every pair within `dhatExternal`.
+    const std::vector<SpatialHashGrid::AABB> &obsVertBox = poseCache.vertBoxes;
+    const std::vector<SpatialHashGrid::AABB> &obsTriBox = poseCache.triBoxes;
+    const std::vector<SpatialHashGrid::AABB> &obsEdgeBox = poseCache.edgeBoxes;
+    const double cellSize = poseCache.cellSize > 0.0 ? poseCache.cellSize : std::max(1e-6, dhatExternal);
 
     // ---- External PT: dyn vertex x obs triangle ----
     {
-      SpatialHashGrid obsTriHash(nObsTri);
-      obsTriHash.setCellSize(cellSize);
-      for (int fi = 0; fi < nObsTri; ++fi)
-        obsTriHash.insert(obsTriBox[fi], fi);
+      const SpatialHashGrid &obsTriHash = poseCache.triHash;
 
       tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
         [nObsTri]() { return std::vector<int>(nObsTri, 0); });
@@ -367,10 +342,7 @@ void buildExternalPairs(
 
     // ---- External EE: dyn edge x obs edge ----
     {
-      SpatialHashGrid obsEdgeHash(nObsEdge);
-      obsEdgeHash.setCellSize(cellSize);
-      for (int ei = 0; ei < nObsEdge; ++ei)
-        obsEdgeHash.insert(obsEdgeBox[ei], ei);
+      const SpatialHashGrid &obsEdgeHash = poseCache.edgeHash;
 
       tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
         [nObsEdge]() { return std::vector<int>(nObsEdge, 0); });

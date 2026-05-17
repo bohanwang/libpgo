@@ -399,9 +399,13 @@ ES::VXd computeSurfacePressureSimulationForce(const pgo::Mesh::TriMeshGeo &surfa
   return simulationForce;
 }
 std::vector<Contact::CIPC::ObstacleSurface> parseExternalObjects(
-  const pgo::ConfigFileJSON &jconfig, double scale)
+  const pgo::ConfigFileJSON &jconfig, double scale,
+  std::vector<bool> *outStaticFlags = nullptr)
 {
   std::vector<Contact::CIPC::ObstacleSurface> obstacles;
+  if (outStaticFlags)
+    outStaticFlags->clear();
+
   if (!jconfig.exist("external-objects"))
     return obstacles;
 
@@ -410,6 +414,9 @@ std::vector<Contact::CIPC::ObstacleSurface> parseExternalObjects(
     throwConfigError("`external-objects` must be a JSON array.");
 
   obstacles.reserve(extObjs.size());
+  if (outStaticFlags)
+    outStaticFlags->reserve(extObjs.size());
+
   for (std::size_t oi = 0; oi < extObjs.size(); ++oi) {
     const auto &objJson = extObjs.at(oi);
     if (!objJson.is_object())
@@ -446,6 +453,8 @@ std::vector<Contact::CIPC::ObstacleSurface> parseExternalObjects(
     auto sampler = Contact::CIPC::makeLinearTrajectorySampler(restFlat, velocity);
 
     obstacles.emplace_back(std::move(V), std::move(F), std::move(sampler));
+    if (outStaticFlags)
+      outStaticFlags->push_back(velocity.isZero());
   }
 
   return obstacles;
@@ -590,11 +599,15 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   context.pullingTargets = std::move(pullingTargets);
   context.pullingTargetRests = std::move(pullingTargetRests);
   context.surfaceMesh = std::move(surfaceMesh);
-  auto obstacles = parseExternalObjects(jconfig, 1.0);
+  std::vector<bool> staticFlags;
+  auto obstacles = parseExternalObjects(jconfig, 1.0, &staticFlags);
   const std::size_t obstacleCount = obstacles.size();
   context.collisionHandler =
     std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(
       V, F, context.surfaceFromSimulationDispMap, ipcParams, std::move(obstacles));
+  for (std::size_t i = 0; i < staticFlags.size(); ++i)
+    if (staticFlags[i])
+      context.collisionHandler->markObstacleStatic(static_cast<int32_t>(i));
   for (const ParsedFloorConfig &floorConfig : floorConfigs) {
     auto floorEnergy =
       std::make_shared<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params);
@@ -710,11 +723,15 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   context.pullingTargets = std::move(pullingTargets);
   context.pullingTargetRests = std::move(pullingTargetRests);
   context.surfaceMesh = std::move(surfaceMesh);
-  auto obstacles = parseExternalObjects(jconfig, scale);
+  std::vector<bool> staticFlags;
+  auto obstacles = parseExternalObjects(jconfig, scale, &staticFlags);
   const std::size_t obstacleCount = obstacles.size();
   context.collisionHandler =
     std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(
       V, F, context.surfaceFromSimulationDispMap, ipcParams, std::move(obstacles));
+  for (std::size_t i = 0; i < staticFlags.size(); ++i)
+    if (staticFlags[i])
+      context.collisionHandler->markObstacleStatic(static_cast<int32_t>(i));
   for (const ParsedFloorConfig &floorConfig : floorConfigs) {
     auto floorEnergy =
       std::make_shared<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params);
