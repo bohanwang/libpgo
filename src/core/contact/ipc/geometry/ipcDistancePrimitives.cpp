@@ -807,6 +807,143 @@ M12d computeEESqDistHess(const V3d &ea0, const V3d &ea1,
   return H12;
 }
 
+// ----- Combined dispatchers (classify once) -----
+
+PTDistAll computePTSqDistAll(const V3d &p, const V3d &t0,
+  const V3d &t1, const V3d &t2)
+{
+  PTDistAll result;
+  auto tp = classifyPT(p, t0, t1, t2);
+  switch (tp) {
+  case PTDistType::PP_PT0: {
+    V6d g6 = ppSqDistGrad(p, t0);
+    M6d H6 = ppSqDistHess(p, t0);
+    result.d2 = ppSqDist(p, t0);
+    embedPP(0, 1, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case PTDistType::PP_PT1: {
+    V6d g6 = ppSqDistGrad(p, t1);
+    M6d H6 = ppSqDistHess(p, t1);
+    result.d2 = ppSqDist(p, t1);
+    embedPP(0, 2, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case PTDistType::PP_PT2: {
+    V6d g6 = ppSqDistGrad(p, t2);
+    M6d H6 = ppSqDistHess(p, t2);
+    result.d2 = ppSqDist(p, t2);
+    embedPP(0, 3, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case PTDistType::PE_PT0T1: {
+    V9d g9 = peSqDistGrad(p, t0, t1);
+    M9d H9 = peSqDistHess(p, t0, t1);
+    result.d2 = peSqDist(p, t0, t1);
+    int slots[3] = { 0, 1, 2 };
+    embedPE(slots, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case PTDistType::PE_PT1T2: {
+    V9d g9 = peSqDistGrad(p, t1, t2);
+    M9d H9 = peSqDistHess(p, t1, t2);
+    result.d2 = peSqDist(p, t1, t2);
+    int slots[3] = { 0, 2, 3 };
+    embedPE(slots, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case PTDistType::PE_PT2T0: {
+    V9d g9 = peSqDistGrad(p, t2, t0);
+    M9d H9 = peSqDistHess(p, t2, t0);
+    result.d2 = peSqDist(p, t2, t0);
+    int slots[3] = { 0, 3, 1 };
+    embedPE(slots, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case PTDistType::PT:
+    result.d2 = ptSqDist(p, t0, t1, t2);
+    result.grad = ptSqDistGrad(p, t0, t1, t2);
+    result.hess = ptSqDistHess(p, t0, t1, t2);
+    break;
+  }
+  return result;
+}
+
+EEDistAll computeEESqDistAll(const V3d &ea0, const V3d &ea1,
+  const V3d &eb0, const V3d &eb1)
+{
+  EEDistAll result;
+  auto tp = classifyEE(ea0, ea1, eb0, eb1);
+  switch (tp) {
+  case EEDistType::PP_Ea0Eb0: {
+    V6d g6 = ppSqDistGrad(ea0, eb0);
+    M6d H6 = ppSqDistHess(ea0, eb0);
+    result.d2 = ppSqDist(ea0, eb0);
+    embedPP(0, 2, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PP_Ea0Eb1: {
+    V6d g6 = ppSqDistGrad(ea0, eb1);
+    M6d H6 = ppSqDistHess(ea0, eb1);
+    result.d2 = ppSqDist(ea0, eb1);
+    embedPP(0, 3, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PP_Ea1Eb0: {
+    V6d g6 = ppSqDistGrad(ea1, eb0);
+    M6d H6 = ppSqDistHess(ea1, eb0);
+    result.d2 = ppSqDist(ea1, eb0);
+    embedPP(1, 2, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PP_Ea1Eb1: {
+    V6d g6 = ppSqDistGrad(ea1, eb1);
+    M6d H6 = ppSqDistHess(ea1, eb1);
+    result.d2 = ppSqDist(ea1, eb1);
+    embedPP(1, 3, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PE_Ea0_Eb: {
+    V9d g9 = peSqDistGrad(ea0, eb0, eb1);
+    M9d H9 = peSqDistHess(ea0, eb0, eb1);
+    result.d2 = peSqDist(ea0, eb0, eb1);
+    int s[3] = { 0, 2, 3 };
+    embedPE(s, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PE_Ea1_Eb: {
+    V9d g9 = peSqDistGrad(ea1, eb0, eb1);
+    M9d H9 = peSqDistHess(ea1, eb0, eb1);
+    result.d2 = peSqDist(ea1, eb0, eb1);
+    int s[3] = { 1, 2, 3 };
+    embedPE(s, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PE_Eb0_Ea: {
+    V9d g9 = peSqDistGrad(eb0, ea0, ea1);
+    M9d H9 = peSqDistHess(eb0, ea0, ea1);
+    result.d2 = peSqDist(eb0, ea0, ea1);
+    int s[3] = { 2, 0, 1 };
+    embedPE(s, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PE_Eb1_Ea: {
+    V9d g9 = peSqDistGrad(eb1, ea0, ea1);
+    M9d H9 = peSqDistHess(eb1, ea0, ea1);
+    result.d2 = peSqDist(eb1, ea0, ea1);
+    int s[3] = { 3, 0, 1 };
+    embedPE(s, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::EE:
+    result.d2 = eeSqDist(ea0, ea1, eb0, eb1);
+    result.grad = eeSqDistGrad(ea0, ea1, eb0, eb1);
+    result.hess = eeSqDistHess(ea0, ea1, eb0, eb1);
+    break;
+  }
+  return result;
+}
+
 }  // namespace distance
 
 }  // namespace CIPC

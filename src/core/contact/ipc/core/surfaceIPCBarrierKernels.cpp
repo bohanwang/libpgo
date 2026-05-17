@@ -26,28 +26,42 @@ LocalContribution pointTriangle(
 {
   LocalContribution c;
 
-  double d2 = distance::computePTSqDist(p, t0, t1, t2);
-  if (d2 >= dhat2 || d2 <= 0.0)
-    return c;
+  // --- fetch distance / gradient / hessian ---
+  double d2;
+  EigenSupport::V12d gd2 = EigenSupport::V12d::Zero();
+  EigenSupport::M12d Hd2 = EigenSupport::M12d::Zero();
 
+  if (needGradient && needHessian) {
+    auto all = distance::computePTSqDistAll(p, t0, t1, t2);
+    d2 = all.d2;
+    if (d2 >= dhat2 || d2 <= 0.0)
+      return c;
+    gd2 = all.grad;
+    Hd2 = all.hess;
+  }
+  else {
+    d2 = distance::computePTSqDist(p, t0, t1, t2);
+    if (d2 >= dhat2 || d2 <= 0.0)
+      return c;
+    if (needGradient || needHessian)
+      gd2 = distance::computePTSqDistGrad(p, t0, t1, t2);
+    if (needHessian)
+      Hd2 = distance::computePTSqDistHess(p, t0, t1, t2);
+  }
+
+  // --- assemble ---
   c.active = true;
   double wk = weight * kappa;
   c.energy = wk * barrier::b(d2, dhat2);
 
-  if (needGradient || needHessian) {
-    EigenSupport::V12d gd2 = distance::computePTSqDistGrad(p, t0, t1, t2);
+  if (needGradient)
+    c.gradient = wk * barrier::dbds(d2, dhat2) * gd2;
+
+  if (needHessian) {
     double db = barrier::dbds(d2, dhat2);
-
-    if (needGradient) {
-      c.gradient = wk * db * gd2;
-    }
-
-    if (needHessian) {
-      EigenSupport::M12d Hd2 = distance::computePTSqDistHess(p, t0, t1, t2);
-      double d2b = barrier::d2bds2(d2, dhat2);
-      c.hessian = wk * (d2b * gd2 * gd2.transpose() + db * Hd2);
-      c.hessian = projectToPSD(c.hessian);
-    }
+    double d2b = barrier::d2bds2(d2, dhat2);
+    c.hessian = wk * (d2b * gd2 * gd2.transpose() + db * Hd2);
+    c.hessian = projectToPSD(c.hessian);
   }
 
   return c;
@@ -67,13 +81,30 @@ LocalContribution edgeEdge(
 {
   LocalContribution c;
 
-  double d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
-  if (d2 >= dhat2 || d2 <= 0.0)
-    return c;
+  // --- fetch distance / gradient / hessian ---
+  double d2;
+  EigenSupport::V12d gd2 = EigenSupport::V12d::Zero();
+  EigenSupport::M12d Hd2 = EigenSupport::M12d::Zero();
 
-  c.active = true;
-  double wk = weight * kappa;
+  if (needGradient && needHessian) {
+    auto all = distance::computeEESqDistAll(ea0, ea1, eb0, eb1);
+    d2 = all.d2;
+    if (d2 >= dhat2 || d2 <= 0.0)
+      return c;
+    gd2 = all.grad;
+    Hd2 = all.hess;
+  }
+  else {
+    d2 = distance::computeEESqDist(ea0, ea1, eb0, eb1);
+    if (d2 >= dhat2 || d2 <= 0.0)
+      return c;
+    if (needGradient || needHessian)
+      gd2 = distance::computeEESqDistGrad(ea0, ea1, eb0, eb1);
+    if (needHessian)
+      Hd2 = distance::computeEESqDistHess(ea0, ea1, eb0, eb1);
+  }
 
+  // --- mollifier (only when epsEe > 0) ---
   double m = 1.0;
   EigenSupport::V12d gm = EigenSupport::V12d::Zero();
   EigenSupport::M12d Hm = EigenSupport::M12d::Zero();
@@ -85,35 +116,30 @@ LocalContribution edgeEdge(
       Hm = distance::eeMollifierHess(ea0, ea1, eb0, eb1, epsEe);
   }
 
+  // --- assemble ---
+  c.active = true;
+  double wk = weight * kappa;
   double bv = barrier::b(d2, dhat2);
   c.energy = wk * m * bv;
 
-  if (needGradient || needHessian) {
-    EigenSupport::V12d gd2 = distance::computeEESqDistGrad(ea0, ea1, eb0, eb1);
+  if (needGradient) {
+    double dbv = barrier::dbds(d2, dhat2);
+    if (epsEe > 0.0)
+      c.gradient = wk * (gm * bv + m * dbv * gd2);
+    else
+      c.gradient = wk * dbv * gd2;
+  }
 
-    if (needGradient) {
-      if (epsEe > 0.0) {
-        double dbv = barrier::dbds(d2, dhat2);
-        c.gradient = wk * (gm * bv + m * dbv * gd2);
-      } else {
-        c.gradient = wk * barrier::dbds(d2, dhat2) * gd2;
-      }
-    }
-
-    if (needHessian) {
-      EigenSupport::M12d Hd2 = distance::computeEESqDistHess(ea0, ea1, eb0, eb1);
-      double gp = barrier::dbds(d2, dhat2);
-      double gpp = barrier::d2bds2(d2, dhat2);
-      EigenSupport::V12d gb = barrier::dbds(d2, dhat2) * gd2;
-
-      if (epsEe > 0.0) {
-        c.hessian = wk * (bv * Hm + gm * gb.transpose() + gb * gm.transpose()
-          + m * (gpp * gd2 * gd2.transpose() + gp * Hd2));
-      } else {
-        c.hessian = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
-      }
-      c.hessian = projectToPSD(c.hessian);
-    }
+  if (needHessian) {
+    double gp = barrier::dbds(d2, dhat2);
+    double gpp = barrier::d2bds2(d2, dhat2);
+    EigenSupport::V12d gb = gp * gd2;
+    if (epsEe > 0.0)
+      c.hessian = wk * (bv * Hm + gm * gb.transpose() + gb * gm.transpose()
+        + m * (gpp * gd2 * gd2.transpose() + gp * Hd2));
+    else
+      c.hessian = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
+    c.hessian = projectToPSD(c.hessian);
   }
 
   return c;
