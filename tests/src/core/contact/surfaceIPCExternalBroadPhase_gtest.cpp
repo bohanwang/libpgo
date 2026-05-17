@@ -110,7 +110,7 @@ TEST(SurfaceIPCExternalBroadPhaseGTest, BuilderMatchesSurfaceIPCCoreExternalPair
   auto makeObs = [&]() {
     ObstacleSurface o(obsV, obsF,
       pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
-    o.update(0.0, 0.0);
+    o.update(0.0);
     return o;
   };
 
@@ -160,7 +160,7 @@ TEST(SurfaceIPCExternalBroadPhaseGTest, MovingObstacleProducesGoldenPairsAndWeig
     obsV, obsF,
     pgo::Contact::CIPC::makeLinearTrajectorySampler(flattenRows(obsV), ES::V3d(0.0, 0.0, -0.15)));
   obs.setObjectId(7);
-  obs.update(0.0, 1.0);
+  obs.update(1.0);
 
   SurfaceIPCTopology topology;
   topology.setMesh(V, F);

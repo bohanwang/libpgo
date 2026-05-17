@@ -32,6 +32,7 @@ SurfaceIPCCore::SurfaceIPCCore(const SurfaceIPCCore &other):
   kappa(other.kappa),
   eps_ee(other.eps_ee),
   slackness(other.slackness),
+  ccd_thickness(other.ccd_thickness),
   topology_(other.topology_),
   obstacles_(other.obstacles_)
 {
@@ -47,6 +48,7 @@ SurfaceIPCCore &SurfaceIPCCore::operator=(const SurfaceIPCCore &other)
   kappa = other.kappa;
   eps_ee = other.eps_ee;
   slackness = other.slackness;
+  ccd_thickness = other.ccd_thickness;
   topology_ = other.topology_;
   obstacles_ = other.obstacles_;
   return *this;
@@ -59,6 +61,7 @@ void SurfaceIPCCore::setParameters(const Parameters &params)
   kappa = params.kappa;
   eps_ee = params.eps_ee;
   slackness = params.slackness;
+  ccd_thickness = params.ccd_thickness;
 }
 
 SurfaceIPCCore::Parameters SurfaceIPCCore::getParameters() const
@@ -69,6 +72,7 @@ SurfaceIPCCore::Parameters SurfaceIPCCore::getParameters() const
   params.kappa = kappa;
   params.eps_ee = eps_ee;
   params.slackness = slackness;
+  params.ccd_thickness = ccd_thickness;
   return params;
 }
 
@@ -117,8 +121,8 @@ SurfaceIPCActiveSet SurfaceIPCCore::buildActiveSet(EigenSupport::ConstRefVecXd x
 // =========================================================================
 NonlinearOptimization::MaxStepResult SurfaceIPCCore::computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
 {
-  double alpha = computeSelfMaxStep(topology_, x, dx, dhat, slackness);
-  alpha = std::min(alpha, computeExternalMaxStep(topology_, x, dx, obstacles_, dhat_external, slackness));
+  double alpha = computeSelfMaxStep(topology_, x, dx, dhat, slackness, ccd_thickness);
+  alpha = std::min(alpha, computeExternalMaxStep(topology_, x, dx, obstacles_, dhat_external, slackness, ccd_thickness));
 
   const double clampedAlpha = std::max(alpha, 1e-12);
 
@@ -233,10 +237,10 @@ void SurfaceIPCCore::setObstacles(std::vector<ObstacleSurface> obstacles)
     obstacles_[slot].setObjectId(static_cast<int32_t>(slot));
 }
 
-void SurfaceIPCCore::updateObstacleStage(double tStart, double tEnd)
+void SurfaceIPCCore::setObstacleTime(double t)
 {
   for (auto &obs : obstacles_)
-    obs.update(tStart, tEnd);
+    obs.update(t);
 }
 
 }  // namespace CIPC

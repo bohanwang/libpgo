@@ -29,7 +29,7 @@ public:
     const SurfaceIPCCore::Parameters &ipcParams = {},
     std::vector<ObstacleSurface> obstacleSurfaces = {});
 
-  void updateObstacleStage(double tStart, double tEnd);
+  void setObstacleTime(double t);
 
 private:
   virtual double computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const override;

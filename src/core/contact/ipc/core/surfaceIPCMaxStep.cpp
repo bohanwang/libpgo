@@ -28,7 +28,8 @@ double computeSelfMaxStep(
   EigenSupport::ConstRefVecXd x,
   EigenSupport::ConstRefVecXd dx,
   double dhat,
-  double slackness)
+  double slackness,
+  double thickness)
 {
   const VXd pos = VXd(x);
 
@@ -50,12 +51,14 @@ double computeSelfMaxStep(
   {
     Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildSwept);
 
+    // Inflate swept AABBs by `thickness` on every side so the broad-phase
+    // prune stays sound for min-separation CCD (contact at distance == thickness).
     tbb::parallel_for(tbb::blocked_range<int>(0, topology.numVerts),
       [&](const tbb::blocked_range<int> &r) {
         for (int vi = r.begin(); vi < r.end(); ++vi) {
           V3d p0 = getV(vi), p1 = p0 + getdV(vi);
-          vertBox[vi].init(p0, 0.0);
-          vertBox[vi].expand(p1);
+          vertBox[vi].init(p0, thickness);
+          vertBox[vi].expand(p1, thickness);
         }
       });
 
@@ -65,12 +68,12 @@ double computeSelfMaxStep(
           auto &tri = topology.triangles[fi];
           V3d v0 = getV(tri[0]), v1 = getV(tri[1]), v2 = getV(tri[2]);
           V3d d0 = getdV(tri[0]), d1 = getdV(tri[1]), d2 = getdV(tri[2]);
-          triBox[fi].init(v0, 0.0);
-          triBox[fi].expand(v1);
-          triBox[fi].expand(v2);
-          triBox[fi].expand(v0 + d0);
-          triBox[fi].expand(v1 + d1);
-          triBox[fi].expand(v2 + d2);
+          triBox[fi].init(v0, thickness);
+          triBox[fi].expand(v1, thickness);
+          triBox[fi].expand(v2, thickness);
+          triBox[fi].expand(v0 + d0, thickness);
+          triBox[fi].expand(v1 + d1, thickness);
+          triBox[fi].expand(v2 + d2, thickness);
         }
       });
 
@@ -79,10 +82,10 @@ double computeSelfMaxStep(
         for (int ei = r.begin(); ei < r.end(); ++ei) {
           V3d a0 = getV(topology.edges[ei][0]), a1 = getV(topology.edges[ei][1]);
           V3d da0 = getdV(topology.edges[ei][0]), da1 = getdV(topology.edges[ei][1]);
-          edgeBox[ei].init(a0, 0.0);
-          edgeBox[ei].expand(a1);
-          edgeBox[ei].expand(a0 + da0);
-          edgeBox[ei].expand(a1 + da1);
+          edgeBox[ei].init(a0, thickness);
+          edgeBox[ei].expand(a1, thickness);
+          edgeBox[ei].expand(a0 + da0, thickness);
+          edgeBox[ei].expand(a1 + da1, thickness);
         }
       });
 
@@ -136,7 +139,7 @@ double computeSelfMaxStep(
 
             double toi = ccd::pointTriangleCCD(p, t0, t1, t2,
               dp, dt0, dt1, dt2,
-              0.0, localAlpha);
+              thickness, localAlpha);
             if (toi < localAlpha)
               localAlpha = toi * slackness;
           }
@@ -187,7 +190,7 @@ double computeSelfMaxStep(
 
             double toi = ccd::edgeEdgeCCD(va0, va1, vb0, vb1,
               da0, da1, db0, db1,
-              0.0, localAlpha);
+              thickness, localAlpha);
             if (toi < localAlpha)
               localAlpha = toi * slackness;
           }
@@ -210,7 +213,8 @@ double computeExternalMaxStep(
   EigenSupport::ConstRefVecXd dx,
   const std::vector<ObstacleSurface> &obstacles,
   double dhatExternal,
-  double slackness)
+  double slackness,
+  double thickness)
 {
   if (obstacles.empty())
     return 1.0;
@@ -228,7 +232,7 @@ double computeExternalMaxStep(
   int nDynTri = (int)topology.triangles.size();
   int nDynEdge = (int)topology.edges.size();
 
-  // Build dynamic swept AABBs
+  // Build dynamic swept AABBs, inflated by `thickness` for min-separation CCD.
   std::vector<SpatialHashGrid::AABB> dynVertBox(topology.numVerts);
   std::vector<SpatialHashGrid::AABB> dynTriBox(nDynTri);
   std::vector<SpatialHashGrid::AABB> dynEdgeBox(nDynEdge);
@@ -237,8 +241,8 @@ double computeExternalMaxStep(
     [&](const tbb::blocked_range<int> &r) {
       for (int vi = r.begin(); vi < r.end(); ++vi) {
         V3d p0 = getV(vi), p1 = p0 + getdV(vi);
-        dynVertBox[vi].init(p0, 0.0);
-        dynVertBox[vi].expand(p1);
+        dynVertBox[vi].init(p0, thickness);
+        dynVertBox[vi].expand(p1, thickness);
       }
     });
 
@@ -248,12 +252,12 @@ double computeExternalMaxStep(
         auto &tri = topology.triangles[fi];
         V3d v0 = getV(tri[0]), v1 = getV(tri[1]), v2 = getV(tri[2]);
         V3d d0 = getdV(tri[0]), d1 = getdV(tri[1]), d2 = getdV(tri[2]);
-        dynTriBox[fi].init(v0, 0.0);
-        dynTriBox[fi].expand(v1);
-        dynTriBox[fi].expand(v2);
-        dynTriBox[fi].expand(v0 + d0);
-        dynTriBox[fi].expand(v1 + d1);
-        dynTriBox[fi].expand(v2 + d2);
+        dynTriBox[fi].init(v0, thickness);
+        dynTriBox[fi].expand(v1, thickness);
+        dynTriBox[fi].expand(v2, thickness);
+        dynTriBox[fi].expand(v0 + d0, thickness);
+        dynTriBox[fi].expand(v1 + d1, thickness);
+        dynTriBox[fi].expand(v2 + d2, thickness);
       }
     });
 
@@ -262,24 +266,26 @@ double computeExternalMaxStep(
       for (int ei = r.begin(); ei < r.end(); ++ei) {
         V3d a0 = getV(topology.edges[ei][0]), a1 = getV(topology.edges[ei][1]);
         V3d da0 = getdV(topology.edges[ei][0]), da1 = getdV(topology.edges[ei][1]);
-        dynEdgeBox[ei].init(a0, 0.0);
-        dynEdgeBox[ei].expand(a1);
-        dynEdgeBox[ei].expand(a0 + da0);
-        dynEdgeBox[ei].expand(a1 + da1);
+        dynEdgeBox[ei].init(a0, thickness);
+        dynEdgeBox[ei].expand(a1, thickness);
+        dynEdgeBox[ei].expand(a0 + da0, thickness);
+        dynEdgeBox[ei].expand(a1 + da1, thickness);
       }
     });
 
   for (const auto &obs : obstacles) {
     const VXd &obsCur = obs.currentPositions();
-    const VXd &obsPrev = obs.previousPositions();
     int nObsVert = (int)obsCur.size() / 3;
     int nObsTri = (int)obs.triangles().rows();
     int nObsEdge = (int)obs.uniqueEdges().rows();
 
-    auto obsV = [&](int i) -> V3d { return obsPrev.segment<3>(3 * i); };
-    auto obsDisp = [&](int i) -> V3d { return obsCur.segment<3>(3 * i) - obsPrev.segment<3>(3 * i); };
+    // The obstacle is treated as fixed at its sampled pose during the
+    // Newton line-search; intra-frame obstacle motion is not swept here.
+    auto obsV = [&](int i) -> V3d { return obsCur.segment<3>(3 * i); };
+    auto obsDisp = [](int) -> V3d { return V3d::Zero(); };
 
-    // Build obstacle swept AABBs
+    // Build obstacle AABBs from the fixed current pose (no sweep), inflated by
+    // `thickness` so the prune stays sound for min-separation CCD.
     std::vector<SpatialHashGrid::AABB> obsVertBox(nObsVert);
     std::vector<SpatialHashGrid::AABB> obsTriBox(nObsTri);
     std::vector<SpatialHashGrid::AABB> obsEdgeBox(nObsEdge);
@@ -287,9 +293,7 @@ double computeExternalMaxStep(
     tbb::parallel_for(tbb::blocked_range<int>(0, nObsVert),
       [&](const tbb::blocked_range<int> &r) {
         for (int vi = r.begin(); vi < r.end(); ++vi) {
-          V3d p0 = obsV(vi), p1 = p0 + obsDisp(vi);
-          obsVertBox[vi].init(p0, 0.0);
-          obsVertBox[vi].expand(p1);
+          obsVertBox[vi].init(obsV(vi), thickness);
         }
       });
 
@@ -299,15 +303,9 @@ double computeExternalMaxStep(
           V3d v0 = obsV(obs.triangles()(fi, 0));
           V3d v1 = obsV(obs.triangles()(fi, 1));
           V3d v2 = obsV(obs.triangles()(fi, 2));
-          V3d d0 = obsDisp(obs.triangles()(fi, 0));
-          V3d d1 = obsDisp(obs.triangles()(fi, 1));
-          V3d d2 = obsDisp(obs.triangles()(fi, 2));
-          obsTriBox[fi].init(v0, 0.0);
-          obsTriBox[fi].expand(v1);
-          obsTriBox[fi].expand(v2);
-          obsTriBox[fi].expand(v0 + d0);
-          obsTriBox[fi].expand(v1 + d1);
-          obsTriBox[fi].expand(v2 + d2);
+          obsTriBox[fi].init(v0, thickness);
+          obsTriBox[fi].expand(v1, thickness);
+          obsTriBox[fi].expand(v2, thickness);
         }
       });
 
@@ -316,12 +314,8 @@ double computeExternalMaxStep(
         for (int ei = r.begin(); ei < r.end(); ++ei) {
           V3d a0 = obsV(obs.uniqueEdges()(ei, 0));
           V3d a1 = obsV(obs.uniqueEdges()(ei, 1));
-          V3d da0 = obsDisp(obs.uniqueEdges()(ei, 0));
-          V3d da1 = obsDisp(obs.uniqueEdges()(ei, 1));
-          obsEdgeBox[ei].init(a0, 0.0);
-          obsEdgeBox[ei].expand(a1);
-          obsEdgeBox[ei].expand(a0 + da0);
-          obsEdgeBox[ei].expand(a1 + da1);
+          obsEdgeBox[ei].init(a0, thickness);
+          obsEdgeBox[ei].expand(a1, thickness);
         }
       });
 
@@ -370,7 +364,7 @@ double computeExternalMaxStep(
               V3d dt2 = obsDisp(obs.triangles()(fi, 2));
 
               double toi = ccd::pointTriangleCCD(p, t0, t1, t2,
-                dp, dt0, dt1, dt2, 0.0, localAlpha);
+                dp, dt0, dt1, dt2, thickness, localAlpha);
               if (toi < localAlpha)
                 localAlpha = toi * slackness;
             }
@@ -415,7 +409,7 @@ double computeExternalMaxStep(
               V3d dt2 = getdV(tri[2]);
 
               double toi = ccd::pointTriangleCCD(p, t0, t1, t2,
-                dp, dt0, dt1, dt2, 0.0, localAlpha);
+                dp, dt0, dt1, dt2, thickness, localAlpha);
               if (toi < localAlpha)
                 localAlpha = toi * slackness;
             }
@@ -459,7 +453,7 @@ double computeExternalMaxStep(
               V3d db0 = obsDisp(b0), db1 = obsDisp(b1);
 
               double toi = ccd::edgeEdgeCCD(va0, va1, vb0, vb1,
-                da0, da1, db0, db1, 0.0, localAlpha);
+                da0, da1, db0, db1, thickness, localAlpha);
               if (toi < localAlpha)
                 localAlpha = toi * slackness;
             }

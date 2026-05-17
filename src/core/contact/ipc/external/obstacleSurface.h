@@ -24,12 +24,14 @@ public:
     EigenSupport::MXi triangles,       // num_obstacle_tris   x 3, local index
     TrajectorySampler sampler);        // sampler(t, out) writes 3*num_vertices
 
-  void update(double tStart, double tEnd);
+  // Sample the obstacle pose at absolute time t and refresh cached triangle
+  // areas / edge lengths. The obstacle has no notion of a "previous" pose;
+  // line-search CCD treats the obstacle as fixed at this pose.
+  void update(double t);
 
   int32_t                          objectId()        const { return objectId_; }
   const EigenSupport::VXd &        restPositions()   const { return rest_; }
   const EigenSupport::VXd &        currentPositions()const { return current_; }
-  const EigenSupport::VXd &        previousPositions()const{ return previous_; }
   const EigenSupport::MXi &        triangles()       const { return triangles_; }
   const EigenSupport::MXi &        uniqueEdges()     const { return uniqueEdges_; }
   const std::vector<double> &       triAreas()        const { return triAreas_; }
@@ -41,7 +43,6 @@ public:
 private:
   int32_t              objectId_ = -1;
   EigenSupport::VXd    rest_;
-  EigenSupport::VXd    previous_;
   EigenSupport::VXd    current_;
   EigenSupport::MXi    triangles_;       // local 0-based indices
   EigenSupport::MXi    uniqueEdges_;     // derived from triangles_

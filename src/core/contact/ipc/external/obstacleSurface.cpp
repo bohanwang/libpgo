@@ -58,9 +58,7 @@ ObstacleSurface::ObstacleSurface(
   triAreas_.resize(nTri, 0.0);
   edgeLengths_.resize(nEdge, 0.0);
 
-  previous_.resize(numVerts * 3);
   current_.resize(numVerts * 3);
-  previous_.setZero();
   current_.setZero();
 }
 
@@ -68,7 +66,6 @@ ObstacleSurfaceView ObstacleSurface::view() const
 {
   return {
     objectId_,
-    &previous_,
     &current_,
     &triangles_,
     &uniqueEdges_,
@@ -77,11 +74,9 @@ ObstacleSurfaceView ObstacleSurface::view() const
   };
 }
 
-void ObstacleSurface::update(double tStart, double tEnd)
+void ObstacleSurface::update(double t)
 {
-  const int n3 = static_cast<int>(rest_.size());
-  sampler_(tStart, previous_);
-  sampler_(tEnd, current_);
+  sampler_(t, current_);
 
   // Cache tri areas and edge lengths from current positions
   for (int fi = 0; fi < triangles_.rows(); ++fi) {

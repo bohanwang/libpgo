@@ -15,7 +15,6 @@ namespace CIPC
 struct ObstacleSurfaceView
 {
   int32_t objectId = -1;
-  const EigenSupport::VXd *previousPositions = nullptr;
   const EigenSupport::VXd *currentPositions = nullptr;
   const EigenSupport::MXi *triangles = nullptr;
   const EigenSupport::MXi *uniqueEdges = nullptr;

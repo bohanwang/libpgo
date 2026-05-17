@@ -355,7 +355,7 @@ int main(int argc, char *argv[])
       }
       intg->setqState(u, uvel, uacc);
       const double tCurr = static_cast<double>(framei) * timestep;
-      context.collisionHandler->updateObstacleStage(tCurr, tCurr + timestep);
+      context.collisionHandler->setObstacleTime(tCurr + timestep);
       intg->doTimestep(1, 3, 1);
       executedStep = true;
       intg->getq(u);

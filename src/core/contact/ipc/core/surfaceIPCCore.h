@@ -34,6 +34,11 @@ public:
     double kappa         = 0.1;
     double eps_ee        = 0.0;
     double slackness     = 1.0;
+    // CCD minimum-separation thickness (xi). 0 = classic contact-at-zero CCD.
+    // If > 0, max-step finds the first time distance drops to ccd_thickness
+    // and broad-phase swept AABBs are inflated by ccd_thickness on both sides
+    // to stay sound under this contact definition.
+    double ccd_thickness = 0.0;
   };
 
   SurfaceIPCCore() = default;
@@ -64,7 +69,10 @@ public:
 
   const SurfaceIPCTopology& topology() const { return topology_; }
 
-  void updateObstacleStage(double tStart, double tEnd);
+  // Sample all registered obstacles at absolute time t. The obstacle pose is
+  // treated as fixed during the subsequent solve / line-search; intra-frame
+  // swept obstacle CCD is not performed.
+  void setObstacleTime(double t);
 
 private:
   void setObstacles(std::vector<ObstacleSurface> obstacles);
@@ -74,6 +82,7 @@ private:
   double kappa = 0.1;
   double eps_ee = 0.0;
   double slackness = 1.0;
+  double ccd_thickness = 0.0;
   SurfaceIPCTopology topology_;
   std::vector<ObstacleSurface> obstacles_;
 };

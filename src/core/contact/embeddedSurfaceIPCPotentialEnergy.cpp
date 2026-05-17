@@ -91,9 +91,9 @@ NonlinearOptimization::MaxStepResult EmbeddedSurfaceIPCPotentialEnergy::computeS
   return surfaceIPCCore_.computeMaxStepLimit(surfacePositions, surfaceDisplacements);
 }
 
-void EmbeddedSurfaceIPCPotentialEnergy::updateObstacleStage(double tStart, double tEnd)
+void EmbeddedSurfaceIPCPotentialEnergy::setObstacleTime(double t)
 {
-  surfaceIPCCore_.updateObstacleStage(tStart, tEnd);
+  surfaceIPCCore_.setObstacleTime(t);
 }
 
 }  // namespace CIPC

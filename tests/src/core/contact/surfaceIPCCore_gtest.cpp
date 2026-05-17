@@ -290,7 +290,7 @@ TEST(SurfaceIPCCoreGTest, ConstructorInjectedObstaclesAssignSequentialSlots)
   obstacles.emplace_back(buildPlaneObstacle( 0.3));
   obstacles.emplace_back(buildPlaneObstacle(-0.3));
   for (auto &obs : obstacles)
-    obs.update(0.0, 0.0);
+    obs.update(0.0);
 
   SurfaceIPCCore::Parameters params;
   params.dhat = 0.1;
