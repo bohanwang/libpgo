@@ -27,9 +27,9 @@ public:
 
   virtual double func_grad(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad) const { gradient(x, grad); return func(x); }
   virtual double func_grad_hessian(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad, EigenSupport::SpMatD &hess) const { gradient(x, grad), hessian(x, hess); return func(x); }
+  virtual void gradient_hessian(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad, EigenSupport::SpMatD &hess) const { gradient(x, grad); hessianDirect(x, hess); }
 
   virtual void hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const;
-
   virtual void createHessian(EigenSupport::SpMatD &hess) const = 0;
 
   virtual void getDOFs(std::vector<int> &dofs) const = 0;

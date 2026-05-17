@@ -53,7 +53,6 @@ void PotentialEnergies::init()
   tbb::concurrent_vector<ES::TripletD> entries;
   for (auto energy : potentialEnergies) {
     ES::SpMatD h;
-    energy->createHessian(h);
 
     std::vector<int> dofs;
     energy->getDOFs(dofs);
@@ -71,6 +70,7 @@ void PotentialEnergies::init()
 
     // Only include fixed-topology energies in hessianAll
     if (energy->isHessianTopologyFixed()) {
+      energy->createHessian(h);
       tbb::parallel_for((ES::IDX)0, h.outerSize(), [&](ES::IDX outeri) {
         for (ES::SpMatD::InnerIterator it(h, outeri); it; ++it) {
           entries.emplace_back(
@@ -277,6 +277,53 @@ void PotentialEnergies::hessianDirect(EigenSupport::ConstRefVecXd x, EigenSuppor
       KiGlobal.setFromTriplets(entries.begin(), entries.end());
       hess = hess + KiGlobal;
     }
+  }
+}
+
+void PotentialEnergies::gradient_hessian(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad, EigenSupport::SpMatD &hess) const
+{
+  grad.setZero();
+
+  hess = hessianAll;
+  std::memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
+
+  for (size_t i = 0; i < potentialEnergies.size(); i++) {
+    if (energyCoeffs[i] == 0)
+      continue;
+
+    mapx(x, energyDOFs[i], buffer->xlocals[i]);
+    buffer->gradients[i].setZero();
+
+    if (potentialEnergies[i]->isHessianTopologyFixed()) {
+      potentialEnergies[i]->gradient(buffer->xlocals[i], buffer->gradients[i]);
+
+      if (buffer->hessianMatrices[i].nonZeros()) {
+        potentialEnergies[i]->hessian(buffer->xlocals[i], buffer->hessianMatrices[i]);
+        ES::addSmallToBig(energyCoeffs[i], buffer->hessianMatrices[i], hess, 1.0, hessianMatrixMappings[i]);
+      }
+    }
+    else {
+      ES::SpMatD Ki;
+      potentialEnergies[i]->gradient_hessian(buffer->xlocals[i], buffer->gradients[i], Ki);
+      if (Ki.nonZeros()) {
+        ES::SpMatD KiGlobal(nAll, nAll);
+        std::vector<ES::TripletD> entries;
+        entries.reserve(Ki.nonZeros());
+        for (Eigen::Index outeri = 0; outeri < Ki.outerSize(); outeri++) {
+          for (ES::SpMatD::InnerIterator it(Ki, outeri); it; ++it) {
+            entries.emplace_back(
+              (ES::SpMatD::StorageIndex)energyDOFs[i][it.row()],
+              (ES::SpMatD::StorageIndex)energyDOFs[i][it.col()],
+              it.value() * energyCoeffs[i]);
+          }
+        }
+        KiGlobal.setFromTriplets(entries.begin(), entries.end());
+        hess = hess + KiGlobal;
+      }
+    }
+
+    for (Eigen::Index j = 0; j < buffer->gradients[i].size(); j++)
+      grad[energyDOFs[i][j]] += buffer->gradients[i][j] * energyCoeffs[i];
   }
 }
 

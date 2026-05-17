@@ -62,6 +62,60 @@ private:
   int n;
   MaxStepResult maxStep;
 };
+
+class TestNonFixedQuadraticEnergy : public PotentialEnergy
+{
+public:
+  explicit TestNonFixedQuadraticEnergy(int n): n(n) {}
+
+  double func(ES::ConstRefVecXd x) const override
+  {
+    return 0.5 * x.squaredNorm();
+  }
+
+  void gradient(ES::ConstRefVecXd x, ES::RefVecXd grad) const override
+  {
+    gradientCalls++;
+    grad = x;
+  }
+
+  void hessian(ES::ConstRefVecXd, ES::SpMatD &hess) const override
+  {
+    hessianCalls++;
+    hess.setIdentity();
+  }
+
+  void gradient_hessian(ES::ConstRefVecXd x, ES::RefVecXd grad, ES::SpMatD &hess) const override
+  {
+    gradientHessianCalls++;
+    grad = x;
+    hess.resize(n, n);
+    hess.setIdentity();
+  }
+
+  void createHessian(ES::SpMatD &hess) const override
+  {
+    hess.resize(n, n);
+    hess.setIdentity();
+  }
+
+  void getDOFs(std::vector<int> &dofs) const override
+  {
+    dofs.resize(n);
+    std::iota(dofs.begin(), dofs.end(), 0);
+  }
+
+  int getNumDOFs() const override { return n; }
+  int isHessianTopologyFixed() const override { return 0; }
+  MaxStepResult computeMaxStepLimit(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return MaxStepResult::unconstrained(); }
+
+  mutable int gradientCalls = 0;
+  mutable int hessianCalls = 0;
+  mutable int gradientHessianCalls = 0;
+
+private:
+  int n;
+};
 }  // namespace
 
 TEST(SolveDiagnosticsGTest, RecordsAndResetsMaxStepAndLineSearch)
@@ -186,6 +240,29 @@ TEST(NewtonSolverGTest, VerboseIterationLogLabelsMaxGradientNorm)
 
   EXPECT_NE(output.find("||grad||_max=4"), std::string::npos);
   EXPECT_EQ(output.find("; ||grad||="), std::string::npos);
+}
+
+TEST(NewtonSolverGTest, NonFixedTopologyIterationsUseGradientHessian)
+{
+  initializeLogging();
+
+  auto energy = std::make_shared<TestNonFixedQuadraticEnergy>(2);
+  ES::VXd x(2);
+  x[0] = 2.0;
+  x[1] = 0.0;
+
+  NewtonSolver::SolverParam solverParam;
+  solverParam.sst = NewtonSolver::SST_SUBITERATION_ONE;
+  const std::vector<int> fixedDOFs = { 1 };
+  const double fixedValues[1] = { 0.0 };
+  NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs, fixedValues);
+
+  const int ret = solver.solve(x.data(), 1, 1e-10, 0);
+
+  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::Converged));
+  EXPECT_EQ(energy->gradientCalls, 2);
+  EXPECT_EQ(energy->gradientHessianCalls, 1);
+  EXPECT_EQ(energy->hessianCalls, 0);
 }
 
 TEST(NewtonSolverGTest, SolveStatusToStringReturnsStableNames)

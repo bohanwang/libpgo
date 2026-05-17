@@ -178,9 +178,17 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
       break;
     }
 
+    const bool fixedHessianTopology = energy->isHessianTopologyFixed();
+
     // we solve f(x_i) + K(x_i) deltax = 0
     memset(grad.data(), 0, sizeof(double) * grad.size());
-    energy->gradient(x, grad);
+    if (fixedHessianTopology) {
+      energy->gradient(x, grad);
+    }
+    else {
+      energy->gradient_hessian(x, grad, sysFull);
+      sysFull.makeCompressed();
+    }
     filterVector(grad);
 
     double gradMaxNorm = grad.cwiseAbs().maxCoeff();
@@ -225,13 +233,9 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
       }
     }
 
-    if (energy->isHessianTopologyFixed()) {
+    if (fixedHessianTopology) {
       memset(sysFull.valuePtr(), 0, sizeof(double) * sysFull.nonZeros());
       energy->hessian(x, sysFull);
-    }
-    else {
-      energy->hessianDirect(x, sysFull);
-      sysFull.makeCompressed();
     }
 
     // grad too small, we don't need damping
@@ -261,7 +265,7 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     // std::cout << "        Damping lambda=" << lambda << std::endl;
 
     // remove column rows
-    if (energy->isHessianTopologyFixed()) {
+    if (fixedHessianTopology) {
       ES::transferBigToSmall(sysFull, A11, A11Mapping, 1);
     }
     else {
@@ -290,7 +294,7 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     // }
     // std::cout << std::endl;
 
-    if (!energy->isHessianTopologyFixed() || solver == nullptr) {
+    if (!fixedHessianTopology || solver == nullptr) {
 #if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
       solver = std::make_shared<ES::EigenMKLPardisoSupport>(A11, ES::EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
         ES::EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
@@ -316,7 +320,7 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     deltaxSmall.noalias() = solver->solve(rhs);
 #endif
 
-    if (energy->isHessianTopologyFixed()) {
+    if (fixedHessianTopology) {
       solver.reset();  // free symbolic factorization memory since we won't reuse it anymore
     }
 

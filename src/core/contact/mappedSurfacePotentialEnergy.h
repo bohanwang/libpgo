@@ -43,10 +43,10 @@ public:
     EigenSupport::ConstRefVecXd simulationDisplacements,
     EigenSupport::RefVecXd simulationGradient,
     EigenSupport::SpMatD &simulationHessian) const override;
-  void gradient_hessian(
+  virtual void gradient_hessian(
     EigenSupport::ConstRefVecXd simulationDisplacements,
     EigenSupport::RefVecXd simulationGradient,
-    EigenSupport::SpMatD &simulationHessian) const;
+    EigenSupport::SpMatD &simulationHessian) const override;
 
   virtual void getDOFs(std::vector<int> &dofs) const override { dofs = simulationDOFs_; }
   virtual int getNumDOFs() const override { return static_cast<int>(simulationDOFs_.size()); }
@@ -64,6 +64,10 @@ protected:
   virtual void computeSurfaceHessian(
     EigenSupport::ConstRefVecXd surfacePositions,
     EigenSupport::SpMatD &surfaceHessian) const = 0;
+  virtual void computeSurfaceGradHessian(
+    EigenSupport::ConstRefVecXd surfacePositions,
+    EigenSupport::RefVecXd surfaceGradient,
+    EigenSupport::SpMatD &surfaceHessian) const;
   virtual void computeSurfaceFuncGrad(
     EigenSupport::ConstRefVecXd surfacePositions,
     double &surfaceEnergy,

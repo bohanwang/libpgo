@@ -52,6 +52,16 @@ void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceHessian(
   surfaceIPCCore_.computeHessian(surfacePositions, surfaceHessian);
 }
 
+void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceGradHessian(
+  EigenSupport::ConstRefVecXd surfacePositions,
+  EigenSupport::RefVecXd surfaceGradient,
+  EigenSupport::SpMatD &surfaceHessian) const
+{
+  const SurfaceIPCActiveSet activeSet = surfaceIPCCore_.buildActiveSet(surfacePositions);
+  surfaceIPCCore_.computeGradient(activeSet, surfaceGradient);
+  surfaceIPCCore_.computeHessian(activeSet, surfaceHessian);
+}
+
 void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceFuncGrad(
   EigenSupport::ConstRefVecXd surfacePositions,
   double &surfaceEnergy,

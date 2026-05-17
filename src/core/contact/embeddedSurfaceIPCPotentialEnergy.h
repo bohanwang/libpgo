@@ -39,6 +39,10 @@ private:
   virtual void computeSurfaceHessian(
     EigenSupport::ConstRefVecXd surfacePositions,
     EigenSupport::SpMatD &surfaceHessian) const override;
+  virtual void computeSurfaceGradHessian(
+    EigenSupport::ConstRefVecXd surfacePositions,
+    EigenSupport::RefVecXd surfaceGradient,
+    EigenSupport::SpMatD &surfaceHessian) const override;
   virtual void computeSurfaceFuncGrad(
     EigenSupport::ConstRefVecXd surfacePositions,
     double &surfaceEnergy,

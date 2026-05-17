@@ -38,6 +38,7 @@ public:
   virtual void hessian(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const override;
   virtual void hessianVector(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd vec, EigenSupport::RefVecXd hessVec) const override;
   virtual void createHessian(EigenSupport::SpMatD &hess) const override { hess = hessianAll; }
+  virtual void gradient_hessian(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad, EigenSupport::SpMatD &hess) const override;
 
   virtual void getDOFs(std::vector<int> &dofs) const override { dofs = allDOFs; }
   virtual int getNumDOFs() const override { return nAll; }

@@ -23,6 +23,7 @@ using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
 using pgo::Contact::CIPCTest::relativeError;
 using pgo::Contact::CIPCTest::sparseToDense;
+using pgo::NonlinearOptimization::PotentialEnergy;
 using pgo::Profiling::ProfileStat;
 
 const ProfileStat *findStat(const std::vector<ProfileStat> &stats, std::string_view name)
@@ -143,6 +144,28 @@ TEST(CIPCPotentialEnergyGTest, BarrierAndFloorActiveMatchesCorePlusFloorContribu
   EXPECT_NEAR(wrapper.func(x), core.computeEnergy(x) + floorE, 1e-10);
   EXPECT_LT(relativeError(wrapperGrad, coreGrad + floorG), 1e-12);
   EXPECT_LT(relativeError(sparseToDense(wrapperH), sparseToDense(coreH) + floorH), 1e-12);
+}
+
+TEST(CIPCPotentialEnergyGTest, BaseGradientHessianUsesHessianDirectDefault)
+{
+  const auto [V, F] = makeTwoTriangleMesh();
+  const ES::VXd x = flattenPositions(V);
+
+  CIPCPotentialEnergy wrapper(0.1, 1.0, false);
+  wrapper.setMesh(V, F);
+
+  const PotentialEnergy &base = wrapper;
+  ES::VXd combinedGrad = ES::VXd::Zero(x.size());
+  ES::SpMatD combinedH;
+  EXPECT_NO_THROW(base.gradient_hessian(x, combinedGrad, combinedH));
+
+  ES::VXd refGrad = ES::VXd::Zero(x.size());
+  wrapper.gradient(x, refGrad);
+  ES::SpMatD refH;
+  wrapper.hessianDirect(x, refH);
+
+  EXPECT_LT(relativeError(combinedGrad, refGrad), 1e-12);
+  EXPECT_LT(relativeError(sparseToDense(combinedH), sparseToDense(refH)), 1e-12);
 }
 
 TEST(CIPCPotentialEnergyGTest, SeparateEvaluationsBuildIndependentActiveSetsForSameState)
