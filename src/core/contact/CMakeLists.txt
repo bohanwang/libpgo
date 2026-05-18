@@ -5,17 +5,20 @@ set(CONTACT_HEADERS
   embeddedSurfaceFloorPotentialEnergy.h
   embeddedSurfaceIPCPotentialEnergy.h
   ipc/broadPhase/spatialHashGrid.h
-  ipc/broadPhase/surfaceIPCSelfBroadPhase.h
-  ipc/core/surfaceIPCBarrierAssembler.h
+  ipc/broadPhase/surfaceIPCBroadPhase.h
+  ipc/core/surfaceIPCSelfBarrierAssembler.h
+  ipc/core/surfaceIPCExternalBarrierAssembler.h
+  ipc/core/surfaceIPCBarrierKernels.h
   ipc/core/surfaceIPCMaxStep.h
   ipc/core/surfaceIPCCore.h
+  ipc/core/surfaceIPCActiveSet.h
   ipc/core/surfaceIPCPairs.h
+  ipc/external/obstacleSurface.h
+  ipc/external/obstaclePoseCache.h
   ipc/geometry/ipcBarrier.h
   ipc/geometry/ipcCCD.h
   ipc/geometry/ipcDistancePrimitives.h
   ipc/geometry/ipcHessianProjection.h
-  ipc/geometry/generated/CIPC_autogen.h
-  ipc/geometry/generated/CIPC_autogen_ll.h
   ipc/profiling/surfaceIPCProfiling.h
   ipc/topology/surfaceIPCTopology.h
   pointPenetrationEnergy.h
@@ -33,12 +36,16 @@ set(CONTACT_SOURCES
   embeddedSurfaceFloorPotentialEnergy.cpp
   embeddedSurfaceIPCPotentialEnergy.cpp
   ipc/broadPhase/spatialHashGrid.cpp
-  ipc/broadPhase/surfaceIPCSelfBroadPhase.cpp
-  ipc/core/surfaceIPCBarrierAssembler.cpp
+  ipc/broadPhase/surfaceIPCBroadPhase.cpp
+  ipc/core/surfaceIPCSelfBarrierAssembler.cpp
+  ipc/core/surfaceIPCExternalBarrierAssembler.cpp
+  ipc/core/surfaceIPCBarrierKernels.cpp
   ipc/core/surfaceIPCMaxStep.cpp
   ipc/core/surfaceIPCCore.cpp
   ipc/geometry/ipcBarrier.cpp
   ipc/geometry/ipcCCD.cpp
+  ipc/external/obstacleSurface.cpp
+  ipc/external/obstaclePoseCache.cpp
   ipc/geometry/ipcDistancePrimitives.cpp
   ipc/geometry/ipcHessianProjection.cpp
   ipc/topology/surfaceIPCTopology.cpp

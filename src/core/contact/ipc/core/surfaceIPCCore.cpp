@@ -7,8 +7,9 @@ copyright to Bohan Wang
 
 #include "ipc/core/surfaceIPCCore.h"
 #include "scopedProfileSection.h"
-#include "ipc/broadPhase/surfaceIPCSelfBroadPhase.h"
-#include "ipc/core/surfaceIPCBarrierAssembler.h"
+#include "ipc/broadPhase/surfaceIPCBroadPhase.h"
+#include "ipc/core/surfaceIPCSelfBarrierAssembler.h"
+#include "ipc/core/surfaceIPCExternalBarrierAssembler.h"
 #include "ipc/core/surfaceIPCMaxStep.h"
 #include "ipc/profiling/surfaceIPCProfiling.h"
 
@@ -17,22 +18,24 @@ copyright to Bohan Wang
 #include <algorithm>
 #include <cstdint>
 #include <stdexcept>
+#include <utility>
 
 namespace pgo {
 namespace Contact {
 namespace CIPC {
+using namespace pgo::EigenSupport;
 static constexpr double kSmallContactAlphaWarnThreshold = 1e-2;
 
 SurfaceIPCCore::SurfaceIPCCore(const SurfaceIPCCore &other):
   dhat(other.dhat),
+  dhat_external(other.dhat_external),
   kappa(other.kappa),
   eps_ee(other.eps_ee),
   slackness(other.slackness),
+  ccd_thickness(other.ccd_thickness),
   topology_(other.topology_),
-  ptPairs_(other.ptPairs_),
-  eePairs_(other.eePairs_),
-  hasPreparedState_(other.hasPreparedState_),
-  preparedPositions_(other.preparedPositions_)
+  obstacles_(other.obstacles_),
+  staticObstacles_(other.staticObstacles_)
 {
 }
 
@@ -42,33 +45,36 @@ SurfaceIPCCore &SurfaceIPCCore::operator=(const SurfaceIPCCore &other)
     return *this;
 
   dhat = other.dhat;
+  dhat_external = other.dhat_external;
   kappa = other.kappa;
   eps_ee = other.eps_ee;
   slackness = other.slackness;
+  ccd_thickness = other.ccd_thickness;
   topology_ = other.topology_;
-  ptPairs_ = other.ptPairs_;
-  eePairs_ = other.eePairs_;
-  hasPreparedState_ = other.hasPreparedState_;
-  preparedPositions_ = other.preparedPositions_;
+  obstacles_ = other.obstacles_;
+  staticObstacles_ = other.staticObstacles_;
   return *this;
 }
 
 void SurfaceIPCCore::setParameters(const Parameters &params)
 {
   dhat = params.dhat;
+  dhat_external = params.dhat_external;
   kappa = params.kappa;
   eps_ee = params.eps_ee;
   slackness = params.slackness;
-  invalidatePreparedState();
+  ccd_thickness = params.ccd_thickness;
 }
 
 SurfaceIPCCore::Parameters SurfaceIPCCore::getParameters() const
 {
   Parameters params;
   params.dhat = dhat;
+  params.dhat_external = dhat_external;
   params.kappa = kappa;
   params.eps_ee = eps_ee;
   params.slackness = slackness;
+  params.ccd_thickness = ccd_thickness;
   return params;
 }
 
@@ -79,7 +85,6 @@ SurfaceIPCCore::Parameters SurfaceIPCCore::getParameters() const
 void SurfaceIPCCore::setMesh(const MXd &V, const MXi &F)
 {
   topology_.setMesh(V, F);
-  invalidatePreparedState();
 }
 
 // =========================================================================
@@ -90,38 +95,27 @@ void SurfaceIPCCore::setMesh(const MXd &V, const MXi &F)
 //  Broad phase: find candidate PT and EE pairs using spatial hashing
 //  Uses insert-then-query: insert one type, query with the other.
 // =========================================================================
-void SurfaceIPCCore::findCollisionPairs(const VXd &positions) const
+SurfaceIPCActiveSet SurfaceIPCCore::buildActiveSet(EigenSupport::ConstRefVecXd x_surf) const
 {
-  SurfaceIPCSelfBroadPhase().buildPairs(topology_, positions, dhat, ptPairs_, eePairs_);
-}
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kBuildActiveSet);
 
-void SurfaceIPCCore::invalidatePreparedState() const
-{
-  hasPreparedState_ = false;
-  preparedPositions_.resize(0);
-  ptPairs_.clear();
-  eePairs_.clear();
-}
+  SurfaceIPCActiveSet activeSet;
+  activeSet.positions = x_surf;
+  buildSelfPairs(topology_, activeSet.positions, dhat, activeSet.selfPairs);
 
-bool SurfaceIPCCore::isPreparedFor(EigenSupport::ConstRefVecXd x_surf) const
-{
-  return hasPreparedState_ &&
-    preparedPositions_.size() == x_surf.size() &&
-    (preparedPositions_.array() == x_surf.array()).all();
-}
+  if (!obstacles_.empty())
+    buildExternalPairs(topology_, activeSet.positions, obstacles_, dhat_external, activeSet.externalPairs);
 
-void SurfaceIPCCore::prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_surf) const
-{
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPrepareActivePairs);
-  preparedPositions_ = x_surf;
-  findCollisionPairs(preparedPositions_);
-  hasPreparedState_ = true;
-}
+  if (auto logger = Logging::lgr(); logger) {
+    const size_t selfTotal = activeSet.selfPairs.size();
+    const size_t externalTotal = activeSet.externalPairs.size();
+    SPDLOG_LOGGER_INFO(logger,
+      "SurfaceIPCCore active pairs: selfPT={} selfEE={} selfTotal={} externalPT={} externalTP={} externalEE={} externalTotal={}",
+      activeSet.selfPairs.ptPairs.size(), activeSet.selfPairs.eePairs.size(), selfTotal,
+      activeSet.externalPairs.ptPairs.size(), activeSet.externalPairs.tpPairs.size(), activeSet.externalPairs.eePairs.size(), externalTotal);
+  }
 
-void SurfaceIPCCore::requirePreparedState() const
-{
-  if (!hasPreparedState_)
-    throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
+  return activeSet;
 }
 
 // =========================================================================
@@ -129,7 +123,9 @@ void SurfaceIPCCore::requirePreparedState() const
 // =========================================================================
 NonlinearOptimization::MaxStepResult SurfaceIPCCore::computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
 {
-  const double alpha = SurfaceIPCMaxStep().compute(topology_, x, dx, dhat, slackness);
+  double alpha = computeSelfMaxStep(topology_, x, dx, dhat, slackness, ccd_thickness);
+  alpha = std::min(alpha, computeExternalMaxStep(topology_, x, dx, obstacles_, dhat_external, slackness, ccd_thickness));
+
   const double clampedAlpha = std::max(alpha, 1e-12);
 
   if (clampedAlpha < 1.0) {
@@ -155,15 +151,18 @@ NonlinearOptimization::MaxStepResult SurfaceIPCCore::computeMaxStepLimit(EigenSu
 double SurfaceIPCCore::computeEnergy(EigenSupport::ConstRefVecXd pos) const
 {
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kEnergy);
-  prepareForSurfacePositions(pos);
-  return computeEnergyWithPreparedPairs();
+  return computeEnergy(buildActiveSet(pos));
 }
 
-double SurfaceIPCCore::computeEnergyWithPreparedPairs() const
+double SurfaceIPCCore::computeEnergy(const SurfaceIPCActiveSet &activeSet) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedEnergy);
-  requirePreparedState();
-  return SurfaceIPCBarrierAssembler().computeEnergy(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee);
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kActiveSetEnergy);
+  double e = computeSelfEnergy(activeSet.positions, activeSet.selfPairs, topology_.numVerts, dhat, kappa, eps_ee);
+  if (!obstacles_.empty()) {
+    e += computeExternalEnergy(
+      activeSet.positions, obstacles_, activeSet.externalPairs, dhat_external, kappa, eps_ee);
+  }
+  return e;
 }
 
 // =========================================================================
@@ -172,15 +171,17 @@ double SurfaceIPCCore::computeEnergyWithPreparedPairs() const
 void SurfaceIPCCore::computeGradient(EigenSupport::ConstRefVecXd pos, EigenSupport::RefVecXd grad) const
 {
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kGradient);
-  prepareForSurfacePositions(pos);
-  computeGradientWithPreparedPairs(grad);
+  computeGradient(buildActiveSet(pos), grad);
 }
 
-void SurfaceIPCCore::computeGradientWithPreparedPairs(EigenSupport::RefVecXd grad) const
+void SurfaceIPCCore::computeGradient(const SurfaceIPCActiveSet &activeSet, EigenSupport::RefVecXd grad) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedGradient);
-  requirePreparedState();
-  SurfaceIPCBarrierAssembler().computeGradient(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, grad);
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kActiveSetGradient);
+  computeSelfGradient(activeSet.positions, activeSet.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, grad);
+  if (!obstacles_.empty()) {
+    computeExternalGradient(
+      activeSet.positions, obstacles_, activeSet.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, grad);
+  }
 }
 
 // =========================================================================
@@ -189,15 +190,19 @@ void SurfaceIPCCore::computeGradientWithPreparedPairs(EigenSupport::RefVecXd gra
 void SurfaceIPCCore::computeHessian(EigenSupport::ConstRefVecXd pos, SpMatD &hess) const
 {
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kHessian);
-  prepareForSurfacePositions(pos);
-  computeHessianWithPreparedPairs(hess);
+  computeHessian(buildActiveSet(pos), hess);
 }
 
-void SurfaceIPCCore::computeHessianWithPreparedPairs(SpMatD &hess) const
+void SurfaceIPCCore::computeHessian(const SurfaceIPCActiveSet &activeSet, SpMatD &hess) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedHessian);
-  requirePreparedState();
-  SurfaceIPCBarrierAssembler().computeHessian(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, hess);
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kActiveSetHessian);
+  computeSelfHessian(activeSet.positions, activeSet.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, hess);
+  if (!obstacles_.empty()) {
+    computeExternalHessian(
+      activeSet.positions, obstacles_, activeSet.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, hess);
+  }
+  if (auto logger = Logging::lgr(); logger)
+    SPDLOG_LOGGER_INFO(logger, "# nonzeros in Hessian: {}", hess.nonZeros());
 }
 
 // =========================================================================
@@ -207,14 +212,48 @@ void SurfaceIPCCore::computeAll(EigenSupport::ConstRefVecXd x,
   double &energy, VXd &grad, SpMatD &hess) const
 {
   Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kCombined);
-  prepareForSurfacePositions(x);
-  computeAllWithPreparedPairs(energy, grad, hess);
+  computeAll(buildActiveSet(x), energy, grad, hess);
 }
 
-void SurfaceIPCCore::computeAllWithPreparedPairs(double &energy, VXd &grad, SpMatD &hess) const
+void SurfaceIPCCore::computeAll(const SurfaceIPCActiveSet &activeSet, double &energy, VXd &grad, SpMatD &hess) const
 {
-  requirePreparedState();
-  SurfaceIPCBarrierAssembler().computeAll(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, energy, grad, hess);
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kActiveSetCombined);
+  computeSelfAll(activeSet.positions, activeSet.selfPairs, topology_.numVerts, dhat, kappa, eps_ee, energy, grad, hess);
+  if (!obstacles_.empty()) {
+    double extEnergy = 0.0;
+    computeExternalAll(
+      activeSet.positions, obstacles_, activeSet.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, extEnergy, grad, hess);
+    energy += extEnergy;
+  }
+  if (auto logger = Logging::lgr(); logger)
+    SPDLOG_LOGGER_INFO(logger, "# nonzeros in Hessian: {}", hess.nonZeros());
+}
+
+// =========================================================================
+//  Obstacle (external) registration
+// =========================================================================
+void SurfaceIPCCore::setObstacles(std::vector<ObstacleSurface> obstacles)
+{
+  obstacles_ = std::move(obstacles);
+  staticObstacles_.assign(obstacles_.size(), false);
+  for (std::size_t slot = 0; slot < obstacles_.size(); ++slot)
+    obstacles_[slot].setObjectId(static_cast<int32_t>(slot));
+}
+
+void SurfaceIPCCore::markObstacleStatic(int32_t objectId)
+{
+  if (objectId < 0 || static_cast<std::size_t>(objectId) >= obstacles_.size())
+    return;
+  staticObstacles_[static_cast<std::size_t>(objectId)] = true;
+  obstacles_[static_cast<std::size_t>(objectId)].update(0.0);
+}
+
+void SurfaceIPCCore::setObstacleTime(double t)
+{
+  for (std::size_t i = 0; i < obstacles_.size(); ++i) {
+    if (!staticObstacles_[i])
+      obstacles_[i].update(t);
+  }
 }
 
 }  // namespace CIPC

@@ -76,6 +76,81 @@ void ImplicitBackwardEulerEnergy::hessian(ES::ConstRefVecXd x, ES::SpMatD &hess)
   (ES::Mp<ES::VXd>(hess.valuePtr(), hess.nonZeros())) +=ES::Mp<const ES::VXd>(intg->A.valuePtr(), intg->A.nonZeros());
 }
 
+void ImplicitBackwardEulerEnergy::gradient_hessian(ES::ConstRefVecXd x, ES::RefVecXd grad, ES::SpMatD &hess) const
+{
+  ES::mv(intg->A, x, grad, 0);
+
+  hess = intg->hessianAll;
+  memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
+  (ES::Mp<ES::VXd>(hess.valuePtr(), hess.nonZeros())) += ES::Mp<const ES::VXd>(intg->A.valuePtr(), intg->A.nonZeros());
+
+  for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
+    ES::VXd &fint = *intg->implicitModelsAll_fint[i];
+    fint.setZero();
+
+    if (intg->implicitModelsAll[i]->isHessianTopologyFixed()) {
+      ES::SpMatD &K = *intg->implicitModelsAll_K[i];
+      const ES::SpMatI &mapping = *intg->implicitModelsAll_Kmaping[i];
+
+      intg->implicitModelsAll[i]->gradient(x, fint);
+      intg->implicitModelsAll[i]->hessian(x, K);
+      ES::addSmallToBig(1.0, K, hess, 1.0, mapping, 1);
+    }
+    else {
+      ES::SpMatD Ki;
+      intg->implicitModelsAll[i]->gradient_hessian(x, fint, Ki);
+      if (Ki.nonZeros())
+        hess = hess + Ki;
+    }
+
+    grad += fint;
+  }
+
+  grad -= intg->b;
+}
+
+double ImplicitBackwardEulerEnergy::func_grad_hessian(ES::ConstRefVecXd x, ES::RefVecXd grad, ES::SpMatD &hess) const
+{
+  // x is u (the full position)
+  // A·u
+  ES::mv(intg->A, x, grad, 0);
+
+  // 0.5·uᵀ·A·u
+  double energy = ES::vTMv(intg->A, x, intg->temp0, 0) * 0.5;
+
+  hess = intg->hessianAll;
+  memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
+  (ES::Mp<ES::VXd>(hess.valuePtr(), hess.nonZeros())) += ES::Mp<const ES::VXd>(intg->A.valuePtr(), intg->A.nonZeros());
+
+  for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
+    ES::VXd &fint = *intg->implicitModelsAll_fint[i];
+    fint.setZero();
+
+    if (intg->implicitModelsAll[i]->isHessianTopologyFixed()) {
+      // Material: energy + gradient + hessian separately
+      energy += intg->implicitModelsAll[i]->func(x);
+
+      ES::SpMatD &K = *intg->implicitModelsAll_K[i];
+      const ES::SpMatI &mapping = *intg->implicitModelsAll_Kmaping[i];
+      intg->implicitModelsAll[i]->gradient(x, fint);
+      intg->implicitModelsAll[i]->hessian(x, K);
+      ES::addSmallToBig(1.0, K, hess, 1.0, mapping, 1);
+    }
+    else {
+      // IPC: combined energy + gradient + hessian (1 buildActiveSet)
+      ES::SpMatD Ki;
+      energy += intg->implicitModelsAll[i]->func_grad_hessian(x, fint, Ki);
+      if (Ki.nonZeros())
+        hess = hess + Ki;
+    }
+    grad += fint;
+  }
+
+  energy -= x.dot(intg->b);
+  grad -= intg->b;
+  return energy;
+}
+
 void ImplicitBackwardEulerEnergy::getDOFs(std::vector<int> &dofs) const
 {
   dofs = intg->allDOFs;

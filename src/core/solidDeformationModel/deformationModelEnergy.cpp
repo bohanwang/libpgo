@@ -6,6 +6,7 @@ copyright to USC,MIT,NUS
 #include "deformationModelEnergy.h"
 
 #include "deformationModelAssembler.h"
+#include "scopedProfileSection.h"
 #include "simulationMesh.h"
 #include "pgoLogging.h"
 
@@ -68,6 +69,7 @@ DeformationModelEnergy::~DeformationModelEnergy()
 
 double DeformationModelEnergy::func(EigenSupport::ConstRefVecXd x) const
 {
+  Profiling::ScopedProfileSection scopedProfile("material.energy");
   if (restPosition.size()) {
     ES::VXd p = restPosition + x.segment(allDOFs[0], restPosition.size());
     return forceModelAssembler->computeEnergy(p.data(), plasticParams.data(), elasticParams.data());
@@ -78,6 +80,7 @@ double DeformationModelEnergy::func(EigenSupport::ConstRefVecXd x) const
 
 void DeformationModelEnergy::gradient(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad) const
 {
+  Profiling::ScopedProfileSection scopedProfile("material.gradient");
   if (restPosition.size()) {
     ES::VXd p = restPosition + x.segment(allDOFs[0], restPosition.size());
     forceModelAssembler->computeGradient(p.data(), plasticParams.data(), elasticParams.data(), grad.data());
@@ -89,6 +92,7 @@ void DeformationModelEnergy::gradient(EigenSupport::ConstRefVecXd x, EigenSuppor
 
 void DeformationModelEnergy::hessian(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const
 {
+  Profiling::ScopedProfileSection scopedProfile("material.hessian");
   if (restPosition.size()) {
     ES::VXd p = restPosition + x.segment(allDOFs[0], restPosition.size());
     forceModelAssembler->computeHessian(p.data(), plasticParams.data(), elasticParams.data(), hess);
@@ -105,6 +109,7 @@ void DeformationModelEnergy::createHessian(EigenSupport::SpMatD &hess) const
 
 NonlinearOptimization::MaxStepResult DeformationModelEnergy::computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
 {
+  Profiling::ScopedProfileSection scopedProfile("material.max_step");
   if (!enableMaterialMaxStep_) {
     return NonlinearOptimization::MaxStepResult::unconstrained();
   }

@@ -20,6 +20,8 @@ public:
   virtual double func(EigenSupport::ConstRefVecXd x) const override;
   virtual void gradient(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad) const override;
   virtual void hessian(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const override;
+  virtual double func_grad_hessian(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad, EigenSupport::SpMatD &hess) const override;
+  virtual void gradient_hessian(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad, EigenSupport::SpMatD &hess) const override;
   virtual void createHessian(EigenSupport::SpMatD &hess) const override;
   virtual void getDOFs(std::vector<int> &dofs) const override;
   virtual int getNumDOFs() const override;

@@ -51,12 +51,8 @@ public:
   virtual int isHessianTopologyFixed() const override { return 0; }
   virtual void hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const override;
 
-  const std::vector<PTPair> &getPTPairs() const { return core.getPTPairs(); }
-  const std::vector<EEPair> &getEEPairs() const { return core.getEEPairs(); }
-
 private:
   void syncCoreParametersFromWrapper() const;
-  void ensurePreparedForSurfacePositions(const VXd &x_surf) const;
   VXd toSurfacePositions(EigenSupport::ConstRefVecXd x) const;
   VXd toSurfaceDisplacements(EigenSupport::ConstRefVecXd dx) const;
   double computeFloorEnergy(const VXd &x_surf) const;

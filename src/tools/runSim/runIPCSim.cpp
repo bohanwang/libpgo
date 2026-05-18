@@ -233,7 +233,7 @@ int main(int argc, char *argv[])
     const int frameGap = jconfig.getInt("dump-interval", 1);
     const std::string simType = jconfig.getString("sim-type");
     if (simType != "dynamic")
-      throw std::invalid_argument("runIPCSim phase1D only supports `sim-type = dynamic`.");
+      throw std::invalid_argument("runIPCSim phase2 only supports `sim-type = dynamic`.");
     const std::filesystem::path outputFolder = jconfig.getResolvedPath("output", 1);
     const OutputDirectories outputDirs = makeOutputDirectories(outputFolder);
     const bool restartFromU = jconfig.exist("restart-from-u") ? jconfig.getValue<bool>("restart-from-u", 1) : false;
@@ -354,6 +354,8 @@ int main(int argc, char *argv[])
         intg->setExternalForce(fext.data());
       }
       intg->setqState(u, uvel, uacc);
+      const double tCurr = static_cast<double>(framei) * timestep;
+      context.collisionHandler->setObstacleTime(tCurr + timestep);
       intg->doTimestep(1, 3, 1);
       executedStep = true;
       intg->getq(u);

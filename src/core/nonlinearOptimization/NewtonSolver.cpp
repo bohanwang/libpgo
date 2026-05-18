@@ -3,6 +3,7 @@
 #include "EigenSupport.h"
 #include "lineSearch.h"
 #include "pgoLogging.h"
+#include "scopedProfileSection.h"
 
 #include <cmath>
 #include <iostream>
@@ -170,17 +171,16 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     if (verbose >= 2 && iter % printGap == 0)
       std::cout << "    Iter=" << iter << std::endl;
 
-    double eng = energy->func(x);
+    // we solve f(x_i) + K(x_i) deltax = 0
+    memset(grad.data(), 0, sizeof(double) * grad.size());
+    double eng = energy->func_grad_hessian(x, grad, sysFull);
     if (!std::isfinite(eng)) {
       status = static_cast<int>(SolveStatus::NonFinite);
       if (verbose >= 1)
         std::cout << "    Iter=" << iter << "; energy is non-finite; status=" << solveStatusToString(status) << std::endl;
       break;
     }
-
-    // we solve f(x_i) + K(x_i) deltax = 0
-    memset(grad.data(), 0, sizeof(double) * grad.size());
-    energy->gradient(x, grad);
+    sysFull.makeCompressed();
     filterVector(grad);
 
     double gradMaxNorm = grad.cwiseAbs().maxCoeff();
@@ -225,15 +225,6 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
       }
     }
 
-    if (energy->isHessianTopologyFixed()) {
-      memset(sysFull.valuePtr(), 0, sizeof(double) * sysFull.nonZeros());
-      energy->hessian(x, sysFull);
-    }
-    else {
-      energy->hessianDirect(x, sysFull);
-      sysFull.makeCompressed();
-    }
-
     // grad too small, we don't need damping
     if (gradMaxNorm < 1e-4) {
       lambdaScale = 0.0;
@@ -261,7 +252,8 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     // std::cout << "        Damping lambda=" << lambda << std::endl;
 
     // remove column rows
-    if (energy->isHessianTopologyFixed()) {
+    const bool fixedHessianTopology = energy->isHessianTopologyFixed();
+    if (fixedHessianTopology) {
       ES::transferBigToSmall(sysFull, A11, A11Mapping, 1);
     }
     else {
@@ -290,7 +282,7 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     // }
     // std::cout << std::endl;
 
-    if (!energy->isHessianTopologyFixed() || solver == nullptr) {
+    if (!fixedHessianTopology || solver == nullptr) {
 #if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
       solver = std::make_shared<ES::EigenMKLPardisoSupport>(A11, ES::EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
         ES::EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
@@ -306,17 +298,26 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     }
 
 #if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
-    solver->factorize(A11);
-    solver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
+    {
+      Profiling::ScopedProfileSection scopedProfile("solver.linear_solve");
+      solver->factorize(A11);
+      solver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
+    }
 #elif defined(PGO_HAS_ORIG_PARDISO)
-    solver->factorize(A11);
-    solver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
+    {
+      Profiling::ScopedProfileSection scopedProfile("solver.linear_solve");
+      solver->factorize(A11);
+      solver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
+    }
 #else
-    solver->factorize(A11);
-    deltaxSmall.noalias() = solver->solve(rhs);
+    {
+      Profiling::ScopedProfileSection scopedProfile("solver.linear_solve");
+      solver->factorize(A11);
+      deltaxSmall.noalias() = solver->solve(rhs);
+    }
 #endif
 
-    if (energy->isHessianTopologyFixed()) {
+    if (fixedHessianTopology) {
       solver.reset();  // free symbolic factorization memory since we won't reuse it anymore
     }
 

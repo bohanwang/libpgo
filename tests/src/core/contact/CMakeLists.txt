@@ -33,10 +33,20 @@ target_link_libraries(surfaceIPCSelfBroadPhase_gtest PRIVATE GTest::gtest_main c
 set_property(TARGET surfaceIPCSelfBroadPhase_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(surfaceIPCSelfBroadPhase_gtest)
 
+add_executable(surfaceIPCExternalBroadPhase_gtest surfaceIPCExternalBroadPhase_gtest.cpp)
+target_link_libraries(surfaceIPCExternalBroadPhase_gtest PRIVATE GTest::gtest_main contact)
+set_property(TARGET surfaceIPCExternalBroadPhase_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(surfaceIPCExternalBroadPhase_gtest)
+
 add_executable(surfaceIPCMaxStep_gtest surfaceIPCMaxStep_gtest.cpp)
 target_link_libraries(surfaceIPCMaxStep_gtest PRIVATE GTest::gtest_main contact)
 set_property(TARGET surfaceIPCMaxStep_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(surfaceIPCMaxStep_gtest)
+
+add_executable(surfaceIPCExternalMaxStep_gtest surfaceIPCExternalMaxStep_gtest.cpp)
+target_link_libraries(surfaceIPCExternalMaxStep_gtest PRIVATE GTest::gtest_main contact)
+set_property(TARGET surfaceIPCExternalMaxStep_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(surfaceIPCExternalMaxStep_gtest)
 
 add_executable(surfaceIPCBarrierAssembler_gtest surfaceIPCBarrierAssembler_gtest.cpp)
 target_link_libraries(surfaceIPCBarrierAssembler_gtest PRIVATE GTest::gtest_main contact)

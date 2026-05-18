@@ -5,6 +5,7 @@ copyright to Bohan Wang
 #include "surfaceIPCTopology.h"
 
 #include <set>
+#include <stdexcept>
 
 namespace pgo
 {
@@ -15,6 +16,13 @@ namespace CIPC
 
 void SurfaceIPCTopology::setMesh(const EigenSupport::MXd &V, const EigenSupport::MXi &F)
 {
+  if (V.cols() != 3)
+    throw std::invalid_argument("SurfaceIPCTopology: V must be an N x 3 vertex matrix.");
+  if (F.cols() != 3)
+    throw std::invalid_argument("SurfaceIPCTopology: F must be an N x 3 triangle index matrix.");
+  if (F.size() > 0 && (F.minCoeff() < 0 || F.maxCoeff() >= V.rows()))
+    throw std::invalid_argument("SurfaceIPCTopology: F contains an out-of-range vertex index.");
+
   numVerts = static_cast<int>(V.rows());
   triangles.resize(F.rows());
   for (int i = 0; i < static_cast<int>(F.rows()); ++i)

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "backend": "tetwild",
+  "input_mesh": "bunny_small.obj",
+  "output_mesh": "bunny.veg",
+  "material": {
+    "density": 1000,
+    "young_modulus": 100000,
+    "poisson_ratio": 0.45
+  },
+  "tetwild": {
+    "lr": 0.15,
+    "epsr": 0.01,
+    "stop_energy": 10.0
+  },
+  "print_stats": true
+}

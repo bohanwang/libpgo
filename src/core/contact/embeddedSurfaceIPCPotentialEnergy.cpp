@@ -17,9 +17,10 @@ EmbeddedSurfaceIPCPotentialEnergy::EmbeddedSurfaceIPCPotentialEnergy(
   const EigenSupport::MXd &surfaceRestVertices,
   const EigenSupport::MXi &surfaceTriangles,
   const EigenSupport::SpMatD &surfaceFromSimulationDispMap,
-  const SurfaceIPCCore::Parameters &ipcParams):
+  const SurfaceIPCCore::Parameters &ipcParams,
+  std::vector<ObstacleSurface> obstacleSurfaces):
   MappedSurfacePotentialEnergy(surfaceRestVertices, surfaceFromSimulationDispMap),
-  surfaceIPCCore_(ipcParams)
+  surfaceIPCCore_(ipcParams, std::move(obstacleSurfaces))
 {
   if (surfaceTriangles.cols() != 3)
     throw std::invalid_argument("surfaceTriangles must be an M x 3 triangle index matrix.");
@@ -32,33 +33,55 @@ EmbeddedSurfaceIPCPotentialEnergy::EmbeddedSurfaceIPCPotentialEnergy(
   surfaceIPCCore_.setMesh(surfaceRestVertices, surfaceTriangles);
 }
 
-void EmbeddedSurfaceIPCPotentialEnergy::ensurePreparedForSurfacePositions(
-  EigenSupport::ConstRefVecXd surfacePositions) const
-{
-  if (!surfaceIPCCore_.isPreparedFor(surfacePositions))
-    surfaceIPCCore_.prepareForSurfacePositions(surfacePositions);
-}
-
 double EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const
 {
-  ensurePreparedForSurfacePositions(surfacePositions);
-  return surfaceIPCCore_.computeEnergyWithPreparedPairs();
+  return surfaceIPCCore_.computeEnergy(surfacePositions);
 }
 
 void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceGradient(
   EigenSupport::ConstRefVecXd surfacePositions,
   EigenSupport::RefVecXd surfaceGradient) const
 {
-  ensurePreparedForSurfacePositions(surfacePositions);
-  surfaceIPCCore_.computeGradientWithPreparedPairs(surfaceGradient);
+  surfaceIPCCore_.computeGradient(surfacePositions, surfaceGradient);
 }
 
 void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceHessian(
   EigenSupport::ConstRefVecXd surfacePositions,
   EigenSupport::SpMatD &surfaceHessian) const
 {
-  ensurePreparedForSurfacePositions(surfacePositions);
-  surfaceIPCCore_.computeHessianWithPreparedPairs(surfaceHessian);
+  surfaceIPCCore_.computeHessian(surfacePositions, surfaceHessian);
+}
+
+void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceGradHessian(
+  EigenSupport::ConstRefVecXd surfacePositions,
+  EigenSupport::RefVecXd surfaceGradient,
+  EigenSupport::SpMatD &surfaceHessian) const
+{
+  const SurfaceIPCActiveSet activeSet = surfaceIPCCore_.buildActiveSet(surfacePositions);
+  surfaceIPCCore_.computeGradient(activeSet, surfaceGradient);
+  surfaceIPCCore_.computeHessian(activeSet, surfaceHessian);
+}
+
+void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceFuncGrad(
+  EigenSupport::ConstRefVecXd surfacePositions,
+  double &surfaceEnergy,
+  EigenSupport::RefVecXd surfaceGradient) const
+{
+  const SurfaceIPCActiveSet activeSet = surfaceIPCCore_.buildActiveSet(surfacePositions);
+  surfaceEnergy = surfaceIPCCore_.computeEnergy(activeSet);
+  surfaceIPCCore_.computeGradient(activeSet, surfaceGradient);
+}
+
+void EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceAll(
+  EigenSupport::ConstRefVecXd surfacePositions,
+  double &surfaceEnergy,
+  EigenSupport::RefVecXd surfaceGradient,
+  EigenSupport::SpMatD &surfaceHessian) const
+{
+  const SurfaceIPCActiveSet activeSet = surfaceIPCCore_.buildActiveSet(surfacePositions);
+  EigenSupport::VXd localGradient = EigenSupport::VXd::Zero(surfaceGradient.size());
+  surfaceIPCCore_.computeAll(activeSet, surfaceEnergy, localGradient, surfaceHessian);
+  surfaceGradient = localGradient;
 }
 
 NonlinearOptimization::MaxStepResult EmbeddedSurfaceIPCPotentialEnergy::computeSurfaceMaxStepLimit(
@@ -66,6 +89,16 @@ NonlinearOptimization::MaxStepResult EmbeddedSurfaceIPCPotentialEnergy::computeS
   EigenSupport::ConstRefVecXd surfaceDisplacements) const
 {
   return surfaceIPCCore_.computeMaxStepLimit(surfacePositions, surfaceDisplacements);
+}
+
+void EmbeddedSurfaceIPCPotentialEnergy::setObstacleTime(double t)
+{
+  surfaceIPCCore_.setObstacleTime(t);
+}
+
+void EmbeddedSurfaceIPCPotentialEnergy::markObstacleStatic(int32_t objectId)
+{
+  surfaceIPCCore_.markObstacleStatic(objectId);
 }
 
 }  // namespace CIPC

@@ -45,7 +45,7 @@ if(TARGET Ipopt::Ipopt)
   set(NONLINEAROPTIMIZATION_SOURCES ${NONLINEAROPTIMIZATION_SOURCES} IpoptProblem.cpp IpoptOptimizer.cpp)
 endif()
 
-set(NONLINEAROPTIMIZATION_DEPS eigenSupport pgoLogging autodiff::autodiff)
+set(NONLINEAROPTIMIZATION_DEPS eigenSupport pgoLogging autodiff::autodiff profiling)
 
 foreach(tgt ${NONLINEAROPTIMIZATION_DEPS})
   if(NOT TARGET ${tgt})

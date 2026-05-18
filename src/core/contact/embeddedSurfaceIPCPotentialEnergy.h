@@ -6,6 +6,7 @@ copyright to Bohan Wang
 
 #include "mappedSurfacePotentialEnergy.h"
 #include "ipc/core/surfaceIPCCore.h"
+#include "ipc/external/obstacleSurface.h"
 
 #include <vector>
 
@@ -25,7 +26,11 @@ public:
     const EigenSupport::MXd &surfaceRestVertices,
     const EigenSupport::MXi &surfaceTriangles,
     const EigenSupport::SpMatD &surfaceFromSimulationDispMap,
-    const SurfaceIPCCore::Parameters &ipcParams = {});
+    const SurfaceIPCCore::Parameters &ipcParams = {},
+    std::vector<ObstacleSurface> obstacleSurfaces = {});
+
+  void setObstacleTime(double t);
+  void markObstacleStatic(int32_t objectId);
 
 private:
   virtual double computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const override;
@@ -35,11 +40,22 @@ private:
   virtual void computeSurfaceHessian(
     EigenSupport::ConstRefVecXd surfacePositions,
     EigenSupport::SpMatD &surfaceHessian) const override;
+  virtual void computeSurfaceGradHessian(
+    EigenSupport::ConstRefVecXd surfacePositions,
+    EigenSupport::RefVecXd surfaceGradient,
+    EigenSupport::SpMatD &surfaceHessian) const override;
+  virtual void computeSurfaceFuncGrad(
+    EigenSupport::ConstRefVecXd surfacePositions,
+    double &surfaceEnergy,
+    EigenSupport::RefVecXd surfaceGradient) const override;
+  virtual void computeSurfaceAll(
+    EigenSupport::ConstRefVecXd surfacePositions,
+    double &surfaceEnergy,
+    EigenSupport::RefVecXd surfaceGradient,
+    EigenSupport::SpMatD &surfaceHessian) const override;
   virtual NonlinearOptimization::MaxStepResult computeSurfaceMaxStepLimit(
     EigenSupport::ConstRefVecXd surfacePositions,
     EigenSupport::ConstRefVecXd surfaceDisplacements) const override;
-
-  void ensurePreparedForSurfacePositions(EigenSupport::ConstRefVecXd surfacePositions) const;
 
   SurfaceIPCCore surfaceIPCCore_;
 };

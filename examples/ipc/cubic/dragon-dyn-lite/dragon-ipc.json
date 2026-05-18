@@ -1,13 +1,11 @@
 {
-  "cubic-mesh": "box-with-sphere.veg",
-  "surface-mesh": "box-with-sphere.obj",
+  "cubic-mesh": "dragon.veg",
+  "surface-mesh": "dragon.obj",
   "fixed-vertices": [],
-  "floors": [
+  "external-objects": [
     {
-      "axis": "y",
-      "side": "lower",
-      "height": -1.0,
-      "kappa": 1000.0
+      "filename": "bottom.obj",
+      "movement": [0, 0, 0]
     }
   ],
   "g": [0, -9.81, 0],
@@ -15,15 +13,16 @@
   "init-disp": [0, 0, 0],
   "scale": 1.0,
   "timestep": 0.001,
-  "num-timestep": 2000,
+  "num-timestep": 4000,
   "damping-params": [0, 0],
   "sim-type": "dynamic",
-  "solver-eps": 1e-3,
+  "solver-eps": 1e-4,
   "solver-max-iter": 200,
   "elastic-material": "stable-neo",
   "dump-interval": 10,
-  "output": "ret-box-with-sphere-ipc",
+  "output": "ret-cubic-dragon-dyn-lite-ipc",
   "ipc-dhat": 0.002,
   "ipc-kappa": 3000.0,
+  "ipc-dhat-external": 0.005,
   "enable-material-max-step": true
 }
