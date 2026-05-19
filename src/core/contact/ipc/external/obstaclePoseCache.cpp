@@ -30,6 +30,17 @@ void buildObstaclePoseCache(
   cache.triBoxes.resize(nTri);
   cache.edgeBoxes.resize(nEdge);
 
+  cache.hasSurfaceBox = nVerts > 0;
+  if (cache.hasSurfaceBox) {
+    cache.surfaceBox.init(positions.segment<3>(0), 0.0);
+    for (int vi = 1; vi < nVerts; ++vi)
+      cache.surfaceBox.expand(positions.segment<3>(3 * vi));
+  }
+  else {
+    cache.surfaceBox.lo.setZero();
+    cache.surfaceBox.hi.setZero();
+  }
+
   // Per-vertex degenerate point AABBs.
   tbb::parallel_for(tbb::blocked_range<int>(0, nVerts),
     [&](const tbb::blocked_range<int> &r) {
@@ -78,15 +89,11 @@ void buildObstaclePoseCache(
   // Rebuild spatial hashes. clear() retains bucket capacity so steady-state
   // refresh is rehash-free. Inserts are sequential (SpatialHashGrid is not
   // thread-safe).
-  cache.triHash.clear();
   cache.triHash.setCellSize(cache.cellSize);
-  for (int fi = 0; fi < nTri; ++fi)
-    cache.triHash.insert(cache.triBoxes[fi], fi);
+  cache.triHash.build(cache.triBoxes);
 
-  cache.edgeHash.clear();
   cache.edgeHash.setCellSize(cache.cellSize);
-  for (int ei = 0; ei < nEdge; ++ei)
-    cache.edgeHash.insert(cache.edgeBoxes[ei], ei);
+  cache.edgeHash.build(cache.edgeBoxes);
 }
 
 }  // namespace CIPC

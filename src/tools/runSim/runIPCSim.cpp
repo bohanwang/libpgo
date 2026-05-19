@@ -170,6 +170,13 @@ void logProfileSummary()
       "profile name={} callCount={} totalSeconds={} maxSeconds={}",
       stat.name, stat.callCount, stat.totalSeconds, stat.maxSeconds);
   }
+
+  const std::vector<pgo::Profiling::ProfileCounterStat> counterStats = pgo::Profiling::snapshotProfileCounterStatistics();
+  for (const pgo::Profiling::ProfileCounterStat &stat : counterStats) {
+    SPDLOG_LOGGER_INFO(logger,
+      "profileCounter name={} sampleCount={} total={} max={}",
+      stat.name, stat.sampleCount, stat.total, stat.max);
+  }
 }
 
 double floorHeightAtFrame(const pgo::RunIPCSim::IpcFloorMotionState &motion, int frame)

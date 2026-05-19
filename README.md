@@ -198,6 +198,7 @@ Run named IPC batches from the JSON config:
 ```bash
 scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job squash_regression --dry-run
 scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job squash_regression --skip-existing
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --case cubic_box_with_sphere_lite --overwrite
 scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job all_ipc_abc
 ```
 
@@ -217,7 +218,8 @@ scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job sim --overwr
 Run representative IPC cases from the repo root:
 
 ```bash
-build/base_no_mkl/bin/runIPCSim examples/ipc/shell/shell-ipc.json
+build/base_no_mkl/bin/runIPCSim examples/ipc/shell/shell-hang/shell-ipc.json
+build/base_no_mkl/bin/runIPCSim examples/ipc/shell/shell-drop/shell-ipc.json
 build/base_no_mkl/bin/runIPCSim examples/ipc/tet/box-hang/box-ipc.json
 build/base_no_mkl/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc.json
 ```
@@ -225,7 +227,8 @@ build/base_no_mkl/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc.json
 Convert dumped frame sequences to Alembic:
 
 ```bash
-build/base_no_mkl/bin/convertAnimation examples/ipc/shell/anim.json
+build/base_no_mkl/bin/convertAnimation examples/ipc/shell/shell-hang/anim.json
+build/base_no_mkl/bin/convertAnimation examples/ipc/shell/shell-drop/anim.json
 build/base_no_mkl/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
 build/base_no_mkl/bin/convertAnimation examples/ipc/cubic/box-with-sphere/anim.json
 ```

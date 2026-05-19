@@ -1,6 +1,5 @@
 {
-  "cubic-mesh": "box.veg",
-  "surface-mesh": "box.obj",
+  "surface-mesh": "shell.obj",
   "fixed-vertices": [],
   "external-objects": [
     {
@@ -13,16 +12,13 @@
   "init-disp": [0, 0, 0],
   "scale": 1.0,
   "timestep": 0.001,
-  "num-timestep": 2000,
+  "num-timestep": 10000,
   "damping-params": [0, 0],
   "sim-type": "dynamic",
   "solver-eps": 1e-4,
   "solver-max-iter": 200,
-  "elastic-material": "stable-neo",
+  "elastic-material": "koiter-stvk",
   "dump-interval": 10,
-  "output": "ret-box-ipc",
-  "ipc-dhat": 0.002,
-  "ipc-kappa": 3000.0,
-  "ipc-dhat-external": 0.005,
-  "enable-material-max-step": false
+  "output": "ret-shell-drop-ipc",
+  "ipc-heuristic": true
 }

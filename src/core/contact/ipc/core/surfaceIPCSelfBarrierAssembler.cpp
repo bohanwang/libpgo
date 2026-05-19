@@ -1,11 +1,15 @@
 #include "surfaceIPCSelfBarrierAssembler.h"
 #include "surfaceIPCBarrierKernels.h"
 
+#include "scopedProfileSection.h"
+#include "ipc/profiling/surfaceIPCProfiling.h"
+
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <stdexcept>
 #include <vector>
@@ -231,6 +235,10 @@ void computeSelfAll(
   int nEE = (int)pairs.eePairs.size();
   int totalPairs = nPT + nEE;
 
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kActiveSetSelfCombined);
+  Profiling::recordProfileCounter(SurfaceIPCProfileSections::kActiveSetSelfPTPairCount, static_cast<std::uint64_t>(nPT));
+  Profiling::recordProfileCounter(SurfaceIPCProfileSections::kActiveSetSelfEEPairCount, static_cast<std::uint64_t>(nEE));
+
   energy = 0.0;
   grad.setZero(n);
   std::vector<TripletD> triplets(144 * totalPairs, TripletD(0, 0, 0.0));
@@ -238,44 +246,52 @@ void computeSelfAll(
   double dhat2 = dhat * dhat;
 
   // ---- PT pairs ----
-  double ptEnergy = tbb::parallel_reduce(
-    tbb::blocked_range<int>(0, nPT), 0.0,
-    [&](const tbb::blocked_range<int> &range, double localE) {
-      for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = pairs.ptPairs[i];
-        auto k = barrier_kernels::pointTriangle(
-          vtx(dynPos, pair.p), vtx(dynPos, pair.t0), vtx(dynPos, pair.t1), vtx(dynPos, pair.t2),
-          pair.weight, dhat2, kappa, true, true);
-        if (!k.active)
-          continue;
-        localE += k.energy;
-        int idx[4] = { pair.p, pair.t0, pair.t1, pair.t2 };
-        scatterSelfGrad(k.gradient, idx, grad);
-        scatterSelfHessian(i, k.hessian, idx, triplets);
-      }
-      return localE;
-    },
-    std::plus<double>());
+  double ptEnergy = 0.0;
+  {
+    Profiling::ScopedProfileSection ptProfile(SurfaceIPCProfileSections::kActiveSetSelfPTCombined);
+    ptEnergy = tbb::parallel_reduce(
+      tbb::blocked_range<int>(0, nPT), 0.0,
+      [&](const tbb::blocked_range<int> &range, double localE) {
+        for (int i = range.begin(); i < range.end(); ++i) {
+          auto &pair = pairs.ptPairs[i];
+          auto k = barrier_kernels::pointTriangle(
+            vtx(dynPos, pair.p), vtx(dynPos, pair.t0), vtx(dynPos, pair.t1), vtx(dynPos, pair.t2),
+            pair.weight, dhat2, kappa, true, true);
+          if (!k.active)
+            continue;
+          localE += k.energy;
+          int idx[4] = { pair.p, pair.t0, pair.t1, pair.t2 };
+          scatterSelfGrad(k.gradient, idx, grad);
+          scatterSelfHessian(i, k.hessian, idx, triplets);
+        }
+        return localE;
+      },
+      std::plus<double>());
+  }
 
   // ---- EE pairs ----
-  double eeEnergy = tbb::parallel_reduce(
-    tbb::blocked_range<int>(0, nEE), 0.0,
-    [&](const tbb::blocked_range<int> &range, double localE) {
-      for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = pairs.eePairs[i];
-        auto k = barrier_kernels::edgeEdge(
-          vtx(dynPos, pair.ea0), vtx(dynPos, pair.ea1), vtx(dynPos, pair.eb0), vtx(dynPos, pair.eb1),
-          pair.weight, dhat2, kappa, eps_ee, true, true);
-        if (!k.active)
-          continue;
-        localE += k.energy;
-        int idx[4] = { pair.ea0, pair.ea1, pair.eb0, pair.eb1 };
-        scatterSelfGrad(k.gradient, idx, grad);
-        scatterSelfHessian(nPT + i, k.hessian, idx, triplets);
-      }
-      return localE;
-    },
-    std::plus<double>());
+  double eeEnergy = 0.0;
+  {
+    Profiling::ScopedProfileSection eeProfile(SurfaceIPCProfileSections::kActiveSetSelfEECombined);
+    eeEnergy = tbb::parallel_reduce(
+      tbb::blocked_range<int>(0, nEE), 0.0,
+      [&](const tbb::blocked_range<int> &range, double localE) {
+        for (int i = range.begin(); i < range.end(); ++i) {
+          auto &pair = pairs.eePairs[i];
+          auto k = barrier_kernels::edgeEdge(
+            vtx(dynPos, pair.ea0), vtx(dynPos, pair.ea1), vtx(dynPos, pair.eb0), vtx(dynPos, pair.eb1),
+            pair.weight, dhat2, kappa, eps_ee, true, true);
+          if (!k.active)
+            continue;
+          localE += k.energy;
+          int idx[4] = { pair.ea0, pair.ea1, pair.eb0, pair.eb1 };
+          scatterSelfGrad(k.gradient, idx, grad);
+          scatterSelfHessian(nPT + i, k.hessian, idx, triplets);
+        }
+        return localE;
+      },
+      std::plus<double>());
+  }
 
   energy = ptEnergy + eeEnergy;
 

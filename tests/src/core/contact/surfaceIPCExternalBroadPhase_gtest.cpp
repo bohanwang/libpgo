@@ -33,12 +33,12 @@ static std::pair<ES::MXd, ES::MXi> makeUnitSquareMesh()
 {
   ES::MXd V(4, 3);
   V << 0.0, 0.0, 0.0,
-       1.0, 0.0, 0.0,
-       0.0, 1.0, 0.0,
-       1.0, 1.0, 0.0;
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    1.0, 1.0, 0.0;
   ES::MXi F(2, 3);
   F << 0, 1, 2,
-       1, 3, 2;
+    1, 3, 2;
   return { V, F };
 }
 
@@ -46,20 +46,20 @@ static std::pair<ES::MXd, ES::MXi> makeSmallBoxObstacle()
 {
   ES::MXd V(8, 3);
   V << -0.5, -0.5, -0.5,
-        0.5, -0.5, -0.5,
-        0.5,  0.5, -0.5,
-       -0.5,  0.5, -0.5,
-       -0.5, -0.5,  0.5,
-        0.5, -0.5,  0.5,
-        0.5,  0.5,  0.5,
-       -0.5,  0.5,  0.5;
+    0.5, -0.5, -0.5,
+    0.5, 0.5, -0.5,
+    -0.5, 0.5, -0.5,
+    -0.5, -0.5, 0.5,
+    0.5, -0.5, 0.5,
+    0.5, 0.5, 0.5,
+    -0.5, 0.5, 0.5;
   ES::MXi F(12, 3);
-  F << 0, 2, 1,  0, 3, 2,
-       4, 5, 6,  4, 6, 7,
-       0, 1, 5,  0, 5, 4,
-       1, 2, 6,  1, 6, 5,
-       2, 3, 7,  2, 7, 6,
-       3, 0, 4,  3, 4, 7;
+  F << 0, 2, 1, 0, 3, 2,
+    4, 5, 6, 4, 6, 7,
+    0, 1, 5, 0, 5, 4,
+    1, 2, 6, 1, 6, 5,
+    2, 3, 7, 2, 7, 6,
+    3, 0, 4, 3, 4, 7;
   return { V, F };
 }
 
@@ -144,15 +144,15 @@ TEST(SurfaceIPCExternalBroadPhaseGTest, MovingObstacleProducesGoldenPairsAndWeig
 {
   ES::MXd V(3, 3);
   V << 0.0, 0.0, 0.0,
-       1.0, 0.0, 0.0,
-       0.0, 1.0, 0.0;
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0;
   ES::MXi F(1, 3);
   F << 0, 1, 2;
 
   ES::MXd obsV(3, 3);
   obsV << 0.0, 0.0, 0.2,
-          1.0, 0.0, 0.2,
-          0.0, 1.0, 0.2;
+    1.0, 0.0, 0.2,
+    0.0, 1.0, 0.2;
   ES::MXi obsF(1, 3);
   obsF << 0, 1, 2;
 
@@ -200,4 +200,30 @@ TEST(SurfaceIPCExternalBroadPhaseGTest, MovingObstacleProducesGoldenPairsAndWeig
       { 7, 1, 2, 0, 2, sqrtTwo },
       { 7, 1, 2, 1, 2, two },
     }));
+}
+
+TEST(SurfaceIPCExternalBroadPhaseGTest, ObstaclePoseCacheTracksSurfaceBounds)
+{
+  auto [obsV, obsF] = makeSmallBoxObstacle();
+  ObstacleSurface obs(
+    obsV, obsF,
+    pgo::Contact::CIPC::makeLinearTrajectorySampler(flattenRows(obsV), ES::V3d(1.0, 2.0, 3.0)));
+  obs.update(0.5);
+
+  const auto &surfaceBox = obs.cache().surfaceBox;
+  EXPECT_NEAR(surfaceBox.lo.x(), 0.0, 1e-12);
+  EXPECT_NEAR(surfaceBox.lo.y(), 0.5, 1e-12);
+  EXPECT_NEAR(surfaceBox.lo.z(), 1.0, 1e-12);
+  EXPECT_NEAR(surfaceBox.hi.x(), 1.0, 1e-12);
+  EXPECT_NEAR(surfaceBox.hi.y(), 1.5, 1e-12);
+  EXPECT_NEAR(surfaceBox.hi.z(), 2.0, 1e-12);
+
+  obs.update(1.0);
+  const auto &updatedBox = obs.cache().surfaceBox;
+  EXPECT_NEAR(updatedBox.lo.x(), 0.5, 1e-12);
+  EXPECT_NEAR(updatedBox.lo.y(), 1.5, 1e-12);
+  EXPECT_NEAR(updatedBox.lo.z(), 2.5, 1e-12);
+  EXPECT_NEAR(updatedBox.hi.x(), 1.5, 1e-12);
+  EXPECT_NEAR(updatedBox.hi.y(), 2.5, 1e-12);
+  EXPECT_NEAR(updatedBox.hi.z(), 3.5, 1e-12);
 }

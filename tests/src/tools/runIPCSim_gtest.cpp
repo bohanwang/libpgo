@@ -643,7 +643,10 @@ TEST(RunIPCSimCliGTest, ProfilingConfigWritesSummaryToOutputLog)
   const std::string contents = readTextFile(logPath);
   EXPECT_NE(contents.find("runIPCSim profiling summary:"), std::string::npos);
   EXPECT_NE(contents.find("profile name=contact.surface.pair_build.static"), std::string::npos);
+  EXPECT_NE(contents.find("profileCounter name=contact.surface.pair_build.self_pt.hash_candidates"), std::string::npos);
   EXPECT_NE(contents.find("callCount="), std::string::npos);
+  EXPECT_EQ(contents.find("SurfaceIPCCore active pairs:"), std::string::npos);
+  EXPECT_EQ(contents.find("# nonzeros in Hessian:"), std::string::npos);
 }
 
 TEST(RunIPCSimCliGTest, DefaultRunClearsOutputAndDoesNotRestartFromDeformState)

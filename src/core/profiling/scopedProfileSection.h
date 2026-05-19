@@ -17,11 +17,21 @@ struct ProfileStat
   double maxSeconds = 0.0;
 };
 
+struct ProfileCounterStat
+{
+  std::string name;
+  std::uint64_t sampleCount = 0;
+  std::uint64_t total = 0;
+  std::uint64_t max = 0;
+};
+
 void setProfilingEnabled(bool enabled);
 bool isProfilingEnabled();
 
 void resetProfileStatistics();
 std::vector<ProfileStat> snapshotProfileStatistics();
+void recordProfileCounter(std::string_view name, std::uint64_t value);
+std::vector<ProfileCounterStat> snapshotProfileCounterStatistics();
 
 class ScopedProfileSection
 {

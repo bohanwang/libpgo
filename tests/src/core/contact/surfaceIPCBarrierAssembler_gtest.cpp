@@ -2,16 +2,26 @@
 
 #include "ipc/broadPhase/surfaceIPCBroadPhase.h"
 #include "ipc/core/surfaceIPCSelfBarrierAssembler.h"
+#include "ipc/core/surfaceIPCExternalBarrierAssembler.h"
 #include "ipc/core/surfaceIPCBarrierKernels.h"
+#include "ipc/external/obstacleSurface.h"
+#include "ipc/profiling/surfaceIPCProfiling.h"
 #include "ipc/topology/surfaceIPCTopology.h"
 #include "ipc/core/surfaceIPCCore.h"
+#include "scopedProfileSection.h"
 
 #include "testCIPCHelpers.h"
+
+#include <algorithm>
+#include <string_view>
+#include <vector>
 
 namespace
 {
 namespace ES = pgo::EigenSupport;
+using pgo::Contact::CIPC::ExternalPairSet;
 using pgo::Contact::CIPC::EEPair;
+using pgo::Contact::CIPC::ObstacleSurface;
 using pgo::Contact::CIPC::PTPair;
 using pgo::Contact::CIPC::SelfPairSet;
 using pgo::Contact::CIPC::SurfaceIPCCore;
@@ -20,7 +30,39 @@ using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
 using pgo::Contact::CIPCTest::relativeError;
 using pgo::Contact::CIPCTest::sparseToDense;
+using pgo::Profiling::ProfileCounterStat;
+using pgo::Profiling::ProfileStat;
 namespace kernels = pgo::Contact::CIPC::barrier_kernels;
+
+const ProfileStat *findStat(const std::vector<ProfileStat> &stats, std::string_view name)
+{
+  const auto it = std::find_if(stats.begin(), stats.end(),
+    [name](const ProfileStat &stat) { return stat.name == name; });
+  return it == stats.end() ? nullptr : &(*it);
+}
+
+const ProfileCounterStat *findCounterStat(const std::vector<ProfileCounterStat> &stats, std::string_view name)
+{
+  const auto it = std::find_if(stats.begin(), stats.end(),
+    [name](const ProfileCounterStat &stat) { return stat.name == name; });
+  return it == stats.end() ? nullptr : &(*it);
+}
+
+class SurfaceIPCBarrierAssemblerProfilingGTest : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    pgo::Profiling::setProfilingEnabled(false);
+    pgo::Profiling::resetProfileStatistics();
+  }
+
+  void TearDown() override
+  {
+    pgo::Profiling::setProfilingEnabled(false);
+    pgo::Profiling::resetProfileStatistics();
+  }
+};
 }  // namespace
 
 TEST(SurfaceIPCBarrierAssemblerGTest, HelperMatchesSurfaceIPCCoreAssembly)
@@ -194,4 +236,121 @@ TEST(SurfaceIPCBarrierAssemblerGTest, SinglePairHessianScatterProducesSymmetricM
   ES::MXd denseH = sparseToDense(hess);
   EXPECT_LT((denseH - denseH.transpose()).norm(), 1e-12);
   EXPECT_GT(hess.nonZeros(), 0);
+}
+
+TEST_F(SurfaceIPCBarrierAssemblerProfilingGTest, ComputeSelfAllRecordsBarrierBreakdownProfiling)
+{
+  ES::MXd V(8, 3);
+  V << 0.0,  0.0,  0.0,
+       0.0,  0.0,  0.05,
+       1.0,  0.0,  0.05,
+       0.0,  1.0,  0.05,
+       0.0, -0.01, 0.0,
+       1.0, -0.01, 0.0,
+       0.0,  0.01, 0.0,
+       1.0,  0.01, 0.0;
+  const ES::VXd x = flattenPositions(V);
+
+  SelfPairSet pairs;
+  pairs.ptPairs.push_back({ 0, 1, 2, 3, 1.0 });
+  pairs.eePairs.push_back({ 4, 5, 6, 7, 1.0 });
+
+  pgo::Profiling::setProfilingEnabled(true);
+
+  double energy = 0.0;
+  ES::VXd grad;
+  ES::SpMatD hess;
+  computeSelfAll(x, pairs, static_cast<int>(V.rows()), 0.1, 1.0, 0.0, energy, grad, hess);
+
+  const auto stats = pgo::Profiling::snapshotProfileStatistics();
+  const auto counters = pgo::Profiling::snapshotProfileCounterStatistics();
+  const ProfileStat *selfCombined = findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kActiveSetSelfCombined);
+  const ProfileStat *selfPT = findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kActiveSetSelfPTCombined);
+  const ProfileStat *selfEE = findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kActiveSetSelfEECombined);
+  const ProfileCounterStat *selfPTPairs = findCounterStat(counters, pgo::Contact::SurfaceIPCProfileSections::kActiveSetSelfPTPairCount);
+  const ProfileCounterStat *selfEEPairs = findCounterStat(counters, pgo::Contact::SurfaceIPCProfileSections::kActiveSetSelfEEPairCount);
+
+  ASSERT_NE(selfCombined, nullptr);
+  ASSERT_NE(selfPT, nullptr);
+  ASSERT_NE(selfEE, nullptr);
+  ASSERT_NE(selfPTPairs, nullptr);
+  ASSERT_NE(selfEEPairs, nullptr);
+  EXPECT_EQ(selfCombined->callCount, 1u);
+  EXPECT_EQ(selfPT->callCount, 1u);
+  EXPECT_EQ(selfEE->callCount, 1u);
+  EXPECT_EQ(selfPTPairs->sampleCount, 1u);
+  EXPECT_EQ(selfPTPairs->total, pairs.ptPairs.size());
+  EXPECT_EQ(selfPTPairs->max, pairs.ptPairs.size());
+  EXPECT_EQ(selfEEPairs->sampleCount, 1u);
+  EXPECT_EQ(selfEEPairs->total, pairs.eePairs.size());
+  EXPECT_EQ(selfEEPairs->max, pairs.eePairs.size());
+}
+
+TEST_F(SurfaceIPCBarrierAssemblerProfilingGTest, ComputeExternalAllRecordsBarrierBreakdownProfiling)
+{
+  ES::MXd V(4, 3);
+  V << 0.0, 0.0, 0.0,
+       1.0, 0.0, 0.0,
+       0.0, 0.0, 1.0,
+       1.0, 0.0, 1.0;
+  const ES::VXd x = flattenPositions(V);
+
+  ES::MXd obsV(4, 3);
+  obsV << 0.0, 0.05, 0.0,
+          1.0, 0.05, 0.0,
+          0.0, 0.05, 1.0,
+          1.0, 0.05, 1.0;
+  ES::MXi obsF(2, 3);
+  obsF << 0, 1, 2,
+          1, 3, 2;
+  const ES::VXd obsRest = flattenPositions(obsV);
+  ObstacleSurface obs(obsV, obsF,
+    pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
+  obs.setObjectId(0);
+  obs.update(0.0);
+  std::vector<ObstacleSurface> obstacles;
+  obstacles.emplace_back(std::move(obs));
+
+  ExternalPairSet pairs;
+  pairs.ptPairs.push_back({ 0, 0, { 0, 1, 2 }, 1.0 });
+  pairs.tpPairs.push_back({ 0, { 0, 1, 2 }, 0, 1.0 });
+  pairs.eePairs.push_back({ 0, { 0, 1 }, { 0, 1 }, 1.0 });
+
+  pgo::Profiling::setProfilingEnabled(true);
+
+  double energy = 0.0;
+  ES::VXd grad;
+  ES::SpMatD hess;
+  computeExternalAll(x, obstacles, pairs, static_cast<int>(V.rows()), 0.1, 1.0, 0.0, energy, grad, hess);
+
+  const auto stats = pgo::Profiling::snapshotProfileStatistics();
+  const auto counters = pgo::Profiling::snapshotProfileCounterStatistics();
+  const ProfileStat *externalCombined = findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kActiveSetExternalCombined);
+  const ProfileStat *externalPT = findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kActiveSetExternalPTCombined);
+  const ProfileStat *externalTP = findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kActiveSetExternalTPCombined);
+  const ProfileStat *externalEE = findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kActiveSetExternalEECombined);
+  const ProfileCounterStat *externalPTPairs = findCounterStat(counters, pgo::Contact::SurfaceIPCProfileSections::kActiveSetExternalPTPairCount);
+  const ProfileCounterStat *externalTPPairs = findCounterStat(counters, pgo::Contact::SurfaceIPCProfileSections::kActiveSetExternalTPPairCount);
+  const ProfileCounterStat *externalEEPairs = findCounterStat(counters, pgo::Contact::SurfaceIPCProfileSections::kActiveSetExternalEEPairCount);
+
+  ASSERT_NE(externalCombined, nullptr);
+  ASSERT_NE(externalPT, nullptr);
+  ASSERT_NE(externalTP, nullptr);
+  ASSERT_NE(externalEE, nullptr);
+  ASSERT_NE(externalPTPairs, nullptr);
+  ASSERT_NE(externalTPPairs, nullptr);
+  ASSERT_NE(externalEEPairs, nullptr);
+  EXPECT_EQ(externalCombined->callCount, 1u);
+  EXPECT_EQ(externalPT->callCount, 1u);
+  EXPECT_EQ(externalTP->callCount, 1u);
+  EXPECT_EQ(externalEE->callCount, 1u);
+  EXPECT_EQ(externalPTPairs->sampleCount, 1u);
+  EXPECT_EQ(externalPTPairs->total, pairs.ptPairs.size());
+  EXPECT_EQ(externalPTPairs->max, pairs.ptPairs.size());
+  EXPECT_EQ(externalTPPairs->sampleCount, 1u);
+  EXPECT_EQ(externalTPPairs->total, pairs.tpPairs.size());
+  EXPECT_EQ(externalTPPairs->max, pairs.tpPairs.size());
+  EXPECT_EQ(externalEEPairs->sampleCount, 1u);
+  EXPECT_EQ(externalEEPairs->total, pairs.eePairs.size());
+  EXPECT_EQ(externalEEPairs->max, pairs.eePairs.size());
 }

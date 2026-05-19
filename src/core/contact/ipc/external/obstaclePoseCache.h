@@ -28,6 +28,8 @@ struct ObstaclePoseCache
   std::vector<double> edgeLengths;
 
   // Per-primitive un-inflated AABBs.
+  SpatialHashGrid::AABB surfaceBox;
+  bool hasSurfaceBox = false;
   std::vector<SpatialHashGrid::AABB> vertBoxes;
   std::vector<SpatialHashGrid::AABB> triBoxes;
   std::vector<SpatialHashGrid::AABB> edgeBoxes;

@@ -5,8 +5,11 @@
     "log": true
   },
   "cases": {
-    "shell": {
-      "sim_config": "examples/ipc/shell/shell-ipc.json"
+    "shell_hang": {
+      "sim_config": "examples/ipc/shell/shell-hang/shell-ipc.json"
+    },
+    "shell_drop": {
+      "sim_config": "examples/ipc/shell/shell-drop/shell-ipc.json"
     },
     "tet_box_hang": {
       "sim_config": "examples/ipc/tet/box-hang/box-ipc.json"
@@ -48,7 +51,7 @@
   "jobs": [
     {
       "name": "shell",
-      "cases": ["shell"]
+      "cases": ["shell_hang", "shell_drop"]
     },
     {
       "name": "hanging_boxes",
@@ -64,7 +67,7 @@
     },
     {
       "name": "drop",
-      "cases": ["tet_box_drop", "cubic_box_drop", "tet_bunny_lite_drop", "tet_dragon_dyn_lite_drop", "cubic_bunny_lite_drop", "cubic_dragon_dyn_lite_drop"]
+      "cases": ["shell_drop", "tet_box_drop", "cubic_box_drop", "tet_bunny_lite_drop", "tet_dragon_dyn_lite_drop", "cubic_bunny_lite_drop", "cubic_dragon_dyn_lite_drop"]
     },
     {
       "name": "volume_cases",

@@ -21,7 +21,8 @@ cmake --build build/base_no_mkl_debug --target runIPCSim convertAnimation
 Run the shipped cases from the repo root:
 
 ```bash
-build/base_no_mkl_debug/bin/runIPCSim examples/ipc/shell/shell-ipc.json
+build/base_no_mkl_debug/bin/runIPCSim examples/ipc/shell/shell-hang/shell-ipc.json
+build/base_no_mkl_debug/bin/runIPCSim examples/ipc/shell/shell-drop/shell-ipc.json
 build/base_no_mkl_debug/bin/runIPCSim examples/ipc/tet/box-hang/box-ipc.json
 build/base_no_mkl_debug/bin/runIPCSim examples/ipc/tet/box-squash/box-ipc.json
 build/base_no_mkl_debug/bin/runIPCSim examples/ipc/cubic/box-hang/box-ipc.json
@@ -32,7 +33,8 @@ build/base_no_mkl_debug/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc
 Convert the dumped frames into Alembic:
 
 ```bash
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/anim.json
+build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/shell-hang/anim.json
+build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/shell-drop/anim.json
 build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
 build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-squash/anim.json
 build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-hang/anim.json
@@ -68,6 +70,14 @@ Run all configured IPC cases explicitly:
 scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json \
   --job all_ipc \
   --skip-existing
+```
+
+Run one configured case directly, without creating a one-case job:
+
+```bash
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json \
+  --case cubic_box_with_sphere_lite \
+  --overwrite
 ```
 
 Regenerate Alembic caches from existing frame dumps without rerunning simulation:
@@ -109,16 +119,22 @@ If `stages` is omitted, the runner defaults to `["sim", "abc"]`. Use a job with 
 
 ## What Each Case Contains
 
-The directory currently ships six runnable IPC inputs:
+The directory currently ships these representative runnable IPC inputs:
 
-- `examples/ipc/shell/shell-ipc.json`
+- `examples/ipc/shell/shell-hang/shell-ipc.json`
+- `examples/ipc/shell/shell-drop/shell-ipc.json`
 - `examples/ipc/tet/box-hang/box-ipc.json`
 - `examples/ipc/tet/box-squash/box-ipc.json`
 - `examples/ipc/cubic/box-hang/box-ipc.json`
 - `examples/ipc/cubic/box-squash/box-ipc.json`
 - `examples/ipc/cubic/box-with-sphere/box-ipc.json`
 
-The shell case lives directly under `examples/ipc/shell/`. The volume cases currently live under:
+The shell cases live under:
+
+- `examples/ipc/shell/shell-hang/`
+- `examples/ipc/shell/shell-drop/`
+
+The volume cases currently live under:
 
 - `examples/ipc/tet/box-hang/`
 - `examples/ipc/tet/box-squash/`
@@ -134,13 +150,20 @@ The volume cases each contain:
 - the `runIPCSim` config: `box-ipc.json`
 - the `convertAnimation` config: `anim.json`
 
-The shell case contains:
+The shell hang case contains:
 
 - the display mesh: `shell.obj`
 - the fixed-vertex list: `shell-fixed0.txt`
 - the `runIPCSim` config: `shell-ipc.json`
 - the `convertAnimation` config: `anim.json`
-- previously generated output folders and a committed `shell-ipc.abc`
+- previously generated output folders and a generated `shell-ipc.abc`
+
+The shell drop case contains:
+
+- the raised display mesh: `shell.obj`
+- the static external floor mesh: `bottom.obj`
+- the `runIPCSim` config: `shell-ipc.json`
+- the `convertAnimation` config: `anim.json`
 
 Current config convention:
 
@@ -154,17 +177,29 @@ Current config convention:
 
 ## Case Guide
 
-### `shell`
+### `shell/shell-hang`
 
-Existing shell self-contact IPC example. This is the legacy shell-only setup under `examples/ipc`, and it is the only case in this directory that already includes committed historical output folders and a generated `.abc` cache.
+Existing shell self-contact IPC example. This is the legacy shell-only setup under `examples/ipc`, organized as the hanging shell case, and it is the only shell case in this directory that already includes historical output folders and a generated `.abc` cache.
 
 - files: `shell.obj`, `shell-fixed0.txt`, `shell-ipc.json`, `anim.json`
 - material: `koiter-stvk`
 - IPC params: shell heuristic via `ipc-heuristic: true`
-- run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/shell/shell-ipc.json`
-- output: `examples/ipc/shell/ret-shell-ipc/`
-- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/anim.json`
-- Alembic: `examples/ipc/shell/shell-ipc.abc`
+- run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/shell/shell-hang/shell-ipc.json`
+- output: `examples/ipc/shell/shell-hang/ret-shell-ipc/`
+- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/shell-hang/anim.json`
+- Alembic: `examples/ipc/shell/shell-hang/shell-ipc.abc`
+
+### `shell/shell-drop`
+
+Shell external-obstacle drop example. This case starts from the same shell mesh translated upward in `y`, leaves `fixed-vertices` empty, and drops the shell onto a static `bottom.obj` obstacle through IPC external-object contact.
+
+- files: `shell.obj`, `bottom.obj`, `shell-ipc.json`, `anim.json`
+- material: `koiter-stvk`
+- IPC params: shell heuristic via `ipc-heuristic: true`
+- external object: static `bottom.obj` with `movement = [0, 0, 0]`
+- run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/shell/shell-drop/shell-ipc.json`
+- output: `examples/ipc/shell/shell-drop/ret-shell-drop-ipc/`
+- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/shell-drop/anim.json`
 
 ### `tet/box-hang`
 
@@ -237,7 +272,8 @@ Cubic unified IPC floor-contact example migrated from `examples/legacy/cubic/box
 After `runIPCSim` dumps the OBJ sequence, use the per-case animation config to convert it:
 
 ```bash
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/anim.json
+build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/shell-hang/anim.json
+build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/shell-drop/anim.json
 build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
 build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-squash/anim.json
 build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-hang/anim.json

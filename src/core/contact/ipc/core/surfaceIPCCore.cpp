@@ -106,10 +106,10 @@ SurfaceIPCActiveSet SurfaceIPCCore::buildActiveSet(EigenSupport::ConstRefVecXd x
   if (!obstacles_.empty())
     buildExternalPairs(topology_, activeSet.positions, obstacles_, dhat_external, activeSet.externalPairs);
 
-  if (auto logger = Logging::lgr(); logger) {
+  if (auto logger = Logging::lgr(); logger && logger->should_log(spdlog::level::debug)) {
     const size_t selfTotal = activeSet.selfPairs.size();
     const size_t externalTotal = activeSet.externalPairs.size();
-    SPDLOG_LOGGER_INFO(logger,
+    SPDLOG_LOGGER_DEBUG(logger,
       "SurfaceIPCCore active pairs: selfPT={} selfEE={} selfTotal={} externalPT={} externalTP={} externalEE={} externalTotal={}",
       activeSet.selfPairs.ptPairs.size(), activeSet.selfPairs.eePairs.size(), selfTotal,
       activeSet.externalPairs.ptPairs.size(), activeSet.externalPairs.tpPairs.size(), activeSet.externalPairs.eePairs.size(), externalTotal);
@@ -201,8 +201,8 @@ void SurfaceIPCCore::computeHessian(const SurfaceIPCActiveSet &activeSet, SpMatD
     computeExternalHessian(
       activeSet.positions, obstacles_, activeSet.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, hess);
   }
-  if (auto logger = Logging::lgr(); logger)
-    SPDLOG_LOGGER_INFO(logger, "# nonzeros in Hessian: {}", hess.nonZeros());
+  if (auto logger = Logging::lgr(); logger && logger->should_log(spdlog::level::debug))
+    SPDLOG_LOGGER_DEBUG(logger, "# nonzeros in Hessian: {}", hess.nonZeros());
 }
 
 // =========================================================================
@@ -225,8 +225,8 @@ void SurfaceIPCCore::computeAll(const SurfaceIPCActiveSet &activeSet, double &en
       activeSet.positions, obstacles_, activeSet.externalPairs, topology_.numVerts, dhat_external, kappa, eps_ee, extEnergy, grad, hess);
     energy += extEnergy;
   }
-  if (auto logger = Logging::lgr(); logger)
-    SPDLOG_LOGGER_INFO(logger, "# nonzeros in Hessian: {}", hess.nonZeros());
+  if (auto logger = Logging::lgr(); logger && logger->should_log(spdlog::level::debug))
+    SPDLOG_LOGGER_DEBUG(logger, "# nonzeros in Hessian: {}", hess.nonZeros());
 }
 
 // =========================================================================

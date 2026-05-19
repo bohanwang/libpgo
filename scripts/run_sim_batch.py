@@ -266,6 +266,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run simulation and postprocessing batches from JSON jobs.")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG, help="JSON batch config file.")
     parser.add_argument("--job", action="append", default=[], help="Job name to run. Can be repeated.")
+    parser.add_argument(
+        "--case",
+        action="append",
+        default=[],
+        help="Case name to run directly with default stages. Can be repeated.",
+    )
     parser.add_argument("--all-jobs", action="store_true", help="Run every job from the JSON config.")
     parser.add_argument("--dry-run", action="store_true", help="Print commands without running them.")
     parser.add_argument("--overwrite", action="store_true", help="Allow runIPCSim to replace existing output folders.")
@@ -274,10 +280,10 @@ def parse_args() -> argparse.Namespace:
 
     if args.overwrite and args.skip_existing:
         parser.error("--overwrite and --skip-existing are mutually exclusive")
-    if args.all_jobs and args.job:
-        parser.error("--all-jobs cannot be combined with --job")
-    if not args.all_jobs and not args.job:
-        parser.error("pass at least one --job, or pass --all-jobs explicitly")
+    if args.all_jobs and (args.job or args.case):
+        parser.error("--all-jobs cannot be combined with --job or --case")
+    if not args.all_jobs and not args.job and not args.case:
+        parser.error("pass at least one --job, --case, or pass --all-jobs explicitly")
 
     args.config = args.config if args.config.is_absolute() else REPO_ROOT / args.config
     return args
@@ -297,6 +303,9 @@ def main() -> int:
         unknown_jobs = [name for name in selected_jobs if name not in jobs]
         if unknown_jobs:
             raise ValueError(f"unknown jobs: {', '.join(unknown_jobs)}")
+        unknown_cases = [name for name in args.case if name not in cases]
+        if unknown_cases:
+            raise ValueError(f"unknown cases: {', '.join(unknown_cases)}")
 
         results: list[CaseResult] = []
         for job_name in selected_jobs:
@@ -307,6 +316,12 @@ def main() -> int:
                 print(f"-- case {case.name} --")
                 args.stages = job.stages
                 results.append(run_case_stages(args, build_dir, case, job.stages))
+
+        for case_name in args.case:
+            case = cases[case_name]
+            print(f"== case {case.name} ==")
+            args.stages = DEFAULT_STAGES
+            results.append(run_case_stages(args, build_dir, case, DEFAULT_STAGES))
 
         print_summary(results)
         return 0

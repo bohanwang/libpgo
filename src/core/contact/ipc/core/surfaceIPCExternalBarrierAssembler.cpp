@@ -1,11 +1,15 @@
 #include "ipc/core/surfaceIPCExternalBarrierAssembler.h"
 #include "ipc/core/surfaceIPCBarrierKernels.h"
 
+#include "scopedProfileSection.h"
+#include "ipc/profiling/surfaceIPCProfiling.h"
+
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <stdexcept>
 #include <vector>
@@ -379,6 +383,11 @@ void computeExternalAll(
   int nTP = (int)pairs.tpPairs.size();
   int nEE = (int)pairs.eePairs.size();
 
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kActiveSetExternalCombined);
+  Profiling::recordProfileCounter(SurfaceIPCProfileSections::kActiveSetExternalPTPairCount, static_cast<std::uint64_t>(nPT));
+  Profiling::recordProfileCounter(SurfaceIPCProfileSections::kActiveSetExternalTPPairCount, static_cast<std::uint64_t>(nTP));
+  Profiling::recordProfileCounter(SurfaceIPCProfileSections::kActiveSetExternalEEPairCount, static_cast<std::uint64_t>(nEE));
+
   energy = 0.0;
   if (grad.size() != n)
     grad.setZero(n);
@@ -390,73 +399,85 @@ void computeExternalAll(
   double dhat2 = dhat * dhat;
 
   // PT pairs
-  double ptEnergy = tbb::parallel_reduce(
-    tbb::blocked_range<int>(0, nPT), 0.0,
-    [&](const tbb::blocked_range<int> &range, double localE) {
-      for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = pairs.ptPairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-        auto k = barrier_kernels::pointTriangle(
-          dynVtx(dynPos, pair.dynVertex),
-          obsVtx(obsP, pair.obsTri[0]),
-          obsVtx(obsP, pair.obsTri[1]),
-          obsVtx(obsP, pair.obsTri[2]),
-          pair.weight, dhat2, kappa, true, true);
-        if (!k.active)
-          continue;
-        localE += k.energy;
-        scatterExternalPTGrad(k.gradient, pair.dynVertex, grad);
-        scatterExternalPTHessian(9 * i, k.hessian, pair.dynVertex, hState);
-      }
-      return localE;
-    },
-    std::plus<double>());
+  double ptEnergy = 0.0;
+  {
+    Profiling::ScopedProfileSection ptProfile(SurfaceIPCProfileSections::kActiveSetExternalPTCombined);
+    ptEnergy = tbb::parallel_reduce(
+      tbb::blocked_range<int>(0, nPT), 0.0,
+      [&](const tbb::blocked_range<int> &range, double localE) {
+        for (int i = range.begin(); i < range.end(); ++i) {
+          auto &pair = pairs.ptPairs[i];
+          const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
+          auto k = barrier_kernels::pointTriangle(
+            dynVtx(dynPos, pair.dynVertex),
+            obsVtx(obsP, pair.obsTri[0]),
+            obsVtx(obsP, pair.obsTri[1]),
+            obsVtx(obsP, pair.obsTri[2]),
+            pair.weight, dhat2, kappa, true, true);
+          if (!k.active)
+            continue;
+          localE += k.energy;
+          scatterExternalPTGrad(k.gradient, pair.dynVertex, grad);
+          scatterExternalPTHessian(9 * i, k.hessian, pair.dynVertex, hState);
+        }
+        return localE;
+      },
+      std::plus<double>());
+  }
 
   // TP pairs
-  double tpEnergy = tbb::parallel_reduce(
-    tbb::blocked_range<int>(0, nTP), 0.0,
-    [&](const tbb::blocked_range<int> &range, double localE) {
-      for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = pairs.tpPairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-        auto k = barrier_kernels::pointTriangle(
-          obsVtx(obsP, pair.obsVertex),
-          dynVtx(dynPos, pair.dynTri[0]),
-          dynVtx(dynPos, pair.dynTri[1]),
-          dynVtx(dynPos, pair.dynTri[2]),
-          pair.weight, dhat2, kappa, true, true);
-        if (!k.active)
-          continue;
-        localE += k.energy;
-        scatterExternalTPGrad(k.gradient, pair.dynTri, grad);
-        scatterExternalTPHessian(9 * nPT + 81 * i, k.hessian, pair.dynTri, hState);
-      }
-      return localE;
-    },
-    std::plus<double>());
+  double tpEnergy = 0.0;
+  {
+    Profiling::ScopedProfileSection tpProfile(SurfaceIPCProfileSections::kActiveSetExternalTPCombined);
+    tpEnergy = tbb::parallel_reduce(
+      tbb::blocked_range<int>(0, nTP), 0.0,
+      [&](const tbb::blocked_range<int> &range, double localE) {
+        for (int i = range.begin(); i < range.end(); ++i) {
+          auto &pair = pairs.tpPairs[i];
+          const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
+          auto k = barrier_kernels::pointTriangle(
+            obsVtx(obsP, pair.obsVertex),
+            dynVtx(dynPos, pair.dynTri[0]),
+            dynVtx(dynPos, pair.dynTri[1]),
+            dynVtx(dynPos, pair.dynTri[2]),
+            pair.weight, dhat2, kappa, true, true);
+          if (!k.active)
+            continue;
+          localE += k.energy;
+          scatterExternalTPGrad(k.gradient, pair.dynTri, grad);
+          scatterExternalTPHessian(9 * nPT + 81 * i, k.hessian, pair.dynTri, hState);
+        }
+        return localE;
+      },
+      std::plus<double>());
+  }
 
   // EE pairs
-  double eeEnergy = tbb::parallel_reduce(
-    tbb::blocked_range<int>(0, nEE), 0.0,
-    [&](const tbb::blocked_range<int> &range, double localE) {
-      for (int i = range.begin(); i < range.end(); ++i) {
-        auto &pair = pairs.eePairs[i];
-        const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-        auto k = barrier_kernels::edgeEdge(
-          dynVtx(dynPos, pair.dynEdge[0]),
-          dynVtx(dynPos, pair.dynEdge[1]),
-          obsVtx(obsP, pair.obsEdge[0]),
-          obsVtx(obsP, pair.obsEdge[1]),
-          pair.weight, dhat2, kappa, eps_ee, true, true);
-        if (!k.active)
-          continue;
-        localE += k.energy;
-        scatterExternalEEGrad(k.gradient, pair.dynEdge, grad);
-        scatterExternalEEHessian(9 * nPT + 81 * nTP + 36 * i, k.hessian, pair.dynEdge, hState);
-      }
-      return localE;
-    },
-    std::plus<double>());
+  double eeEnergy = 0.0;
+  {
+    Profiling::ScopedProfileSection eeProfile(SurfaceIPCProfileSections::kActiveSetExternalEECombined);
+    eeEnergy = tbb::parallel_reduce(
+      tbb::blocked_range<int>(0, nEE), 0.0,
+      [&](const tbb::blocked_range<int> &range, double localE) {
+        for (int i = range.begin(); i < range.end(); ++i) {
+          auto &pair = pairs.eePairs[i];
+          const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
+          auto k = barrier_kernels::edgeEdge(
+            dynVtx(dynPos, pair.dynEdge[0]),
+            dynVtx(dynPos, pair.dynEdge[1]),
+            obsVtx(obsP, pair.obsEdge[0]),
+            obsVtx(obsP, pair.obsEdge[1]),
+            pair.weight, dhat2, kappa, eps_ee, true, true);
+          if (!k.active)
+            continue;
+          localE += k.energy;
+          scatterExternalEEGrad(k.gradient, pair.dynEdge, grad);
+          scatterExternalEEHessian(9 * nPT + 81 * nTP + 36 * i, k.hessian, pair.dynEdge, hState);
+        }
+        return localE;
+      },
+      std::plus<double>());
+  }
 
   energy = ptEnergy + tpEnergy + eeEnergy;
 

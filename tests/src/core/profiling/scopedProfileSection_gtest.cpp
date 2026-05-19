@@ -11,12 +11,20 @@
 namespace
 {
 using pgo::Profiling::ProfileStat;
+using pgo::Profiling::ProfileCounterStat;
 using pgo::Profiling::ScopedProfileSection;
 
 const ProfileStat *findStat(const std::vector<ProfileStat> &stats, std::string_view name)
 {
   const auto it = std::find_if(stats.begin(), stats.end(),
     [name](const ProfileStat &stat) { return stat.name == name; });
+  return it == stats.end() ? nullptr : &(*it);
+}
+
+const ProfileCounterStat *findCounterStat(const std::vector<ProfileCounterStat> &stats, std::string_view name)
+{
+  const auto it = std::find_if(stats.begin(), stats.end(),
+    [name](const ProfileCounterStat &stat) { return stat.name == name; });
   return it == stats.end() ? nullptr : &(*it);
 }
 
@@ -43,8 +51,10 @@ TEST_F(ScopedProfileSectionGTest, DisabledProfilingLeavesNoRecords)
     ScopedProfileSection scope("profiling.disabled");
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
+  pgo::Profiling::recordProfileCounter("profiling.disabled.counter", 3);
 
   EXPECT_TRUE(pgo::Profiling::snapshotProfileStatistics().empty());
+  EXPECT_TRUE(pgo::Profiling::snapshotProfileCounterStatistics().empty());
 }
 
 TEST_F(ScopedProfileSectionGTest, RepeatedSectionsAggregateByName)
@@ -124,8 +134,36 @@ TEST_F(ScopedProfileSectionGTest, ResetClearsCollectedStatistics)
     ScopedProfileSection scope("profiling.reset");
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
+  pgo::Profiling::recordProfileCounter("profiling.reset.counter", 7);
 
   ASSERT_FALSE(pgo::Profiling::snapshotProfileStatistics().empty());
+  ASSERT_FALSE(pgo::Profiling::snapshotProfileCounterStatistics().empty());
   pgo::Profiling::resetProfileStatistics();
   EXPECT_TRUE(pgo::Profiling::snapshotProfileStatistics().empty());
+  EXPECT_TRUE(pgo::Profiling::snapshotProfileCounterStatistics().empty());
+}
+
+TEST_F(ScopedProfileSectionGTest, CountersAggregateByNameAndSort)
+{
+  pgo::Profiling::setProfilingEnabled(true);
+
+  pgo::Profiling::recordProfileCounter("profiling.counter.zeta", 4);
+  pgo::Profiling::recordProfileCounter("profiling.counter.alpha", 2);
+  pgo::Profiling::recordProfileCounter("profiling.counter.zeta", 9);
+
+  const auto stats = pgo::Profiling::snapshotProfileCounterStatistics();
+  ASSERT_EQ(stats.size(), 2u);
+  EXPECT_EQ(stats[0].name, "profiling.counter.alpha");
+  EXPECT_EQ(stats[1].name, "profiling.counter.zeta");
+
+  const ProfileCounterStat *alpha = findCounterStat(stats, "profiling.counter.alpha");
+  const ProfileCounterStat *zeta = findCounterStat(stats, "profiling.counter.zeta");
+  ASSERT_NE(alpha, nullptr);
+  ASSERT_NE(zeta, nullptr);
+  EXPECT_EQ(alpha->sampleCount, 1u);
+  EXPECT_EQ(alpha->total, 2u);
+  EXPECT_EQ(alpha->max, 2u);
+  EXPECT_EQ(zeta->sampleCount, 2u);
+  EXPECT_EQ(zeta->total, 13u);
+  EXPECT_EQ(zeta->max, 9u);
 }
