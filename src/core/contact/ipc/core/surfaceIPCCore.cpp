@@ -118,6 +118,22 @@ SurfaceIPCActiveSet SurfaceIPCCore::buildActiveSet(EigenSupport::ConstRefVecXd x
   return activeSet;
 }
 
+SurfaceIPCActiveSet SurfaceIPCCore::buildLineSearchActiveSetSuperset(
+  EigenSupport::ConstRefVecXd x_surf,
+  EigenSupport::ConstRefVecXd dx_surf) const
+{
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kBuildActiveSet);
+
+  SurfaceIPCActiveSet activeSet;
+  activeSet.positions = x_surf;
+  buildSelfPairsLineSearchSuperset(topology_, activeSet.positions, dx_surf, dhat, activeSet.selfPairs);
+
+  if (!obstacles_.empty())
+    buildExternalPairsLineSearchSuperset(topology_, activeSet.positions, dx_surf, obstacles_, dhat_external, activeSet.externalPairs);
+
+  return activeSet;
+}
+
 // =========================================================================
 //  1)  Maximum step size  (CCD-based line search with spatial hashing)
 // =========================================================================

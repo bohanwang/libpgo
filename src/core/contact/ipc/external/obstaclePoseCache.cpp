@@ -17,12 +17,12 @@ namespace CIPC
 void buildObstaclePoseCache(
   const EigenSupport::VXd &positions,
   const EigenSupport::MXi &triangles,
-  const EigenSupport::MXi &uniqueEdges,
+  const EigenSupport::MXi &contactEdges,
   ObstaclePoseCache &cache)
 {
   const int nVerts = static_cast<int>(positions.size() / 3);
   const int nTri = static_cast<int>(triangles.rows());
-  const int nEdge = static_cast<int>(uniqueEdges.rows());
+  const int nEdge = static_cast<int>(contactEdges.rows());
 
   cache.triAreas.assign(nTri, 0.0);
   cache.edgeLengths.assign(nEdge, 0.0);
@@ -67,8 +67,8 @@ void buildObstaclePoseCache(
   tbb::parallel_for(tbb::blocked_range<int>(0, nEdge),
     [&](const tbb::blocked_range<int> &r) {
       for (int ei = r.begin(); ei < r.end(); ++ei) {
-        const EigenSupport::V3d e0 = positions.segment<3>(3 * uniqueEdges(ei, 0));
-        const EigenSupport::V3d e1 = positions.segment<3>(3 * uniqueEdges(ei, 1));
+        const EigenSupport::V3d e0 = positions.segment<3>(3 * contactEdges(ei, 0));
+        const EigenSupport::V3d e1 = positions.segment<3>(3 * contactEdges(ei, 1));
         cache.edgeLengths[ei] = (e1 - e0).norm();
         cache.edgeBoxes[ei].init(e0, 0.0);
         cache.edgeBoxes[ei].expand(e1);

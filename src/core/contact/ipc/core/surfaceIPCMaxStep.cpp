@@ -390,7 +390,8 @@ double computeExternalMaxStep(
     const VXd &obsCur = obs.currentPositions();
     int nObsVert = (int)obsCur.size() / 3;
     int nObsTri = (int)obs.triangles().rows();
-    int nObsEdge = (int)obs.uniqueEdges().rows();
+    const EigenSupport::MXi &obsContactEdges = obs.contactEdges();
+    int nObsEdge = (int)obsContactEdges.rows();
     // The obstacle is treated as fixed at its sampled pose during the
     // Newton line-search; intra-frame obstacle motion is not swept here.
     auto obsV = [&](int i) -> V3d {
@@ -549,8 +550,8 @@ double computeExternalMaxStep(
 
               if (profilingEnabled)
                 localCounts.exactTests += 1;
-              int b0 = obs.uniqueEdges()(ej, 0);
-              int b1 = obs.uniqueEdges()(ej, 1);
+              int b0 = obsContactEdges(ej, 0);
+              int b1 = obsContactEdges(ej, 1);
               V3d vb0 = obsV(b0), vb1 = obsV(b1);
               V3d db0 = obsDisp(b0), db1 = obsDisp(b1);
 

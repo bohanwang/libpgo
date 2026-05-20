@@ -41,6 +41,8 @@ public:
   virtual int isHessianTopologyFixed() const { return 1; }
 
   virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const = 0;
+  virtual void beginLineSearch(EigenSupport::ConstRefVecXd, EigenSupport::ConstRefVecXd) const {}
+  virtual void endLineSearch() const {}
 };
 
 typedef std::shared_ptr<PotentialEnergy> PotentialEnergy_p;

@@ -202,6 +202,40 @@ TEST(SurfaceIPCExternalBroadPhaseGTest, MovingObstacleProducesGoldenPairsAndWeig
     }));
 }
 
+TEST(SurfaceIPCExternalBroadPhaseGTest, ExternalEEDoesNotUseCoplanarInteriorObstacleDiagonal)
+{
+  auto [V, F] = makeUnitSquareMesh();
+  V.col(2).array() = 0.05;
+
+  auto [obsV, obsF] = makeUnitSquareMesh();
+  const ES::VXd obsRest = flattenRows(obsV);
+  ObstacleSurface obs(
+    obsV, obsF,
+    pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
+  obs.setObjectId(0);
+  obs.update(0.0);
+
+  SurfaceIPCTopology topology;
+  topology.setMesh(V, F);
+
+  std::vector<ObstacleSurface> obstacles;
+  obstacles.emplace_back(std::move(obs));
+
+  ExternalPairSet pairs;
+  buildExternalPairs(topology, flattenRows(V), obstacles, 0.2, pairs);
+
+  bool sawBoundaryEdge = false;
+  for (const auto &pair : pairs.eePairs) {
+    const int a = std::min(pair.obsEdge[0], pair.obsEdge[1]);
+    const int b = std::max(pair.obsEdge[0], pair.obsEdge[1]);
+    EXPECT_FALSE(a == 1 && b == 2);
+    if (a == 0 && b == 1)
+      sawBoundaryEdge = true;
+  }
+
+  EXPECT_TRUE(sawBoundaryEdge);
+}
+
 TEST(SurfaceIPCExternalBroadPhaseGTest, ObstaclePoseCacheTracksSurfaceBounds)
 {
   auto [obsV, obsF] = makeSmallBoxObstacle();

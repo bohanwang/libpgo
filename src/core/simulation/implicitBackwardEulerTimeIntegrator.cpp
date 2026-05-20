@@ -92,20 +92,28 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
               << " dt=" << timestep << std::endl;
   }
 
+  eulerEnergy->clearCachedImplicitEnergyComponents();
   solverRet = solver->solve(needRenew, z, g, lambda, uRangeLow, uRangeHi,
     constraintsRangeLow, constraintsRangeHi, eulerEnergy, constraints,
     nIter, eps, verbose, solverConfigFilename.length() ? solverConfigFilename.c_str() : nullptr,
     solverOption);
 
+  const SolveDiagnostics &diagnostics = solver->getLastSolveDiagnostics();
   double residualNorm = 0.0;
   double residualMaxNorm = 0.0;
-  ES::VXd residual(n3), rhs = ES::VXd::Zero(n3 - fixedDOFs.size());
   if (printResidual || verbose || solverRet != 0) {
-    residual.setZero();
-    eulerEnergy->gradient(z, residual);
-    ES::transferBigToSmall(residual, rhs, rhsb2s);
-    residualNorm = rhs.norm();
-    residualMaxNorm = rhs.cwiseAbs().maxCoeff();
+    if (diagnostics.hasFinalGradientStats) {
+      residualNorm = diagnostics.finalGradientNorm;
+      residualMaxNorm = diagnostics.finalGradientMaxNorm;
+    }
+    else {
+      ES::VXd residual(n3), rhs = ES::VXd::Zero(n3 - fixedDOFs.size());
+      residual.setZero();
+      eulerEnergy->gradient(z, residual);
+      ES::transferBigToSmall(residual, rhs, rhsb2s);
+      residualNorm = rhs.norm();
+      residualMaxNorm = rhs.cwiseAbs().maxCoeff();
+    }
   }
 
   const bool acceptedTimestep = solverRet == 0 ||
@@ -131,7 +139,7 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
               << " (" << NewtonSolver::solveStatusToString(solverRet) << ")" << std::endl;
 
     std::cout << "    Energy components:\n";
-    eulerEnergy->printImplicitEnergy(z);
+    eulerEnergy->printImplicitEnergy(z, diagnostics.hasFinalGradientStats);
   }
 
   if (!acceptedTimestep) {

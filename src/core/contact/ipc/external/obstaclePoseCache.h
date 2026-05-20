@@ -27,7 +27,8 @@ struct ObstaclePoseCache
   std::vector<double> triAreas;
   std::vector<double> edgeLengths;
 
-  // Per-primitive un-inflated AABBs.
+  // Per-primitive un-inflated AABBs. Edge fields are built over
+  // ObstacleSurface::contactEdges(), not every topological edge.
   SpatialHashGrid::AABB surfaceBox;
   bool hasSurfaceBox = false;
   std::vector<SpatialHashGrid::AABB> vertBoxes;
@@ -51,11 +52,11 @@ struct ObstaclePoseCache
 //
 //   positions   : 3*N_verts entries, row-major xyz per vertex
 //   triangles   : N_tri x 3 local-index matrix
-//   uniqueEdges : N_edge x 2 local-index matrix (derived from triangles)
+//   contactEdges: N_edge x 2 local-index matrix used by external EE
 void buildObstaclePoseCache(
   const EigenSupport::VXd &positions,
   const EigenSupport::MXi &triangles,
-  const EigenSupport::MXi &uniqueEdges,
+  const EigenSupport::MXi &contactEdges,
   ObstaclePoseCache &cache);
 
 }  // namespace CIPC

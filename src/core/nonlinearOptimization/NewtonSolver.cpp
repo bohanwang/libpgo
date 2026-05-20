@@ -155,18 +155,8 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
   double lambdaScale = 1.0;
   double lambda0 = 1.0;
   int lineSearchFailedTimes = 0;
-  // compute lambda initial
-  memset(grad.data(), 0, sizeof(double) * grad.size());
-  energy->gradient(x, grad);
-  filterVector(grad);
-  if (!grad.allFinite()) {
-    if (verbose >= 1)
-      std::cout << "    Newton solve failed before iteration; status=" << solveStatusToString(static_cast<int>(SolveStatus::NonFinite)) << std::endl;
-    return static_cast<int>(SolveStatus::NonFinite);
-  }
-  lambda0 = grad.cwiseAbs().maxCoeff();
-
-  double gradMaxNormLast = lambda0;
+  bool hasInitialGradNorm = false;
+  double gradMaxNormLast = 0.0;
   for (; iter < numIter; iter++) {
     if (verbose >= 2 && iter % printGap == 0)
       std::cout << "    Iter=" << iter << std::endl;
@@ -190,6 +180,11 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
         std::cout << "    Iter=" << iter << "; gradient is non-finite; status=" << solveStatusToString(status) << std::endl;
       break;
     }
+    if (!hasInitialGradNorm) {
+      lambda0 = gradMaxNorm;
+      gradMaxNormLast = gradMaxNorm;
+      hasInitialGradNorm = true;
+    }
 
     if (verbose >= 2 && iter % printGap == 0)
       std::cout << "        E= " << eng << "; ||grad||_max=" << gradMaxNorm << "; ||x||=" << x.norm() << std::endl;
@@ -204,6 +199,7 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     const bool relConverged = gradMaxNorm < relThreshold;
     if (absConverged || relConverged) {
       status = static_cast<int>(SolveStatus::Converged);
+      solveDiagnostics.recordFinalGradientStats(grad.norm(), gradMaxNorm);
       if (verbose >= 1) {
         std::cout << "    Iter=" << iter << "; ||grad||_max=" << gradMaxNorm
                   << (absConverged ? " < eps" : " < lambda0*relTol")
@@ -370,57 +366,83 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
       }
       deltax *= feasibleAlpha;
 
-      lineSearchx.noalias() = x + deltax;
-      double eng1 = energy->func(lineSearchx);
-      if (!std::isfinite(eng1)) {
-        status = static_cast<int>(SolveStatus::NonFinite);
-        if (verbose >= 1)
-          std::cout << "    Iter=" << iter << "; trial energy is non-finite; status=" << solveStatusToString(status) << std::endl;
-        break;
-      }
-      int maxIter = 50;
-      if (eng1 < eng) {
-        maxIter = 3;
-      }
-
-      if (solverParam.lsm == LSM_GOLDEN) {
-        lineSearchHandle->nativeLineSearch->setMaxIterations(maxIter);
-        LineSearch::Result ret = lineSearchHandle->nativeLineSearch->golden(x.data(), deltax.data(), eng);
-        alpha = ret.alpha;
-        eng1 = ret.f;
-      }
-      else if (solverParam.lsm == LSM_BRENTS) {
-        lineSearchHandle->nativeLineSearch->setMaxIterations(maxIter);
-        LineSearch::Result ret = lineSearchHandle->nativeLineSearch->BrentsMethod(x.data(), deltax.data(), eng);
-        alpha = ret.alpha;
-        eng1 = ret.f;
-      }
-      else if (solverParam.lsm == LSM_BACKTRACK) {
-        lineSearchHandle->nativeLineSearch->setMaxIterations(maxIter);
-        LineSearch::Result ret = lineSearchHandle->nativeLineSearch->backtracking(x.data(), deltax.data(), eng, grad.data(), 0.0001, 0.5);
-        alpha = ret.alpha;
-        eng1 = ret.f;
-      }
-      else if (solverParam.lsm == LSM_SIMPLE) {
-        eng1 = eng;
-        for (int i = 0; i < 100; i++) {
-          lineSearchx.noalias() = x + deltax * alpha;
-          eng1 = energy->func(lineSearchx);
-          if (!std::isfinite(eng1)) {
-            status = static_cast<int>(SolveStatus::NonFinite);
-            break;
+      double eng1 = 0.0;
+      {
+        struct LineSearchScope
+        {
+          const PotentialEnergy_const_p &energy;
+          bool active = false;
+          LineSearchScope(const PotentialEnergy_const_p &energy, EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx, bool active):
+            energy(energy), active(active)
+          {
+            if (active)
+              energy->beginLineSearch(x, dx);
           }
-
-          if (eng1 < eng) {
-            break;
+          ~LineSearchScope()
+          {
+            if (active)
+              energy->endLineSearch();
           }
+        };
+        // Backtracking and simple line search only evaluate alpha in [0, 1].
+        // Golden/Brent may expand the bracket past 1, which is outside the IPC
+        // swept active-set superset built for this Newton step.
+        const bool useLineSearchActiveSet = solverParam.lsm == LSM_BACKTRACK || solverParam.lsm == LSM_SIMPLE;
+        LineSearchScope lineSearchScope(energy, x, deltax, useLineSearchActiveSet);
 
-          alpha *= 0.5;
+        lineSearchx.noalias() = x + deltax;
+        eng1 = energy->func(lineSearchx);
+        if (!std::isfinite(eng1)) {
+          status = static_cast<int>(SolveStatus::NonFinite);
+          if (verbose >= 1)
+            std::cout << "    Iter=" << iter << "; trial energy is non-finite; status=" << solveStatusToString(status) << std::endl;
+          break;
         }
-      }
+        int maxIter = 50;
+        if (eng1 < eng) {
+          maxIter = 3;
+        }
 
-      if (!std::isfinite(alpha) || !std::isfinite(eng1))
-        status = static_cast<int>(SolveStatus::NonFinite);
+        if (solverParam.lsm == LSM_GOLDEN) {
+          lineSearchHandle->nativeLineSearch->setMaxIterations(maxIter);
+          LineSearch::Result ret = lineSearchHandle->nativeLineSearch->golden(x.data(), deltax.data(), eng);
+          alpha = ret.alpha;
+          eng1 = ret.f;
+        }
+        else if (solverParam.lsm == LSM_BRENTS) {
+          lineSearchHandle->nativeLineSearch->setMaxIterations(maxIter);
+          LineSearch::Result ret = lineSearchHandle->nativeLineSearch->BrentsMethod(x.data(), deltax.data(), eng);
+          alpha = ret.alpha;
+          eng1 = ret.f;
+        }
+        else if (solverParam.lsm == LSM_BACKTRACK) {
+          lineSearchHandle->nativeLineSearch->setMaxIterations(maxIter);
+          LineSearch::Result ret = lineSearchHandle->nativeLineSearch->backtrackingWithInitialValue(
+            x.data(), deltax.data(), eng, grad.data(), 0.0001, 0.5, 1.0, eng1);
+          alpha = ret.alpha;
+          eng1 = ret.f;
+        }
+        else if (solverParam.lsm == LSM_SIMPLE) {
+          eng1 = eng;
+          for (int i = 0; i < 100; i++) {
+            lineSearchx.noalias() = x + deltax * alpha;
+            eng1 = energy->func(lineSearchx);
+            if (!std::isfinite(eng1)) {
+              status = static_cast<int>(SolveStatus::NonFinite);
+              break;
+            }
+
+            if (eng1 < eng) {
+              break;
+            }
+
+            alpha *= 0.5;
+          }
+        }
+
+        if (!std::isfinite(alpha) || !std::isfinite(eng1))
+          status = static_cast<int>(SolveStatus::NonFinite);
+      }
 
       if (status == static_cast<int>(SolveStatus::NonFinite)) {
         if (verbose >= 1)
@@ -435,6 +457,8 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
         constexpr double looseRelFactor = 1e-4;
         const bool looseRelConverged = gradMaxNorm < lambda0 * looseRelFactor;
         status = (gradMaxNorm < epsilon || looseRelConverged) ? static_cast<int>(SolveStatus::Converged) : static_cast<int>(SolveStatus::LineSearchFailed);
+        if (status == static_cast<int>(SolveStatus::Converged))
+          solveDiagnostics.recordFinalGradientStats(grad.norm(), gradMaxNorm);
         if (verbose >= 1) {
           std::cout << "    Iter=" << iter << "; line search failed; ||grad||_max=" << gradMaxNorm
                     << " (lambda0=" << lambda0 << ", looseRel=" << lambda0 * looseRelFactor << ")"
@@ -487,6 +511,8 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
         constexpr double looseRelFactor = 1e-4;
         const bool looseRelConverged = gradMaxNorm < lambda0 * looseRelFactor;
         status = (gradMaxNorm < epsilon || looseRelConverged) ? static_cast<int>(SolveStatus::Converged) : static_cast<int>(SolveStatus::StepTooSmall);
+        if (status == static_cast<int>(SolveStatus::Converged))
+          solveDiagnostics.recordFinalGradientStats(grad.norm(), gradMaxNorm);
         if (verbose >= 1) {
           std::cout << "    Iter=" << iter << "; dx = " << stepSize
                     << "; dx too small; ||grad||_max=" << gradMaxNorm

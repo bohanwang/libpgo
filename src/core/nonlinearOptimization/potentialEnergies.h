@@ -53,6 +53,8 @@ public:
   virtual void hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const override;
 
   virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override;
+  virtual void beginLineSearch(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override;
+  virtual void endLineSearch() const override;
 
   void printEnergy(EigenSupport::ConstRefVecXd x) const;
 

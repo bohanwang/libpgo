@@ -80,6 +80,8 @@ public:
   // In practice, c is a small value like 1e-4
   Result backtracking(const double * x0, const double * p, double fx0, const double * gx0, double c, double rho,
       double initialAlpha = 1.0) const;
+  Result backtrackingWithInitialValue(const double * x0, const double * p, double fx0, const double * gx0, double c, double rho,
+      double initialAlpha, double initialF) const;
 
   void setVerbose(int v) { verbose = v; }
 

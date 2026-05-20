@@ -98,9 +98,9 @@ M12d computeEESqDistHess(const V3d &ea0, const V3d &ea1,
 
 struct EEDistAll
 {
-  double d2 = 0.0;
-  V12d grad = V12d::Zero();
-  M12d hess = M12d::Zero();
+  double d2;
+  V12d grad;
+  M12d hess;
 };
 
 EEDistAll computeEESqDistAll(const V3d &ea0, const V3d &ea1,
@@ -108,9 +108,9 @@ EEDistAll computeEESqDistAll(const V3d &ea0, const V3d &ea1,
 
 struct PTDistAll
 {
-  double d2 = 0.0;
-  V12d grad = V12d::Zero();
-  M12d hess = M12d::Zero();
+  double d2;
+  V12d grad;
+  M12d hess;
 };
 
 PTDistAll computePTSqDistAll(const V3d &p, const V3d &t0,

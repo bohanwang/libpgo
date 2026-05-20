@@ -35,6 +35,7 @@ public:
   const EigenSupport::VXd &currentPositions() const { return current_; }
   const EigenSupport::MXi &triangles()        const { return triangles_; }
   const EigenSupport::MXi &uniqueEdges()      const { return uniqueEdges_; }
+  const EigenSupport::MXi &contactEdges()     const { return contactEdges_; }
   const ObstaclePoseCache &cache()            const { return cache_; }
 
   void setObjectId(int32_t id) { objectId_ = id; }
@@ -44,7 +45,8 @@ private:
   EigenSupport::VXd    rest_;
   EigenSupport::VXd    current_;
   EigenSupport::MXi    triangles_;       // local 0-based indices
-  EigenSupport::MXi    uniqueEdges_;     // derived from triangles_
+  EigenSupport::MXi    uniqueEdges_;     // all topological edges derived from triangles_
+  EigenSupport::MXi    contactEdges_;    // boundary/nonmanifold/sharp edges used for external EE
   TrajectorySampler    sampler_;
   ObstaclePoseCache    cache_;
 };

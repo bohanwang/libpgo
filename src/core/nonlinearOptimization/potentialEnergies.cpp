@@ -337,3 +337,18 @@ MaxStepResult PotentialEnergies::computeMaxStepLimit(EigenSupport::ConstRefVecXd
   }
   return result;
 }
+
+void PotentialEnergies::beginLineSearch(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
+{
+  for (size_t i = 0; i < potentialEnergies.size(); i++) {
+    mapx(x, energyDOFs[i], buffer->xlocals[i]);
+    mapx(dx, energyDOFs[i], buffer->vecs[i]);
+    potentialEnergies[i]->beginLineSearch(buffer->xlocals[i], buffer->vecs[i]);
+  }
+}
+
+void PotentialEnergies::endLineSearch() const
+{
+  for (const auto &energy : potentialEnergies)
+    energy->endLineSearch();
+}

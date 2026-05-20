@@ -31,11 +31,18 @@ public:
   virtual int isHessianTopologyFixed() const override;
   virtual void hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const override;
 
-  void printImplicitEnergy(EigenSupport::ConstRefVecXd x) const;
+  void clearCachedImplicitEnergyComponents() const;
+  void printImplicitEnergy(EigenSupport::ConstRefVecXd x, bool allowCachedComponents = false) const;
 
 protected:
+  void cacheImplicitEnergyComponents(double mainEnergy, const std::vector<double> &componentEnergies) const;
+  bool hasCachedImplicitEnergyComponents() const;
+
   ImplicitBackwardEulerTimeIntegrator *intg;
   bool approxHessian = true;
+  mutable bool hasCachedEnergyComponents = false;
+  mutable double cachedMainEnergy = 0.0;
+  mutable std::vector<double> cachedImplicitModelEnergies;
 };
 
 }  // namespace OptimizationBasedIntegrator

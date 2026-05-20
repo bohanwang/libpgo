@@ -33,6 +33,10 @@ public:
   void markObstacleStatic(int32_t objectId);
 
 private:
+  void cacheEnergyActiveSet(SurfaceIPCActiveSet activeSet) const;
+  const SurfaceIPCActiveSet *cachedEnergyActiveSetFor(EigenSupport::ConstRefVecXd surfacePositions) const;
+  void clearCachedEnergyActiveSet() const;
+
   virtual double computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const override;
   virtual void computeSurfaceGradient(
     EigenSupport::ConstRefVecXd surfacePositions,
@@ -56,8 +60,17 @@ private:
   virtual NonlinearOptimization::MaxStepResult computeSurfaceMaxStepLimit(
     EigenSupport::ConstRefVecXd surfacePositions,
     EigenSupport::ConstRefVecXd surfaceDisplacements) const override;
+  virtual void beginSurfaceLineSearch(
+    EigenSupport::ConstRefVecXd surfacePositions,
+    EigenSupport::ConstRefVecXd surfaceDisplacements) const override;
+  virtual void endSurfaceLineSearch() const override;
 
   SurfaceIPCCore surfaceIPCCore_;
+  mutable bool hasCachedEnergyActiveSet_ = false;
+  mutable SurfaceIPCActiveSet cachedEnergyActiveSet_;
+  mutable bool hasLineSearchActiveSet_ = false;
+  mutable bool hasLineSearchEnergyState_ = false;
+  mutable SurfaceIPCActiveSet lineSearchActiveSet_;
 };
 
 }  // namespace CIPC

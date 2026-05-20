@@ -47,6 +47,10 @@ public:
     EigenSupport::ConstRefVecXd simulationDisplacements,
     EigenSupport::RefVecXd simulationGradient,
     EigenSupport::SpMatD &simulationHessian) const override;
+  virtual void beginLineSearch(
+    EigenSupport::ConstRefVecXd simulationDisplacements,
+    EigenSupport::ConstRefVecXd trialSimulationDisplacements) const override;
+  virtual void endLineSearch() const override;
 
   virtual void getDOFs(std::vector<int> &dofs) const override { dofs = simulationDOFs_; }
   virtual int getNumDOFs() const override { return static_cast<int>(simulationDOFs_.size()); }
@@ -80,6 +84,10 @@ protected:
   virtual NonlinearOptimization::MaxStepResult computeSurfaceMaxStepLimit(
     EigenSupport::ConstRefVecXd surfacePositions,
     EigenSupport::ConstRefVecXd surfaceDisplacements) const;
+  virtual void beginSurfaceLineSearch(
+    EigenSupport::ConstRefVecXd surfacePositions,
+    EigenSupport::ConstRefVecXd surfaceDisplacements) const;
+  virtual void endSurfaceLineSearch() const;
 
 private:
   VXd surfaceRestPositions_;

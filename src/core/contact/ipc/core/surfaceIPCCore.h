@@ -56,6 +56,9 @@ public:
 
   void setMesh(const EigenSupport::MXd &V, const EigenSupport::MXi &F);
   SurfaceIPCActiveSet buildActiveSet(EigenSupport::ConstRefVecXd x_surf) const;
+  SurfaceIPCActiveSet buildLineSearchActiveSetSuperset(
+    EigenSupport::ConstRefVecXd x_surf,
+    EigenSupport::ConstRefVecXd dx_surf) const;
 
   double computeEnergy(EigenSupport::ConstRefVecXd x_surf) const;
   void computeGradient(EigenSupport::ConstRefVecXd x_surf, EigenSupport::RefVecXd g_surf) const;

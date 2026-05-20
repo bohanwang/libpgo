@@ -427,6 +427,16 @@ Result LineSearch::backtracking(const double * x0, const double * p, double fx0,
   this->p = p;
   f1DCount = 0;
 
+  return backtrackingWithInitialValue(x0, p, fx0, gx0, c, rho, initialAlpha, f1D(initialAlpha));
+}
+
+Result LineSearch::backtrackingWithInitialValue(const double * x0, const double * p, double fx0, const double * gx0, double c, double rho,
+      double initialAlpha, double initialF) const
+{
+  this->x0 = x0;
+  this->p = p;
+  f1DCount = 1;
+
   double cgp = c * vectorDotProduct(n, gx0, p);
 //  double dir = 1.0;
   if (cgp > 0)
@@ -438,7 +448,7 @@ Result LineSearch::backtracking(const double * x0, const double * p, double fx0,
   }
 
   double alpha = initialAlpha;
-  double fa = f1D(alpha);
+  double fa = initialF;
   double minf = fa, mina = initialAlpha;
   int iter = 0;
   for(; (fa > fx0 + alpha * cgp) && iter < maxIter; iter++)

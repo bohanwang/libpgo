@@ -4,6 +4,7 @@
 #include "pgoLogging.h"
 #include "solveDiagnostics.h"
 
+#include <cmath>
 #include <numeric>
 
 namespace
@@ -30,16 +31,19 @@ public:
 
   double func(ES::ConstRefVecXd x) const override
   {
+    funcCalls++;
     return 0.5 * x.squaredNorm();
   }
 
   void gradient(ES::ConstRefVecXd x, ES::RefVecXd grad) const override
   {
+    gradientCalls++;
     grad = x;
   }
 
   void hessian(ES::ConstRefVecXd, ES::SpMatD &hess) const override
   {
+    hessianCalls++;
     hess.setIdentity();
   }
 
@@ -57,6 +61,14 @@ public:
 
   int getNumDOFs() const override { return n; }
   MaxStepResult computeMaxStepLimit(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return maxStep; }
+  void beginLineSearch(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { beginLineSearchCalls++; }
+  void endLineSearch() const override { endLineSearchCalls++; }
+
+  mutable int funcCalls = 0;
+  mutable int gradientCalls = 0;
+  mutable int hessianCalls = 0;
+  mutable int beginLineSearchCalls = 0;
+  mutable int endLineSearchCalls = 0;
 
 private:
   int n;
@@ -93,6 +105,12 @@ public:
     hess.setIdentity();
   }
 
+  double func_grad_hessian(ES::ConstRefVecXd x, ES::RefVecXd grad, ES::SpMatD &hess) const override
+  {
+    gradient_hessian(x, grad, hess);
+    return func(x);
+  }
+
   void createHessian(ES::SpMatD &hess) const override
   {
     hess.resize(n, n);
@@ -116,6 +134,46 @@ public:
 private:
   int n;
 };
+
+class TestSlowQuadraticEnergy : public PotentialEnergy
+{
+public:
+  double func(ES::ConstRefVecXd x) const override
+  {
+    return 0.5 * x.squaredNorm();
+  }
+
+  void gradient(ES::ConstRefVecXd x, ES::RefVecXd grad) const override
+  {
+    grad = x;
+  }
+
+  void hessian(ES::ConstRefVecXd, ES::SpMatD &hess) const override
+  {
+    hess.setIdentity();
+    hess *= 10.0;
+  }
+
+  void createHessian(ES::SpMatD &hess) const override
+  {
+    hess.resize(1, 1);
+    hess.setIdentity();
+  }
+
+  void getDOFs(std::vector<int> &dofs) const override
+  {
+    dofs = { 0 };
+  }
+
+  int getNumDOFs() const override { return 1; }
+
+  MaxStepResult computeMaxStepLimit(ES::ConstRefVecXd x, ES::ConstRefVecXd) const override
+  {
+    if (std::abs(x[0]) < 2e-4)
+      return MaxStepResult::contact(0.0);
+    return MaxStepResult::unconstrained();
+  }
+};
 }  // namespace
 
 TEST(SolveDiagnosticsGTest, RecordsAndResetsMaxStepAndLineSearch)
@@ -125,6 +183,7 @@ TEST(SolveDiagnosticsGTest, RecordsAndResetsMaxStepAndLineSearch)
   diagnostics.recordMaxStep(MaxStepResult::material(0.4));
   diagnostics.recordMaxStep(MaxStepResult::contact(0.25));
   diagnostics.recordLineSearch(0.25, 0.5, 0.125);
+  diagnostics.recordFinalGradientStats(2.0, 1.5);
 
   EXPECT_EQ(diagnostics.materialClampCount, 1);
   EXPECT_EQ(diagnostics.contactClampCount, 1);
@@ -135,6 +194,9 @@ TEST(SolveDiagnosticsGTest, RecordsAndResetsMaxStepAndLineSearch)
   EXPECT_DOUBLE_EQ(diagnostics.minEffectiveAlpha, 0.125);
   EXPECT_DOUBLE_EQ(diagnostics.currentMaterialAlpha, 1.0);
   EXPECT_DOUBLE_EQ(diagnostics.currentContactAlpha, 0.25);
+  EXPECT_TRUE(diagnostics.hasFinalGradientStats);
+  EXPECT_DOUBLE_EQ(diagnostics.finalGradientNorm, 2.0);
+  EXPECT_DOUBLE_EQ(diagnostics.finalGradientMaxNorm, 1.5);
 
   diagnostics.reset();
 
@@ -147,6 +209,9 @@ TEST(SolveDiagnosticsGTest, RecordsAndResetsMaxStepAndLineSearch)
   EXPECT_DOUBLE_EQ(diagnostics.minEffectiveAlpha, 1.0);
   EXPECT_DOUBLE_EQ(diagnostics.currentMaterialAlpha, 1.0);
   EXPECT_DOUBLE_EQ(diagnostics.currentContactAlpha, 1.0);
+  EXPECT_FALSE(diagnostics.hasFinalGradientStats);
+  EXPECT_DOUBLE_EQ(diagnostics.finalGradientNorm, 0.0);
+  EXPECT_DOUBLE_EQ(diagnostics.finalGradientMaxNorm, 0.0);
 }
 
 TEST(NewtonSolverGTest, ConvergedSolveReturnsConvergedStatus)
@@ -221,6 +286,77 @@ TEST(NewtonSolverGTest, SolveDiagnosticsRecordsMaxStepBreakdown)
   EXPECT_NE(output.find("feasible alpha clamped: material:0.25 contact:1"), std::string::npos);
 }
 
+TEST(NewtonSolverGTest, BacktrackingReusesInitialTrialEnergy)
+{
+  initializeLogging();
+
+  auto energy = std::make_shared<TestQuadraticEnergy>(2);
+  ES::VXd x(2);
+  x[0] = 2.0;
+  x[1] = 0.0;
+
+  NewtonSolver::SolverParam solverParam;
+  solverParam.lsm = NewtonSolver::LSM_BACKTRACK;
+  const std::vector<int> fixedDOFs = { 1 };
+  const double fixedValues[1] = { 0.0 };
+  NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs, fixedValues);
+
+  const int ret = solver.solve(x.data(), 1, 1e-10, 0);
+
+  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::MaxIterations));
+  EXPECT_EQ(energy->funcCalls, 2);
+  EXPECT_EQ(energy->gradientCalls, 1);
+  EXPECT_EQ(energy->hessianCalls, 2);
+  EXPECT_EQ(energy->beginLineSearchCalls, 1);
+  EXPECT_EQ(energy->endLineSearchCalls, 1);
+}
+
+TEST(NewtonSolverGTest, GoldenLineSearchDoesNotUseBoundedActiveSetScope)
+{
+  initializeLogging();
+
+  auto energy = std::make_shared<TestQuadraticEnergy>(2);
+  ES::VXd x(2);
+  x[0] = 2.0;
+  x[1] = 0.0;
+
+  NewtonSolver::SolverParam solverParam;
+  solverParam.lsm = NewtonSolver::LSM_GOLDEN;
+  const std::vector<int> fixedDOFs = { 1 };
+  const double fixedValues[1] = { 0.0 };
+  NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs, fixedValues);
+
+  const int ret = solver.solve(x.data(), 1, 1e-10, 0);
+
+  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::MaxIterations));
+  EXPECT_EQ(energy->beginLineSearchCalls, 0);
+  EXPECT_EQ(energy->endLineSearchCalls, 0);
+}
+
+TEST(NewtonSolverGTest, StepTooSmallConvergenceRecordsFinalGradientStats)
+{
+  initializeLogging();
+
+  auto energy = std::make_shared<TestSlowQuadraticEnergy>();
+  ES::VXd x(1);
+  x[0] = 2.0;
+
+  NewtonSolver::SolverParam solverParam;
+  const std::vector<int> fixedDOFs;
+  NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs);
+
+  testing::internal::CaptureStdout();
+  const int ret = solver.solve(x.data(), 120, 1e-12, 1);
+  const std::string output = testing::internal::GetCapturedStdout();
+
+  const SolveDiagnostics &diagnostics = solver.getSolveDiagnostics();
+  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::Converged));
+  EXPECT_NE(output.find("dx too small"), std::string::npos);
+  EXPECT_TRUE(diagnostics.hasFinalGradientStats);
+  EXPECT_GT(diagnostics.finalGradientMaxNorm, 0.0);
+  EXPECT_LT(diagnostics.finalGradientMaxNorm, 2.0e-4);
+}
+
 TEST(NewtonSolverGTest, VerboseIterationLogLabelsMaxGradientNorm)
 {
   initializeLogging();
@@ -260,7 +396,7 @@ TEST(NewtonSolverGTest, NonFixedTopologyIterationsUseGradientHessian)
   const int ret = solver.solve(x.data(), 1, 1e-10, 0);
 
   EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::Converged));
-  EXPECT_EQ(energy->gradientCalls, 2);
+  EXPECT_EQ(energy->gradientCalls, 1);
   EXPECT_EQ(energy->gradientHessianCalls, 1);
   EXPECT_EQ(energy->hessianCalls, 0);
 }

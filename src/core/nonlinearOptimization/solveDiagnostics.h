@@ -60,6 +60,9 @@ struct SolveDiagnostics
   double minEffectiveAlpha = 1.0;
   double currentMaterialAlpha = 1.0;
   double currentContactAlpha = 1.0;
+  bool hasFinalGradientStats = false;
+  double finalGradientNorm = 0.0;
+  double finalGradientMaxNorm = 0.0;
 
   void reset()
   {
@@ -85,6 +88,13 @@ struct SolveDiagnostics
     minFeasibleAlpha = std::min(minFeasibleAlpha, feasibleAlpha);
     minLineSearchAlpha = std::min(minLineSearchAlpha, lineSearchAlpha);
     minEffectiveAlpha = std::min(minEffectiveAlpha, effectiveAlpha);
+  }
+
+  void recordFinalGradientStats(double gradientNorm, double gradientMaxNorm)
+  {
+    hasFinalGradientStats = true;
+    finalGradientNorm = gradientNorm;
+    finalGradientMaxNorm = gradientMaxNorm;
   }
 };
 

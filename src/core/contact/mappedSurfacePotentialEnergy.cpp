@@ -211,11 +211,35 @@ NonlinearOptimization::MaxStepResult MappedSurfacePotentialEnergy::computeMaxSte
   return computeSurfaceMaxStepLimit(surfacePositions, trialSurfaceDisplacements);
 }
 
+void MappedSurfacePotentialEnergy::beginLineSearch(
+  EigenSupport::ConstRefVecXd simulationDisplacements,
+  EigenSupport::ConstRefVecXd trialSimulationDisplacements) const
+{
+  const VXd surfacePositions = computeSurfacePositionsFromSimulationDisplacements(simulationDisplacements);
+  const VXd trialSurfaceDisplacements = computeSurfaceDisplacementsFromSimulationDisplacements(trialSimulationDisplacements);
+  beginSurfaceLineSearch(surfacePositions, trialSurfaceDisplacements);
+}
+
+void MappedSurfacePotentialEnergy::endLineSearch() const
+{
+  endSurfaceLineSearch();
+}
+
 NonlinearOptimization::MaxStepResult MappedSurfacePotentialEnergy::computeSurfaceMaxStepLimit(
   EigenSupport::ConstRefVecXd,
   EigenSupport::ConstRefVecXd) const
 {
   return NonlinearOptimization::MaxStepResult::unconstrained();
+}
+
+void MappedSurfacePotentialEnergy::beginSurfaceLineSearch(
+  EigenSupport::ConstRefVecXd,
+  EigenSupport::ConstRefVecXd) const
+{
+}
+
+void MappedSurfacePotentialEnergy::endSurfaceLineSearch() const
+{
 }
 
 }  // namespace CIPC

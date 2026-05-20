@@ -181,6 +181,70 @@ TEST(SurfaceIPCBarrierAssemblerGTest, KernelEEActiveAndInactive)
   EXPECT_FALSE(kFar.active);
 }
 
+TEST(SurfaceIPCBarrierAssemblerGTest, ExternalDynamicPointKernelMatchesGenericSubBlock)
+{
+  const ES::V3d p(0.10, 0.20, 0.0);
+  const ES::V3d t0(0.0, 0.0, 0.04);
+  const ES::V3d t1(1.0, 0.0, 0.04);
+  const ES::V3d t2(0.0, 1.0, 0.04);
+
+  const double dhat2 = 0.01;
+  const double kappa = 2.0;
+  const double weight = 0.75;
+
+  const auto generic = kernels::pointTriangle(p, t0, t1, t2, weight, dhat2, kappa, true, true);
+  const auto external = kernels::pointStaticTriangle(p, t0, t1, t2, weight, dhat2, kappa, true, true);
+
+  ASSERT_TRUE(generic.active);
+  ASSERT_EQ(external.active, generic.active);
+  EXPECT_NEAR(external.energy, generic.energy, 1e-12);
+  EXPECT_LT((external.gradient - generic.gradient.head<3>()).norm(), 1e-12);
+  EXPECT_LT((external.hessian - generic.hessian.block<3, 3>(0, 0)).norm(), 1e-12);
+}
+
+TEST(SurfaceIPCBarrierAssemblerGTest, ExternalDynamicTriangleKernelMatchesGenericSubBlock)
+{
+  const ES::V3d p(0.10, 0.20, 0.0);
+  const ES::V3d t0(0.0, 0.0, 0.04);
+  const ES::V3d t1(1.0, 0.0, 0.04);
+  const ES::V3d t2(0.0, 1.0, 0.04);
+
+  const double dhat2 = 0.01;
+  const double kappa = 2.0;
+  const double weight = 0.75;
+
+  const auto generic = kernels::pointTriangle(p, t0, t1, t2, weight, dhat2, kappa, true, true);
+  const auto external = kernels::staticPointTriangle(p, t0, t1, t2, weight, dhat2, kappa, true, true);
+
+  ASSERT_TRUE(generic.active);
+  ASSERT_EQ(external.active, generic.active);
+  EXPECT_NEAR(external.energy, generic.energy, 1e-12);
+  EXPECT_LT((external.gradient - generic.gradient.segment<9>(3)).norm(), 1e-12);
+  EXPECT_LT((external.hessian - generic.hessian.block<9, 9>(3, 3)).norm(), 1e-12);
+}
+
+TEST(SurfaceIPCBarrierAssemblerGTest, ExternalDynamicEdgeKernelMatchesGenericSubBlock)
+{
+  const ES::V3d ea0(0.0, -0.01, 0.0);
+  const ES::V3d ea1(1.0, -0.01, 0.0);
+  const ES::V3d eb0(0.0,  0.01, 0.0);
+  const ES::V3d eb1(1.0,  0.01, 0.0);
+
+  const double dhat2 = 0.01;
+  const double kappa = 1.5;
+  const double weight = 0.8;
+  const double epsEE = 1e-3;
+
+  const auto generic = kernels::edgeEdge(ea0, ea1, eb0, eb1, weight, dhat2, kappa, epsEE, true, true);
+  const auto external = kernels::edgeStaticEdge(ea0, ea1, eb0, eb1, weight, dhat2, kappa, epsEE, true, true);
+
+  ASSERT_TRUE(generic.active);
+  ASSERT_EQ(external.active, generic.active);
+  EXPECT_NEAR(external.energy, generic.energy, 1e-12);
+  EXPECT_LT((external.gradient - generic.gradient.head<6>()).norm(), 1e-12);
+  EXPECT_LT((external.hessian - generic.hessian.block<6, 6>(0, 0)).norm(), 1e-12);
+}
+
 TEST(SurfaceIPCBarrierAssemblerGTest, SinglePairGradientScatterIsCorrect)
 {
   // Create a minimal mesh with 2 vertices, build one PT pair manually

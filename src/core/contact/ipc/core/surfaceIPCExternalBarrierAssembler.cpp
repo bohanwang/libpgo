@@ -42,7 +42,7 @@ static V3d dynVtx(ConstRefVecXd x, int i)
 
 // Gradient scatter helpers
 
-static void scatterExternalPTGrad(const V12d &g_local, int dynVertex, RefVecXd g_surf)
+static void scatterExternalPTGrad(const V3d &g_local, int dynVertex, RefVecXd g_surf)
 {
   double *gd = g_surf.data();
   for (int d = 0; d < 3; ++d)
@@ -50,16 +50,16 @@ static void scatterExternalPTGrad(const V12d &g_local, int dynVertex, RefVecXd g
       .fetch_add(g_local[d], std::memory_order_relaxed);
 }
 
-static void scatterExternalTPGrad(const V12d &g_local, const std::array<int, 3> &dynTri, RefVecXd g_surf)
+static void scatterExternalTPGrad(const V9d &g_local, const std::array<int, 3> &dynTri, RefVecXd g_surf)
 {
   double *gd = g_surf.data();
   for (int i = 0; i < 3; ++i)
     for (int d = 0; d < 3; ++d)
       std::atomic_ref<double>(gd[3 * dynTri[i] + d])
-        .fetch_add(g_local[3 * (i + 1) + d], std::memory_order_relaxed);
+        .fetch_add(g_local[3 * i + d], std::memory_order_relaxed);
 }
 
-static void scatterExternalEEGrad(const V12d &g_local, const std::array<int, 2> &dynEdge, RefVecXd g_surf)
+static void scatterExternalEEGrad(const V6d &g_local, const std::array<int, 2> &dynEdge, RefVecXd g_surf)
 {
   double *gd = g_surf.data();
   for (int i = 0; i < 2; ++i)
@@ -76,7 +76,7 @@ struct ExtHessianScatterState
   int pairCount = 0;
 };
 
-static void scatterExternalPTHessian(int tripletOffset, const M12d &localH, int dynVertex, ExtHessianScatterState &state)
+static void scatterExternalPTHessian(int tripletOffset, const M3d &localH, int dynVertex, ExtHessianScatterState &state)
 {
   TripletD *base = state.triplets.data() + tripletOffset;
   int k = 0;
@@ -87,7 +87,7 @@ static void scatterExternalPTHessian(int tripletOffset, const M12d &localH, int 
       base[k] = TripletD(ri + di, cj + dj, localH(di, dj));
 }
 
-static void scatterExternalTPHessian(int tripletOffset, const M12d &localH, const std::array<int, 3> &dynTri, ExtHessianScatterState &state)
+static void scatterExternalTPHessian(int tripletOffset, const M9d &localH, const std::array<int, 3> &dynTri, ExtHessianScatterState &state)
 {
   TripletD *base = state.triplets.data() + tripletOffset;
   int k = 0;
@@ -97,12 +97,12 @@ static void scatterExternalTPHessian(int tripletOffset, const M12d &localH, cons
       int cj = 3 * dynTri[j];
       for (int di = 0; di < 3; ++di)
         for (int dj = 0; dj < 3; ++dj, ++k)
-          base[k] = TripletD(ri + di, cj + dj, localH(3 * (i + 1) + di, 3 * (j + 1) + dj));
+          base[k] = TripletD(ri + di, cj + dj, localH(3 * i + di, 3 * j + dj));
     }
   }
 }
 
-static void scatterExternalEEHessian(int tripletOffset, const M12d &localH, const std::array<int, 2> &dynEdge, ExtHessianScatterState &state)
+static void scatterExternalEEHessian(int tripletOffset, const M6d &localH, const std::array<int, 2> &dynEdge, ExtHessianScatterState &state)
 {
   TripletD *base = state.triplets.data() + tripletOffset;
   int k = 0;
@@ -138,7 +138,7 @@ double computeExternalEnergy(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-        auto k = barrier_kernels::pointTriangle(
+        auto k = barrier_kernels::pointStaticTriangle(
           dynVtx(dynPos, pair.dynVertex),
           obsVtx(obsP, pair.obsTri[0]),
           obsVtx(obsP, pair.obsTri[1]),
@@ -157,7 +157,7 @@ double computeExternalEnergy(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.tpPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-        auto k = barrier_kernels::pointTriangle(
+        auto k = barrier_kernels::staticPointTriangle(
           obsVtx(obsP, pair.obsVertex),
           dynVtx(dynPos, pair.dynTri[0]),
           dynVtx(dynPos, pair.dynTri[1]),
@@ -176,7 +176,7 @@ double computeExternalEnergy(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-        auto k = barrier_kernels::edgeEdge(
+        auto k = barrier_kernels::edgeStaticEdge(
           dynVtx(dynPos, pair.dynEdge[0]),
           dynVtx(dynPos, pair.dynEdge[1]),
           obsVtx(obsP, pair.obsEdge[0]),
@@ -219,7 +219,7 @@ void computeExternalGradient(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-        auto k = barrier_kernels::pointTriangle(
+        auto k = barrier_kernels::pointStaticTriangle(
           dynVtx(dynPos, pair.dynVertex),
           obsVtx(obsP, pair.obsTri[0]),
           obsVtx(obsP, pair.obsTri[1]),
@@ -238,7 +238,7 @@ void computeExternalGradient(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.tpPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-        auto k = barrier_kernels::pointTriangle(
+        auto k = barrier_kernels::staticPointTriangle(
           obsVtx(obsP, pair.obsVertex),
           dynVtx(dynPos, pair.dynTri[0]),
           dynVtx(dynPos, pair.dynTri[1]),
@@ -257,7 +257,7 @@ void computeExternalGradient(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-        auto k = barrier_kernels::edgeEdge(
+        auto k = barrier_kernels::edgeStaticEdge(
           dynVtx(dynPos, pair.dynEdge[0]),
           dynVtx(dynPos, pair.dynEdge[1]),
           obsVtx(obsP, pair.obsEdge[0]),
@@ -302,7 +302,7 @@ void computeExternalHessian(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.ptPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-        auto k = barrier_kernels::pointTriangle(
+        auto k = barrier_kernels::pointStaticTriangle(
           dynVtx(dynPos, pair.dynVertex),
           obsVtx(obsP, pair.obsTri[0]),
           obsVtx(obsP, pair.obsTri[1]),
@@ -321,7 +321,7 @@ void computeExternalHessian(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.tpPairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-        auto k = barrier_kernels::pointTriangle(
+        auto k = barrier_kernels::staticPointTriangle(
           obsVtx(obsP, pair.obsVertex),
           dynVtx(dynPos, pair.dynTri[0]),
           dynVtx(dynPos, pair.dynTri[1]),
@@ -340,7 +340,7 @@ void computeExternalHessian(
       for (int i = range.begin(); i < range.end(); ++i) {
         auto &pair = pairs.eePairs[i];
         const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-        auto k = barrier_kernels::edgeEdge(
+        auto k = barrier_kernels::edgeStaticEdge(
           dynVtx(dynPos, pair.dynEdge[0]),
           dynVtx(dynPos, pair.dynEdge[1]),
           obsVtx(obsP, pair.obsEdge[0]),
@@ -408,7 +408,7 @@ void computeExternalAll(
         for (int i = range.begin(); i < range.end(); ++i) {
           auto &pair = pairs.ptPairs[i];
           const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-          auto k = barrier_kernels::pointTriangle(
+          auto k = barrier_kernels::pointStaticTriangle(
             dynVtx(dynPos, pair.dynVertex),
             obsVtx(obsP, pair.obsTri[0]),
             obsVtx(obsP, pair.obsTri[1]),
@@ -435,7 +435,7 @@ void computeExternalAll(
         for (int i = range.begin(); i < range.end(); ++i) {
           auto &pair = pairs.tpPairs[i];
           const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-          auto k = barrier_kernels::pointTriangle(
+          auto k = barrier_kernels::staticPointTriangle(
             obsVtx(obsP, pair.obsVertex),
             dynVtx(dynPos, pair.dynTri[0]),
             dynVtx(dynPos, pair.dynTri[1]),
@@ -462,7 +462,7 @@ void computeExternalAll(
         for (int i = range.begin(); i < range.end(); ++i) {
           auto &pair = pairs.eePairs[i];
           const VXd &obsP = obsPositions(obstacles, pair.obstacleSlot);
-          auto k = barrier_kernels::edgeEdge(
+          auto k = barrier_kernels::edgeStaticEdge(
             dynVtx(dynPos, pair.dynEdge[0]),
             dynVtx(dynPos, pair.dynEdge[1]),
             obsVtx(obsP, pair.obsEdge[0]),

@@ -33,11 +33,13 @@ public:
 
   double func(ES::ConstRefVecXd x) const override
   {
+    funcCalls++;
     return 0.5 * x.squaredNorm();
   }
 
   void gradient(ES::ConstRefVecXd x, ES::RefVecXd grad) const override
   {
+    gradientCalls++;
     grad = x;
   }
 
@@ -60,6 +62,9 @@ public:
 
   int getNumDOFs() const override { return n; }
   MaxStepResult computeMaxStepLimit(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return MaxStepResult::material(maxStep); }
+
+  mutable int funcCalls = 0;
+  mutable int gradientCalls = 0;
 
 private:
   int n;
@@ -95,6 +100,12 @@ public:
     grad = x;
     hess.resize(n, n);
     hess.setIdentity();
+  }
+
+  double func_grad_hessian(ES::ConstRefVecXd x, ES::RefVecXd grad, ES::SpMatD &hess) const override
+  {
+    gradient_hessian(x, grad, hess);
+    return func(x);
   }
 
   void createHessian(ES::SpMatD &hess) const override
@@ -173,6 +184,25 @@ TEST(ImplicitBackwardEulerTimeIntegratorGTest, DoTimestepDoesNotThrowOnAcceptedM
   EXPECT_NO_THROW(integrator.doTimestep(1, 0, 0));
   EXPECT_EQ(integrator.getSolverReturn(), static_cast<int>(NewtonSolver::SolveStatus::MaxIterations));
   EXPECT_EQ(integrator.getTimestepID(), 1u);
+}
+
+TEST(ImplicitBackwardEulerTimeIntegratorGTest, ResidualPrintReusesNewtonFinalGradient)
+{
+  initializeLogging();
+
+  auto energy = std::make_shared<TestQuadraticEnergy>(1);
+  ImplicitBackwardEulerTimeIntegrator integrator(identityMass(1), energy, 0.0, 0.0, 0.1, 10, 1e-8);
+
+  testing::internal::CaptureStdout();
+  const int ret = integrator.tryTimestep(0, 1, 1);
+  const std::string output = testing::internal::GetCapturedStdout();
+
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(integrator.getSolverReturn(), static_cast<int>(NewtonSolver::SolveStatus::Converged));
+  EXPECT_NE(output.find("residual=0"), std::string::npos);
+  EXPECT_NE(output.find("sub 0: 0"), std::string::npos);
+  EXPECT_EQ(energy->funcCalls, 1);
+  EXPECT_EQ(energy->gradientCalls, 1);
 }
 
 TEST(ImplicitBackwardEulerTimeIntegratorGTest, WrapperGradientHessianDispatchesToNonFixedModel)

@@ -52,7 +52,7 @@ struct ExternalEEPair
 {                                     // dyn edge x obs edge
   int32_t            obstacleSlot;
   std::array<int, 2> dynEdge;         // dyn-surface-global indices (row order in unique_edges)
-  std::array<int, 2> obsEdge;         // obstacle-local indices (row order in ObstacleSurface::uniqueEdges)
+  std::array<int, 2> obsEdge;         // obstacle-local endpoint indices from ObstacleSurface::contactEdges
   double             weight;          // length(edgeA) * length(edgeB)
 };
 

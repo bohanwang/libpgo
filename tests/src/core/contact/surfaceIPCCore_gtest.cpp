@@ -9,6 +9,7 @@
 #include "testCIPCHelpers.h"
 
 #include <algorithm>
+#include <array>
 #include <stdexcept>
 #include <string_view>
 #include <vector>
@@ -64,6 +65,78 @@ const ProfileStat *findStat(const std::vector<ProfileStat> &stats, std::string_v
   const auto it = std::find_if(stats.begin(), stats.end(),
     [name](const ProfileStat &stat) { return stat.name == name; });
   return it == stats.end() ? nullptr : &(*it);
+}
+
+std::array<int, 2> edgeKey(int a, int b)
+{
+  if (b < a)
+    std::swap(a, b);
+  return { a, b };
+}
+
+std::array<int, 3> triKey(int a, int b, int c)
+{
+  std::array<int, 3> key = { a, b, c };
+  std::sort(key.begin(), key.end());
+  return key;
+}
+
+std::array<int, 4> selfPTKey(const pgo::Contact::CIPC::PTPair &pair)
+{
+  const auto tri = triKey(pair.t0, pair.t1, pair.t2);
+  return { pair.p, tri[0], tri[1], tri[2] };
+}
+
+std::array<int, 4> selfEEKey(const pgo::Contact::CIPC::EEPair &pair)
+{
+  auto edgeA = edgeKey(pair.ea0, pair.ea1);
+  auto edgeB = edgeKey(pair.eb0, pair.eb1);
+  if (edgeB < edgeA)
+    std::swap(edgeA, edgeB);
+  return { edgeA[0], edgeA[1], edgeB[0], edgeB[1] };
+}
+
+std::array<int, 5> externalPTKey(const pgo::Contact::CIPC::ExternalPTPair &pair)
+{
+  const auto tri = triKey(pair.obsTri[0], pair.obsTri[1], pair.obsTri[2]);
+  return { static_cast<int>(pair.obstacleSlot), pair.dynVertex, tri[0], tri[1], tri[2] };
+}
+
+std::array<int, 5> externalTPKey(const pgo::Contact::CIPC::ExternalTPPair &pair)
+{
+  const auto tri = triKey(pair.dynTri[0], pair.dynTri[1], pair.dynTri[2]);
+  return { static_cast<int>(pair.obstacleSlot), tri[0], tri[1], tri[2], pair.obsVertex };
+}
+
+std::array<int, 5> externalEEKey(const pgo::Contact::CIPC::ExternalEEPair &pair)
+{
+  const auto dynEdge = edgeKey(pair.dynEdge[0], pair.dynEdge[1]);
+  const auto obsEdge = edgeKey(pair.obsEdge[0], pair.obsEdge[1]);
+  return { static_cast<int>(pair.obstacleSlot), dynEdge[0], dynEdge[1], obsEdge[0], obsEdge[1] };
+}
+
+template<class Pair, class KeyFn>
+bool containsPair(const std::vector<Pair> &pairs, const Pair &target, KeyFn keyFn)
+{
+  const auto targetKey = keyFn(target);
+  return std::any_of(pairs.begin(), pairs.end(),
+    [&](const Pair &pair) { return keyFn(pair) == targetKey; });
+}
+
+void expectActiveSetSubset(
+  const pgo::Contact::CIPC::SurfaceIPCActiveSet &exact,
+  const pgo::Contact::CIPC::SurfaceIPCActiveSet &superset)
+{
+  for (const auto &pair : exact.selfPairs.ptPairs)
+    EXPECT_TRUE(containsPair(superset.selfPairs.ptPairs, pair, selfPTKey));
+  for (const auto &pair : exact.selfPairs.eePairs)
+    EXPECT_TRUE(containsPair(superset.selfPairs.eePairs, pair, selfEEKey));
+  for (const auto &pair : exact.externalPairs.ptPairs)
+    EXPECT_TRUE(containsPair(superset.externalPairs.ptPairs, pair, externalPTKey));
+  for (const auto &pair : exact.externalPairs.tpPairs)
+    EXPECT_TRUE(containsPair(superset.externalPairs.tpPairs, pair, externalTPKey));
+  for (const auto &pair : exact.externalPairs.eePairs)
+    EXPECT_TRUE(containsPair(superset.externalPairs.eePairs, pair, externalEEKey));
 }
 }  // namespace
 
@@ -259,6 +332,66 @@ TEST(SurfaceIPCCoreGTest, ComputeAllBuildsActiveSetOnce)
   EXPECT_EQ(hessian.rows(), x.size());
 }
 
+TEST(SurfaceIPCCoreGTest, LineSearchActiveSetSupersetContainsExactSampledAlphas)
+{
+  using pgo::Contact::CIPC::ObstacleSurface;
+
+  ES::MXd dynV(4, 3);
+  dynV << 0.0, 0.0, 0.32,
+          1.0, 0.0, 0.32,
+          0.0, 1.0, 0.32,
+          1.0, 1.0, 0.32;
+  ES::MXi dynF(2, 3);
+  dynF << 0, 1, 2,
+          1, 3, 2;
+
+  ES::MXd obsV(4, 3);
+  obsV << 0.0, 0.0, 0.0,
+          1.0, 0.0, 0.0,
+          0.0, 1.0, 0.0,
+          1.0, 1.0, 0.0;
+  ES::MXi obsF(2, 3);
+  obsF << 0, 1, 2,
+          1, 3, 2;
+
+  const ES::VXd obsRest = flattenPositions(obsV);
+  std::vector<ObstacleSurface> obstacles;
+  obstacles.emplace_back(obsV, obsF,
+    pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
+  obstacles.front().update(0.0);
+
+  SurfaceIPCCore::Parameters params;
+  params.dhat = 0.1;
+  params.dhat_external = 0.35;
+  params.kappa = 1.0;
+  params.eps_ee = 0.0;
+  params.slackness = 0.9;
+
+  SurfaceIPCCore core(params, std::move(obstacles));
+  core.setMesh(dynV, dynF);
+
+  const ES::VXd x = flattenPositions(dynV);
+  ES::VXd dx = ES::VXd::Zero(x.size());
+  for (int vi = 0; vi < dynV.rows(); ++vi)
+    dx[3 * vi + 2] = -0.28;
+
+  const auto lineSearchSuperset = core.buildLineSearchActiveSetSuperset(x, dx);
+  bool sawExternalPairs = false;
+
+  for (double alpha : { 0.0, 0.25, 0.5, 1.0 }) {
+    const ES::VXd trial = x + alpha * dx;
+    const auto exact = core.buildActiveSet(trial);
+    auto supersetAtTrial = lineSearchSuperset;
+    supersetAtTrial.positions = trial;
+
+    expectActiveSetSubset(exact, supersetAtTrial);
+    EXPECT_NEAR(core.computeEnergy(supersetAtTrial), core.computeEnergy(exact), 1e-12);
+    sawExternalPairs = sawExternalPairs || exact.externalPairs.size() > 0;
+  }
+
+  EXPECT_TRUE(sawExternalPairs);
+}
+
 TEST(SurfaceIPCCoreGTest, ConstructorInjectedObstaclesAssignSequentialSlots)
 {
   using pgo::Contact::CIPC::ObstacleSurface;
@@ -390,7 +523,7 @@ TEST(SurfaceIPCCoreGTest, ObstacleSurfaceUpdateRefreshesBroadPhaseCache)
   // Vector sizes match primitive counts.
   ASSERT_EQ(static_cast<int>(cache.vertBoxes.size()), V.rows());
   ASSERT_EQ(static_cast<int>(cache.triBoxes.size()), F.rows());
-  ASSERT_EQ(static_cast<int>(cache.edgeBoxes.size()), obs.uniqueEdges().rows());
+  ASSERT_EQ(static_cast<int>(cache.edgeBoxes.size()), obs.contactEdges().rows());
   EXPECT_GT(cache.cellSize, 0.0);
 
   // Each tri box exactly contains its 3 sampled vertices (un-inflated).
@@ -424,4 +557,71 @@ TEST(SurfaceIPCCoreGTest, ObstacleSurfaceUpdateRefreshesBroadPhaseCache)
     EXPECT_LE(box.lo.z(), v0.z());
     EXPECT_GE(box.hi.z(), v0.z());
   }
+}
+
+TEST(SurfaceIPCCoreGTest, ObstacleSurfaceKeepsOnlyFeatureEdgesForExternalEECache)
+{
+  using pgo::Contact::CIPC::ObstacleSurface;
+
+  ES::MXd V(4, 3);
+  V << 0.0, 0.0, 0.0,
+       1.0, 0.0, 0.0,
+       0.0, 1.0, 0.0,
+       1.0, 1.0, 0.0;
+  ES::MXi F(2, 3);
+  F << 0, 1, 2,
+       1, 3, 2;
+
+  ES::VXd rest(V.rows() * 3);
+  for (int vi = 0; vi < V.rows(); ++vi)
+    rest.segment<3>(3 * vi) = V.row(vi).transpose();
+
+  ObstacleSurface obs(V, F,
+    pgo::Contact::CIPC::makeLinearTrajectorySampler(rest, ES::V3d::Zero()));
+  obs.update(0.0);
+
+  ASSERT_EQ(obs.uniqueEdges().rows(), 5);
+  ASSERT_EQ(obs.contactEdges().rows(), 4);
+  EXPECT_EQ(static_cast<int>(obs.cache().edgeBoxes.size()), obs.contactEdges().rows());
+  EXPECT_EQ(static_cast<int>(obs.cache().edgeLengths.size()), obs.contactEdges().rows());
+
+  for (int ei = 0; ei < obs.contactEdges().rows(); ++ei) {
+    const int a = std::min(obs.contactEdges()(ei, 0), obs.contactEdges()(ei, 1));
+    const int b = std::max(obs.contactEdges()(ei, 0), obs.contactEdges()(ei, 1));
+    EXPECT_FALSE(a == 1 && b == 2);
+  }
+}
+
+TEST(SurfaceIPCCoreGTest, ObstacleSurfaceKeepsSharpInteriorEdgesForExternalEECache)
+{
+  using pgo::Contact::CIPC::ObstacleSurface;
+
+  ES::MXd V(4, 3);
+  V << 0.0, 0.0, 0.0,
+       1.0, 0.0, 0.0,
+       0.0, 1.0, 0.0,
+       1.0, 0.0, 1.0;
+  ES::MXi F(2, 3);
+  F << 0, 1, 2,
+       1, 3, 2;
+
+  ES::VXd rest(V.rows() * 3);
+  for (int vi = 0; vi < V.rows(); ++vi)
+    rest.segment<3>(3 * vi) = V.row(vi).transpose();
+
+  ObstacleSurface obs(V, F,
+    pgo::Contact::CIPC::makeLinearTrajectorySampler(rest, ES::V3d::Zero()));
+  obs.update(0.0);
+
+  ASSERT_EQ(obs.uniqueEdges().rows(), 5);
+  ASSERT_EQ(obs.contactEdges().rows(), 5);
+
+  bool sawSharedSharpEdge = false;
+  for (int ei = 0; ei < obs.contactEdges().rows(); ++ei) {
+    const int a = std::min(obs.contactEdges()(ei, 0), obs.contactEdges()(ei, 1));
+    const int b = std::max(obs.contactEdges()(ei, 0), obs.contactEdges()(ei, 1));
+    if (a == 1 && b == 2)
+      sawSharedSharpEdge = true;
+  }
+  EXPECT_TRUE(sawSharedSharpEdge);
 }
