@@ -70,7 +70,51 @@ public:
   const SolveDiagnostics &getSolveDiagnostics() const { return solveDiagnostics; }
 
 protected:
+  struct IterationState
+  {
+    int iter = 0;
+    double energy = 0.0;
+    double gradMaxNorm = 0.0;
+    double gradNorm = 0.0;
+    double lambda0 = 1.0;
+    double relThreshold = 0.0;
+    bool absConverged = false;
+    bool relConverged = false;
+    bool nonFiniteEnergy = false;
+    bool nonFiniteGradient = false;
+  };
+
+  struct StepAcceptance
+  {
+    double feasibleAlpha = 1.0;
+    double lineSearchAlpha = 1.0;
+    double effectiveAlpha = 1.0;
+    double acceptedEnergy = 0.0;
+    double acceptedStepMaxNorm = 0.0;
+
+    enum class NonFiniteReason
+    {
+      None,
+      FeasibleAlpha,
+      TrialEnergy,
+      LineSearchResult
+    };
+
+    NonFiniteReason nonFiniteReason = NonFiniteReason::None;
+
+    bool nonFinite() const { return nonFiniteReason != NonFiniteReason::None; }
+  };
+
   void filterVector(EigenSupport::VXd &v);
+  void applyFixedValues();
+  IterationState evaluateCurrentState(int iter, double epsilon, double lambda0, bool hasInitialGradNorm);
+  bool isConverged(const IterationState &state) const;
+  bool prepareReducedSystem(double lambdaScale, double lambda0);
+  void ensureLinearSolver(bool fixedHessianTopology);
+  bool solveReducedNewtonDirection(bool fixedHessianTopology);
+  bool expandReducedStep();
+  StepAcceptance runLineSearchStep(double currentEnergy, int verbose, int printGap, int iter);
+  bool looseRelativeConverged(double gradMaxNorm, double lambda0) const;
 
   PotentialEnergy_const_p energy;
   SolverParam solverParam;

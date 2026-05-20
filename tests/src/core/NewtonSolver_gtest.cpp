@@ -5,6 +5,7 @@
 #include "solveDiagnostics.h"
 
 #include <cmath>
+#include <limits>
 #include <numeric>
 
 namespace
@@ -174,6 +175,48 @@ public:
     return MaxStepResult::unconstrained();
   }
 };
+
+class TestNonFiniteTrialEnergy : public PotentialEnergy
+{
+public:
+  double func(ES::ConstRefVecXd x) const override
+  {
+    funcCalls++;
+    if (std::abs(x[0]) < 1e-14)
+      return std::numeric_limits<double>::quiet_NaN();
+    return 0.5 * x.squaredNorm();
+  }
+
+  void gradient(ES::ConstRefVecXd x, ES::RefVecXd grad) const override
+  {
+    grad = x;
+  }
+
+  void hessian(ES::ConstRefVecXd, ES::SpMatD &hess) const override
+  {
+    hess.setIdentity();
+  }
+
+  void createHessian(ES::SpMatD &hess) const override
+  {
+    hess.resize(1, 1);
+    hess.setIdentity();
+  }
+
+  void getDOFs(std::vector<int> &dofs) const override
+  {
+    dofs = { 0 };
+  }
+
+  int getNumDOFs() const override { return 1; }
+  MaxStepResult computeMaxStepLimit(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return MaxStepResult::unconstrained(); }
+  void beginLineSearch(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { beginLineSearchCalls++; }
+  void endLineSearch() const override { endLineSearchCalls++; }
+
+  mutable int funcCalls = 0;
+  mutable int beginLineSearchCalls = 0;
+  mutable int endLineSearchCalls = 0;
+};
 }  // namespace
 
 TEST(SolveDiagnosticsGTest, RecordsAndResetsMaxStepAndLineSearch)
@@ -283,7 +326,29 @@ TEST(NewtonSolverGTest, SolveDiagnosticsRecordsMaxStepBreakdown)
   EXPECT_DOUBLE_EQ(diagnostics.minFeasibleAlpha, 0.25);
   EXPECT_DOUBLE_EQ(diagnostics.minMaterialFeasibleAlpha, 0.25);
   EXPECT_DOUBLE_EQ(diagnostics.minContactFeasibleAlpha, 1.0);
+  EXPECT_DOUBLE_EQ(diagnostics.minLineSearchAlpha, 1.0);
+  EXPECT_DOUBLE_EQ(diagnostics.minEffectiveAlpha, 0.25);
   EXPECT_NE(output.find("feasible alpha clamped: material:0.25 contact:1"), std::string::npos);
+}
+
+TEST(NewtonSolverGTest, NonFiniteTrialEnergyEndsLineSearchScope)
+{
+  initializeLogging();
+
+  auto energy = std::make_shared<TestNonFiniteTrialEnergy>();
+  ES::VXd x(1);
+  x[0] = 2.0;
+
+  NewtonSolver::SolverParam solverParam;
+  solverParam.lsm = NewtonSolver::LSM_BACKTRACK;
+  const std::vector<int> fixedDOFs;
+  NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs);
+
+  const int ret = solver.solve(x.data(), 1, 1e-12, 0);
+
+  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::NonFinite));
+  EXPECT_EQ(energy->beginLineSearchCalls, 1);
+  EXPECT_EQ(energy->endLineSearchCalls, 1);
 }
 
 TEST(NewtonSolverGTest, BacktrackingReusesInitialTrialEnergy)
