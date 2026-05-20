@@ -37,6 +37,8 @@ set(CONTACT_SOURCES
   embeddedSurfaceIPCPotentialEnergy.cpp
   ipc/broadPhase/spatialHashGrid.cpp
   ipc/broadPhase/surfaceIPCBroadPhase.cpp
+  ipc/broadPhase/surfaceIPCSelfBroadPhase.cpp
+  ipc/broadPhase/surfaceIPCExternalBroadPhase.cpp
   ipc/core/surfaceIPCSelfBarrierAssembler.cpp
   ipc/core/surfaceIPCExternalBarrierAssembler.cpp
   ipc/core/surfaceIPCBarrierKernels.cpp

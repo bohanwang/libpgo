@@ -47,6 +47,20 @@ std::vector<std::tuple<int, int, int, int>> canonicalEE(const std::vector<EEPair
   return keys;
 }
 
+bool containsSelfPT(const std::vector<PTPair> &pairs, const PTPair &target)
+{
+  const auto keys = canonicalPT(pairs);
+  const auto targetKey = canonicalPT(std::vector<PTPair>{ target }).front();
+  return std::binary_search(keys.begin(), keys.end(), targetKey);
+}
+
+bool containsSelfEE(const std::vector<EEPair> &pairs, const EEPair &target)
+{
+  const auto keys = canonicalEE(pairs);
+  const auto targetKey = canonicalEE(std::vector<EEPair>{ target }).front();
+  return std::binary_search(keys.begin(), keys.end(), targetKey);
+}
+
 const ProfileCounterStat *findCounterStat(const std::vector<ProfileCounterStat> &stats, std::string_view name)
 {
   const auto it = std::find_if(stats.begin(), stats.end(),
@@ -157,6 +171,35 @@ TEST(SurfaceIPCSelfBroadPhaseGTest, BuilderMatchesBruteForceNearThreshold)
 
   EXPECT_EQ(canonicalPT(broadPhasePairs.ptPairs), canonicalPT(bruteForcePairs.ptPairs));
   EXPECT_EQ(canonicalEE(broadPhasePairs.eePairs), canonicalEE(bruteForcePairs.eePairs));
+}
+
+TEST(SurfaceIPCSelfBroadPhaseGTest, LineSearchSupersetContainsExactSelfPairsAtTrialStates)
+{
+  const auto [V, F] = makeTwoTriangleMesh();
+  const ES::VXd x = flattenPositions(V);
+  ES::VXd dx = ES::VXd::Zero(x.size());
+  for (int vi = 3; vi < 6; ++vi)
+    dx[3 * vi + 2] = -0.08;
+
+  SurfaceIPCTopology topology;
+  topology.setMesh(V, F);
+
+  SelfPairSet superset;
+  buildSelfPairsLineSearchSuperset(topology, x, dx, 0.1, superset);
+
+  bool sawExactPairs = false;
+  for (double alpha : { 0.0, 0.25, 0.5, 1.0 }) {
+    SelfPairSet exact;
+    buildSelfPairs(topology, x + alpha * dx, 0.1, exact);
+    sawExactPairs = sawExactPairs || exact.size() > 0;
+
+    for (const auto &pair : exact.ptPairs)
+      EXPECT_TRUE(containsSelfPT(superset.ptPairs, pair));
+    for (const auto &pair : exact.eePairs)
+      EXPECT_TRUE(containsSelfEE(superset.eePairs, pair));
+  }
+
+  EXPECT_TRUE(sawExactPairs);
 }
 
 TEST(SurfaceIPCSelfBroadPhaseGTest, ProfilingRecordsSelfCandidateCounters)

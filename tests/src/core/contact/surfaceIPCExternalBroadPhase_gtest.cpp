@@ -101,6 +101,27 @@ static auto canonicalEE(const std::vector<ExternalEEPair> &pairs)
   return keys;
 }
 
+static bool containsExternalPT(const std::vector<ExternalPTPair> &pairs, const ExternalPTPair &target)
+{
+  const auto keys = canonicalPT(pairs);
+  const auto targetKey = canonicalPT(std::vector<ExternalPTPair>{ target }).front();
+  return std::binary_search(keys.begin(), keys.end(), targetKey);
+}
+
+static bool containsExternalTP(const std::vector<ExternalTPPair> &pairs, const ExternalTPPair &target)
+{
+  const auto keys = canonicalTP(pairs);
+  const auto targetKey = canonicalTP(std::vector<ExternalTPPair>{ target }).front();
+  return std::binary_search(keys.begin(), keys.end(), targetKey);
+}
+
+static bool containsExternalEE(const std::vector<ExternalEEPair> &pairs, const ExternalEEPair &target)
+{
+  const auto keys = canonicalEE(pairs);
+  const auto targetKey = canonicalEE(std::vector<ExternalEEPair>{ target }).front();
+  return std::binary_search(keys.begin(), keys.end(), targetKey);
+}
+
 TEST(SurfaceIPCExternalBroadPhaseGTest, BuilderMatchesSurfaceIPCCoreExternalPairs)
 {
   auto [V, F] = makeUnitSquareMesh();
@@ -234,6 +255,56 @@ TEST(SurfaceIPCExternalBroadPhaseGTest, ExternalEEDoesNotUseCoplanarInteriorObst
   }
 
   EXPECT_TRUE(sawBoundaryEdge);
+}
+
+TEST(SurfaceIPCExternalBroadPhaseGTest, LineSearchSupersetContainsExactExternalPairsAtTrialStates)
+{
+  ES::MXd dynV(4, 3);
+  dynV << 0.0, 0.0, 0.32,
+    1.0, 0.0, 0.32,
+    0.0, 1.0, 0.32,
+    1.0, 1.0, 0.32;
+  ES::MXi dynF(2, 3);
+  dynF << 0, 1, 2,
+    1, 3, 2;
+
+  auto [obsV, obsF] = makeUnitSquareMesh();
+  const ES::VXd obsRest = flattenRows(obsV);
+  ObstacleSurface obs(
+    obsV, obsF,
+    pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
+  obs.setObjectId(3);
+  obs.update(0.0);
+
+  SurfaceIPCTopology topology;
+  topology.setMesh(dynV, dynF);
+
+  const ES::VXd x = flattenRows(dynV);
+  ES::VXd dx = ES::VXd::Zero(x.size());
+  for (int vi = 0; vi < dynV.rows(); ++vi)
+    dx[3 * vi + 2] = -0.28;
+
+  std::vector<ObstacleSurface> obstacles;
+  obstacles.emplace_back(std::move(obs));
+
+  ExternalPairSet superset;
+  buildExternalPairsLineSearchSuperset(topology, x, dx, obstacles, 0.35, superset);
+
+  bool sawExactPairs = false;
+  for (double alpha : { 0.0, 0.25, 0.5, 1.0 }) {
+    ExternalPairSet exact;
+    buildExternalPairs(topology, x + alpha * dx, obstacles, 0.35, exact);
+    sawExactPairs = sawExactPairs || exact.size() > 0;
+
+    for (const auto &pair : exact.ptPairs)
+      EXPECT_TRUE(containsExternalPT(superset.ptPairs, pair));
+    for (const auto &pair : exact.tpPairs)
+      EXPECT_TRUE(containsExternalTP(superset.tpPairs, pair));
+    for (const auto &pair : exact.eePairs)
+      EXPECT_TRUE(containsExternalEE(superset.eePairs, pair));
+  }
+
+  EXPECT_TRUE(sawExactPairs);
 }
 
 TEST(SurfaceIPCExternalBroadPhaseGTest, ObstaclePoseCacheTracksSurfaceBounds)
