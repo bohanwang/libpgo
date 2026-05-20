@@ -23,8 +23,15 @@ RunIPCSimRuntimeConfig parseRunIPCSimRuntimeConfig(const pgo::ConfigFileJSON &co
   runtimeConfig.frameGap = config.getInt("dump-interval", 1);
 
   const std::string simType = config.getString("sim-type");
-  if (simType != "dynamic")
-    throw std::invalid_argument("runIPCSim phase2 only supports `sim-type = dynamic`.");
+  if (simType == "dynamic") {
+    runtimeConfig.simulationMode = RunIPCSimSimulationMode::Dynamic;
+  }
+  else if (simType == "static") {
+    runtimeConfig.simulationMode = RunIPCSimSimulationMode::Static;
+  }
+  else {
+    throw std::invalid_argument("runIPCSim only supports `sim-type = dynamic` or `sim-type = static`.");
+  }
 
   runtimeConfig.outputFolder = config.getResolvedPath("output", 1);
   runtimeConfig.restartFromU = config.exist("restart-from-u") ? config.getValue<bool>("restart-from-u", 1) : false;

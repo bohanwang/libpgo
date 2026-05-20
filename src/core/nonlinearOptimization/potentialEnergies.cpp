@@ -327,6 +327,15 @@ void PotentialEnergies::gradient_hessian(EigenSupport::ConstRefVecXd x, EigenSup
   }
 }
 
+double PotentialEnergies::func_grad_hessian(
+  EigenSupport::ConstRefVecXd x,
+  EigenSupport::RefVecXd grad,
+  EigenSupport::SpMatD &hess) const
+{
+  gradient_hessian(x, grad, hess);
+  return func(x);
+}
+
 MaxStepResult PotentialEnergies::computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
 {
   MaxStepResult result = MaxStepResult::unconstrained();

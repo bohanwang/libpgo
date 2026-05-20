@@ -239,6 +239,18 @@ std::string addTopLevelJsonField(std::string json, const std::string &field)
   return json;
 }
 
+std::string makeStaticConfig(std::string json)
+{
+  const std::string dynamicToken = "\"sim-type\": \"dynamic\"";
+  const std::string staticToken = "\"sim-type\": \"static\"";
+  const std::size_t pos = json.find(dynamicToken);
+  if (pos == std::string::npos)
+    throw std::runtime_error("test config does not contain dynamic sim-type");
+
+  json.replace(pos, dynamicToken.size(), staticToken);
+  return json;
+}
+
 std::string addEmptyFloorsConfig(std::string json)
 {
   return addTopLevelJsonField(std::move(json), "  \"floors\": []");
@@ -408,7 +420,8 @@ std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey,
   bool useFloor = false,
   std::optional<std::string> floorAxis = std::nullopt,
   std::optional<double> floorHeight = std::nullopt,
-  std::optional<double> floorKappa = std::nullopt)
+  std::optional<double> floorKappa = std::nullopt,
+  int solverMaxIter = 5)
 {
   std::ostringstream json;
   json << "{\n"
@@ -430,7 +443,7 @@ std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey,
        << "  \"damping-params\": [0, 0],\n"
        << "  \"sim-type\": \"dynamic\",\n"
        << "  \"solver-eps\": 1e-4,\n"
-       << "  \"solver-max-iter\": 5,\n"
+       << "  \"solver-max-iter\": " << solverMaxIter << ",\n"
        << "  \"elastic-material\": \"" << material << "\",\n"
        << "  \"loglevel\": \"" << logLevel << "\",\n"
        << "  \"dump-interval\": " << dumpInterval << ",\n"
@@ -463,10 +476,11 @@ std::string makeTetIPCConfig(const fs::path &tempDir, int numTimesteps,
   bool useFloor = false,
   std::optional<std::string> floorAxis = std::nullopt,
   std::optional<double> floorHeight = std::nullopt,
-  std::optional<double> floorKappa = std::nullopt)
+  std::optional<double> floorKappa = std::nullopt,
+  int solverMaxIter = 5)
 {
   return makeVolumeIPCConfig(tetIPCExampleDir(), "tet-mesh", tempDir / "tet-output", numTimesteps,
-    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel, useFloor, floorAxis, floorHeight, floorKappa);
+    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel, useFloor, floorAxis, floorHeight, floorKappa, solverMaxIter);
 }
 
 std::string makeCubicIPCConfig(const fs::path &tempDir, int numTimesteps,
@@ -475,10 +489,11 @@ std::string makeCubicIPCConfig(const fs::path &tempDir, int numTimesteps,
   bool useFloor = false,
   std::optional<std::string> floorAxis = std::nullopt,
   std::optional<double> floorHeight = std::nullopt,
-  std::optional<double> floorKappa = std::nullopt)
+  std::optional<double> floorKappa = std::nullopt,
+  int solverMaxIter = 5)
 {
   return makeVolumeIPCConfig(cubicIPCExampleDir(), "cubic-mesh", tempDir / "cubic-output", numTimesteps,
-    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel, useFloor, floorAxis, floorHeight, floorKappa);
+    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel, useFloor, floorAxis, floorHeight, floorKappa, solverMaxIter);
 }
 
 std::string makeLegacyVolumeConfig(const fs::path &volumeMesh, const fs::path &surfaceMesh,
@@ -635,6 +650,23 @@ TEST(RunIPCSimConfigGTest, RuntimeConfigParsesRequiredAndOptionalFields)
   EXPECT_NEAR(runtime.gravity[1], -9.81, 1e-12);
 }
 
+TEST(RunIPCSimConfigGTest, RuntimeConfigAcceptsStaticMode)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "static-runtime-config.json";
+  writeTextFile(configPath, makeStaticConfig(makeShellIPCConfig(tempDir.path(), 1)));
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+
+  const pgo::RunIPCSim::RunIPCSimRuntimeConfig runtime =
+    pgo::RunIPCSim::parseRunIPCSimRuntimeConfig(config);
+
+  EXPECT_EQ(runtime.simulationMode, pgo::RunIPCSim::RunIPCSimSimulationMode::Static);
+}
+
 TEST(RunIPCSimOutputGTest, OutputPathsPreserveCurrentLayout)
 {
   ScopedTempDir tempDir;
@@ -747,6 +779,116 @@ TEST(RunIPCSimLegacyGTest, LegacyShellConfigIsRejected)
   pgo::RunIPCSim::RunIPCSimOptions options;
   options.contactBackendKind = pgo::RunIPCSim::ContactBackendKind::LegacyPenalty;
   EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, options), 1);
+}
+
+TEST(RunIPCSimStaticGTest, StaticTetIpcWritesUnifiedSurfaceAndState)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-static-ipc.json";
+  const fs::path outputDir = tempDir.path() / "tet-output";
+  writeTextFile(configPath, makeStaticConfig(makeTetIPCConfig(
+    tempDir.path(), 1, 1.0, true, false, "stable-neo", 1, "info",
+    false, std::nullopt, std::nullopt, std::nullopt, 1)));
+
+  EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, {}), 0);
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+}
+
+TEST(RunIPCSimStaticGTest, StaticShellIpcWritesUnifiedSurfaceAndState)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-static-ipc.json";
+  const fs::path outputDir = tempDir.path() / "shell-output";
+  writeTextFile(configPath, makeStaticConfig(makeShellIPCConfig(
+    tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "info",
+    false, std::nullopt, std::nullopt, std::nullopt, 1)));
+
+  EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, {}), 0);
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+}
+
+TEST(RunIPCSimStaticGTest, StaticCubicIpcWithFloorWritesUnifiedSurfaceAndState)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "cubic-static-floor-ipc.json";
+  const fs::path outputDir = tempDir.path() / "cubic-output";
+  writeTextFile(configPath, makeStaticConfig(makeCubicIPCConfig(
+    tempDir.path(), 1, 1.0, true, false, "stable-neo", 1, "info",
+    true, std::string("y"), -0.15, 4000.0, 1)));
+
+  EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, {}), 0);
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+}
+
+TEST(RunIPCSimStaticGTest, StaticVolumeWritesVonMisesWhenRequested)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-static-von-mises.json";
+  const fs::path outputDir = tempDir.path() / "tet-output";
+  writeTextFile(configPath,
+    addBoolConfigField(makeStaticConfig(makeTetIPCConfig(
+      tempDir.path(), 1, 1.0, true, false, "stable-neo", 1, "info",
+      false, std::nullopt, std::nullopt, std::nullopt, 1)),
+      "output-von-mises", true));
+
+  EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, {}), 0);
+  EXPECT_TRUE(fs::exists(stressPath(outputDir, 0)));
+}
+
+TEST(RunIPCSimStaticGTest, StaticLegacyTetWritesUnifiedSurfaceAndState)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-static-legacy.json";
+  const fs::path outputDir = tempDir.path() / "legacy-tet-static-output";
+  writeTextFile(configPath, makeStaticConfig(makeLegacyVolumeConfig(
+    fs::path(kLegacyTetBoxDir) / "box.veg",
+    fs::path(kLegacyTetBoxDir) / "box.obj",
+    outputDir, "tet-mesh", "stable-neo", 1)));
+
+  pgo::RunIPCSim::RunIPCSimOptions options;
+  options.contactBackendKind = pgo::RunIPCSim::ContactBackendKind::LegacyPenalty;
+  EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, options), 0);
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+}
+
+TEST(RunIPCSimStaticGTest, StaticLegacyShellIsRejected)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-static-legacy.json";
+  writeTextFile(configPath, makeStaticConfig(makeShellIPCConfig(tempDir.path(), 1)));
+
+  pgo::RunIPCSim::RunIPCSimOptions options;
+  options.contactBackendKind = pgo::RunIPCSim::ContactBackendKind::LegacyPenalty;
+  EXPECT_NE(pgo::RunIPCSim::runFromConfig(configPath, options), 0);
+}
+
+TEST(RunIPCSimStaticGTest, StaticRejectsRestartFromU)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-static-restart.json";
+  writeTextFile(configPath,
+    addBoolConfigField(makeStaticConfig(makeTetIPCConfig(tempDir.path(), 1)),
+      "restart-from-u", true));
+
+  EXPECT_NE(pgo::RunIPCSim::runFromConfig(configPath, {}), 0);
 }
 
 TEST(RunIPCSimCliGTest, VolumeSetupRespectsDisabledMaterialMaxStepFlag)

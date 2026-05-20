@@ -2,6 +2,7 @@
 
 #include "configFileJSON.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
+#include "potentialEnergies.h"
 #include "pointPenetrationEnergy.h"
 #include "pointTrianglePairCouplingEnergyWithCollision.h"
 #include "runIPCSimConfig.h"
@@ -143,6 +144,12 @@ public:
         objects_[oi].mesh.pos(vi) += movement;
       updateExternalSurface(oi);
     }
+  }
+
+  void addStaticEnergies(const RunIPCSimRuntimeConfig &,
+    IpcSimulationContext &, NonlinearOptimization::PotentialEnergies &) override
+  {
+    // Old runSim static mode did not add legacy penalty contact energies.
   }
 
   void logSummary(const IpcSimulationContext &context, const RunIPCSimSession &session) const override

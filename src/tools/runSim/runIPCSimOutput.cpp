@@ -141,6 +141,32 @@ void RunIPCSimOutput::writeSurface(int outputFrame, const pgo::Mesh::TriMeshGeo 
   mesh.save(surfacePath(outputFrame).string());
 }
 
+void RunIPCSimOutput::writeStateAndSurfaceFrame(
+  int frame,
+  int outputFrame,
+  const IpcSimulationContext &context,
+  const ES::VXd &u,
+  const ES::VXd &uvel,
+  const ES::VXd &uacc,
+  double scale,
+  bool writeStateFile,
+  bool writeSurfaceFile) const
+{
+  if (writeStateFile)
+    writeState(frame, u, uvel, uacc);
+
+  if (!writeSurfaceFile)
+    return;
+
+  pgo::Mesh::TriMeshGeo mesh = context.surfaceMesh;
+  ES::VXd usurf(context.surfaceRestPositions.size());
+  ES::mv(context.surfaceFromSimulationDispMap, u, usurf);
+  const ES::VXd psurf = context.surfaceRestPositions + usurf;
+  for (int vi = 0; vi < mesh.numVertices(); ++vi)
+    mesh.pos(vi) = psurf.segment<3>(vi * 3) / scale;
+  writeSurface(outputFrame, mesh);
+}
+
 void RunIPCSimOutput::writeVonMisesStressJson(int frame, double timestep,
   const IpcSimulationContext &context, const ES::VXd &displacement) const
 {

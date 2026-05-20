@@ -8,6 +8,11 @@ namespace pgo::Simulation
 class ImplicitBackwardEulerTimeIntegrator;
 }
 
+namespace pgo::NonlinearOptimization
+{
+class PotentialEnergies;
+}
+
 namespace pgo::RunIPCSim
 {
 struct IpcSimulationContext;
@@ -39,6 +44,9 @@ public:
 
   virtual void afterStep(int frame, const RunIPCSimRuntimeConfig &runtimeConfig,
     IpcSimulationContext &context, RunIPCSimSession &session) = 0;
+
+  virtual void addStaticEnergies(const RunIPCSimRuntimeConfig &runtimeConfig,
+    IpcSimulationContext &context, NonlinearOptimization::PotentialEnergies &energyAll) = 0;
 
   virtual void logSummary(const IpcSimulationContext &context,
     const RunIPCSimSession &session) const = 0;

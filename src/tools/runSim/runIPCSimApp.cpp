@@ -8,6 +8,7 @@
 #include "runIPCSimLoop.h"
 #include "runIPCSimOutput.h"
 #include "runIPCSimSession.h"
+#include "runIPCSimStaticSolve.h"
 
 #include <tbb/global_control.h>
 
@@ -60,10 +61,17 @@ int runFromConfig(const std::filesystem::path &configPath, const RunIPCSimOption
     pgo::Mesh::initPredicates();
 
     IpcSimulationContext context = buildRunIPCSimSimulation(config, options);
-    RunIPCSimSession session = createRunIPCSimSession(runtimeConfig, context);
-    restoreRestartStateIfRequested(runtimeConfig, output, session);
-    context.contactBackend->initializeAfterRestart(runtimeConfig, context, session);
-    runIPCSimLoop(runtimeConfig, context, session, output);
+    if (runtimeConfig.simulationMode == RunIPCSimSimulationMode::Static) {
+      if (runtimeConfig.restartFromU)
+        throw std::invalid_argument("runIPCSim static mode does not support `restart-from-u`.");
+      runIPCSimStaticSolve(runtimeConfig, context, output);
+    }
+    else {
+      RunIPCSimSession session = createRunIPCSimSession(runtimeConfig, context);
+      restoreRestartStateIfRequested(runtimeConfig, output, session);
+      context.contactBackend->initializeAfterRestart(runtimeConfig, context, session);
+      runIPCSimLoop(runtimeConfig, context, session, output);
+    }
     runScope.logProfileSummaryIfEnabled();
     return 0;
   }

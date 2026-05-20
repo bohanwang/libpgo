@@ -45,20 +45,13 @@ void runIPCSimLoop(const RunIPCSimRuntimeConfig &runtimeConfig,
     context.contactBackend->logSummary(context, session);
 
     const bool dumpDeformThisFrame = runtimeConfig.dumpDeformEveryFrame || (framei % runtimeConfig.frameGap == 0);
-    if (dumpDeformThisFrame)
-      output.writeState(framei, session.u, session.uvel, session.uacc);
+    const bool dumpSurfaceThisFrame = (framei % runtimeConfig.frameGap == 0);
+    output.writeStateAndSurfaceFrame(framei, framei / runtimeConfig.frameGap, context,
+      session.u, session.uvel, session.uacc, runtimeConfig.scale,
+      dumpDeformThisFrame, dumpSurfaceThisFrame);
 
     if (runtimeConfig.outputVonMises)
       output.writeVonMisesStressJson(framei, runtimeConfig.timestep, context, session.u);
-
-    if (framei % runtimeConfig.frameGap == 0) {
-      pgo::Mesh::TriMeshGeo mesh = context.surfaceMesh;
-      ES::mv(context.surfaceFromSimulationDispMap, session.u, session.usurf);
-      const ES::VXd psurf = context.surfaceRestPositions + session.usurf;
-      for (int vi = 0; vi < mesh.numVertices(); ++vi)
-        mesh.pos(vi) = psurf.segment<3>(vi * 3) / runtimeConfig.scale;
-      output.writeSurface(framei / runtimeConfig.frameGap, mesh);
-    }
   }
 
   if (!executedStep)

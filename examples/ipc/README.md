@@ -170,6 +170,7 @@ Current config convention:
 - shell uses `surface-mesh` together with `elastic-material = koiter-stvk`
 - tet uses `tet-mesh` together with `surface-mesh`
 - cubic uses `cubic-mesh` together with `surface-mesh`
+- supported IPC shell, tet, and cubic cases can switch from `"sim-type": "dynamic"` to `"sim-type": "static"` for a one-shot Newton solve that writes `states/deform0000.u` and `surface/ret0000.obj`
 - tet and cubic provide explicit `ipc-dhat` and `ipc-kappa`
 - floor-enabled cases additionally provide a `floors` array with `axis`, `side`, `height` or `motion`, and `kappa`
 - shell currently uses `ipc-heuristic: true`

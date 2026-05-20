@@ -241,7 +241,9 @@ Legacy penalty-based volume contact is available through the same entrypoint:
 build/base_no_mkl/bin/runIPCSim --legacy path/to/legacy-volume-config.json
 ```
 
-`--legacy` accepts the old volume JSON shape with either `tet-mesh` or `cubic-mesh` and uses the penalty contact model instead of IPC contact. Shell legacy configs are no longer supported; use the IPC shell examples above for shell simulations.
+`runIPCSim` accepts both `"sim-type": "dynamic"` and `"sim-type": "static"`. Static mode performs a one-shot Newton solve from the rest state, writes the same unified `states/deform0000.u` and `surface/ret0000.obj` layout as dynamic mode, and does not support `restart-from-u`.
+
+`--legacy` accepts the old volume JSON shape with either `tet-mesh` or `cubic-mesh` and uses the penalty contact model instead of IPC contact. Legacy static mode preserves the old volume static semantics: it solves elastic, attachment, and external-force energies without adding the legacy penalty contact energies. Shell legacy configs are no longer supported; use the IPC shell examples above for shell simulations.
 
 Optional Python API smoke test:
 

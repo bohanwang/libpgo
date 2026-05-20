@@ -33,6 +33,16 @@ public:
   void writeState(int frame, const EigenSupport::VXd &u,
     const EigenSupport::VXd &uvel, const EigenSupport::VXd &uacc) const;
   void writeSurface(int outputFrame, const pgo::Mesh::TriMeshGeo &mesh) const;
+  void writeStateAndSurfaceFrame(
+    int frame,
+    int outputFrame,
+    const IpcSimulationContext &context,
+    const EigenSupport::VXd &u,
+    const EigenSupport::VXd &uvel,
+    const EigenSupport::VXd &uacc,
+    double scale,
+    bool writeStateFile,
+    bool writeSurfaceFile) const;
   void writeVonMisesStressJson(int frame, double timestep,
     const IpcSimulationContext &context, const EigenSupport::VXd &displacement) const;
 

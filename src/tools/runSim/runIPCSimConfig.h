@@ -12,8 +12,15 @@ class ConfigFileJSON;
 
 namespace pgo::RunIPCSim
 {
+enum class RunIPCSimSimulationMode
+{
+  Dynamic,
+  Static,
+};
+
 struct RunIPCSimRuntimeConfig
 {
+  RunIPCSimSimulationMode simulationMode = RunIPCSimSimulationMode::Dynamic;
   EigenSupport::V3d gravity = EigenSupport::V3d::Zero();
   EigenSupport::V3d initialVelocity = EigenSupport::V3d::Zero();
   double timestep = 0.0;
