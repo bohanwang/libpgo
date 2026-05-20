@@ -16,7 +16,7 @@ FetchContent_MakeAvailable(googletest)
 add_executable(pgo_c_gtest pgo_c_gtest.cpp)
 target_include_directories(pgo_c_gtest PRIVATE ${CMAKE_SOURCE_DIR}/src/c)
 target_link_libraries(pgo_c_gtest PRIVATE GTest::gtest_main pgo_c)
-target_compile_definitions(pgo_c_gtest PRIVATE LIBPGO_TEST_TORUS_VEG="${CMAKE_SOURCE_DIR}/examples/legacy/tet/torus.veg")
+target_compile_definitions(pgo_c_gtest PRIVATE LIBPGO_TEST_TORUS_VEG="${CMAKE_SOURCE_DIR}/tests/fixtures/legacy/tet/torus.veg")
 set_property(TARGET pgo_c_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(pgo_c_gtest)
 

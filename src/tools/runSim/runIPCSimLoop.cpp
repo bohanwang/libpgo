@@ -1,10 +1,7 @@
 #include "runIPCSimLoop.h"
 
-#include "embeddedSurfaceIPCPotentialEnergy.h"
-#include "embeddedSurfaceFloorPotentialEnergy.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
 #include "multiVertexPullingSoftConstraints.h"
-#include "runIPCSimLogging.h"
 
 #include <algorithm>
 #include <iostream>
@@ -31,26 +28,21 @@ void runIPCSimLoop(const RunIPCSimRuntimeConfig &runtimeConfig,
       std::cout << "Frame " << framei << ", attachment " << pi << " target: " << curTgt.transpose().head(3) << std::endl;
     }
 
-    session.integrator->addGeneralImplicitForceModel(context.collisionHandler, 0, 0);
-    for (std::size_t fi = 0; fi < context.floorPotentialEnergies.size(); ++fi) {
-      context.floorPotentialEnergies[fi]->setFloorHeight(floorHeightAtFrame(context.floorMotionStates[fi], framei));
-    }
-    for (const auto &forceModel : context.extraGeneralImplicitForceModels)
-      session.integrator->addGeneralImplicitForceModel(forceModel, 0, 0);
+    context.contactBackend->beginFrame(framei, runtimeConfig, context, session);
+    context.contactBackend->addForces(framei, runtimeConfig, context, session);
     if (context.surfacePressureForceEnabled) {
       const double ramp = std::min(1.0, static_cast<double>(framei + 1) / static_cast<double>(context.surfacePressureRampSteps));
       session.fext.noalias() = session.gravityForce + ramp * context.surfacePressureSimulationForce;
       session.integrator->setExternalForce(session.fext.data());
     }
     session.integrator->setqState(session.u, session.uvel, session.uacc);
-    const double tCurr = static_cast<double>(framei) * runtimeConfig.timestep;
-    context.collisionHandler->setObstacleTime(tCurr + runtimeConfig.timestep);
     session.integrator->doTimestep(1, 3, 1);
     executedStep = true;
     session.integrator->getq(session.u);
     session.integrator->getqvel(session.uvel);
     session.integrator->getqacc(session.uacc);
-    logRunIPCSimMaxStepSummary(context.elasticEnergy, context.collisionHandler, session.integrator);
+    context.contactBackend->afterStep(framei, runtimeConfig, context, session);
+    context.contactBackend->logSummary(context, session);
 
     const bool dumpDeformThisFrame = runtimeConfig.dumpDeformEveryFrame || (framei % runtimeConfig.frameGap == 0);
     if (dumpDeformThisFrame)
@@ -70,6 +62,6 @@ void runIPCSimLoop(const RunIPCSimRuntimeConfig &runtimeConfig,
   }
 
   if (!executedStep)
-    logRunIPCSimMaxStepSummary(context.elasticEnergy, context.collisionHandler, session.integrator);
+    context.contactBackend->logSummary(context, session);
 }
 }  // namespace pgo::RunIPCSim

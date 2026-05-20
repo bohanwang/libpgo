@@ -235,13 +235,18 @@ build/base_no_mkl/bin/convertAnimation examples/ipc/cubic/box-with-sphere/anim.j
 
 For the full IPC case list and per-case notes, see [`examples/ipc/README.md`](./examples/ipc/README.md).
 
-For non-IPC legacy examples (`runSim`, `runShellSim`, `pgo_run_sim.py`, `pgo_dump_abc.py`), see [`examples/legacy/README.md`](./examples/legacy/README.md).
+Legacy penalty-based volume contact is available through the same entrypoint:
+
+```bash
+build/base_no_mkl/bin/runIPCSim --legacy path/to/legacy-volume-config.json
+```
+
+`--legacy` accepts the old volume JSON shape with either `tet-mesh` or `cubic-mesh` and uses the penalty contact model instead of IPC contact. Shell legacy configs are no longer supported; use the IPC shell examples above for shell simulations.
 
 Optional Python API smoke test:
 
 ```bash
-cd examples
-python ../src/python/pypgo/pgo_test_01.py
+python src/python/pypgo/pgo_test_01.py
 ```
 
 ## Tools
@@ -261,10 +266,10 @@ Basic usage:
 
 ```bash
 build/base_no_mkl/bin/cubicMesher \
---input-mesh examples/legacy/cubic/box/box.obj \
+--input-mesh examples/ipc/cubic/box/box.obj \
 --resolution 4 \
---output-mesh examples/legacy/cubic/box/box.veg \
---output-surface examples/legacy/cubic/box/box-surface.obj \
+--output-mesh /tmp/libpgo-box.veg \
+--output-surface /tmp/libpgo-box-surface.obj \
 --E 10000000 \
 --nu 0.45 \
 --density 1000
@@ -277,8 +282,6 @@ Main arguments:
 - `--output-mesh`: output cubic `.veg`
 - `--output-surface`: optional extracted surface `.obj`
 - `--E`, `--nu`, `--density`: isotropic material parameters written into the output mesh
-
-Generated legacy cubic assets are stored under `examples/legacy/cubic/`. See [`examples/legacy/cubic/README.md`](./examples/legacy/cubic/README.md) for detailed commands and case notes.
 
 ### Tet Mesher
 
@@ -351,18 +354,6 @@ Config fields:
 - `tetwild.lr` / `tetwild.la`: relative or absolute fTetWild target edge length
 - `tetwild.epsr`: fTetWild relative envelope tolerance
 - `tetwild.stop_energy`, `tetwild.max_threads`: fTetWild optimization controls
-
-### Legacy Non-IPC Examples
-
-The non-IPC example suite has been moved to `examples/legacy/`.
-
-Use [`examples/legacy/README.md`](./examples/legacy/README.md) for:
-
-- `runSim` and `runShellSim` legacy case commands
-- Python wrappers `pgo_run_sim.py` and `pgo_dump_abc.py`
-- legacy case layout and migration notes
-
----
 
 ## Third-party libraries
 

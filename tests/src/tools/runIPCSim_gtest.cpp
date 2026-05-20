@@ -7,6 +7,7 @@
 #include "initPredicates.h"
 #include "pgoLogging.h"
 #include "runIPCSimApp.h"
+#include "runIPCSimCli.h"
 #include "runIPCSimConfig.h"
 #include "runIPCSimOutput.h"
 #include "runIPCSimSetup.h"
@@ -36,6 +37,8 @@ namespace ES = pgo::EigenSupport;
 namespace fs = std::filesystem;
 
 constexpr const char *kShellExampleDir = LIBPGO_TEST_SHELL_EXAMPLE_DIR;
+constexpr const char *kLegacyTetBoxDir = LIBPGO_TEST_LEGACY_TET_BOX_DIR;
+constexpr const char *kLegacyCubicBoxDir = LIBPGO_TEST_LEGACY_CUBIC_BOX_DIR;
 constexpr const char *kTetIPCExampleDir = LIBPGO_TEST_IPC_TET_EXAMPLE_DIR;
 constexpr const char *kCubicIPCExampleDir = LIBPGO_TEST_IPC_CUBIC_EXAMPLE_DIR;
 
@@ -478,6 +481,35 @@ std::string makeCubicIPCConfig(const fs::path &tempDir, int numTimesteps,
     scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel, useFloor, floorAxis, floorHeight, floorKappa);
 }
 
+std::string makeLegacyVolumeConfig(const fs::path &volumeMesh, const fs::path &surfaceMesh,
+  const fs::path &outputDir, const char *meshKey, const char *material, int numTimesteps)
+{
+  std::ostringstream json;
+  json << "{\n"
+       << "  \"" << meshKey << "\": " << quotePath(volumeMesh) << ",\n"
+       << "  \"surface-mesh\": " << quotePath(surfaceMesh) << ",\n"
+       << "  \"fixed-vertices\": [],\n"
+       << "  \"g\": [0, -9.81, 0],\n"
+       << "  \"init-vel\": [0, 0, 0],\n"
+       << "  \"init-disp\": [0, 0, 0],\n"
+       << "  \"scale\": 1.0,\n"
+       << "  \"timestep\": 0.001,\n"
+       << "  \"num-timestep\": " << numTimesteps << ",\n"
+       << "  \"damping-params\": [0, 0],\n"
+       << "  \"sim-type\": \"dynamic\",\n"
+       << "  \"contact-stiffness\": 1000,\n"
+       << "  \"contact-sample\": 2,\n"
+       << "  \"contact-friction-coeff\": 0.0,\n"
+       << "  \"contact-vel-eps\": 1e-5,\n"
+       << "  \"solver-eps\": 1e-4,\n"
+       << "  \"solver-max-iter\": 5,\n"
+       << "  \"elastic-material\": \"" << material << "\",\n"
+       << "  \"dump-interval\": 1,\n"
+       << "  \"output\": " << quotePath(outputDir) << "\n"
+       << "}\n";
+  return json.str();
+}
+
 std::string makeCubicSquashIPCConfig(const fs::path &tempDir, int numTimesteps, const std::string &logLevel = "info")
 {
   const fs::path exampleDir = cubicBoxSquashIPCExampleDir();
@@ -649,6 +681,72 @@ TEST(RunIPCSimAppGTest, RunFromConfigReturnsFailureForMissingRequiredIPCFields)
 
   pgo::RunIPCSim::RunIPCSimOptions options;
   EXPECT_NE(pgo::RunIPCSim::runFromConfig(configPath, options), 0);
+}
+
+TEST(RunIPCSimCliGTest, LegacyFlagSelectsLegacyPenaltyBackend)
+{
+  const char *argv[] = { "runIPCSim", "--legacy", "scene.json" };
+  const auto options = pgo::RunIPCSim::parseRunIPCSimCli(3, const_cast<char **>(argv));
+  EXPECT_EQ(options.configPath, fs::path("scene.json"));
+  EXPECT_EQ(options.runOptions.contactBackendKind, pgo::RunIPCSim::ContactBackendKind::LegacyPenalty);
+}
+
+TEST(RunIPCSimCliGTest, DefaultBackendIsIpc)
+{
+  const char *argv[] = { "runIPCSim", "scene.json" };
+  const auto options = pgo::RunIPCSim::parseRunIPCSimCli(2, const_cast<char **>(argv));
+  EXPECT_EQ(options.runOptions.contactBackendKind, pgo::RunIPCSim::ContactBackendKind::Ipc);
+}
+
+TEST(RunIPCSimLegacyGTest, LegacyTetConfigRunsOneStepAndWritesUnifiedOutput)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "legacy-tet.json";
+  const fs::path outputDir = tempDir.path() / "legacy-tet-output";
+  writeTextFile(configPath, makeLegacyVolumeConfig(
+    fs::path(kLegacyTetBoxDir) / "box.veg",
+    fs::path(kLegacyTetBoxDir) / "box.obj",
+    outputDir, "tet-mesh", "stable-neo", 1));
+
+  pgo::RunIPCSim::RunIPCSimOptions options;
+  options.contactBackendKind = pgo::RunIPCSim::ContactBackendKind::LegacyPenalty;
+  EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, options), 0);
+  EXPECT_TRUE(fs::exists(outputDir / "states" / "deform0000.u"));
+  EXPECT_TRUE(fs::exists(outputDir / "surface" / "ret0000.obj"));
+}
+
+TEST(RunIPCSimLegacyGTest, LegacyCubicConfigRunsOneStepAndWritesUnifiedOutput)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "legacy-cubic.json";
+  const fs::path outputDir = tempDir.path() / "legacy-cubic-output";
+  writeTextFile(configPath, makeLegacyVolumeConfig(
+    fs::path(kLegacyCubicBoxDir) / "box.veg",
+    fs::path(kLegacyCubicBoxDir) / "box.obj",
+    outputDir, "cubic-mesh", "stable-neo", 1));
+
+  pgo::RunIPCSim::RunIPCSimOptions options;
+  options.contactBackendKind = pgo::RunIPCSim::ContactBackendKind::LegacyPenalty;
+  EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, options), 0);
+  EXPECT_TRUE(fs::exists(outputDir / "states" / "deform0000.u"));
+  EXPECT_TRUE(fs::exists(outputDir / "surface" / "ret0000.obj"));
+}
+
+TEST(RunIPCSimLegacyGTest, LegacyShellConfigIsRejected)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "legacy-shell.json";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
+
+  pgo::RunIPCSim::RunIPCSimOptions options;
+  options.contactBackendKind = pgo::RunIPCSim::ContactBackendKind::LegacyPenalty;
+  EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, options), 1);
 }
 
 TEST(RunIPCSimCliGTest, VolumeSetupRespectsDisabledMaterialMaxStepFlag)

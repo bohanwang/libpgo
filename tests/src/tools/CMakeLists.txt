@@ -34,12 +34,12 @@ if(TARGET convertAnimation)
   gtest_discover_tests(convertAnimation_gtest)
 endif()
 
-add_executable(runSim_gtest
-  runSim_gtest.cpp
+add_executable(runSimShared_gtest
+  runSimShared_gtest.cpp
   ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimCliLogging.cpp
   ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimVolumeMeshIO.cpp
   ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimFEMSetup.cpp)
-target_link_libraries(runSim_gtest PRIVATE
+target_link_libraries(runSimShared_gtest PRIVATE
   GTest::gtest_main
   configFileJSON
   contact
@@ -47,25 +47,24 @@ target_link_libraries(runSim_gtest PRIVATE
   solidDeformationModel
   volumetricMesh
   mesh)
-target_include_directories(runSim_gtest PRIVATE
+target_include_directories(runSimShared_gtest PRIVATE
   ${CMAKE_SOURCE_DIR}/src/tools/runSim
   ${CMAKE_SOURCE_DIR}/src/core/solidDeformationModel)
-target_compile_definitions(runSim_gtest PRIVATE
-  LIBPGO_TEST_TET_BOX_VEG="${CMAKE_SOURCE_DIR}/examples/legacy/tet/box/box.veg"
-  LIBPGO_TEST_TET_BOX_OBJ="${CMAKE_SOURCE_DIR}/examples/legacy/tet/box/box.obj"
-  LIBPGO_TEST_CUBIC_BOX_VEG="${CMAKE_SOURCE_DIR}/examples/legacy/cubic/box/box.veg"
-  LIBPGO_TEST_CUBIC_BOX_OBJ="${CMAKE_SOURCE_DIR}/examples/legacy/cubic/box/box.obj"
-  LIBPGO_TEST_SHELL_JSON="${CMAKE_SOURCE_DIR}/examples/legacy/shell/shell.json"
-  PGO_TEST_RUN_SHELL_SIM_BIN="$<TARGET_FILE:runShellSim>")
-add_dependencies(runSim_gtest runShellSim)
-set_property(TARGET runSim_gtest PROPERTY FOLDER "tests/gtest")
-gtest_discover_tests(runSim_gtest)
+target_compile_definitions(runSimShared_gtest PRIVATE
+  LIBPGO_TEST_TET_BOX_VEG="${CMAKE_SOURCE_DIR}/tests/fixtures/legacy/tet/box/box.veg"
+  LIBPGO_TEST_TET_BOX_OBJ="${CMAKE_SOURCE_DIR}/tests/fixtures/legacy/tet/box/box.obj"
+  LIBPGO_TEST_CUBIC_BOX_VEG="${CMAKE_SOURCE_DIR}/tests/fixtures/legacy/cubic/box/box.veg"
+  LIBPGO_TEST_CUBIC_BOX_OBJ="${CMAKE_SOURCE_DIR}/tests/fixtures/legacy/cubic/box/box.obj")
+set_property(TARGET runSimShared_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(runSimShared_gtest)
 
 add_executable(runIPCSim_gtest
-  runIPCSim_gtest.cpp)
+  runIPCSim_gtest.cpp
+  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runIPCSimCli.cpp)
 target_link_libraries(runIPCSim_gtest PRIVATE
   GTest::gtest_main
   runIPCSimCore
+  argparse::argparse
   configFileJSON
   contact
   constraintPotentialEnergies
@@ -89,7 +88,9 @@ target_include_directories(runIPCSim_gtest PRIVATE
   ${CMAKE_SOURCE_DIR}/src/core/solidDeformationModel
   ${CMAKE_SOURCE_DIR}/src/core/volumetricMesh)
 target_compile_definitions(runIPCSim_gtest PRIVATE
-  LIBPGO_TEST_SHELL_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/legacy/shell"
+  LIBPGO_TEST_SHELL_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/shell"
+  LIBPGO_TEST_LEGACY_TET_BOX_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/legacy/tet/box"
+  LIBPGO_TEST_LEGACY_CUBIC_BOX_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/legacy/cubic/box"
   LIBPGO_TEST_IPC_TET_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/ipc/tet/box-hang"
   LIBPGO_TEST_IPC_CUBIC_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/ipc/cubic/box-hang"
   PGO_TEST_RUN_IPC_SIM_BIN="$<TARGET_FILE:runIPCSim>")

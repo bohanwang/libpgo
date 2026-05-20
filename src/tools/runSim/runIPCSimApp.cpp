@@ -31,6 +31,14 @@ IpcSimulationContext buildIpcSimulation(const pgo::ConfigFileJSON &config)
   return useVolumePath ? buildVolumeIpcSimulation(config) : buildShellIpcSimulation(config);
 }
 
+IpcSimulationContext buildRunIPCSimSimulation(const pgo::ConfigFileJSON &config, const RunIPCSimOptions &options)
+{
+  if (options.contactBackendKind == ContactBackendKind::LegacyPenalty)
+    return buildVolumeLegacyPenaltySimulation(config);
+
+  return buildIpcSimulation(config);
+}
+
 int runFromConfig(const std::filesystem::path &configPath, const RunIPCSimOptions &options)
 {
   try {
@@ -51,9 +59,10 @@ int runFromConfig(const std::filesystem::path &configPath, const RunIPCSimOption
       std::cout << "restart-from-u=false; clearing output folder " << runtimeConfig.outputFolder << "." << std::endl;
     pgo::Mesh::initPredicates();
 
-    IpcSimulationContext context = buildIpcSimulation(config);
+    IpcSimulationContext context = buildRunIPCSimSimulation(config, options);
     RunIPCSimSession session = createRunIPCSimSession(runtimeConfig, context);
     restoreRestartStateIfRequested(runtimeConfig, output, session);
+    context.contactBackend->initializeAfterRestart(runtimeConfig, context, session);
     runIPCSimLoop(runtimeConfig, context, session, output);
     runScope.logProfileSummaryIfEnabled();
     return 0;

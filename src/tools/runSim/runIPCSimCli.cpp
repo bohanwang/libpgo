@@ -18,6 +18,10 @@ void configureRunIPCSimArgumentParser(argparse::ArgumentParser &program)
     .help("Write command-line output to a .log file next to the config file")
     .default_value(false)
     .implicit_value(true);
+  program.add_argument("--legacy")
+    .help("Run volume legacy penalty-contact configs through the runIPCSim entry")
+    .default_value(false)
+    .implicit_value(true);
 }
 
 RunIPCSimCliOptions readRunIPCSimCliOptions(const argparse::ArgumentParser &program)
@@ -25,6 +29,9 @@ RunIPCSimCliOptions readRunIPCSimCliOptions(const argparse::ArgumentParser &prog
   RunIPCSimCliOptions options;
   options.configPath = program.get<std::string>("config");
   options.runOptions.enableCliLog = program.get<bool>("--log");
+  options.runOptions.contactBackendKind = program.get<bool>("--legacy")
+    ? ContactBackendKind::LegacyPenalty
+    : ContactBackendKind::Ipc;
   return options;
 }
 }  // namespace

@@ -1,0 +1,17 @@
+{
+  "surface-mesh": "../shell/shell.obj",
+  "fixed-vertices": [
+    {
+      "filename": "../shell/shell-fixed.txt",
+      "movement": [0, 0, 0],
+      "coeff": 100000
+    }
+  ],
+  "external-objects": [
+    {
+      "filename": "../shell/shell.obj",
+      "movement": [0, 0, 0]
+    }
+  ],
+  "output": "ret-shell-path-test"
+}

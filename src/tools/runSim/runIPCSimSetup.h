@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EigenSupport.h"
+#include "runIPCSimContactBackend.h"
 #include "triMeshGeo.h"
 
 #include <memory>
@@ -64,6 +65,7 @@ struct IpcSimulationContext
   std::vector<EigenSupport::VXd> pullingTargets;
   std::vector<EigenSupport::VXd> pullingTargetRests;
   pgo::Mesh::TriMeshGeo surfaceMesh;
+  std::shared_ptr<RunIPCSimContactBackend> contactBackend;
   std::shared_ptr<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy> collisionHandler;
   std::vector<std::shared_ptr<NonlinearOptimization::PotentialEnergy>> extraGeneralImplicitForceModels;
   std::vector<std::shared_ptr<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>> floorPotentialEnergies;
@@ -75,6 +77,8 @@ struct IpcSimulationContext
 
 IpcSimulationContext buildShellIpcSimulation(const ConfigFileJSON &jconfig);
 IpcSimulationContext buildVolumeIpcSimulation(const ConfigFileJSON &jconfig);
+IpcSimulationContext buildVolumeLegacyPenaltySimulation(const ConfigFileJSON &jconfig);
+std::shared_ptr<RunIPCSimContactBackend> makeIpcContactBackend();
 double floorHeightAtFrame(const IpcFloorMotionState &motion, int frame);
 }  // namespace RunIPCSim
 }  // namespace pgo

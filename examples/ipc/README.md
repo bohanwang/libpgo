@@ -255,7 +255,7 @@ Cubic unified IPC material max-step regression case. This mirrors the tet squash
 
 ### `cubic/box-with-sphere`
 
-Cubic unified IPC floor-contact example migrated from `examples/legacy/cubic/box-with-sphere-xlite`. This case removes the legacy external obstacle mesh and replaces it with the mapped-surface floor penalty path in `runIPCSim`.
+Cubic unified IPC floor-contact example migrated from the old cubic penalty-contact setup. This case removes the legacy external obstacle mesh and replaces it with the mapped-surface floor penalty path in `runIPCSim`.
 
 - files: `box-with-sphere.obj`, `box-with-sphere.veg`, `box-ipc.json`, `anim.json`
 - material: `stable-neo`
