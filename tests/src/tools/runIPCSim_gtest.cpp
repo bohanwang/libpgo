@@ -6,6 +6,9 @@
 #include "deformationModelEnergy.h"
 #include "initPredicates.h"
 #include "pgoLogging.h"
+#include "runIPCSimApp.h"
+#include "runIPCSimConfig.h"
+#include "runIPCSimOutput.h"
 #include "runIPCSimSetup.h"
 #include "runSimCliLogging.h"
 #include "runSimVolumeMeshIO.h"
@@ -567,6 +570,86 @@ std::string vec3Json(const ES::V3d &v)
 }
 
 }  // namespace
+
+TEST(RunIPCSimConfigGTest, RuntimeConfigParsesRequiredAndOptionalFields)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-runtime-config.json";
+  writeTextFile(configPath,
+    addBoolConfigField(
+      addBoolConfigField(makeShellIPCConfig(tempDir.path(), 3, true, false, 0.002, 3000.0, 2),
+        "restart-from-u", true),
+      "dump_deform_every_frame", true));
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  config.handle()["profiling"] = true;
+  config.handle()["output-von-mises"] = false;
+
+  const pgo::RunIPCSim::RunIPCSimRuntimeConfig runtime =
+    pgo::RunIPCSim::parseRunIPCSimRuntimeConfig(config);
+
+  EXPECT_EQ(runtime.numSimSteps, 3);
+  EXPECT_EQ(runtime.frameGap, 2);
+  EXPECT_TRUE(runtime.restartFromU);
+  EXPECT_TRUE(runtime.dumpDeformEveryFrame);
+  EXPECT_FALSE(runtime.outputVonMises);
+  EXPECT_TRUE(runtime.enableProfiling);
+  EXPECT_DOUBLE_EQ(runtime.scale, 1.0);
+  EXPECT_DOUBLE_EQ(runtime.timestep, 0.001);
+  EXPECT_EQ(runtime.outputFolder.filename(), "shell-output");
+  EXPECT_NEAR(runtime.gravity[1], -9.81, 1e-12);
+}
+
+TEST(RunIPCSimOutputGTest, OutputPathsPreserveCurrentLayout)
+{
+  ScopedTempDir tempDir;
+  const fs::path outputDir = tempDir.path() / "ipc-output";
+  const pgo::RunIPCSim::RunIPCSimOutput output(outputDir);
+
+  EXPECT_EQ(output.directories().root, outputDir);
+  EXPECT_EQ(output.directories().states, outputDir / "states");
+  EXPECT_EQ(output.directories().surface, outputDir / "surface");
+  EXPECT_EQ(output.directories().stress, outputDir / "stress");
+  EXPECT_EQ(output.logPath(), outputDir / "runIPCSim.log");
+  EXPECT_EQ(output.statePath(7), outputDir / "states" / "deform0007.u");
+  EXPECT_EQ(output.surfacePath(3), outputDir / "surface" / "ret0003.obj");
+  EXPECT_EQ(output.stressPath(11), outputDir / "stress" / "von_mises0011.json");
+}
+
+TEST(RunIPCSimAppGTest, RunFromConfigNoTimestepsMatchesCliSuccess)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-runner-zero-step.json";
+  const fs::path logPath = tempDir.path() / "shell-output" / "runIPCSim.log";
+
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
+
+  pgo::RunIPCSim::RunIPCSimOptions options;
+  options.enableCliLog = true;
+
+  EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, options), 0);
+  ASSERT_TRUE(fs::exists(logPath));
+  const std::string contents = readTextFile(logPath);
+  EXPECT_NE(contents.find("runIPCSim phase2 shell IPC parameters:"), std::string::npos);
+  EXPECT_NE(contents.find("max-step summary"), std::string::npos);
+}
+
+TEST(RunIPCSimAppGTest, RunFromConfigReturnsFailureForMissingRequiredIPCFields)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-runner-missing-ipc.json";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0, false));
+
+  pgo::RunIPCSim::RunIPCSimOptions options;
+  EXPECT_NE(pgo::RunIPCSim::runFromConfig(configPath, options), 0);
+}
 
 TEST(RunIPCSimCliGTest, VolumeSetupRespectsDisabledMaterialMaxStepFlag)
 {

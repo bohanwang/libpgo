@@ -256,21 +256,6 @@ const char *floorSideToString(FloorSide side)
   }
 }
 
-double floorHeightAtFrame(const IpcFloorMotionState &motion, int frame)
-{
-  if (!motion.hasMotion)
-    return motion.heightStart;
-
-  if (frame <= motion.frameStart)
-    return motion.heightStart;
-  if (frame >= motion.frameEnd)
-    return motion.heightEnd;
-
-  const double denom = static_cast<double>(motion.frameEnd - motion.frameStart);
-  const double alpha = denom > 0.0 ? static_cast<double>(frame - motion.frameStart) / denom : 1.0;
-  return motion.heightStart * (1.0 - alpha) + motion.heightEnd * alpha;
-}
-
 std::vector<ParsedFloorConfig> parseFloorsConfig(const pgo::ConfigFileJSON &jconfig)
 {
   for (const char *legacyField : { "use-floor", "floor-axis", "floor-height", "floor-kappa" }) {
@@ -460,6 +445,21 @@ std::vector<Contact::CIPC::ObstacleSurface> parseExternalObjects(
   return obstacles;
 }
 }  // namespace
+
+double floorHeightAtFrame(const IpcFloorMotionState &motion, int frame)
+{
+  if (!motion.hasMotion)
+    return motion.heightStart;
+
+  if (frame <= motion.frameStart)
+    return motion.heightStart;
+  if (frame >= motion.frameEnd)
+    return motion.heightEnd;
+
+  const double denom = static_cast<double>(motion.frameEnd - motion.frameStart);
+  const double alpha = denom > 0.0 ? static_cast<double>(frame - motion.frameStart) / denom : 1.0;
+  return motion.heightStart * (1.0 - alpha) + motion.heightEnd * alpha;
+}
 
 IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
 {

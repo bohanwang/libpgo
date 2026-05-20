@@ -62,18 +62,16 @@ set_property(TARGET runSim_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(runSim_gtest)
 
 add_executable(runIPCSim_gtest
-  runIPCSim_gtest.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimCliLogging.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimVolumeMeshIO.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimFEMSetup.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runIPCSimSetup.cpp)
+  runIPCSim_gtest.cpp)
 target_link_libraries(runIPCSim_gtest PRIVATE
   GTest::gtest_main
+  runIPCSimCore
   configFileJSON
   contact
   constraintPotentialEnergies
   interpolationCoordinates
   libiglInterface
+  simulation
   solidDeformationModel
   volumetricMesh
   mesh)

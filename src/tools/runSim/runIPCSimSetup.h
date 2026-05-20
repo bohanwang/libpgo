@@ -75,5 +75,6 @@ struct IpcSimulationContext
 
 IpcSimulationContext buildShellIpcSimulation(const ConfigFileJSON &jconfig);
 IpcSimulationContext buildVolumeIpcSimulation(const ConfigFileJSON &jconfig);
+double floorHeightAtFrame(const IpcFloorMotionState &motion, int frame);
 }  // namespace RunIPCSim
 }  // namespace pgo
