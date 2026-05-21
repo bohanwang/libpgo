@@ -35,6 +35,11 @@ struct SolverResult
 const char *solveStatusToString(SolveStatus status);
 const char *solveStatusToString(int status);
 bool isSolveStatusCode(int status);
+SolverResult makeSolverResult(SolveStatus status, int rawStatusCode, int iterations = 0);
+SolverResult makeIpoptSolverResult(int rawStatusCode);
+SolverResult makeKnitroSolverResult(int rawStatusCode);
+bool acceptsDynamicSolveStatus(SolveStatus status);
+bool acceptsStrictSolveStatus(SolveStatus status);
 std::string formatSolverResultSummary(const SolverResult &result);
 
 }  // namespace pgo::NonlinearOptimization

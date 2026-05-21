@@ -17,6 +17,10 @@ using pgo::NonlinearOptimization::PotentialEnergy;
 using pgo::NonlinearOptimization::SolveDiagnostics;
 using pgo::NonlinearOptimization::SolverResult;
 using pgo::NonlinearOptimization::SolveStatus;
+using pgo::NonlinearOptimization::acceptsDynamicSolveStatus;
+using pgo::NonlinearOptimization::acceptsStrictSolveStatus;
+using pgo::NonlinearOptimization::makeIpoptSolverResult;
+using pgo::NonlinearOptimization::makeKnitroSolverResult;
 using pgo::NonlinearOptimization::solveStatusToString;
 
 void initializeLogging()
@@ -485,6 +489,37 @@ TEST(NewtonSolverGTest, SolveStatusToStringReturnsStableNames)
   EXPECT_STREQ(solveStatusToString(SolveStatus::ExternalSolverFailure), "ExternalSolverFailure");
   EXPECT_STREQ(solveStatusToString(SolveStatus::UnsupportedBackend), "UnsupportedBackend");
   EXPECT_STREQ(solveStatusToString(999), "Unknown");
+}
+
+TEST(SolverResultGTest, MapsExternalRawStatusCodes)
+{
+  EXPECT_EQ(makeIpoptSolverResult(0).status, SolveStatus::Converged);
+  EXPECT_EQ(makeIpoptSolverResult(1).status, SolveStatus::Converged);
+  EXPECT_EQ(makeIpoptSolverResult(-1).status, SolveStatus::MaxIterations);
+  EXPECT_EQ(makeIpoptSolverResult(3).status, SolveStatus::StepTooSmall);
+  EXPECT_EQ(makeIpoptSolverResult(-13).status, SolveStatus::NonFinite);
+  EXPECT_EQ(makeIpoptSolverResult(-3).status, SolveStatus::LinearSolveFailed);
+  EXPECT_EQ(makeIpoptSolverResult(-199).status, SolveStatus::ExternalSolverFailure);
+  EXPECT_EQ(makeIpoptSolverResult(-199).rawStatusCode, -199);
+
+  EXPECT_EQ(makeKnitroSolverResult(0).status, SolveStatus::Converged);
+  EXPECT_EQ(makeKnitroSolverResult(-100).status, SolveStatus::Converged);
+  EXPECT_EQ(makeKnitroSolverResult(-400).status, SolveStatus::MaxIterations);
+  EXPECT_EQ(makeKnitroSolverResult(-500).status, SolveStatus::LinearSolveFailed);
+  EXPECT_EQ(makeKnitroSolverResult(-200).status, SolveStatus::ExternalSolverFailure);
+  EXPECT_EQ(makeKnitroSolverResult(-200).rawStatusCode, -200);
+}
+
+TEST(SolverResultGTest, EncodesDynamicAndStrictAcceptancePolicies)
+{
+  EXPECT_TRUE(acceptsStrictSolveStatus(SolveStatus::Converged));
+  EXPECT_FALSE(acceptsStrictSolveStatus(SolveStatus::MaxIterations));
+
+  EXPECT_TRUE(acceptsDynamicSolveStatus(SolveStatus::Converged));
+  EXPECT_TRUE(acceptsDynamicSolveStatus(SolveStatus::MaxIterations));
+  EXPECT_TRUE(acceptsDynamicSolveStatus(SolveStatus::StepTooSmall));
+  EXPECT_FALSE(acceptsDynamicSolveStatus(SolveStatus::LineSearchFailed));
+  EXPECT_FALSE(acceptsDynamicSolveStatus(SolveStatus::ExternalSolverFailure));
 }
 
 TEST(NewtonSolverGTest, SolveRecordsIterationsForImmediateConvergence)

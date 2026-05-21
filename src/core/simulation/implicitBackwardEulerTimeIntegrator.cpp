@@ -19,16 +19,6 @@ using namespace pgo::Simulation;
 
 namespace ES = pgo::EigenSupport;
 
-namespace
-{
-bool acceptsDynamicSolveStatus(SolveStatus status)
-{
-  return status == SolveStatus::Converged ||
-    status == SolveStatus::MaxIterations ||
-    status == SolveStatus::StepTooSmall;
-}
-}  // namespace
-
 ImplicitBackwardEulerTimeIntegrator::ImplicitBackwardEulerTimeIntegrator(
   const EigenSupport::SpMatD &massMatrix,
   std::shared_ptr<const NonlinearOptimization::PotentialEnergy> elasticPotential,

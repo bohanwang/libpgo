@@ -59,7 +59,7 @@ void LaplacianProblem::solve(EigenSupport::RefVecXd xfinal, int numIter, double 
   ES::VXd lambda, g, clow, chi;
 
   xfinal = xinit;
-  int ret = NonlinearOptimization::EnergyOptimizer::minimizeUsingKnitro(xfinal, energyAll, xlow, xhi, lambda, g,
+  NonlinearOptimization::SolverResult result = NonlinearOptimization::EnergyOptimizer::minimizeUsingKnitro(xfinal, energyAll, xlow, xhi, lambda, g,
     nullptr, clow, chi, numIter, eps, verbose, "");
-  std::cout << "Solver ret: " << ret << std::endl;
+  std::cout << "Solver result: " << NonlinearOptimization::formatSolverResultSummary(result) << std::endl;
 }

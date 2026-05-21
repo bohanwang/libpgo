@@ -282,6 +282,14 @@ if(TARGET Ceres::ceres)
   add_compile_definitions(PGO_HAS_CERES)
 endif()
 
+if(PGO_OPT_USE_IPOPT)
+  find_package(Ipopt)
+
+  if(TARGET Ipopt::Core)
+    add_compile_definitions(PGO_HAS_IPOPT)
+  endif()
+endif()
+
 if(PGO_OPT_USE_KNITRO)
   include(CMakeModules/third-party/knitro.cmake)
 
