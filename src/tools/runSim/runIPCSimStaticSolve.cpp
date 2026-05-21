@@ -70,6 +70,7 @@ void runIPCSimStaticSolve(
   energyAll->init();
 
   NonlinearOptimization::NewtonSolver::SolverParam solverParam;
+  solverParam.addDamping = 1;
   ES::VXd u = ES::VXd::Zero(n3);
   energyAll->printEnergy(u);
 

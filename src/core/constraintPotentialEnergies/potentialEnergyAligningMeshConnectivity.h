@@ -36,7 +36,7 @@ public:
   virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override = 0;
 
 protected:
-  const EigenSupport::SpMatD &hessianBase;
+  EigenSupport::SpMatD hessianBase;
   std::vector<int> allDOFs;
 };
 

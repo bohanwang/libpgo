@@ -7,11 +7,9 @@ copyright to USC
 #include "pgoLogging.h"
 #include "EigenSupport.h"
 
-#include <tbb/concurrent_vector.h>
-#include <tbb/parallel_for.h>
-
 #include <numeric>
 #include <iostream>
+#include <vector>
 
 using namespace pgo::NonlinearOptimization;
 namespace ES = pgo::EigenSupport;
@@ -49,8 +47,7 @@ PotentialEnergies::~PotentialEnergies()
 
 void PotentialEnergies::init()
 {
-  // std::vector<ES::TripletD> entries;
-  tbb::concurrent_vector<ES::TripletD> entries;
+  std::vector<ES::TripletD> entries;
   for (auto energy : potentialEnergies) {
     ES::SpMatD h;
 
@@ -71,14 +68,15 @@ void PotentialEnergies::init()
     // Only include fixed-topology energies in hessianAll
     if (energy->isHessianTopologyFixed()) {
       energy->createHessian(h);
-      tbb::parallel_for((ES::IDX)0, h.outerSize(), [&](ES::IDX outeri) {
+      entries.reserve(entries.size() + static_cast<std::size_t>(h.nonZeros()));
+      for (ES::IDX outeri = 0; outeri < h.outerSize(); ++outeri) {
         for (ES::SpMatD::InnerIterator it(h, outeri); it; ++it) {
           entries.emplace_back(
             (ES::SpMatD::StorageIndex)dofs[it.row()],
             (ES::SpMatD::StorageIndex)dofs[it.col()],
             1.0);
         }
-      });
+      }
     }
 
     buffer->hessianMatrices.push_back(h);

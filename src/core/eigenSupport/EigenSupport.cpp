@@ -819,12 +819,10 @@ EIGEN_SUPPORT_INLINE void pgo::EigenSupport::transposeTransfer(const SpMatD &A, 
 
 EIGEN_SUPPORT_INLINE void pgo::EigenSupport::small2Big(const SpMatD &Asmall, const SpMatD &Abig, const std::vector<int> &dofs, SpMatI &mapping)
 {
-  // std::vector<TripletI> entries;
-  tbb::concurrent_vector<TripletI> entries;
+  std::vector<TripletI> entries;
   entries.reserve(Asmall.nonZeros());
 
-  // for (Eigen::Index outeri = 0; outeri < Asmall.outerSize(); outeri++) {
-  tbb::parallel_for((IDX)0, Asmall.outerSize(), [&](IDX outeri) {
+  for (Eigen::Index outeri = 0; outeri < Asmall.outerSize(); outeri++) {
     for (SpMatD::InnerIterator it(Asmall, outeri); it; ++it) {
       Eigen::Index small_row = it.row();
       Eigen::Index small_col = it.col();
@@ -844,7 +842,8 @@ EIGEN_SUPPORT_INLINE void pgo::EigenSupport::small2Big(const SpMatD &Asmall, con
       else {
         throw std::domain_error("Different sparse matrix topology");
       }
-    } });
+    }
+  }
 
   mapping.resize(Asmall.rows(), Asmall.cols());
   mapping.setFromTriplets(entries.begin(), entries.end());

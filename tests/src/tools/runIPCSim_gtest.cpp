@@ -891,6 +891,29 @@ TEST(RunIPCSimStaticGTest, StaticRejectsRestartFromU)
   EXPECT_NE(pgo::RunIPCSim::runFromConfig(configPath, {}), 0);
 }
 
+TEST(RunIPCSimCliGTest, StaticTetCliSmokeWritesUnifiedSurfaceAndState)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-static-cli.json";
+  const fs::path outputDir = tempDir.path() / "tet-output";
+  writeTextFile(configPath, makeStaticConfig(makeTetIPCConfig(
+    tempDir.path(), 1, 1.0, true, false, "stable-neo", 1, "info",
+    false, std::nullopt, std::nullopt, std::nullopt, 1)));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+}
+
 TEST(RunIPCSimCliGTest, VolumeSetupRespectsDisabledMaterialMaxStepFlag)
 {
   initializeRunIPCSimTestEnvironment();
