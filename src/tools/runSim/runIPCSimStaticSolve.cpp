@@ -13,6 +13,7 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace pgo::RunIPCSim
@@ -76,7 +77,10 @@ void runIPCSimStaticSolve(
 
   NonlinearOptimization::NewtonSolver solver(
     u.data(), solverParam, energyAll, std::vector<int>(), nullptr);
-  solver.solve(u.data(), runtimeConfig.solverMaxIter, runtimeConfig.solverEps, 2);
+  const int solverRet = solver.solve(u.data(), runtimeConfig.solverMaxIter, runtimeConfig.solverEps, 2);
+  if (solverRet != static_cast<int>(NonlinearOptimization::NewtonSolver::SolveStatus::Converged)) {
+    throw std::runtime_error("runIPCSim static solve failed to converge; NewtonSolver status=" + std::to_string(solverRet));
+  }
 
   const ES::VXd uvel = ES::VXd::Zero(n3);
   const ES::VXd uacc = ES::VXd::Zero(n3);

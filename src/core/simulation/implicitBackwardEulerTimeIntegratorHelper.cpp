@@ -1,8 +1,8 @@
 #include "implicitBackwardEulerTimeIntegratorHelper.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
 #include "deformationModelEnergy.h"
-#include "embeddedSurfaceIPCPotentialEnergy.h"
-#include "CIPC.h"
+#include "ipc/embeddedSurfaceIPCPotentialEnergy.h"
+#include "ipc/CIPC.h"
 
 #include <iostream>
 

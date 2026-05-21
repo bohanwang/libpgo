@@ -1,6 +1,6 @@
 #pragma once
 
-#include "contactEnergyUtilities.h"
+#include "legacy_penalty/contactEnergyUtilities.h"
 
 #include "potentialEnergy.h"
 #include "triMeshGeo.h"

@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "CIPC.h"
+#include "ipc/CIPC.h"
 #include "ipc/core/surfaceIPCCore.h"
 #include "scopedProfileSection.h"
 #include "ipc/profiling/surfaceIPCProfiling.h"

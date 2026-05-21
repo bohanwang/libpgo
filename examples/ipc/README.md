@@ -44,6 +44,16 @@ build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-with-sphere/
 
 The JSON configs use paths relative to the config file, so they can be launched from the repo root without first changing into the case directory.
 
+Static solves use the same entrypoint by setting `"sim-type": "static"` in a config. Static mode performs one Newton solve from the rest state and writes only frame `0` (`states/deform0000.u` and `surface/ret0000.obj`) when the solve converges. It is intentionally strict: if Newton returns any non-converged status, `runIPCSim` exits with failure and does not write a partial static state.
+
+Legacy penalty contact is also routed through `runIPCSim`:
+
+```bash
+build/base_no_mkl_debug/bin/runIPCSim --legacy path/to/legacy-volume-config.json
+```
+
+`--legacy` accepts old tet/cubic volume JSON files and swaps the contact backend to the legacy penalty model (`contact-stiffness`, `contact-sample`, `contact-friction-coeff`, `contact-vel-eps`). Shell legacy has been removed. In static mode, a gravity-only legacy drop is not a well-posed equilibrium unless the model has an attachment or another constraint; use fixed vertices for box-hang-style static tests.
+
 ## Batch Runner
 
 Use `ipc_batch.json` with `scripts/run_sim_batch.py` to define named IPC case groups. The script command line is only for execution control: selecting jobs, dry-run mode, and overwrite/skip behavior.
@@ -168,6 +178,9 @@ The shell drop case contains:
 Current config convention:
 
 - shell uses `surface-mesh` together with `elastic-material = koiter-stvk`
+- tet/cubic volume IPC uses `tet-mesh` or `cubic-mesh`, `surface-mesh`, and explicit `ipc-dhat`/`ipc-kappa`
+- legacy tet/cubic volume runs use the same `runIPCSim` entrypoint with `--legacy` and the old penalty contact fields
+- static configs must converge before any frame is written; unconstrained gravity-only drops should be treated as expected failures
 - tet uses `tet-mesh` together with `surface-mesh`
 - cubic uses `cubic-mesh` together with `surface-mesh`
 - supported IPC shell, tet, and cubic cases can switch from `"sim-type": "dynamic"` to `"sim-type": "static"` for a one-shot Newton solve that writes `states/deform0000.u` and `surface/ret0000.obj`

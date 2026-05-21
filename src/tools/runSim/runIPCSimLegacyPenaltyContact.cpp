@@ -3,14 +3,14 @@
 #include "configFileJSON.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
 #include "potentialEnergies.h"
-#include "pointPenetrationEnergy.h"
-#include "pointTrianglePairCouplingEnergyWithCollision.h"
+#include "legacy_penalty/pointPenetrationEnergy.h"
+#include "legacy_penalty/pointTrianglePairCouplingEnergyWithCollision.h"
 #include "runIPCSimConfig.h"
 #include "runIPCSimLogging.h"
 #include "runIPCSimSession.h"
 #include "runIPCSimSetup.h"
-#include "triangleMeshExternalContactHandler.h"
-#include "triangleMeshSelfContactHandler.h"
+#include "legacy_penalty/triangleMeshExternalContactHandler.h"
+#include "legacy_penalty/triangleMeshSelfContactHandler.h"
 
 #include <array>
 #include <stdexcept>

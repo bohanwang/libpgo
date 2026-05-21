@@ -3,9 +3,9 @@ author: Bohan Wang
 copyright to USC
 */
 
-#include "triangleMeshSelfContactHandler.h"
-#include "triangleMeshSelfContactDetection.h"
-#include "pointTrianglePairCouplingEnergyWithCollision.h"
+#include "legacy_penalty/triangleMeshSelfContactHandler.h"
+#include "legacy_penalty/triangleMeshSelfContactDetection.h"
+#include "legacy_penalty/pointTrianglePairCouplingEnergyWithCollision.h"
 
 #include "pgoLogging.h"
 #include "geometryQuery.h"

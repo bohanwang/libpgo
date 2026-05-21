@@ -2,7 +2,7 @@
 copyright to Bohan Wang
 */
 
-#include "embeddedSurfaceIPCPotentialEnergy.h"
+#include "ipc/embeddedSurfaceIPCPotentialEnergy.h"
 
 #include "ipc/profiling/surfaceIPCProfiling.h"
 #include "scopedProfileSection.h"

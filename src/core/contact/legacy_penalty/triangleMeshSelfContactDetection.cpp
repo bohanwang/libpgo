@@ -3,7 +3,7 @@ author: Bohan Wang
 copyright to USC
 */
 
-#include "triangleMeshSelfContactDetection.h"
+#include "legacy_penalty/triangleMeshSelfContactDetection.h"
 
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_sort.h>

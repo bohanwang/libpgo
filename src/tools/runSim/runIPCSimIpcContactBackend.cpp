@@ -1,7 +1,7 @@
 #include "runIPCSimContactBackend.h"
 
-#include "embeddedSurfaceFloorPotentialEnergy.h"
-#include "embeddedSurfaceIPCPotentialEnergy.h"
+#include "ipc/embeddedSurfaceFloorPotentialEnergy.h"
+#include "ipc/embeddedSurfaceIPCPotentialEnergy.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
 #include "potentialEnergies.h"
 #include "runIPCSimConfig.h"

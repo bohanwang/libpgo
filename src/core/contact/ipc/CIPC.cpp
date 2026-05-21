@@ -2,7 +2,7 @@
 copyright to Bohan Wang
 */
 
-#include "CIPC.h"
+#include "ipc/CIPC.h"
 
 #include "scopedProfileSection.h"
 #include "ipc/profiling/surfaceIPCProfiling.h"

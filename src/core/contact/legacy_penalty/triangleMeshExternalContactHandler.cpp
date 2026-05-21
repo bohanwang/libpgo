@@ -1,5 +1,5 @@
-#include "triangleMeshExternalContactHandler.h"
-#include "pointPenetrationEnergy.h"
+#include "legacy_penalty/triangleMeshExternalContactHandler.h"
+#include "legacy_penalty/pointPenetrationEnergy.h"
 
 #include "pgoLogging.h"
 #include "geometryQuery.h"

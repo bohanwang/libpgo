@@ -3,7 +3,7 @@ author: Bohan Wang
 copyright to USC
 */
 
-#include "CCDKernel.h"
+#include "legacy_penalty/CCDKernel.h"
 
 #include "predicates.h"
 #include "triangle.h"

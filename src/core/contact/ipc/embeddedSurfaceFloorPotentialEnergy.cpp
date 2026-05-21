@@ -2,7 +2,7 @@
 copyright to Bohan Wang
 */
 
-#include "embeddedSurfaceFloorPotentialEnergy.h"
+#include "ipc/embeddedSurfaceFloorPotentialEnergy.h"
 
 #include <cmath>
 #include <stdexcept>

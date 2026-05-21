@@ -11,6 +11,14 @@ set(RUN_IPC_SIM_CORE_SOURCES
   runSimVolumeMeshIO.cpp
   runSimFEMSetup.cpp
   runIPCSimSetup.cpp
+  runIPCSimSetupCommon.cpp
+  runIPCSimAttachmentSetup.cpp
+  runIPCSimFloorSetup.cpp
+  runIPCSimSurfacePressureSetup.cpp
+  runIPCSimObstacleSetup.cpp
+  runIPCSimShellSetup.cpp
+  runIPCSimVolumeSetup.cpp
+  runIPCSimLegacySetup.cpp
   runIPCSimApp.cpp
   runIPCSimConfig.cpp
   runIPCSimOutput.cpp

@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
-#include "CIPC.h"
-#include "embeddedSurfaceIPCPotentialEnergy.h"
+#include "ipc/CIPC.h"
+#include "ipc/embeddedSurfaceIPCPotentialEnergy.h"
 #include "potentialEnergies.h"
 #include "scopedProfileSection.h"
 #include "ipc/core/surfaceIPCCore.h"

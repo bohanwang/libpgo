@@ -41,6 +41,7 @@ constexpr const char *kLegacyTetBoxDir = LIBPGO_TEST_LEGACY_TET_BOX_DIR;
 constexpr const char *kLegacyCubicBoxDir = LIBPGO_TEST_LEGACY_CUBIC_BOX_DIR;
 constexpr const char *kTetIPCExampleDir = LIBPGO_TEST_IPC_TET_EXAMPLE_DIR;
 constexpr const char *kCubicIPCExampleDir = LIBPGO_TEST_IPC_CUBIC_EXAMPLE_DIR;
+constexpr int kStaticSolverMaxIter = 200;
 
 std::string quotePath(const fs::path &path)
 {
@@ -525,6 +526,41 @@ std::string makeLegacyVolumeConfig(const fs::path &volumeMesh, const fs::path &s
   return json.str();
 }
 
+std::string makeLegacyBoxHangVolumeConfig(const fs::path &volumeMesh, const fs::path &surfaceMesh,
+  const fs::path &fixedVertexFile, const fs::path &outputDir, const char *meshKey, const char *material)
+{
+  std::ostringstream json;
+  json << "{\n"
+       << "  \"" << meshKey << "\": " << quotePath(volumeMesh) << ",\n"
+       << "  \"surface-mesh\": " << quotePath(surfaceMesh) << ",\n"
+       << "  \"fixed-vertices\": [\n"
+       << "    {\n"
+       << "      \"filename\": " << quotePath(fixedVertexFile) << ",\n"
+       << "      \"movement\": [0, 0, 0],\n"
+       << "      \"coeff\": 1e5\n"
+       << "    }\n"
+       << "  ],\n"
+       << "  \"g\": [0, -9.81, 0],\n"
+       << "  \"init-vel\": [0, 0, 0],\n"
+       << "  \"init-disp\": [0, 0, 0],\n"
+       << "  \"scale\": 1.0,\n"
+       << "  \"timestep\": 0.001,\n"
+       << "  \"num-timestep\": 1,\n"
+       << "  \"damping-params\": [0, 0],\n"
+       << "  \"sim-type\": \"static\",\n"
+       << "  \"contact-stiffness\": 1000,\n"
+       << "  \"contact-sample\": 2,\n"
+       << "  \"contact-friction-coeff\": 0.0,\n"
+       << "  \"contact-vel-eps\": 1e-5,\n"
+       << "  \"solver-eps\": 1e-4,\n"
+       << "  \"solver-max-iter\": 200,\n"
+       << "  \"elastic-material\": \"" << material << "\",\n"
+       << "  \"dump-interval\": 1,\n"
+       << "  \"output\": " << quotePath(outputDir) << "\n"
+       << "}\n";
+  return json.str();
+}
+
 std::string makeCubicSquashIPCConfig(const fs::path &tempDir, int numTimesteps, const std::string &logLevel = "info")
 {
   const fs::path exampleDir = cubicBoxSquashIPCExampleDir();
@@ -790,7 +826,7 @@ TEST(RunIPCSimStaticGTest, StaticTetIpcWritesUnifiedSurfaceAndState)
   const fs::path outputDir = tempDir.path() / "tet-output";
   writeTextFile(configPath, makeStaticConfig(makeTetIPCConfig(
     tempDir.path(), 1, 1.0, true, false, "stable-neo", 1, "info",
-    false, std::nullopt, std::nullopt, std::nullopt, 1)));
+    false, std::nullopt, std::nullopt, std::nullopt, kStaticSolverMaxIter)));
 
   EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, {}), 0);
   EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
@@ -806,7 +842,7 @@ TEST(RunIPCSimStaticGTest, StaticShellIpcWritesUnifiedSurfaceAndState)
   const fs::path outputDir = tempDir.path() / "shell-output";
   writeTextFile(configPath, makeStaticConfig(makeShellIPCConfig(
     tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "info",
-    false, std::nullopt, std::nullopt, std::nullopt, 1)));
+    false, std::nullopt, std::nullopt, std::nullopt, kStaticSolverMaxIter)));
 
   EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, {}), 0);
   EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
@@ -822,7 +858,7 @@ TEST(RunIPCSimStaticGTest, StaticCubicIpcWithFloorWritesUnifiedSurfaceAndState)
   const fs::path outputDir = tempDir.path() / "cubic-output";
   writeTextFile(configPath, makeStaticConfig(makeCubicIPCConfig(
     tempDir.path(), 1, 1.0, true, false, "stable-neo", 1, "info",
-    true, std::string("y"), -0.15, 4000.0, 1)));
+    true, std::string("y"), -0.15, 4000.0, kStaticSolverMaxIter)));
 
   EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, {}), 0);
   EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
@@ -839,24 +875,66 @@ TEST(RunIPCSimStaticGTest, StaticVolumeWritesVonMisesWhenRequested)
   writeTextFile(configPath,
     addBoolConfigField(makeStaticConfig(makeTetIPCConfig(
       tempDir.path(), 1, 1.0, true, false, "stable-neo", 1, "info",
-      false, std::nullopt, std::nullopt, std::nullopt, 1)),
+      false, std::nullopt, std::nullopt, std::nullopt, kStaticSolverMaxIter)),
       "output-von-mises", true));
 
   EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, {}), 0);
   EXPECT_TRUE(fs::exists(stressPath(outputDir, 0)));
 }
 
-TEST(RunIPCSimStaticGTest, StaticLegacyTetWritesUnifiedSurfaceAndState)
+TEST(RunIPCSimStaticGTest, StaticLegacyTetDropWithoutAttachmentFails)
 {
   initializeRunIPCSimTestEnvironment();
 
   ScopedTempDir tempDir;
-  const fs::path configPath = tempDir.path() / "tet-static-legacy.json";
+  const fs::path configPath = tempDir.path() / "tet-static-legacy-drop.json";
   const fs::path outputDir = tempDir.path() / "legacy-tet-static-output";
   writeTextFile(configPath, makeStaticConfig(makeLegacyVolumeConfig(
     fs::path(kLegacyTetBoxDir) / "box.veg",
     fs::path(kLegacyTetBoxDir) / "box.obj",
     outputDir, "tet-mesh", "stable-neo", 1)));
+
+  pgo::RunIPCSim::RunIPCSimOptions options;
+  options.contactBackendKind = pgo::RunIPCSim::ContactBackendKind::LegacyPenalty;
+  EXPECT_NE(pgo::RunIPCSim::runFromConfig(configPath, options), 0);
+  EXPECT_FALSE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_FALSE(fs::exists(statePath(outputDir, 0)));
+}
+
+TEST(RunIPCSimStaticGTest, StaticLegacyTetBoxHangWritesUnifiedSurfaceAndState)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path fixedPath = tempDir.path() / "box-fixed.txt";
+  writeTextFile(fixedPath, "0\n");
+  const fs::path configPath = tempDir.path() / "tet-static-legacy-hang.json";
+  const fs::path outputDir = tempDir.path() / "legacy-tet-static-hang-output";
+  writeTextFile(configPath, makeLegacyBoxHangVolumeConfig(
+    fs::path(kLegacyTetBoxDir) / "box.veg",
+    fs::path(kLegacyTetBoxDir) / "box.obj",
+    fixedPath, outputDir, "tet-mesh", "stable-neo"));
+
+  pgo::RunIPCSim::RunIPCSimOptions options;
+  options.contactBackendKind = pgo::RunIPCSim::ContactBackendKind::LegacyPenalty;
+  EXPECT_EQ(pgo::RunIPCSim::runFromConfig(configPath, options), 0);
+  EXPECT_TRUE(fs::exists(surfacePath(outputDir, 0)));
+  EXPECT_TRUE(fs::exists(statePath(outputDir, 0)));
+}
+
+TEST(RunIPCSimStaticGTest, StaticLegacyCubicBoxHangWritesUnifiedSurfaceAndState)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path fixedPath = tempDir.path() / "box-fixed.txt";
+  writeTextFile(fixedPath, "0\n");
+  const fs::path configPath = tempDir.path() / "cubic-static-legacy-hang.json";
+  const fs::path outputDir = tempDir.path() / "legacy-cubic-static-hang-output";
+  writeTextFile(configPath, makeLegacyBoxHangVolumeConfig(
+    fs::path(kLegacyCubicBoxDir) / "box.veg",
+    fs::path(kLegacyCubicBoxDir) / "box.obj",
+    fixedPath, outputDir, "cubic-mesh", "stable-neo"));
 
   pgo::RunIPCSim::RunIPCSimOptions options;
   options.contactBackendKind = pgo::RunIPCSim::ContactBackendKind::LegacyPenalty;
@@ -902,7 +980,7 @@ TEST(RunIPCSimCliGTest, StaticTetCliSmokeWritesUnifiedSurfaceAndState)
   const fs::path outputDir = tempDir.path() / "tet-output";
   writeTextFile(configPath, makeStaticConfig(makeTetIPCConfig(
     tempDir.path(), 1, 1.0, true, false, "stable-neo", 1, "info",
-    false, std::nullopt, std::nullopt, std::nullopt, 1)));
+    false, std::nullopt, std::nullopt, std::nullopt, kStaticSolverMaxIter)));
 
   std::ostringstream command;
   command << shellExecutable(binary)

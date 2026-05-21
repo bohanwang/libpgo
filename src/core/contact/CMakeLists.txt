@@ -1,9 +1,15 @@
 set(CONTACT_HEADERS
-  CCDKernel.h
-  contactEnergyUtilities.h
-  mappedSurfacePotentialEnergy.h
-  embeddedSurfaceFloorPotentialEnergy.h
-  embeddedSurfaceIPCPotentialEnergy.h
+  legacy_penalty/CCDKernel.h
+  legacy_penalty/contactEnergyUtilities.h
+  legacy_penalty/pointPenetrationEnergy.h
+  legacy_penalty/pointTrianglePairCouplingEnergyWithCollision.h
+  legacy_penalty/triangleMeshExternalContactHandler.h
+  legacy_penalty/triangleMeshSelfContactDetection.h
+  legacy_penalty/triangleMeshSelfContactHandler.h
+  ipc/CIPC.h
+  ipc/mappedSurfacePotentialEnergy.h
+  ipc/embeddedSurfaceFloorPotentialEnergy.h
+  ipc/embeddedSurfaceIPCPotentialEnergy.h
   ipc/broadPhase/spatialHashGrid.h
   ipc/broadPhase/surfaceIPCBroadPhase.h
   ipc/core/surfaceIPCSelfBarrierAssembler.h
@@ -21,20 +27,20 @@ set(CONTACT_HEADERS
   ipc/geometry/ipcHessianProjection.h
   ipc/profiling/surfaceIPCProfiling.h
   ipc/topology/surfaceIPCTopology.h
-  pointPenetrationEnergy.h
-  pointTrianglePairCouplingEnergyWithCollision.h
-  triangleMeshExternalContactHandler.h
-  triangleMeshSelfContactDetection.h
-  triangleMeshSelfContactHandler.h
-  CIPC.h
 )
 
 set(CONTACT_SOURCES
-  CCDKernel.cpp
-  contactEnergyUtilities.cpp
-  mappedSurfacePotentialEnergy.cpp
-  embeddedSurfaceFloorPotentialEnergy.cpp
-  embeddedSurfaceIPCPotentialEnergy.cpp
+  legacy_penalty/CCDKernel.cpp
+  legacy_penalty/contactEnergyUtilities.cpp
+  legacy_penalty/pointPenetrationEnergy.cpp
+  legacy_penalty/pointTrianglePairCouplingEnergyWithCollision.cpp
+  legacy_penalty/triangleMeshExternalContactHandler.cpp
+  legacy_penalty/triangleMeshSelfContactDetection.cpp
+  legacy_penalty/triangleMeshSelfContactHandler.cpp
+  ipc/CIPC.cpp
+  ipc/mappedSurfacePotentialEnergy.cpp
+  ipc/embeddedSurfaceFloorPotentialEnergy.cpp
+  ipc/embeddedSurfaceIPCPotentialEnergy.cpp
   ipc/broadPhase/spatialHashGrid.cpp
   ipc/broadPhase/surfaceIPCBroadPhase.cpp
   ipc/broadPhase/surfaceIPCSelfBroadPhase.cpp
@@ -51,12 +57,6 @@ set(CONTACT_SOURCES
   ipc/geometry/ipcDistancePrimitives.cpp
   ipc/geometry/ipcHessianProjection.cpp
   ipc/topology/surfaceIPCTopology.cpp
-  pointPenetrationEnergy.cpp
-  pointTrianglePairCouplingEnergyWithCollision.cpp
-  triangleMeshExternalContactHandler.cpp
-  triangleMeshSelfContactDetection.cpp
-  triangleMeshSelfContactHandler.cpp
-  CIPC.cpp
 )
 
 set(CONTACT_DEPS mesh nonlinearOptimization profiling CCD::SafeCCD CCD::Exact)
