@@ -25,6 +25,7 @@ set(RUN_IPC_SIM_CORE_SOURCES
   runIPCSimLogging.cpp
   runIPCSimSession.cpp
   runIPCSimLoop.cpp
+  runIPCSimSolverRunner.cpp
   runIPCSimStaticSolve.cpp
   runIPCSimIpcContactBackend.cpp
   runIPCSimLegacyPenaltyContact.cpp

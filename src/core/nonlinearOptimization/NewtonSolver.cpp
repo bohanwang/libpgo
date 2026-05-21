@@ -57,26 +57,6 @@ inline double dura(const hclock::time_point &t1, const hclock::time_point &t2)
   return std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1e6;
 }
 
-const char *NewtonSolver::solveStatusToString(int status)
-{
-  switch (static_cast<SolveStatus>(status)) {
-    case SolveStatus::Converged:
-      return "Converged";
-    case SolveStatus::MaxIterations:
-      return "MaxIterations";
-    case SolveStatus::LineSearchFailed:
-      return "LineSearchFailed";
-    case SolveStatus::StepTooSmall:
-      return "StepTooSmall";
-    case SolveStatus::NonFinite:
-      return "NonFinite";
-    case SolveStatus::LinearSolveFailed:
-      return "LinearSolveFailed";
-  }
-
-  return "Unknown";
-}
-
 NewtonSolver::NewtonSolver(const double *x_, SolverParam sp, PotentialEnergy_const_p energy_, const std::vector<int> &fixedDOFs_, const double *fixedValues_):
   energy(energy_), solverParam(sp)
 {
@@ -154,10 +134,11 @@ void NewtonSolver::setFixedDOFs(const std::vector<int> &fixedDOFs_, const double
   fixedValues = ES::Mp<const ES::VXd>(fixedValues_, fixedDOFs_.size());
 }
 
-int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
+SolverResult NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
 {
   hclock::time_point t1 = hclock::now();
-  int status = static_cast<int>(SolveStatus::MaxIterations);
+  SolveStatus status = SolveStatus::MaxIterations;
+  int completedIterations = 0;
   solveDiagnostics.reset();
 
   x.noalias() = Eigen::Map<ES::VXd>(x_, energy->getNumDOFs());
@@ -190,13 +171,13 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     // we solve f(x_i) + K(x_i) deltax = 0
     const IterationState state = evaluateCurrentState(iter, epsilon, lambda0, hasInitialGradNorm);
     if (state.nonFiniteEnergy) {
-      status = static_cast<int>(SolveStatus::NonFinite);
+      status = SolveStatus::NonFinite;
       if (verbose >= 1)
         std::cout << "    Iter=" << iter << "; energy is non-finite; status=" << solveStatusToString(status) << std::endl;
       break;
     }
     if (state.nonFiniteGradient) {
-      status = static_cast<int>(SolveStatus::NonFinite);
+      status = SolveStatus::NonFinite;
       if (verbose >= 1)
         std::cout << "    Iter=" << iter << "; gradient is non-finite; status=" << solveStatusToString(status) << std::endl;
       break;
@@ -218,7 +199,8 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     // Relative branch handles systems where |E| is large enough that the absolute
     // eps becomes unreachable in double precision (line search saturates at FP floor).
     if (isConverged(state)) {
-      status = static_cast<int>(SolveStatus::Converged);
+      status = SolveStatus::Converged;
+      completedIterations = iter;
       solveDiagnostics.recordFinalGradientStats(state.gradNorm, gradMaxNorm);
       if (verbose >= 1) {
         std::cout << "    Iter=" << iter << "; ||grad||_max=" << gradMaxNorm
@@ -283,7 +265,8 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
 
     ensureLinearSolver(fixedHessianTopology);
     if (!solveReducedNewtonDirection(fixedHessianTopology)) {
-      status = static_cast<int>(SolveStatus::NonFinite);
+      status = SolveStatus::NonFinite;
+      completedIterations = iter + 1;
       if (verbose >= 1)
         std::cout << "    Iter=" << iter << "; dx is non-finite; status=" << solveStatusToString(status) << std::endl;
       break;
@@ -293,7 +276,8 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
       std::cout << (A11 * deltaxSmall - rhs).norm() << ' ' << rhs.norm() << std::endl;
 
     if (!expandReducedStep()) {
-      status = static_cast<int>(SolveStatus::NonFinite);
+      status = SolveStatus::NonFinite;
+      completedIterations = iter + 1;
       if (verbose >= 1)
         std::cout << "    Iter=" << iter << "; dx is non-finite; status=" << solveStatusToString(status) << std::endl;
       break;
@@ -323,7 +307,8 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     if (solverParam.sst == SST_SUBITERATION_LINE_SEARCH) {
       const StepAcceptance accepted = runLineSearchStep(eng, verbose, printGap, iter);
       if (accepted.nonFinite()) {
-        status = static_cast<int>(SolveStatus::NonFinite);
+        status = SolveStatus::NonFinite;
+        completedIterations = iter + 1;
         break;
       }
 
@@ -333,8 +318,9 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
         // this as converged-at-FP-limit rather than failure.
         constexpr double looseRelFactor = 1e-4;
         const bool looseRelConverged = looseRelativeConverged(gradMaxNorm, lambda0);
-        status = (gradMaxNorm < epsilon || looseRelConverged) ? static_cast<int>(SolveStatus::Converged) : static_cast<int>(SolveStatus::LineSearchFailed);
-        if (status == static_cast<int>(SolveStatus::Converged))
+        status = (gradMaxNorm < epsilon || looseRelConverged) ? SolveStatus::Converged : SolveStatus::LineSearchFailed;
+        completedIterations = iter + 1;
+        if (status == SolveStatus::Converged)
           solveDiagnostics.recordFinalGradientStats(grad.norm(), gradMaxNorm);
         if (verbose >= 1) {
           std::cout << "    Iter=" << iter << "; line search failed; ||grad||_max=" << gradMaxNorm
@@ -371,8 +357,9 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
         // Same loose relative fallback as the line-search-failed branch above.
         constexpr double looseRelFactor = 1e-4;
         const bool looseRelConverged = looseRelativeConverged(gradMaxNorm, lambda0);
-        status = (gradMaxNorm < epsilon || looseRelConverged) ? static_cast<int>(SolveStatus::Converged) : static_cast<int>(SolveStatus::StepTooSmall);
-        if (status == static_cast<int>(SolveStatus::Converged))
+        status = (gradMaxNorm < epsilon || looseRelConverged) ? SolveStatus::Converged : SolveStatus::StepTooSmall;
+        completedIterations = iter + 1;
+        if (status == SolveStatus::Converged)
           solveDiagnostics.recordFinalGradientStats(grad.norm(), gradMaxNorm);
         if (verbose >= 1) {
           std::cout << "    Iter=" << iter << "; dx = " << stepSize
@@ -426,11 +413,13 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     if (stepFunc) {
       stepFunc(x, iter);
     }
+
+    completedIterations = iter + 1;
   }
 
   if (solverParam.sst == SST_SUBITERATION_ONE || solverParam.sst == SST_SUBITERATION_STATIC_DAMPING) {
     if (historyGradNormMin < epsilon)
-      status = static_cast<int>(SolveStatus::Converged);
+      status = SolveStatus::Converged;
 
     if (verbose >= 1)
       std::cout << "        Final ||grad||=" << historyGradNormMin << std::endl;
@@ -445,7 +434,17 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
   double timeCost = dura(t1, t2);
 
   SPDLOG_LOGGER_INFO(Logging::lgr(), "Newton solve time: {}", timeCost);
-  return status;
+  SolverResult result;
+  result.status = status;
+  result.iterations = completedIterations;
+  result.rawStatusCode = static_cast<int>(status);
+  result.diagnostics = solveDiagnostics;
+  if (solveDiagnostics.hasFinalGradientStats) {
+    result.hasFinalGradientStats = true;
+    result.finalGradientNorm = solveDiagnostics.finalGradientNorm;
+    result.finalGradientMaxNorm = solveDiagnostics.finalGradientMaxNorm;
+  }
+  return result;
 }
 
 void NewtonSolver::filterVector(ES::VXd &v)
@@ -588,7 +587,7 @@ NewtonSolver::StepAcceptance NewtonSolver::runLineSearchStep(double currentEnerg
   if (!std::isfinite(accepted.feasibleAlpha)) {
     accepted.nonFiniteReason = StepAcceptance::NonFiniteReason::FeasibleAlpha;
     if (verbose >= 1)
-      std::cout << "    Iter=" << iter << "; feasible alpha is non-finite; status=" << solveStatusToString(static_cast<int>(SolveStatus::NonFinite)) << std::endl;
+      std::cout << "    Iter=" << iter << "; feasible alpha is non-finite; status=" << solveStatusToString(SolveStatus::NonFinite) << std::endl;
     return accepted;
   }
   deltax *= accepted.feasibleAlpha;
@@ -605,7 +604,7 @@ NewtonSolver::StepAcceptance NewtonSolver::runLineSearchStep(double currentEnerg
     if (!std::isfinite(accepted.acceptedEnergy)) {
       accepted.nonFiniteReason = StepAcceptance::NonFiniteReason::TrialEnergy;
       if (verbose >= 1)
-        std::cout << "    Iter=" << iter << "; trial energy is non-finite; status=" << solveStatusToString(static_cast<int>(SolveStatus::NonFinite)) << std::endl;
+        std::cout << "    Iter=" << iter << "; trial energy is non-finite; status=" << solveStatusToString(SolveStatus::NonFinite) << std::endl;
     }
     else {
       int maxIter = 50;
@@ -657,7 +656,7 @@ NewtonSolver::StepAcceptance NewtonSolver::runLineSearchStep(double currentEnerg
 
   if (accepted.nonFinite()) {
     if (verbose >= 1 && accepted.nonFiniteReason == StepAcceptance::NonFiniteReason::LineSearchResult)
-      std::cout << "    Iter=" << iter << "; line search energy is non-finite; status=" << solveStatusToString(static_cast<int>(SolveStatus::NonFinite)) << std::endl;
+      std::cout << "    Iter=" << iter << "; line search energy is non-finite; status=" << solveStatusToString(SolveStatus::NonFinite) << std::endl;
     return accepted;
   }
 

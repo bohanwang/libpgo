@@ -218,7 +218,7 @@ void TRBDF2TimeIntegrator::updateb2()
 void TRBDF2TimeIntegrator::solve(ES::VXd &x, std::shared_ptr<TRBDF2TimeIntegratorEnergy> eng, int verbose, int printResidual)
 {
   bool needRenew = (constraintsChanged || generalForceModelChanged);
-  solverRet = solver[stage]->solve(needRenew, x, g, lambda, uRangeLow, uRangeHi,
+  lastSolverResult = solver[stage]->solve(needRenew, x, g, lambda, uRangeLow, uRangeHi,
     constraintsRangeLow, constraintsRangeHi, eng, constraints,
     nIter, eps, verbose, solverConfigFilename.length() ? solverConfigFilename.c_str() : nullptr,
     solverOption);
@@ -228,7 +228,9 @@ void TRBDF2TimeIntegrator::solve(ES::VXd &x, std::shared_ptr<TRBDF2TimeIntegrato
     residual.setZero();
     eng->gradient(x, residual);
     ES::transferBigToSmall(residual, rhs, rhsb2s);
-    std::cout << "    T" << timestepID << ": ||g||=" << rhs.norm() << "; Solver Ret: " << solverRet << std::endl;
+    std::cout << "    T" << timestepID << ": ||g||=" << rhs.norm()
+              << "; status=" << NonlinearOptimization::solveStatusToString(lastSolverResult.status)
+              << " rawStatusCode=" << lastSolverResult.rawStatusCode << std::endl;
 
     std::cout << "    Energy components:\n";
     eng->printImplicitEnergy(x);

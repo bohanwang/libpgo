@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
 #include "implicitBackwardEulerTimeIntegrator.h"
-#include "NewtonSolver.h"
 #include "pgoLogging.h"
+#include "solverResult.h"
 #include "TRBDF2TimeIntegrator.h"
 
 #include <numeric>
@@ -11,9 +11,10 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
-using pgo::NonlinearOptimization::NewtonSolver;
 using pgo::NonlinearOptimization::MaxStepResult;
 using pgo::NonlinearOptimization::PotentialEnergy;
+using pgo::NonlinearOptimization::SolverResult;
+using pgo::NonlinearOptimization::SolveStatus;
 using pgo::Simulation::ImplicitBackwardEulerTimeIntegrator;
 using pgo::Simulation::TRBDF2TimeIntegrator;
 
@@ -159,15 +160,16 @@ TEST(ImplicitBackwardEulerTimeIntegratorGTest, TryTimestepAcceptsMaxIterationsAn
   integrator.setExternalForce(force);
 
   testing::internal::CaptureStdout();
-  const int ret = integrator.tryTimestep(1, 1, 0);
+  const SolverResult result = integrator.tryTimestep(1, 1, 0);
   const std::string output = testing::internal::GetCapturedStdout();
 
-  EXPECT_EQ(ret, 0);
-  EXPECT_EQ(integrator.getSolverReturn(), static_cast<int>(NewtonSolver::SolveStatus::MaxIterations));
+  EXPECT_EQ(result.status, SolveStatus::MaxIterations);
+  EXPECT_EQ(integrator.getSolverStatus(), SolveStatus::MaxIterations);
+  EXPECT_EQ(integrator.getLastSolveResult().rawStatusCode, static_cast<int>(SolveStatus::MaxIterations));
   EXPECT_EQ(integrator.getTimestepID(), 8u);
 
   EXPECT_NE(output.find("ImplicitBackwardEuler timestep begin: T7"), std::string::npos);
-  EXPECT_NE(output.find("solverRet=MaxIterations"), std::string::npos);
+  EXPECT_NE(output.find("status=MaxIterations"), std::string::npos);
   EXPECT_NE(output.find("accepted=true"), std::string::npos);
 }
 
@@ -182,7 +184,7 @@ TEST(ImplicitBackwardEulerTimeIntegratorGTest, DoTimestepDoesNotThrowOnAcceptedM
   integrator.setExternalForce(force);
 
   EXPECT_NO_THROW(integrator.doTimestep(1, 0, 0));
-  EXPECT_EQ(integrator.getSolverReturn(), static_cast<int>(NewtonSolver::SolveStatus::MaxIterations));
+  EXPECT_EQ(integrator.getSolverStatus(), SolveStatus::MaxIterations);
   EXPECT_EQ(integrator.getTimestepID(), 1u);
 }
 
@@ -194,11 +196,11 @@ TEST(ImplicitBackwardEulerTimeIntegratorGTest, ResidualPrintReusesNewtonFinalGra
   ImplicitBackwardEulerTimeIntegrator integrator(identityMass(1), energy, 0.0, 0.0, 0.1, 10, 1e-8);
 
   testing::internal::CaptureStdout();
-  const int ret = integrator.tryTimestep(0, 1, 1);
+  const SolverResult result = integrator.tryTimestep(0, 1, 1);
   const std::string output = testing::internal::GetCapturedStdout();
 
-  EXPECT_EQ(ret, 0);
-  EXPECT_EQ(integrator.getSolverReturn(), static_cast<int>(NewtonSolver::SolveStatus::Converged));
+  EXPECT_EQ(result.status, SolveStatus::Converged);
+  EXPECT_EQ(integrator.getSolverStatus(), SolveStatus::Converged);
   EXPECT_NE(output.find("residual=0"), std::string::npos);
   EXPECT_NE(output.find("sub 0: 0"), std::string::npos);
   EXPECT_EQ(energy->funcCalls, 1);

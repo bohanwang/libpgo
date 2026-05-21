@@ -23,6 +23,19 @@ using namespace pgo::Simulation;
 
 namespace ES = EigenSupport;
 
+namespace
+{
+SolverResult makeExternalSolverResult(int rawStatusCode)
+{
+  SolverResult result;
+  result.status = rawStatusCode == 0 ? SolveStatus::Converged : SolveStatus::ExternalSolverFailure;
+  result.rawStatusCode = rawStatusCode;
+  result.iterations = 0;
+  result.diagnostics.reset();
+  return result;
+}
+}  // namespace
+
 namespace pgo::Simulation
 {
 class TimeIntegratorSolverData
@@ -34,7 +47,7 @@ public:
 #endif
 
   std::shared_ptr<NewtonSolver> newtonSolver;
-  SolveDiagnostics lastSolveDiagnostics;
+  SolverResult lastSolveResult;
   std::vector<int> fixedDOFs;
   ES::VXd fixedValues;
 };
@@ -48,10 +61,15 @@ TimeIntegratorSolver::TimeIntegratorSolver()
 
 const SolveDiagnostics &TimeIntegratorSolver::getLastSolveDiagnostics() const
 {
-  return da->lastSolveDiagnostics;
+  return da->lastSolveResult.diagnostics;
 }
 
-int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
+const SolverResult &TimeIntegratorSolver::getLastSolveResult() const
+{
+  return da->lastSolveResult;
+}
+
+SolverResult TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
   [[maybe_unused]] ES::VXd &g, [[maybe_unused]] ES::VXd &lambda,
   const ES::VXd &xlow, const ES::VXd &xhi,
   [[maybe_unused]] const ES::VXd &clow, [[maybe_unused]] const ES::VXd &chi,
@@ -105,8 +123,8 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
       }
     }
 
-    int solverRet = da->opt->solve();
-    da->lastSolveDiagnostics.reset();
+    const int solverRet = da->opt->solve();
+    da->lastSolveResult = makeExternalSolverResult(solverRet);
 
     /*if (verbose == 0)
     da->opt->printInfo();*/
@@ -158,7 +176,7 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
     //  exit(1);
     //}
 
-    return solverRet;
+    return da->lastSolveResult;
 #else
     throw std::invalid_argument("No available selected solver");
     /*
@@ -210,7 +228,8 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
   }
   else if (op == TimeIntegratorSolverOption::SO_IPOPT) {
 #if defined(USE_IPOPT)
-    return solveDirect(x, g, lambda, xlow, xhi, clow, chi, energy, constraints, nIter, eps, verbose, nullptr, op);
+    da->lastSolveResult = solveDirect(x, g, lambda, xlow, xhi, clow, chi, energy, constraints, nIter, eps, verbose, nullptr, op);
+    return da->lastSolveResult;
 #else
     throw std::invalid_argument("No IPOPT solver");
 #endif
@@ -241,10 +260,8 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
         da->newtonSolver->setFixedDOFs(da->fixedDOFs, da->fixedValues.data());
       }
 
-      int ret = da->newtonSolver->solve(x.data(), nIter, eps, verbose);
-      da->lastSolveDiagnostics = da->newtonSolver->getSolveDiagnostics();
-
-      return ret;
+      da->lastSolveResult = da->newtonSolver->solve(x.data(), nIter, eps, verbose);
+      return da->lastSolveResult;
     }
   }
   else {
@@ -252,7 +269,7 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
   }
 }
 
-int TimeIntegratorSolver::solveDirect(ES::VXd &x, ES::VXd &g, ES::VXd &lambda,
+SolverResult TimeIntegratorSolver::solveDirect(ES::VXd &x, ES::VXd &g, ES::VXd &lambda,
   const ES::VXd &xlow, const ES::VXd &xhi, const ES::VXd &clow, const ES::VXd &chi,
   std::shared_ptr<const PotentialEnergy> energy,
   std::shared_ptr<const ConstraintFunctions> constraints,
@@ -288,5 +305,5 @@ int TimeIntegratorSolver::solveDirect(ES::VXd &x, ES::VXd &g, ES::VXd &lambda,
         solverConfigFilename);
   }
 
-  return solverRet;
+  return makeExternalSolverResult(solverRet);
 }

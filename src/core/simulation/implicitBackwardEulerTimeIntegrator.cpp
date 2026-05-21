@@ -19,6 +19,16 @@ using namespace pgo::Simulation;
 
 namespace ES = pgo::EigenSupport;
 
+namespace
+{
+bool acceptsDynamicSolveStatus(SolveStatus status)
+{
+  return status == SolveStatus::Converged ||
+    status == SolveStatus::MaxIterations ||
+    status == SolveStatus::StepTooSmall;
+}
+}  // namespace
+
 ImplicitBackwardEulerTimeIntegrator::ImplicitBackwardEulerTimeIntegrator(
   const EigenSupport::SpMatD &massMatrix,
   std::shared_ptr<const NonlinearOptimization::PotentialEnergy> elasticPotential,
@@ -53,14 +63,14 @@ const NonlinearOptimization::SolveDiagnostics &ImplicitBackwardEulerTimeIntegrat
 
 void ImplicitBackwardEulerTimeIntegrator::doTimestep(int updateq, int verbose, int printResidual)
 {
-  const int ret = tryTimestep(updateq, verbose, printResidual);
-  if (ret != 0) {
-    throw std::runtime_error(std::string("ImplicitBackwardEulerTimeIntegrator timestep failed with solverRet=") +
-      NewtonSolver::solveStatusToString(ret));
+  const SolverResult result = tryTimestep(updateq, verbose, printResidual);
+  if (!acceptsDynamicSolveStatus(result.status)) {
+    throw std::runtime_error(std::string("ImplicitBackwardEulerTimeIntegrator timestep failed with status=") +
+      solveStatusToString(result.status));
   }
 }
 
-int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, int printResidual)
+SolverResult ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, int printResidual)
 {
   assembleImplicitModels();
 
@@ -93,15 +103,15 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
   }
 
   eulerEnergy->clearCachedImplicitEnergyComponents();
-  solverRet = solver->solve(needRenew, z, g, lambda, uRangeLow, uRangeHi,
+  lastSolverResult = solver->solve(needRenew, z, g, lambda, uRangeLow, uRangeHi,
     constraintsRangeLow, constraintsRangeHi, eulerEnergy, constraints,
     nIter, eps, verbose, solverConfigFilename.length() ? solverConfigFilename.c_str() : nullptr,
     solverOption);
 
-  const SolveDiagnostics &diagnostics = solver->getLastSolveDiagnostics();
+  const SolveDiagnostics &diagnostics = lastSolverResult.diagnostics;
   double residualNorm = 0.0;
   double residualMaxNorm = 0.0;
-  if (printResidual || verbose || solverRet != 0) {
+  if (printResidual || verbose || lastSolverResult.status != SolveStatus::Converged) {
     if (diagnostics.hasFinalGradientStats) {
       residualNorm = diagnostics.finalGradientNorm;
       residualMaxNorm = diagnostics.finalGradientMaxNorm;
@@ -116,17 +126,15 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
     }
   }
 
-  const bool acceptedTimestep = solverRet == 0 ||
-    solverRet == static_cast<int>(NewtonSolver::SolveStatus::MaxIterations) ||
-    solverRet == static_cast<int>(NewtonSolver::SolveStatus::StepTooSmall);
+  const bool acceptedTimestep = acceptsDynamicSolveStatus(lastSolverResult.status);
 
-  if (solverRet != 0) {
-    std::cout << "Warning: solverRet = " << NewtonSolver::solveStatusToString(solverRet) << "\n";
+  if (lastSolverResult.status != SolveStatus::Converged) {
+    std::cout << "Warning: status = " << solveStatusToString(lastSolverResult.status) << "\n";
   }
 
   if (verbose) {
     std::cout << "ImplicitBackwardEuler timestep end: T" << timestepID
-              << " solverRet=" << NewtonSolver::solveStatusToString(solverRet)
+              << " status=" << solveStatusToString(lastSolverResult.status)
               << " residual=" << residualNorm
               << " residualMax=" << residualMaxNorm
               << " accepted=" << (acceptedTimestep ? "true" : "false")
@@ -135,8 +143,8 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
 
   if (printResidual) {
     std::cout << "    T" << timestepID << ": ||g||=" << residualNorm
-              << "; Solver Ret: " << solverRet
-              << " (" << NewtonSolver::solveStatusToString(solverRet) << ")" << std::endl;
+              << "; status=" << solveStatusToString(lastSolverResult.status)
+              << " rawStatusCode=" << lastSolverResult.rawStatusCode << std::endl;
 
     std::cout << "    Energy components:\n";
     eulerEnergy->printImplicitEnergy(z, diagnostics.hasFinalGradientStats);
@@ -144,7 +152,7 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
 
   if (!acceptedTimestep) {
     TimeIntegrator::doTimestep(0, verbose, printResidual);
-    return solverRet;
+    return lastSolverResult;
   }
 
   if (finiteDifferenceTestFlag)
@@ -167,7 +175,7 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
   }
 
   TimeIntegrator::doTimestep(updateq, verbose, printResidual);
-  return 0;
+  return lastSolverResult;
 }
 
 void ImplicitBackwardEulerTimeIntegrator::setSolution(ES::ConstRefVecXd newz)

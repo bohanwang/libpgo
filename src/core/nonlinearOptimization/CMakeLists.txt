@@ -4,6 +4,7 @@ set(NONLINEAROPTIMIZATION_HEADERS
   potentialEnergy.h 
   potentialEnergies.h 
   solveDiagnostics.h
+  solverResult.h
 
   potentialEnergyFromConstraintFunctions.h
   
@@ -21,6 +22,7 @@ set(NONLINEAROPTIMIZATION_HEADERS
 
 set(NONLINEAROPTIMIZATION_SOURCES 
   potentialEnergies.cpp
+  solverResult.cpp
   
   constraintFunctions.cpp constraintFunctionsAssember.cpp 
   linearConstraintFunctions.cpp

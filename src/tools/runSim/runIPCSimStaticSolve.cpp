@@ -4,11 +4,11 @@
 #include "deformationModelEnergy.h"
 #include "linearPotentialEnergy.h"
 #include "multiVertexPullingSoftConstraints.h"
-#include "NewtonSolver.h"
 #include "potentialEnergies.h"
 #include "runIPCSimConfig.h"
 #include "runIPCSimOutput.h"
 #include "runIPCSimSetup.h"
+#include "runIPCSimSolverRunner.h"
 
 #include <iostream>
 #include <memory>
@@ -70,17 +70,12 @@ void runIPCSimStaticSolve(
   context.contactBackend->addStaticEnergies(runtimeConfig, context, *energyAll);
   energyAll->init();
 
-  NonlinearOptimization::NewtonSolver::SolverParam solverParam;
-  solverParam.addDamping = 1;
   ES::VXd u = ES::VXd::Zero(n3);
   energyAll->printEnergy(u);
 
-  NonlinearOptimization::NewtonSolver solver(
-    u.data(), solverParam, energyAll, std::vector<int>(), nullptr);
-  const int solverRet = solver.solve(u.data(), runtimeConfig.solverMaxIter, runtimeConfig.solverEps, 2);
-  if (solverRet != static_cast<int>(NonlinearOptimization::NewtonSolver::SolveStatus::Converged)) {
-    throw std::runtime_error("runIPCSim static solve failed to converge; NewtonSolver status=" + std::to_string(solverRet));
-  }
+  const StaticSolveResult staticResult = solveStaticEnergyStrict(
+    energyAll, n3, runtimeConfig.solverMaxIter, runtimeConfig.solverEps, 2);
+  u = staticResult.u;
 
   const ES::VXd uvel = ES::VXd::Zero(n3);
   const ES::VXd uacc = ES::VXd::Zero(n3);

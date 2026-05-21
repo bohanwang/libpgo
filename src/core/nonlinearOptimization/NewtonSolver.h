@@ -1,6 +1,7 @@
 #pragma once
 
 #include "potentialEnergy.h"
+#include "solverResult.h"
 
 #if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
 #  include "EigenMKLPardisoSupport.h"
@@ -36,16 +37,6 @@ public:
     LSM_SIMPLE,
   };
 
-  enum class SolveStatus : int
-  {
-    Converged = 0,
-    MaxIterations = 1,
-    LineSearchFailed = 2,
-    StepTooSmall = 3,
-    NonFinite = 4,
-    LinearSolveFailed = 5
-  };
-
   struct SolverParam
   {
     double alpha = 0.5;
@@ -58,10 +49,8 @@ public:
   NewtonSolver(const double *x, SolverParam sp, PotentialEnergy_const_p energy_,
     const std::vector<int> &fixedDOFs, const double *fixedValues_ = nullptr);
 
-  static const char *solveStatusToString(int status);
-
   void setFixedDOFs(const std::vector<int> &fixedDOFs, const double *fixedValues);
-  int solve(double *x, int numIter, double epsilon, int verbose);
+  SolverResult solve(double *x, int numIter, double epsilon, int verbose);
 
   using StepFunc = std::function<void(const EigenSupport::VXd &, int)>;
   void setStepFunc(StepFunc func) { stepFunc = func; }

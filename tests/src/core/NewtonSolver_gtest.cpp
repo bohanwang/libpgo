@@ -15,6 +15,9 @@ using pgo::NonlinearOptimization::NewtonSolver;
 using pgo::NonlinearOptimization::MaxStepResult;
 using pgo::NonlinearOptimization::PotentialEnergy;
 using pgo::NonlinearOptimization::SolveDiagnostics;
+using pgo::NonlinearOptimization::SolverResult;
+using pgo::NonlinearOptimization::SolveStatus;
+using pgo::NonlinearOptimization::solveStatusToString;
 
 void initializeLogging()
 {
@@ -271,9 +274,10 @@ TEST(NewtonSolverGTest, ConvergedSolveReturnsConvergedStatus)
   const double fixedValues[1] = { 0.0 };
   NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs, fixedValues);
 
-  const int ret = solver.solve(x.data(), 8, 1e-10, 0);
+  const SolverResult result = solver.solve(x.data(), 8, 1e-10, 0);
 
-  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::Converged));
+  EXPECT_EQ(result.status, SolveStatus::Converged);
+  EXPECT_TRUE(result.converged());
   EXPECT_NEAR(x[0], 0.0, 1e-10);
   EXPECT_NEAR(x[1], 0.0, 1e-10);
 }
@@ -293,10 +297,10 @@ TEST(NewtonSolverGTest, ZeroFeasibleStepWithLargeResidualReturnsStepTooSmall)
   NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs, fixedValues);
 
   testing::internal::CaptureStdout();
-  const int ret = solver.solve(x.data(), 8, 1e-10, 1);
+  const SolverResult result = solver.solve(x.data(), 8, 1e-10, 1);
   const std::string output = testing::internal::GetCapturedStdout();
 
-  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::StepTooSmall));
+  EXPECT_EQ(result.status, SolveStatus::StepTooSmall);
   EXPECT_NE(output.find("status=StepTooSmall"), std::string::npos);
   EXPECT_EQ(output.find("T2330"), std::string::npos);
 }
@@ -316,11 +320,12 @@ TEST(NewtonSolverGTest, SolveDiagnosticsRecordsMaxStepBreakdown)
   NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs, fixedValues);
 
   testing::internal::CaptureStdout();
-  const int ret = solver.solve(x.data(), 1, 1e-10, 2);
+  const SolverResult result = solver.solve(x.data(), 1, 1e-10, 2);
   const std::string output = testing::internal::GetCapturedStdout();
 
   const SolveDiagnostics &diagnostics = solver.getSolveDiagnostics();
-  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::MaxIterations));
+  EXPECT_EQ(result.status, SolveStatus::MaxIterations);
+  EXPECT_EQ(result.diagnostics.materialClampCount, 1);
   EXPECT_EQ(diagnostics.materialClampCount, 1);
   EXPECT_EQ(diagnostics.contactClampCount, 0);
   EXPECT_DOUBLE_EQ(diagnostics.minFeasibleAlpha, 0.25);
@@ -344,9 +349,9 @@ TEST(NewtonSolverGTest, NonFiniteTrialEnergyEndsLineSearchScope)
   const std::vector<int> fixedDOFs;
   NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs);
 
-  const int ret = solver.solve(x.data(), 1, 1e-12, 0);
+  const SolverResult result = solver.solve(x.data(), 1, 1e-12, 0);
 
-  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::NonFinite));
+  EXPECT_EQ(result.status, SolveStatus::NonFinite);
   EXPECT_EQ(energy->beginLineSearchCalls, 1);
   EXPECT_EQ(energy->endLineSearchCalls, 1);
 }
@@ -366,9 +371,9 @@ TEST(NewtonSolverGTest, BacktrackingReusesInitialTrialEnergy)
   const double fixedValues[1] = { 0.0 };
   NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs, fixedValues);
 
-  const int ret = solver.solve(x.data(), 1, 1e-10, 0);
+  const SolverResult result = solver.solve(x.data(), 1, 1e-10, 0);
 
-  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::MaxIterations));
+  EXPECT_EQ(result.status, SolveStatus::MaxIterations);
   EXPECT_EQ(energy->funcCalls, 2);
   EXPECT_EQ(energy->gradientCalls, 1);
   EXPECT_EQ(energy->hessianCalls, 2);
@@ -391,9 +396,9 @@ TEST(NewtonSolverGTest, GoldenLineSearchDoesNotUseBoundedActiveSetScope)
   const double fixedValues[1] = { 0.0 };
   NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs, fixedValues);
 
-  const int ret = solver.solve(x.data(), 1, 1e-10, 0);
+  const SolverResult result = solver.solve(x.data(), 1, 1e-10, 0);
 
-  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::MaxIterations));
+  EXPECT_EQ(result.status, SolveStatus::MaxIterations);
   EXPECT_EQ(energy->beginLineSearchCalls, 0);
   EXPECT_EQ(energy->endLineSearchCalls, 0);
 }
@@ -411,11 +416,13 @@ TEST(NewtonSolverGTest, StepTooSmallConvergenceRecordsFinalGradientStats)
   NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs);
 
   testing::internal::CaptureStdout();
-  const int ret = solver.solve(x.data(), 120, 1e-12, 1);
+  const SolverResult result = solver.solve(x.data(), 120, 1e-12, 1);
   const std::string output = testing::internal::GetCapturedStdout();
 
   const SolveDiagnostics &diagnostics = solver.getSolveDiagnostics();
-  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::Converged));
+  EXPECT_EQ(result.status, SolveStatus::Converged);
+  EXPECT_TRUE(result.hasFinalGradientStats);
+  EXPECT_DOUBLE_EQ(result.finalGradientMaxNorm, diagnostics.finalGradientMaxNorm);
   EXPECT_NE(output.find("dx too small"), std::string::npos);
   EXPECT_TRUE(diagnostics.hasFinalGradientStats);
   EXPECT_GT(diagnostics.finalGradientMaxNorm, 0.0);
@@ -458,9 +465,9 @@ TEST(NewtonSolverGTest, NonFixedTopologyIterationsUseGradientHessian)
   const double fixedValues[1] = { 0.0 };
   NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs, fixedValues);
 
-  const int ret = solver.solve(x.data(), 1, 1e-10, 0);
+  const SolverResult result = solver.solve(x.data(), 1, 1e-10, 0);
 
-  EXPECT_EQ(ret, static_cast<int>(NewtonSolver::SolveStatus::Converged));
+  EXPECT_EQ(result.status, SolveStatus::Converged);
   EXPECT_EQ(energy->gradientCalls, 1);
   EXPECT_EQ(energy->gradientHessianCalls, 1);
   EXPECT_EQ(energy->hessianCalls, 0);
@@ -468,11 +475,52 @@ TEST(NewtonSolverGTest, NonFixedTopologyIterationsUseGradientHessian)
 
 TEST(NewtonSolverGTest, SolveStatusToStringReturnsStableNames)
 {
-  EXPECT_STREQ(NewtonSolver::solveStatusToString(static_cast<int>(NewtonSolver::SolveStatus::Converged)), "Converged");
-  EXPECT_STREQ(NewtonSolver::solveStatusToString(static_cast<int>(NewtonSolver::SolveStatus::MaxIterations)), "MaxIterations");
-  EXPECT_STREQ(NewtonSolver::solveStatusToString(static_cast<int>(NewtonSolver::SolveStatus::LineSearchFailed)), "LineSearchFailed");
-  EXPECT_STREQ(NewtonSolver::solveStatusToString(static_cast<int>(NewtonSolver::SolveStatus::StepTooSmall)), "StepTooSmall");
-  EXPECT_STREQ(NewtonSolver::solveStatusToString(static_cast<int>(NewtonSolver::SolveStatus::NonFinite)), "NonFinite");
-  EXPECT_STREQ(NewtonSolver::solveStatusToString(static_cast<int>(NewtonSolver::SolveStatus::LinearSolveFailed)), "LinearSolveFailed");
-  EXPECT_STREQ(NewtonSolver::solveStatusToString(999), "Unknown");
+  EXPECT_STREQ(solveStatusToString(SolveStatus::Converged), "Converged");
+  EXPECT_STREQ(solveStatusToString(static_cast<int>(SolveStatus::Converged)), "Converged");
+  EXPECT_STREQ(solveStatusToString(SolveStatus::MaxIterations), "MaxIterations");
+  EXPECT_STREQ(solveStatusToString(SolveStatus::LineSearchFailed), "LineSearchFailed");
+  EXPECT_STREQ(solveStatusToString(SolveStatus::StepTooSmall), "StepTooSmall");
+  EXPECT_STREQ(solveStatusToString(SolveStatus::NonFinite), "NonFinite");
+  EXPECT_STREQ(solveStatusToString(SolveStatus::LinearSolveFailed), "LinearSolveFailed");
+  EXPECT_STREQ(solveStatusToString(SolveStatus::ExternalSolverFailure), "ExternalSolverFailure");
+  EXPECT_STREQ(solveStatusToString(SolveStatus::UnsupportedBackend), "UnsupportedBackend");
+  EXPECT_STREQ(solveStatusToString(999), "Unknown");
+}
+
+TEST(NewtonSolverGTest, SolveRecordsIterationsForImmediateConvergence)
+{
+  initializeLogging();
+
+  auto energy = std::make_shared<TestQuadraticEnergy>(1);
+  ES::VXd x(1);
+  x[0] = 0.0;
+
+  NewtonSolver::SolverParam solverParam;
+  const std::vector<int> fixedDOFs;
+  NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs);
+
+  const SolverResult result = solver.solve(x.data(), 8, 1e-10, 0);
+
+  EXPECT_EQ(result.status, SolveStatus::Converged);
+  EXPECT_EQ(result.iterations, 0);
+  EXPECT_EQ(result.rawStatusCode, static_cast<int>(SolveStatus::Converged));
+}
+
+TEST(NewtonSolverGTest, SolveRecordsZeroIterationsForZeroMaxIter)
+{
+  initializeLogging();
+
+  auto energy = std::make_shared<TestQuadraticEnergy>(1);
+  ES::VXd x(1);
+  x[0] = 2.0;
+
+  NewtonSolver::SolverParam solverParam;
+  const std::vector<int> fixedDOFs;
+  NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs);
+
+  const SolverResult result = solver.solve(x.data(), 0, 1e-10, 0);
+
+  EXPECT_EQ(result.status, SolveStatus::MaxIterations);
+  EXPECT_EQ(result.iterations, 0);
+  EXPECT_EQ(result.rawStatusCode, static_cast<int>(SolveStatus::MaxIterations));
 }

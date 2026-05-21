@@ -46,6 +46,8 @@ The JSON configs use paths relative to the config file, so they can be launched 
 
 Static solves use the same entrypoint by setting `"sim-type": "static"` in a config. Static mode performs one Newton solve from the rest state and writes only frame `0` (`states/deform0000.u` and `surface/ret0000.obj`) when the solve converges. It is intentionally strict: if Newton returns any non-converged status, `runIPCSim` exits with failure and does not write a partial static state.
 
+Solver logs use typed status names. Static mode only accepts `Converged`; dynamic implicit Euler keeps the current legacy acceptance policy for `Converged`, `MaxIterations`, and `StepTooSmall`.
+
 Legacy penalty contact is also routed through `runIPCSim`:
 
 ```bash

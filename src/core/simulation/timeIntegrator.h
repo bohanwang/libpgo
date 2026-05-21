@@ -7,6 +7,7 @@
 #include "potentialEnergies.h"
 #include "potentialEnergyAligningMeshConnectivity.h"
 #include "constraintFunctions.h"
+#include "solverResult.h"
 
 namespace pgo
 {
@@ -53,7 +54,8 @@ public:
 
   void setSolverOption(TimeIntegratorSolverOption so) { solverOption = so; }
   TimeIntegratorSolverOption getSolverOption() const { return solverOption; }
-  int getSolverReturn() const { return solverRet; }
+  const NonlinearOptimization::SolverResult &getLastSolveResult() const { return lastSolverResult; }
+  NonlinearOptimization::SolveStatus getSolverStatus() const { return lastSolverResult.status; }
 
   void addImplicitForceModel(std::shared_ptr<ConstraintPotentialEnergies::PotentialEnergyAligningMeshConnectivity> fm, double kd = -1, double md = 0);
   void clearImplicitForceModel();
@@ -168,7 +170,7 @@ protected:
   int n3;
   int nnz;
 
-  int solverRet = 0;
+  NonlinearOptimization::SolverResult lastSolverResult;
   uint64_t timestepID = 0;
   TimeIntegratorSolverOption solverOption = TimeIntegratorSolverOption::SO_NEWTON;
   EigenSupport::VXd fixedPosition, fixedRestPosition;

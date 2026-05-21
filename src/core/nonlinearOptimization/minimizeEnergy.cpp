@@ -546,7 +546,7 @@ int EnergyOptimizer::minimizeUsingNewton(EigenSupport::RefVecXd x, PotentialEner
       xinit.tail(constraints->getNumConstraints()) = ES::VXd::Zero(constraints->getNumConstraints());
   }
 
-  int ret = solver.solve(xinit.data(), maxIter, eps, verbose);
+  SolverResult ret = solver.solve(xinit.data(), maxIter, eps, verbose);
 
   x = xinit.head(energy->getNumDOFs());
 
@@ -556,5 +556,5 @@ int EnergyOptimizer::minimizeUsingNewton(EigenSupport::RefVecXd x, PotentialEner
   if (g.size() && constraints)
     constraints->func(x, g);
 
-  return ret;
+  return ret.rawStatusCode;
 }

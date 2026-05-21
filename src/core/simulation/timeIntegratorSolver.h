@@ -4,6 +4,7 @@
 
 #include "EigenSupport.h"
 #include "solveDiagnostics.h"
+#include "solverResult.h"
 
 #include <memory>
 
@@ -24,7 +25,7 @@ class TimeIntegratorSolver
 public:
   TimeIntegratorSolver();
 
-  int solve(bool needRenew, EigenSupport::VXd &x, EigenSupport::VXd &g, EigenSupport::VXd &lambda,
+  NonlinearOptimization::SolverResult solve(bool needRenew, EigenSupport::VXd &x, EigenSupport::VXd &g, EigenSupport::VXd &lambda,
     const EigenSupport::VXd &xlow, const EigenSupport::VXd &xhi,
     const EigenSupport::VXd &clow, const EigenSupport::VXd &chi,
     std::shared_ptr<const NonlinearOptimization::PotentialEnergy> energy,
@@ -32,8 +33,9 @@ public:
     int niter, double eps, int verbose, const char *solverConfigFilename, TimeIntegratorSolverOption op);
 
   const NonlinearOptimization::SolveDiagnostics &getLastSolveDiagnostics() const;
+  const NonlinearOptimization::SolverResult &getLastSolveResult() const;
 
-  static int solveDirect(EigenSupport::VXd &x, EigenSupport::VXd &g, EigenSupport::VXd &lambda,
+  static NonlinearOptimization::SolverResult solveDirect(EigenSupport::VXd &x, EigenSupport::VXd &g, EigenSupport::VXd &lambda,
     const EigenSupport::VXd &xlow, const EigenSupport::VXd &xhi,
     const EigenSupport::VXd &clow, const EigenSupport::VXd &chi,
     std::shared_ptr<const NonlinearOptimization::PotentialEnergy> energy,
