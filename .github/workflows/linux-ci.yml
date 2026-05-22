@@ -50,6 +50,7 @@ jobs:
         run: |
           mamba install -y \
             "cmake>=3.29" \
+            mkl-devel \
             ninja \
             numpy \
             pip \
@@ -75,12 +76,13 @@ jobs:
       - name: Configure build environment
         run: |
           echo "CMAKE_PREFIX_PATH=${CONDA_PREFIX};/usr" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
           echo "LIBRARY_PATH=/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> "$GITHUB_ENV"
 
       - name: Build and install Python package
         run: |
-          export CMAKE_ARGS="-DCMAKE_PREFIX_PATH=${CONDA_PREFIX};/usr -DPGO_USE_MKL=OFF"
+          export CMAKE_ARGS="-DCMAKE_PREFIX_PATH=${CONDA_PREFIX};/usr"
           python -m pip install --upgrade pip
           python -m pip install ".[test]"
 
@@ -149,7 +151,7 @@ jobs:
         run: cmake --preset base_no_mkl -DBUILD_TESTING=ON
 
       - name: Build with preset base_no_mkl_release
-        run: cmake --build --preset base_no_mkl_release
+        run: cmake --build --preset base_no_mkl_release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
 
       - name: Run CTest
         run: ctest --test-dir build/base_no_mkl --output-on-failure
