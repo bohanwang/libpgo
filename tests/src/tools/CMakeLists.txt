@@ -93,6 +93,7 @@ target_compile_definitions(runIPCSim_gtest PRIVATE
   LIBPGO_TEST_LEGACY_CUBIC_BOX_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures/legacy/cubic/box"
   LIBPGO_TEST_IPC_TET_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/ipc/tet/box-hang"
   LIBPGO_TEST_IPC_CUBIC_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/ipc/cubic/box-hang"
+  LIBPGO_TEST_IPC_CUBIC_SQUASH_EXAMPLE_DIR="${CMAKE_SOURCE_DIR}/examples/ipc/cubic/box-squash"
   PGO_TEST_RUN_IPC_SIM_BIN="$<TARGET_FILE:runIPCSim>")
 add_dependencies(runIPCSim_gtest runIPCSim)
 set_property(TARGET runIPCSim_gtest PROPERTY FOLDER "tests/gtest")

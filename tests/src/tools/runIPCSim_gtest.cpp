@@ -41,6 +41,7 @@ constexpr const char *kLegacyTetBoxDir = LIBPGO_TEST_LEGACY_TET_BOX_DIR;
 constexpr const char *kLegacyCubicBoxDir = LIBPGO_TEST_LEGACY_CUBIC_BOX_DIR;
 constexpr const char *kTetIPCExampleDir = LIBPGO_TEST_IPC_TET_EXAMPLE_DIR;
 constexpr const char *kCubicIPCExampleDir = LIBPGO_TEST_IPC_CUBIC_EXAMPLE_DIR;
+constexpr const char *kCubicSquashIPCExampleDir = LIBPGO_TEST_IPC_CUBIC_SQUASH_EXAMPLE_DIR;
 constexpr int kStaticSolverMaxIter = 200;
 
 std::string quotePath(const fs::path &path)
@@ -295,7 +296,7 @@ fs::path cubicIPCExampleDir()
 
 fs::path cubicBoxSquashIPCExampleDir()
 {
-  return fs::path(__FILE__).parent_path().parent_path().parent_path().parent_path() / "examples" / "ipc" / "cubic" / "box-squash";
+  return fs::path(kCubicSquashIPCExampleDir);
 }
 
 fs::path tetIPCConfigPath()
