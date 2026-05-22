@@ -1,0 +1,152 @@
+name: Linux CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - original/*
+      - codex/**
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-build-and-test:
+    name: Python Build and Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: libpgo-ci
+          auto-activate-base: false
+          use-mamba: true
+          python-version: "3.12"
+          channels: conda-forge
+          channel-priority: strict
+
+      - name: Install Conda packages
+        run: |
+          mamba install -y \
+            "cmake>=3.29" \
+            ninja \
+            numpy \
+            pip \
+            setuptools \
+            wheel
+
+      - name: Install APT prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            g++ \
+            gcc \
+            git \
+            libblas-dev \
+            libgmp-dev \
+            libimath-dev \
+            liblapack-dev \
+            libmpfr-dev \
+            pkg-config \
+            zlib1g-dev
+
+      - name: Configure build environment
+        run: |
+          echo "CMAKE_PREFIX_PATH=${CONDA_PREFIX};/usr" >> "$GITHUB_ENV"
+          echo "CPATH=/usr/include" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: Build and install Python package
+        run: |
+          export CMAKE_ARGS="-DCMAKE_PREFIX_PATH=${CONDA_PREFIX};/usr -DPGO_USE_MKL=OFF"
+          python -m pip install --upgrade pip
+          python -m pip install ".[test]"
+
+      - name: Run Python API pytest suite
+        run: pytest -q tests/pypgo
+
+  cmake-build:
+    name: CMake Preset Build and Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: libpgo-ci
+          auto-activate-base: false
+          use-mamba: true
+          python-version: "3.12"
+          channels: conda-forge
+          channel-priority: strict
+
+      - name: Install Conda packages
+        run: |
+          mamba install -y \
+            "cmake>=3.29" \
+            ninja
+
+      - name: Install APT prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            g++ \
+            gcc \
+            git \
+            libblas-dev \
+            libgmsh-dev \
+            libgmp-dev \
+            libimath-dev \
+            liblapack-dev \
+            libmpfr-dev \
+            pkg-config \
+            zlib1g-dev
+
+      - name: Configure build environment
+        run: |
+          echo "CMAKE_PREFIX_PATH=${CONDA_PREFIX};/usr" >> "$GITHUB_ENV"
+          echo "CPATH=/usr/include" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: Configure with preset base_no_mkl and tests enabled
+        run: cmake --preset base_no_mkl -DBUILD_TESTING=ON
+
+      - name: Build with preset base_no_mkl_release
+        run: cmake --build --preset base_no_mkl_release
+
+      - name: Run CTest
+        run: ctest --test-dir build/base_no_mkl --output-on-failure
