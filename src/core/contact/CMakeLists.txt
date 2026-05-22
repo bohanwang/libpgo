@@ -59,9 +59,10 @@ set(CONTACT_SOURCES
   ipc/topology/surfaceIPCTopology.cpp
 )
 
-set(CONTACT_DEPS mesh nonlinearOptimization profiling CCD::SafeCCD CCD::Exact)
+set(CONTACT_PUBLIC_DEPS mesh nonlinearOptimization profiling)
+set(CONTACT_PRIVATE_DEPS CCD::SafeCCD CCD::Exact)
 
-foreach(tgt ${CONTACT_DEPS})
+foreach(tgt ${CONTACT_PUBLIC_DEPS} ${CONTACT_PRIVATE_DEPS})
   if(NOT TARGET ${tgt})
     message(STATUS "selfContact is not included. Missing: ${tgt}")
     return()
@@ -70,4 +71,5 @@ endforeach()
 
 add_libpgo_lib(contact "${CONTACT_SOURCES}" "${CONTACT_HEADERS}")
 
-target_link_libraries(contact PUBLIC ${CONTACT_DEPS})
+target_link_libraries(contact PUBLIC ${CONTACT_PUBLIC_DEPS})
+target_link_libraries(contact PRIVATE ${CONTACT_PRIVATE_DEPS})

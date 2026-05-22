@@ -40,7 +40,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: linux-python-ccache-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'CMakeModules/**/*.cmake', 'src/**/*.h', 'src/**/*.cpp') }}
+          key: linux-python-ccache-${{ runner.arch }}-${{ hashFiles('**/CMakeLists.txt', 'CMakePresets.json', 'CMakeModules/**/*.cmake', 'src/**/*.h', 'src/**/*.cpp') }}
           restore-keys: |
             linux-python-ccache-${{ runner.arch }}-
 
@@ -131,7 +131,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: linux-cmake-ccache-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'CMakeModules/**/*.cmake', 'src/**/*.h', 'src/**/*.cpp') }}
+          key: linux-cmake-ccache-${{ runner.arch }}-${{ hashFiles('**/CMakeLists.txt', 'CMakePresets.json', 'CMakeModules/**/*.cmake', 'src/**/*.h', 'src/**/*.cpp') }}
           restore-keys: |
             linux-cmake-ccache-${{ runner.arch }}-
 

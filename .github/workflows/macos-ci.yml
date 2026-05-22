@@ -33,7 +33,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: macos-python-ccache-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'CMakeModules/**/*.cmake', 'src/**/*.h', 'src/**/*.cpp') }}
+          key: macos-python-ccache-${{ runner.arch }}-${{ hashFiles('**/CMakeLists.txt', 'CMakePresets.json', 'CMakeModules/**/*.cmake', 'src/**/*.h', 'src/**/*.cpp') }}
           restore-keys: |
             macos-python-ccache-${{ runner.arch }}-
 
@@ -105,7 +105,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: macos-cmake-ccache-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'CMakeModules/**/*.cmake', 'src/**/*.h', 'src/**/*.cpp') }}
+          key: macos-cmake-ccache-${{ runner.arch }}-${{ hashFiles('**/CMakeLists.txt', 'CMakePresets.json', 'CMakeModules/**/*.cmake', 'src/**/*.h', 'src/**/*.cpp') }}
           restore-keys: |
             macos-cmake-ccache-${{ runner.arch }}-
 

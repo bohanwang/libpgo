@@ -4,7 +4,7 @@ add_library(tetgen STATIC tetgen.h tetgen.cxx predicates.cxx)
 
 if (TARGET CGAL::CGAL)
   target_compile_definitions(tetgen PRIVATE USE_CGAL_PREDICATES)
-  target_link_libraries(tetgen PUBLIC CGAL::CGAL)
+  target_link_libraries(tetgen PRIVATE CGAL::CGAL)
 endif()
 
 target_compile_definitions(tetgen PUBLIC TETLIBRARY)
