@@ -32,7 +32,7 @@ class RunSimBatchRunnerTest(unittest.TestCase):
 
         case = cases["cubic_box_squash"]
 
-        self.assertEqual(build_dir, REPO_ROOT / "build" / "base_no_mkl")
+        self.assertEqual(build_dir, REPO_ROOT / "build" / "base")
         self.assertEqual(
             case.sim_config,
             REPO_ROOT / "examples" / "ipc" / "cubic" / "box-squash" / "box-ipc.json",
@@ -59,7 +59,7 @@ class RunSimBatchRunnerTest(unittest.TestCase):
         self.assertEqual(
             commands[0].argv,
             [
-                str(REPO_ROOT / "build" / "base_no_mkl" / "bin" / "runIPCSim"),
+                str(REPO_ROOT / "build" / "base" / "bin" / "runIPCSim"),
                 str(case.sim_config),
                 "--log",
             ],
@@ -68,7 +68,7 @@ class RunSimBatchRunnerTest(unittest.TestCase):
         self.assertEqual(
             commands[1].argv,
             [
-                str(REPO_ROOT / "build" / "base_no_mkl" / "bin" / "convertAnimation"),
+                str(REPO_ROOT / "build" / "base" / "bin" / "convertAnimation"),
                 str(case.anim_config),
             ],
         )

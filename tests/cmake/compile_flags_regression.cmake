@@ -21,8 +21,8 @@ if(NOT DEFINED TEST_CXX_COMPILER OR TEST_CXX_COMPILER STREQUAL "")
 endif()
 
 set(test_home "${TEST_ROOT}/home")
-set(debug_build "${TEST_ROOT}/base_no_mkl_debug")
-set(release_build "${TEST_ROOT}/base_no_mkl")
+set(debug_build "${TEST_ROOT}/nomkl_debug")
+set(release_build "${TEST_ROOT}/nomkl_release")
 set(release_flags_make "${release_build}/src/core/contact/CMakeFiles/contact.dir/flags.make")
 set(debug_eigen_export "${debug_build}/_deps/eigen3-build/Eigen3Targets.cmake")
 

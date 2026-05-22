@@ -140,18 +140,18 @@ jobs:
           echo "CPATH=$(brew --prefix)/include" >> "$GITHUB_ENV"
           echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
 
-      - name: Configure with preset base_no_mkl and tests enabled
+      - name: Configure with preset base and tests enabled
         run: |
-          cmake --preset base_no_mkl \
+          cmake --preset base \
             -DBUILD_TESTING=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
-      - name: Build with preset base_no_mkl_release
-        run: cmake --build --preset base_no_mkl_release
+      - name: Build with preset base
+        run: cmake --build --preset base
 
       - name: Run CTest
-        run: ctest --test-dir build/base_no_mkl --output-on-failure
+        run: ctest --test-dir build/base --output-on-failure
 
       - name: Print ccache stats
         if: always()

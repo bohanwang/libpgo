@@ -1,5 +1,5 @@
 {
-  "build_dir": "build/base_no_mkl",
+  "build_dir": "build/base",
   "defaults": {
     "anim_config": "anim.json",
     "log": true

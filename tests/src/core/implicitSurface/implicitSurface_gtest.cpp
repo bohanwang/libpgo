@@ -8,8 +8,9 @@
 #include "geometry/shellThickening.h"
 #include "geometry/sphereField.h"
 
-#ifdef PGO_HAS_OPENVDB
 #include "extraction/openVDBExtractor.h"
+
+#ifdef PGO_HAS_OPENVDB
 #include <openvdb/openvdb.h>
 #endif
 

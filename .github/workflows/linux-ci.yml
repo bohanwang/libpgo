@@ -152,7 +152,9 @@ jobs:
         run: |
           mamba install -y \
             "cmake>=3.29" \
-            ninja
+            mkl-devel \
+            ninja \
+            tbb-devel
 
       - name: Install APT prerequisites
         run: |
@@ -180,18 +182,18 @@ jobs:
           echo "LIBRARY_PATH=/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> "$GITHUB_ENV"
 
-      - name: Configure with preset base_no_mkl and tests enabled
+      - name: Configure with preset base and tests enabled
         run: |
-          cmake --preset base_no_mkl \
+          cmake --preset base \
             -DBUILD_TESTING=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
-      - name: Build with preset base_no_mkl_release
-        run: cmake --build --preset base_no_mkl_release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+      - name: Build with preset base
+        run: cmake --build --preset base --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
 
       - name: Run CTest
-        run: ctest --test-dir build/base_no_mkl --output-on-failure
+        run: ctest --test-dir build/base --output-on-failure
 
       - name: Print ccache stats
         if: always()

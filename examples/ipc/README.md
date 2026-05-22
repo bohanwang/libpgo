@@ -14,32 +14,32 @@ The current examples are meant to cover the three IPC entry points that exist in
 Build the tools:
 
 ```bash
-cmake --preset base_no_mkl_debug
-cmake --build build/base_no_mkl_debug --target runIPCSim convertAnimation
+cmake --preset base_debug
+cmake --build build/base_debug --target runIPCSim convertAnimation
 ```
 
 Run the shipped cases from the repo root:
 
 ```bash
-build/base_no_mkl_debug/bin/runIPCSim examples/ipc/shell/shell-hang/shell-ipc.json
-build/base_no_mkl_debug/bin/runIPCSim examples/ipc/shell/shell-drop/shell-ipc.json
-build/base_no_mkl_debug/bin/runIPCSim examples/ipc/tet/box-hang/box-ipc.json
-build/base_no_mkl_debug/bin/runIPCSim examples/ipc/tet/box-squash/box-ipc.json
-build/base_no_mkl_debug/bin/runIPCSim examples/ipc/cubic/box-hang/box-ipc.json
-build/base_no_mkl_debug/bin/runIPCSim examples/ipc/cubic/box-squash/box-ipc.json
-build/base_no_mkl_debug/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc.json
+build/base_debug/bin/runIPCSim examples/ipc/shell/shell-hang/shell-ipc.json
+build/base_debug/bin/runIPCSim examples/ipc/shell/shell-drop/shell-ipc.json
+build/base_debug/bin/runIPCSim examples/ipc/tet/box-hang/box-ipc.json
+build/base_debug/bin/runIPCSim examples/ipc/tet/box-squash/box-ipc.json
+build/base_debug/bin/runIPCSim examples/ipc/cubic/box-hang/box-ipc.json
+build/base_debug/bin/runIPCSim examples/ipc/cubic/box-squash/box-ipc.json
+build/base_debug/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc.json
 ```
 
 Convert the dumped frames into Alembic:
 
 ```bash
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/shell-hang/anim.json
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/shell-drop/anim.json
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-squash/anim.json
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-hang/anim.json
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-squash/anim.json
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-with-sphere/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/shell/shell-hang/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/shell/shell-drop/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/tet/box-squash/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/cubic/box-hang/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/cubic/box-squash/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/cubic/box-with-sphere/anim.json
 ```
 
 The JSON configs use paths relative to the config file, so they can be launched from the repo root without first changing into the case directory.
@@ -51,7 +51,7 @@ Solver logs use the shared `SolverResult` / `SolveStatus` API used by `NewtonSol
 Legacy penalty contact is also routed through `runIPCSim`:
 
 ```bash
-build/base_no_mkl_debug/bin/runIPCSim --legacy path/to/legacy-volume-config.json
+build/base_debug/bin/runIPCSim --legacy path/to/legacy-volume-config.json
 ```
 
 `--legacy` accepts old tet/cubic volume JSON files and swaps the contact backend to the legacy penalty model (`contact-stiffness`, `contact-sample`, `contact-friction-coeff`, `contact-vel-eps`). Shell legacy has been removed. In static mode, a gravity-only legacy drop is not a well-posed equilibrium unless the model has an attachment or another constraint; use fixed vertices for box-hang-style static tests.
@@ -99,13 +99,13 @@ scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json \
   --job all_ipc_abc
 ```
 
-The default batch config uses `build/base_no_mkl`. Edit `ipc_batch.json` if you want to use another build directory such as `build/base_no_mkl_debug`.
+The default batch config uses `build/base`. Edit `ipc_batch.json` if you want to use another build directory such as `build/base_debug`.
 
 Each case entry references its `runIPCSim` config. The per-case `anim_config` defaults to `anim.json` next to that simulation config:
 
 ```json
 {
-  "build_dir": "build/base_no_mkl",
+  "build_dir": "build/base",
   "defaults": {
     "anim_config": "anim.json",
     "log": true
@@ -200,9 +200,9 @@ Existing shell self-contact IPC example. This is the legacy shell-only setup und
 - files: `shell.obj`, `shell-fixed0.txt`, `shell-ipc.json`, `anim.json`
 - material: `koiter-stvk`
 - IPC params: shell heuristic via `ipc-heuristic: true`
-- run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/shell/shell-hang/shell-ipc.json`
+- run: `build/base_debug/bin/runIPCSim examples/ipc/shell/shell-hang/shell-ipc.json`
 - output: `examples/ipc/shell/shell-hang/ret-shell-ipc/`
-- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/shell-hang/anim.json`
+- animation: `build/base_debug/bin/convertAnimation examples/ipc/shell/shell-hang/anim.json`
 - Alembic: `examples/ipc/shell/shell-hang/shell-ipc.abc`
 
 ### `shell/shell-drop`
@@ -213,9 +213,9 @@ Shell external-obstacle drop example. This case starts from the same shell mesh 
 - material: `koiter-stvk`
 - IPC params: shell heuristic via `ipc-heuristic: true`
 - external object: static `bottom.obj` with `movement = [0, 0, 0]`
-- run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/shell/shell-drop/shell-ipc.json`
+- run: `build/base_debug/bin/runIPCSim examples/ipc/shell/shell-drop/shell-ipc.json`
 - output: `examples/ipc/shell/shell-drop/ret-shell-drop-ipc/`
-- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/shell-drop/anim.json`
+- animation: `build/base_debug/bin/convertAnimation examples/ipc/shell/shell-drop/anim.json`
 
 ### `tet/box-hang`
 
@@ -225,9 +225,9 @@ Minimal tetrahedral unified IPC hanging-box case. This is the compact tet sanity
 - material: `stable-neo`
 - IPC params: explicit `ipc-dhat = 0.002`, `ipc-kappa = 3000.0`
 - config note: `fixed-vertices` means tet simulation vertex indices
-- run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/tet/box-hang/box-ipc.json`
+- run: `build/base_debug/bin/runIPCSim examples/ipc/tet/box-hang/box-ipc.json`
 - output: `examples/ipc/tet/box-hang/ret-box-ipc/`
-- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-hang/anim.json`
+- animation: `build/base_debug/bin/convertAnimation examples/ipc/tet/box-hang/anim.json`
 - Alembic: `examples/ipc/tet/box-hang/box-hang-ipc-tet.abc`
 
 ### `tet/box-squash`
@@ -239,9 +239,9 @@ Tet unified IPC material max-step regression case. This setup is intentionally n
 - IPC params: explicit `ipc-dhat = 0.002`, `ipc-kappa = 3000.0`
 - config note: `fixed-vertices` means tet simulation vertex indices
 - config note: `enable-material-max-step = true`
-- run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/tet/box-squash/box-ipc.json`
+- run: `build/base_debug/bin/runIPCSim examples/ipc/tet/box-squash/box-ipc.json`
 - output: `examples/ipc/tet/box-squash/ret-box-squash-ipc/`
-- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-squash/anim.json`
+- animation: `build/base_debug/bin/convertAnimation examples/ipc/tet/box-squash/anim.json`
 
 ### `cubic/box-hang`
 
@@ -251,9 +251,9 @@ Minimal cubic unified IPC hanging-box case. This case mirrors the tet setup, but
 - material: `stable-neo`
 - IPC params: explicit `ipc-dhat = 0.002`, `ipc-kappa = 3000.0`
 - config note: `fixed-vertices` means cubic volume simulation vertex indices
-- run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/cubic/box-hang/box-ipc.json`
+- run: `build/base_debug/bin/runIPCSim examples/ipc/cubic/box-hang/box-ipc.json`
 - output: `examples/ipc/cubic/box-hang/ret-box-ipc/`
-- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-hang/anim.json`
+- animation: `build/base_debug/bin/convertAnimation examples/ipc/cubic/box-hang/anim.json`
 - Alembic: `examples/ipc/cubic/box-hang/box-hang-ipc-cubic.abc`
 
 ### `cubic/box-squash`
@@ -265,9 +265,9 @@ Cubic unified IPC material max-step regression case. This mirrors the tet squash
 - IPC params: explicit `ipc-dhat = 0.002`, `ipc-kappa = 3000.0`
 - config note: `fixed-vertices` means cubic volume simulation vertex indices
 - config note: `enable-material-max-step = true`
-- run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/cubic/box-squash/box-ipc.json`
+- run: `build/base_debug/bin/runIPCSim examples/ipc/cubic/box-squash/box-ipc.json`
 - output: `examples/ipc/cubic/box-squash/ret-box-squash-ipc/`
-- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-squash/anim.json`
+- animation: `build/base_debug/bin/convertAnimation examples/ipc/cubic/box-squash/anim.json`
 
 ### `cubic/box-with-sphere`
 
@@ -278,9 +278,9 @@ Cubic unified IPC floor-contact example migrated from the old cubic penalty-cont
 - IPC params: explicit `ipc-dhat = 0.002`, `ipc-kappa = 3000.0`
 - floor params: one lower `y` floor with `height = -1.0` and `kappa = 1000.0`
 - config note: restores the source-case gravity direction with `g = [0, -9.81, 0]`
-- run: `build/base_no_mkl_debug/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc.json`
+- run: `build/base_debug/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc.json`
 - output: `examples/ipc/cubic/box-with-sphere/ret-box-with-sphere-ipc/`
-- animation: `build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-with-sphere/anim.json`
+- animation: `build/base_debug/bin/convertAnimation examples/ipc/cubic/box-with-sphere/anim.json`
 - Alembic: `examples/ipc/cubic/box-with-sphere/box-with-sphere-ipc-cubic.abc`
 
 ## Rebuilding Animation Outputs
@@ -288,13 +288,13 @@ Cubic unified IPC floor-contact example migrated from the old cubic penalty-cont
 After `runIPCSim` dumps the OBJ sequence, use the per-case animation config to convert it:
 
 ```bash
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/shell-hang/anim.json
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/shell/shell-drop/anim.json
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/tet/box-squash/anim.json
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-hang/anim.json
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-squash/anim.json
-build/base_no_mkl_debug/bin/convertAnimation examples/ipc/cubic/box-with-sphere/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/shell/shell-hang/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/shell/shell-drop/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/tet/box-squash/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/cubic/box-hang/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/cubic/box-squash/anim.json
+build/base_debug/bin/convertAnimation examples/ipc/cubic/box-with-sphere/anim.json
 ```
 
 If the optional output path is omitted, `convertAnimation` writes the `.abc` file next to the animation config and uses the mesh `name` field from that config as the output filename stem.

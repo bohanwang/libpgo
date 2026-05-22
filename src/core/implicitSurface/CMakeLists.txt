@@ -24,15 +24,16 @@ foreach(tgt ${IMPLICIT_SURFACE_DEPS})
   endif()
 endforeach()
 
+# The extractor TU is always compiled; it provides throwing stubs when OpenVDB
+# is unavailable, so the API is present regardless of backend.
+list(APPEND IMPLICIT_SURFACE_SOURCES extraction/openVDBExtractor.cpp)
+list(APPEND IMPLICIT_SURFACE_HEADERS extraction/openVDBExtractor.h)
+
 set(PGO_HAS_OPENVDB 0)
 if(TARGET openvdb_static)
-  list(APPEND IMPLICIT_SURFACE_SOURCES extraction/openVDBExtractor.cpp)
-  list(APPEND IMPLICIT_SURFACE_HEADERS extraction/openVDBExtractor.h)
   list(APPEND IMPLICIT_SURFACE_DEPS openvdb_static)
   set(PGO_HAS_OPENVDB 1)
 elseif(TARGET OpenVDB::openvdb)
-  list(APPEND IMPLICIT_SURFACE_SOURCES extraction/openVDBExtractor.cpp)
-  list(APPEND IMPLICIT_SURFACE_HEADERS extraction/openVDBExtractor.h)
   list(APPEND IMPLICIT_SURFACE_DEPS OpenVDB::openvdb)
   set(PGO_HAS_OPENVDB 1)
 else()
@@ -41,4 +42,6 @@ endif()
 
 add_libpgo_lib(implicitSurface "${IMPLICIT_SURFACE_SOURCES}" "${IMPLICIT_SURFACE_HEADERS}")
 target_link_libraries(implicitSurface PUBLIC ${IMPLICIT_SURFACE_DEPS})
-target_compile_definitions(implicitSurface PUBLIC PGO_HAS_OPENVDB=${PGO_HAS_OPENVDB})
+if(PGO_HAS_OPENVDB)
+  target_compile_definitions(implicitSurface PUBLIC PGO_HAS_OPENVDB)
+endif()

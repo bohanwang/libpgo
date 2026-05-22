@@ -150,7 +150,7 @@ def load_config(config_path: Path) -> tuple[Path, dict[str, CaseConfig], dict[st
         config = require_mapping(json.load(fin), "config")
 
     defaults = require_mapping(config.get("defaults", {}), "defaults")
-    build_dir = repo_path(require_string(config.get("build_dir", "build/base_no_mkl"), "build_dir"))
+    build_dir = repo_path(require_string(config.get("build_dir", "build/base"), "build_dir"))
 
     cases_config = require_mapping(config.get("cases"), "cases")
     cases: dict[str, CaseConfig] = {}

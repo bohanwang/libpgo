@@ -89,39 +89,41 @@ Configure presets define feature flags and build directories. Build presets defi
 
 #### Configure Presets
 
+`base` is the default preset for CI and local development. It enables MKL and the full feature stack; unsupported options are auto-disabled per platform (see note below).
+
 | Configure preset | Binary directory | Purpose / key options |
 | --- | --- | --- |
-| `base_no_mkl` | `build/base_no_mkl` | Release baseline without MKL. Full stack on: `PGO_ENABLE_FULL=ON`, Alembic/Gmsh/TetWild enabled. |
-| `base` | `build/base` | Release baseline with MKL (`PGO_USE_MKL=ON`) and full stack enabled (non-macOS). |
+| `base` | `build/base` | Release baseline with MKL (`PGO_USE_MKL=ON`) and full stack (Alembic/Gmsh/TetWild). |
+| `base_debug` | `build/base_debug` | `base` in Debug mode. |
 | `base_win` | `build/base_win` | Windows-oriented release baseline: MKL on, Alembic/Gmsh/TetWild off. |
-| `debug` | *(fragment preset)* | Inheritance fragment that sets `CMAKE_BUILD_TYPE=Debug`. |
-| `knitro` | *(fragment preset)* | Inheritance fragment enabling Knitro (`PGO_OPT_USE_KNITRO=ON`) with `KNITRO_LIBRARY_HINT`. |
-| `pardiso` | *(fragment preset)* | Inheritance fragment enabling original Pardiso (`PGO_HAS_ORIG_PARDISO=ON`) with `PARDISO_LIBRARY_HINT`. |
-| `cuda` | *(fragment preset)* | Inheritance fragment enabling CUDA (`PGO_ENABLE_CUDA=ON`). |
-| `base_knitro` | `build/base_knitro` | `base` + `knitro` (non-macOS). |
-| `base_knitro_cuda` | `build/base_knitro_cuda` | `base` + `knitro` + `cuda` (non-macOS). |
-| `all_debug` | `build/all_debug` | `base` + `knitro` + `pardiso` + `cuda` in Debug mode (non-macOS). |
-| `all_release` | `build/all_release` | `base` + `knitro` + `pardiso` + `cuda` in Release mode (non-macOS). |
-| `base_cuda_debug` | `build/base_cuda_debug` | `base` + `cuda` in Debug mode (non-macOS). |
-| `base_no_mkl_debug` | `build/base_no_mkl_debug` | `base_no_mkl` in Debug mode. |
-| `base_cuda_release` | `build/base_cuda_release` | `base` + `cuda` in Release mode (non-macOS). |
+| `debug` | *(hidden fragment)* | Inheritance fragment that sets `CMAKE_BUILD_TYPE=Debug`. |
+| `knitro` | *(hidden fragment)* | Inheritance fragment enabling Knitro (`PGO_OPT_USE_KNITRO=ON`) with `KNITRO_LIBRARY_HINT`. |
+| `pardiso` | *(hidden fragment)* | Inheritance fragment enabling original Pardiso (`PGO_HAS_ORIG_PARDISO=ON`) with `PARDISO_LIBRARY_HINT`. |
+| `cuda` | *(hidden fragment)* | Inheritance fragment enabling CUDA (`PGO_ENABLE_CUDA=ON`). |
+| `base_knitro` | `build/base_knitro` | `base` + `knitro` (Linux). |
+| `base_knitro_cuda` | `build/base_knitro_cuda` | `base` + `knitro` + `cuda` (Linux). |
+| `all_debug` | `build/all_debug` | `base` + `knitro` + `pardiso` + `cuda` in Debug mode (Linux). |
+| `all_release` | `build/all_release` | `base` + `knitro` + `pardiso` + `cuda` in Release mode (Linux). |
+| `base_cuda_debug` | `build/base_cuda_debug` | `base` + `cuda` in Debug mode (Linux/Windows). |
+| `base_cuda_release` | `build/base_cuda_release` | `base` + `cuda` in Release mode (Linux/Windows). |
 | `base_cuda_win` | `build/base_cuda_win` | `base_win` + `cuda`, with Windows `cudss_DIR` hint. |
+
+The `debug`, `knitro`, `pardiso`, and `cuda` presets are hidden inheritance fragments: they are meant to be composed into other presets and are not selectable directly.
 
 #### Build Presets
 
 | Build preset | Configure preset | Typical use |
 | --- | --- | --- |
-| `base` | `base` | Release build with MKL/full stack (non-macOS). |
-| `all_debug` | `all_debug` | Debug build with all optional solvers/features (non-macOS). |
-| `all_release` | `all_release` | Release build with all optional solvers/features (non-macOS). |
-| `base_cuda_debug` | `base_cuda_debug` | Debug build with CUDA (non-macOS). |
-| `base_no_mkl_debug` | `base_no_mkl_debug` | Debug build without MKL. |
-| `base_no_mkl_release` | `base_no_mkl` | Release build without MKL. |
-| `base_cuda_release` | `base_cuda_release` | Release build with CUDA (non-macOS). |
+| `base` | `base` | Release build with MKL/full stack. |
+| `base_debug` | `base_debug` | Debug build. |
+| `all_debug` | `all_debug` | Debug build with all optional solvers/features (Linux). |
+| `all_release` | `all_release` | Release build with all optional solvers/features (Linux). |
+| `base_cuda_debug` | `base_cuda_debug` | Debug build with CUDA (Linux/Windows). |
+| `base_cuda_release` | `base_cuda_release` | Release build with CUDA (Linux/Windows). |
 
 Some configure presets are composition-oriented and currently have no dedicated build preset (for example: `base_win`, `base_cuda_win`, `base_knitro`, `base_knitro_cuda`).
 
-On macOS, use the no-MKL preset family only: `base_no_mkl`, `base_no_mkl_release`, and `base_no_mkl_debug`.
+Platform auto-disable: on macOS, configuring with `base` (or any MKL/CUDA preset) emits a warning and forces `PGO_USE_MKL=OFF` and `PGO_ENABLE_CUDA=OFF`. On Windows, `PGO_ENABLE_OPENVDB=ON` is similarly forced off. This means the same `base` preset works across Linux, Windows, and macOS.
 
 ### Install libpgo
 
@@ -139,15 +141,7 @@ If you want to use the library with your C++ code or modify the source code, you
 
 ### Windows & Ubuntu
 
-To compile the lib with basic functionality (no MKL):
-
-```bash
-cd libpgo
-cmake --preset base_no_mkl
-cmake --build --preset base_no_mkl_release
-```
-
-To enable the MKL/full-feature stack, install [MKL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html). Then,
+The default `base` preset enables the MKL/full-feature stack. Install [MKL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html) first, then:
 
 ```bash
 cd libpgo
@@ -155,30 +149,32 @@ cmake --preset base
 cmake --build --preset base
 ```
 
-> On Windows, a few extra steps are need before running the preset commands above. First, the library should be configured in "x64 Native Tools Command Prompt for VS 2022". In addition, before running the commands above, run `c:\Program Files (x86)\Intel\oneAPI\setvars.bat` to setup the environments for MKL, where `c:\Program Files (x86)\Intel\oneAPI` is the path to the oneAPI installation. Once setup, run above commands.
+To build without MKL, override the option: `cmake --preset base -DPGO_USE_MKL=OFF`.
+
+> On Windows, a few extra steps are need before running the preset commands above. First, the library should be configured in "x64 Native Tools Command Prompt for VS 2022". In addition, before running the commands above, run `c:\Program Files (x86)\Intel\oneAPI\setvars.bat` to setup the environments for MKL, where `c:\Program Files (x86)\Intel\oneAPI` is the path to the oneAPI installation. Once setup, run above commands. OpenVDB is not supported on Windows and is forced off automatically.
 
 > On Ubuntu, a similar procedure is needed. Before configuring the library with presets, run `bash /opt/intel/oneapi/setvars.sh` to setup the MKL environments for the subsequent CMake configuration.
 
 ### Mac OS
 
-On macOS, MKL is not supported. Use only the no-MKL presets.
+macOS uses the same `base` preset. MKL and CUDA are not supported there, so configuring `base` emits a warning and forces `PGO_USE_MKL=OFF` and `PGO_ENABLE_CUDA=OFF` automatically.
 
 Release build:
 
 ```bash
 cd libpgo
-cmake --preset base_no_mkl
-cmake --build --preset base_no_mkl_release
+cmake --preset base
+cmake --build --preset base
 ```
 
 Debug build:
 
 ```bash
-cmake --preset base_no_mkl_debug
-cmake --build --preset base_no_mkl_debug
+cmake --preset base_debug
+cmake --build --preset base_debug
 ```
 
-The `base_no_mkl` preset already keeps the full non-MKL feature stack enabled (including Alembic/Gmsh/TetWild). Alembic and Gmsh related features still depend on local third-party libraries (such as imath and gmsh).
+The `base` preset keeps the full feature stack enabled (including Alembic/Gmsh/TetWild). Alembic and Gmsh related features still depend on local third-party libraries (such as imath and gmsh).
 
 ---
 
@@ -189,8 +185,8 @@ The primary runnable examples in this repository are now IPC examples driven by 
 Build the IPC tools:
 
 ```bash
-cmake --preset base_no_mkl
-cmake --build --preset base_no_mkl_release --target runIPCSim convertAnimation
+cmake --preset base
+cmake --build --preset base --target runIPCSim convertAnimation
 ```
 
 Run named IPC batches from the JSON config:
@@ -218,19 +214,19 @@ scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job sim --overwr
 Run representative IPC cases from the repo root:
 
 ```bash
-build/base_no_mkl/bin/runIPCSim examples/ipc/shell/shell-hang/shell-ipc.json
-build/base_no_mkl/bin/runIPCSim examples/ipc/shell/shell-drop/shell-ipc.json
-build/base_no_mkl/bin/runIPCSim examples/ipc/tet/box-hang/box-ipc.json
-build/base_no_mkl/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc.json
+build/base/bin/runIPCSim examples/ipc/shell/shell-hang/shell-ipc.json
+build/base/bin/runIPCSim examples/ipc/shell/shell-drop/shell-ipc.json
+build/base/bin/runIPCSim examples/ipc/tet/box-hang/box-ipc.json
+build/base/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc.json
 ```
 
 Convert dumped frame sequences to Alembic:
 
 ```bash
-build/base_no_mkl/bin/convertAnimation examples/ipc/shell/shell-hang/anim.json
-build/base_no_mkl/bin/convertAnimation examples/ipc/shell/shell-drop/anim.json
-build/base_no_mkl/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
-build/base_no_mkl/bin/convertAnimation examples/ipc/cubic/box-with-sphere/anim.json
+build/base/bin/convertAnimation examples/ipc/shell/shell-hang/anim.json
+build/base/bin/convertAnimation examples/ipc/shell/shell-drop/anim.json
+build/base/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
+build/base/bin/convertAnimation examples/ipc/cubic/box-with-sphere/anim.json
 ```
 
 For the full IPC case list and per-case notes, see [`examples/ipc/README.md`](./examples/ipc/README.md).
@@ -238,7 +234,7 @@ For the full IPC case list and per-case notes, see [`examples/ipc/README.md`](./
 Legacy penalty-based volume contact is available through the same entrypoint:
 
 ```bash
-build/base_no_mkl/bin/runIPCSim --legacy path/to/legacy-volume-config.json
+build/base/bin/runIPCSim --legacy path/to/legacy-volume-config.json
 ```
 
 `runIPCSim` accepts both `"sim-type": "dynamic"` and `"sim-type": "static"`. Static mode performs a one-shot Newton solve from the rest state, writes the same unified `states/deform0000.u` and `surface/ret0000.obj` layout as dynamic mode, and does not support `restart-from-u`. Static output is written only after Newton convergence; unconstrained gravity-only static drops, including legacy penalty-contact drops without attachments, are expected to fail instead of producing a partial state.
@@ -262,14 +258,14 @@ python src/python/pypgo/pgo_test_01.py
 Build the tool:
 
 ```bash
-cmake --preset base_no_mkl
-cmake --build --preset base_no_mkl_release --target cubicMesher
+cmake --preset base
+cmake --build --preset base --target cubicMesher
 ```
 
 Basic usage:
 
 ```bash
-build/base_no_mkl/bin/cubicMesher \
+build/base/bin/cubicMesher \
 --input-mesh examples/ipc/cubic/box/box.obj \
 --resolution 4 \
 --output-mesh /tmp/libpgo-box.veg \
@@ -294,14 +290,14 @@ Main arguments:
 Build `tetMesher` in the default no-MKL preset:
 
 ```bash
-cmake --preset base_no_mkl
-cmake --build --preset base_no_mkl_release --target tetMesher
+cmake --preset base
+cmake --build --preset base --target tetMesher
 ```
 
 Run a tet meshing job:
 
 ```bash
-build/base_no_mkl/bin/tetMesher --config path/to/tetmesh.json
+build/base/bin/tetMesher --config path/to/tetmesh.json
 ```
 
 Basic TetGen config:
@@ -323,8 +319,8 @@ Basic TetGen config:
 The fTetWild backend is enabled by default in the main presets on macOS/Linux. Build it in the preset build tree:
 
 ```bash
-cmake --preset base_no_mkl
-cmake --build --preset base_no_mkl_release --target tetMesher
+cmake --preset base
+cmake --build --preset base --target tetMesher
 ```
 
 Basic fTetWild config:
