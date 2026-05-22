@@ -55,6 +55,7 @@ jobs:
             numpy \
             pip \
             setuptools \
+            tbb-devel \
             wheel
 
       - name: Install APT prerequisites
