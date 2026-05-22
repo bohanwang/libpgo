@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   python-build-and-test:
     name: Python Build and Test
@@ -36,11 +39,12 @@ jobs:
           miniforge-variant: Miniforge3
           miniforge-version: latest
           activate-environment: libpgo-ci
-          auto-activate-base: false
+          auto-activate: true
           use-mamba: true
           python-version: "3.12"
           channels: conda-forge
           channel-priority: strict
+          conda-remove-defaults: true
 
       - name: Install Conda packages
         run: |
@@ -71,7 +75,6 @@ jobs:
       - name: Configure build environment
         run: |
           echo "CMAKE_PREFIX_PATH=${CONDA_PREFIX};/usr" >> "$GITHUB_ENV"
-          echo "CPATH=/usr/include" >> "$GITHUB_ENV"
           echo "LIBRARY_PATH=/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> "$GITHUB_ENV"
 
@@ -106,11 +109,12 @@ jobs:
           miniforge-variant: Miniforge3
           miniforge-version: latest
           activate-environment: libpgo-ci
-          auto-activate-base: false
+          auto-activate: true
           use-mamba: true
           python-version: "3.12"
           channels: conda-forge
           channel-priority: strict
+          conda-remove-defaults: true
 
       - name: Install Conda packages
         run: |
@@ -138,7 +142,6 @@ jobs:
       - name: Configure build environment
         run: |
           echo "CMAKE_PREFIX_PATH=${CONDA_PREFIX};/usr" >> "$GITHUB_ENV"
-          echo "CPATH=/usr/include" >> "$GITHUB_ENV"
           echo "LIBRARY_PATH=/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> "$GITHUB_ENV"
 
