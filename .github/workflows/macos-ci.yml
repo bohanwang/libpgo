@@ -20,11 +20,22 @@ jobs:
         shell: bash -l {0}
 
     env:
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
       CMAKE_BUILD_PARALLEL_LEVEL: 3
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: macos-python-ccache-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'CMakeModules/**/*.cmake', 'src/**/*.h', 'src/**/*.cpp') }}
+          restore-keys: |
+            macos-python-ccache-${{ runner.arch }}-
 
       - name: Set up Miniforge
         uses: conda-incubator/setup-miniconda@v3
@@ -49,21 +60,27 @@ jobs:
             wheel
 
       - name: Install Homebrew prerequisites
-        run: brew install gmp mpfr imath
+        run: brew install ccache gmp mpfr imath
 
       - name: Configure build environment
         run: |
+          ccache --set-config=max_size=2G
+          ccache --zero-stats
           echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
 
       - name: Build and install Python package
         run: |
-          export CMAKE_ARGS="-DCMAKE_PREFIX_PATH=${CONDA_PREFIX};${HOMEBREW_PREFIX}"
+          export CMAKE_ARGS="-DCMAKE_PREFIX_PATH=${CONDA_PREFIX};${HOMEBREW_PREFIX} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
           python -m pip install --upgrade pip
           python -m pip install ".[test]"
 
       - name: Run Python API pytest suite
         run: pytest -q tests/pypgo
+
+      - name: Print ccache stats
+        if: always()
+        run: ccache --show-stats
 
   cmake-build:
     name: CMake Preset Build and Test
@@ -75,11 +92,22 @@ jobs:
         shell: bash -l {0}
 
     env:
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
       CMAKE_BUILD_PARALLEL_LEVEL: 3
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: macos-cmake-ccache-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'CMakeModules/**/*.cmake', 'src/**/*.h', 'src/**/*.cpp') }}
+          restore-keys: |
+            macos-cmake-ccache-${{ runner.arch }}-
 
       - name: Set up Miniforge
         uses: conda-incubator/setup-miniconda@v3
@@ -100,10 +128,12 @@ jobs:
             ninja
 
       - name: Install Homebrew prerequisites
-        run: brew install gmp mpfr imath
+        run: brew install ccache gmp mpfr imath
 
       - name: Configure build environment
         run: |
+          ccache --set-config=max_size=2G
+          ccache --zero-stats
           echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
           echo "CMAKE_PREFIX_PATH=$(brew --prefix)" >> "$GITHUB_ENV"
@@ -111,10 +141,18 @@ jobs:
           echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
 
       - name: Configure with preset base_no_mkl and tests enabled
-        run: cmake --preset base_no_mkl -DBUILD_TESTING=ON
+        run: |
+          cmake --preset base_no_mkl \
+            -DBUILD_TESTING=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build with preset base_no_mkl_release
         run: cmake --build --preset base_no_mkl_release
 
       - name: Run CTest
         run: ctest --test-dir build/base_no_mkl --output-on-failure
+
+      - name: Print ccache stats
+        if: always()
+        run: ccache --show-stats
