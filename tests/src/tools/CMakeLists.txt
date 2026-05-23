@@ -1,6 +1,6 @@
 add_executable(cubicMesher_gtest cubicMesher_gtest.cpp)
 target_link_libraries(cubicMesher_gtest PRIVATE GTest::gtest_main cubicMesherCore)
-target_include_directories(cubicMesher_gtest PRIVATE ${CMAKE_SOURCE_DIR}/src/tools/cubicMesher)
+target_include_directories(cubicMesher_gtest PRIVATE ${CMAKE_SOURCE_DIR}/src/tools/mesh/volumetric/cubicMesher)
 add_dependencies(cubicMesher_gtest cubicMesher)
 target_compile_definitions(cubicMesher_gtest PRIVATE
   PGO_TEST_CUBIC_MESHER_BIN="$<TARGET_FILE:cubicMesher>")
@@ -36,9 +36,9 @@ endif()
 
 add_executable(runSimShared_gtest
   runSimShared_gtest.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimCliLogging.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimVolumeMeshIO.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimFEMSetup.cpp)
+  ${CMAKE_SOURCE_DIR}/src/tools/sim/runIPCSim/cli/cliLogging.cpp
+  ${CMAKE_SOURCE_DIR}/src/tools/sim/runIPCSim/io/volumeMeshIO.cpp
+  ${CMAKE_SOURCE_DIR}/src/tools/sim/runIPCSim/setup/femSetup.cpp)
 target_link_libraries(runSimShared_gtest PRIVATE
   GTest::gtest_main
   configFileJSON
@@ -48,7 +48,7 @@ target_link_libraries(runSimShared_gtest PRIVATE
   volumetricMesh
   mesh)
 target_include_directories(runSimShared_gtest PRIVATE
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim
+  ${CMAKE_SOURCE_DIR}/src/tools/sim/runIPCSim
   ${CMAKE_SOURCE_DIR}/src/core/solidDeformationModel)
 target_compile_definitions(runSimShared_gtest PRIVATE
   LIBPGO_TEST_TET_BOX_VEG="${CMAKE_SOURCE_DIR}/tests/fixtures/legacy/tet/box/box.veg"
@@ -60,7 +60,7 @@ gtest_discover_tests(runSimShared_gtest)
 
 add_executable(runIPCSim_gtest
   runIPCSim_gtest.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runIPCSimCli.cpp)
+  ${CMAKE_SOURCE_DIR}/src/tools/sim/runIPCSim/cli/cli.cpp)
 target_link_libraries(runIPCSim_gtest PRIVATE
   GTest::gtest_main
   runIPCSimCore
@@ -75,7 +75,7 @@ target_link_libraries(runIPCSim_gtest PRIVATE
   volumetricMesh
   mesh)
 target_include_directories(runIPCSim_gtest PRIVATE
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim
+  ${CMAKE_SOURCE_DIR}/src/tools/sim/runIPCSim
   ${CMAKE_SOURCE_DIR}/src/core/basicIO
   ${CMAKE_SOURCE_DIR}/src/core/contact
   ${CMAKE_SOURCE_DIR}/src/core/constraintPotentialEnergies
