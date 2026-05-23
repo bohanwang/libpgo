@@ -46,7 +46,9 @@ constexpr int kStaticSolverMaxIter = 200;
 
 std::string quotePath(const fs::path &path)
 {
-  return "\"" + path.string() + "\"";
+  // Use forward slashes so the path stays valid when embedded in JSON (a
+  // backslash would be an escape character) and still resolves on Windows.
+  return "\"" + path.generic_string() + "\"";
 }
 
 std::string shellExecutable(const fs::path &path)

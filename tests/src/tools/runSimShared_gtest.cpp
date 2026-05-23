@@ -264,13 +264,20 @@ void expectSparseMatrixNear(const ES::SpMatD &actual, const ES::SpMatD &expected
   const double maxDiff = (actualDense - expectedDense).cwiseAbs().maxCoeff();
   EXPECT_LE(maxDiff, tol);
 }
+
+// Compare paths by normalized components so the assertion is independent of the
+// platform's preferred separator (Windows resolves paths with backslashes).
+void expectSamePath(const fs::path &actual, const fs::path &expected)
+{
+  EXPECT_EQ(actual.lexically_normal(), expected.lexically_normal());
+}
 }  // namespace
 
 TEST(RunSimVolumeMeshIOGTest, AcceptsLegacyTetMeshKey)
 {
   const VolumeMeshInputConfig config = parseConfig("tet-mesh", "box.veg", tetConfigPath());
   EXPECT_EQ(config.configKey, "tet-mesh");
-  EXPECT_EQ(config.meshFilename, kTetBoxVegPath);
+  expectSamePath(config.meshFilename, kTetBoxVegPath);
   EXPECT_EQ(config.expectedElementType, VolumetricMesh::TET);
 
   pgo::VolumetricMeshes::TetMesh referenceMesh(kTetBoxVegPath);
@@ -284,7 +291,7 @@ TEST(RunSimVolumeMeshIOGTest, AcceptsCubicMeshKey)
 {
   const VolumeMeshInputConfig config = parseConfig("cubic-mesh", "box.veg", cubicConfigPath());
   EXPECT_EQ(config.configKey, "cubic-mesh");
-  EXPECT_EQ(config.meshFilename, kCubicBoxVegPath);
+  expectSamePath(config.meshFilename, kCubicBoxVegPath);
   EXPECT_EQ(config.expectedElementType, VolumetricMesh::CUBIC);
 
   pgo::VolumetricMeshes::CubicMesh referenceMesh(kCubicBoxVegPath);
@@ -344,12 +351,12 @@ TEST(RunSimVolumeMeshIOGTest, ResolvesCubicExamplePathsAgainstConfigDirectory)
   config.handle()["external-objects"] = nlohmann::json::array({ { { "filename", "../bottom.obj" }, { "movement", { 0.0, 0.0, 0.0 } } } });
 
   const ResolvedRunSimPaths paths = resolvePaths(config, cubicConfigPath());
-  EXPECT_EQ(paths.surfaceMeshFilename, kCubicBoxObjPath);
-  EXPECT_EQ(paths.outputPath, (cubicExampleDir() / "ret-cubic-box").string());
+  expectSamePath(paths.surfaceMeshFilename, kCubicBoxObjPath);
+  expectSamePath(paths.outputPath, cubicExampleDir() / "ret-cubic-box");
   ASSERT_EQ(paths.fixedVertexFilenames.size(), 1u);
-  EXPECT_EQ(paths.fixedVertexFilenames[0], (cubicExampleDir() / "fixed.txt").string());
+  expectSamePath(paths.fixedVertexFilenames[0], cubicExampleDir() / "fixed.txt");
   ASSERT_EQ(paths.externalObjectFilenames.size(), 1u);
-  EXPECT_EQ(paths.externalObjectFilenames[0], (cubicExampleDir() / "../bottom.obj").lexically_normal().string());
+  expectSamePath(paths.externalObjectFilenames[0], cubicExampleDir() / "../bottom.obj");
 }
 
 TEST(RunSimVolumeMeshIOGTest, ResolvesLegacyTetExamplePathsAgainstConfigDirectory)
@@ -362,10 +369,10 @@ TEST(RunSimVolumeMeshIOGTest, ResolvesLegacyTetExamplePathsAgainstConfigDirector
   config.handle()["external-objects"] = nlohmann::json::array({ { { "filename", "../bottom.obj" }, { "movement", { 0.0, 0.0, 0.0 } } } });
 
   const ResolvedRunSimPaths paths = resolvePaths(config, tetConfigPath());
-  EXPECT_EQ(paths.surfaceMeshFilename, kTetBoxObjPath);
-  EXPECT_EQ(paths.outputPath, (tetExampleDir() / "ret-box").string());
+  expectSamePath(paths.surfaceMeshFilename, kTetBoxObjPath);
+  expectSamePath(paths.outputPath, tetExampleDir() / "ret-box");
   ASSERT_EQ(paths.externalObjectFilenames.size(), 1u);
-  EXPECT_EQ(paths.externalObjectFilenames[0], (tetExampleDir() / "../bottom.obj").lexically_normal().string());
+  expectSamePath(paths.externalObjectFilenames[0], tetExampleDir() / "../bottom.obj");
 }
 
 TEST(RunSimCliLoggingGTest, DerivesDefaultLogPathFromConfigPath)

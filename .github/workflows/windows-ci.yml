@@ -125,8 +125,11 @@ jobs:
 
       - name: Run CTest
         run: |
-          # Put every built DLL directory (pgo_c.dll, etc.) plus the conda
-          # runtime (MKL/TBB/GMP/MPFR) on PATH so the test executables load.
+          # Drop mingw/Strawberry so any CMake re-run during discovery stays on
+          # the MSVC toolchain, then put every built DLL directory (pgo_c.dll,
+          # etc.) plus the conda runtime (MKL/TBB/GMP/MPFR) on PATH so the test
+          # executables load.
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'mingw' -and $_ -notmatch 'Strawberry' }) -join ';'
           $dllDirs = (Get-ChildItem -Path build/base_win -Recurse -Filter *.dll |
             Select-Object -ExpandProperty DirectoryName -Unique) -join ';'
           $env:PATH = "$dllDirs;$env:CONDA_PREFIX\Library\bin;$env:PATH"
