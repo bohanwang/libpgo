@@ -115,10 +115,19 @@ jobs:
           # fatally when a found compiler is incompatible with the MSVC toolchain.
           # Drop those directories so no Fortran compiler is discovered.
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'mingw' -and $_ -notmatch 'Strawberry' }) -join ';'
-          cmake --preset base_win -G Ninja -DBUILD_TESTING=ON
+          # Defer gtest discovery to test time; running the test exes at build
+          # time fails on Windows because their runtime DLLs are not co-located.
+          cmake --preset base_win -G Ninja -DBUILD_TESTING=ON `
+            -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST
 
       - name: Build with preset base_win
         run: cmake --build build/base_win
 
       - name: Run CTest
-        run: ctest --test-dir build/base_win --output-on-failure
+        run: |
+          # Put every built DLL directory (pgo_c.dll, etc.) plus the conda
+          # runtime (MKL/TBB/GMP/MPFR) on PATH so the test executables load.
+          $dllDirs = (Get-ChildItem -Path build/base_win -Recurse -Filter *.dll |
+            Select-Object -ExpandProperty DirectoryName -Unique) -join ';'
+          $env:PATH = "$dllDirs;$env:CONDA_PREFIX\Library\bin;$env:PATH"
+          ctest --test-dir build/base_win --output-on-failure
