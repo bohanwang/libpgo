@@ -14,6 +14,62 @@ permissions:
   contents: read
 
 jobs:
+  python-build-and-test:
+    name: Python Build and Test
+    runs-on: windows-2022
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: libpgo-ci
+          auto-activate-base: false
+          use-mamba: true
+          python-version: "3.12"
+          channels: conda-forge
+          channel-priority: strict
+
+      - name: Install Conda packages
+        run: |
+          mamba install -y `
+            "cmake>=3.29" `
+            imath `
+            mkl-devel `
+            ninja `
+            numpy `
+            pip `
+            setuptools `
+            tbb-devel `
+            wheel
+
+      - name: Build and install Python package
+        run: |
+          # Strip mingw/Strawberry gfortran so Eigen's optional Fortran probe
+          # does not pick an MSVC-incompatible compiler. Build with Ninja + MSVC.
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'mingw' -and $_ -notmatch 'Strawberry' }) -join ';'
+          $env:CMAKE_GENERATOR = "Ninja"
+          $env:CMAKE_ARGS = "-DCMAKE_PREFIX_PATH=$env:CONDA_PREFIX/Library"
+          python -m pip install --upgrade pip
+          python -m pip install ".[test]"
+
+      - name: Run Python API pytest suite
+        run: pytest -q tests/pypgo
+
   cmake-build:
     name: CMake Preset Build and Test
     runs-on: windows-2022
