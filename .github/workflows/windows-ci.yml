@@ -1,0 +1,63 @@
+name: Windows CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - original/*
+      - codex/**
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cmake-build:
+    name: CMake Preset Build and Test
+    runs-on: windows-2022
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: libpgo-ci
+          auto-activate-base: false
+          use-mamba: true
+          python-version: "3.12"
+          channels: conda-forge
+          channel-priority: strict
+
+      - name: Install Conda packages
+        run: |
+          mamba install -y `
+            "cmake>=3.29" `
+            mkl-devel `
+            ninja `
+            tbb-devel
+
+      - name: Configure with preset base_win and tests enabled
+        run: |
+          cmake --preset base_win -G Ninja -DBUILD_TESTING=ON
+
+      - name: Build with preset base_win
+        run: cmake --build build/base_win
+
+      - name: Run CTest
+        run: ctest --test-dir build/base_win --output-on-failure
