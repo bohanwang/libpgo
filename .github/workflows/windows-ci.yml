@@ -54,6 +54,11 @@ jobs:
 
       - name: Configure with preset base_win and tests enabled
         run: |
+          # The runner ships mingw/Strawberry gfortran on PATH. Eigen's bundled
+          # blas/lapack call enable_language(Fortran OPTIONAL), which still fails
+          # fatally when a found compiler is incompatible with the MSVC toolchain.
+          # Drop those directories so no Fortran compiler is discovered.
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'mingw' -and $_ -notmatch 'Strawberry' }) -join ';'
           cmake --preset base_win -G Ninja -DBUILD_TESTING=ON
 
       - name: Build with preset base_win
