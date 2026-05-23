@@ -31,7 +31,10 @@
 #include "legacy_penalty/pointTrianglePairCouplingEnergyWithCollision.h"
 #include "linearPotentialEnergy.h"
 #include "NewtonSolver.h"
-#include "animationLoader.h"
+
+#if defined(PGO_HAS_ANIMATION_IO)
+#  include "animationLoader.h"
+#endif
 
 #if defined(PGO_HAS_MKL)
 #  include "smoothRSEnergy.h"
@@ -969,7 +972,8 @@ int pgo_run_sim_from_config(const char *configFileName)
 }
 
 int pgo_convert_animation_to_abc(const char *configFileName, const char *outputFolder)
-{  
+{
+#if defined(PGO_HAS_ANIMATION_IO)
   pgo::Mesh::initPredicates();
   pgo::AnimationIO::AnimationLoader loader;
   if (loader.load(configFileName) != 0) {
@@ -977,4 +981,9 @@ int pgo_convert_animation_to_abc(const char *configFileName, const char *outputF
   }
 
   return loader.saveABC(outputFolder);
+#else
+  (void)configFileName;
+  (void)outputFolder;
+  return 1;
+#endif
 }
