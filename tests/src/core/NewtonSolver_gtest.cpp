@@ -479,6 +479,44 @@ TEST(NewtonSolverGTest, NonFixedTopologyIterationsUseGradientHessian)
   EXPECT_EQ(energy->hessianCalls, 0);
 }
 
+TEST(NewtonSolverGTest, StaticDampingConvergesOnQuadratic)
+{
+  auto energy = std::make_shared<TestQuadraticEnergy>(2);
+  ES::VXd x(2);
+  x[0] = 3.0;
+  x[1] = 4.0;
+
+  NewtonSolver::SolverParam solverParam;
+  solverParam.sst = NewtonSolver::SST_SUBITERATION_STATIC_DAMPING;
+  solverParam.alpha = 0.5;
+  const std::vector<int> fixedDOFs;
+  NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs);
+
+  const SolverResult result = solver.solve(x.data(), 200, 1e-6, 0);
+
+  EXPECT_EQ(result.status, SolveStatus::Converged);
+  EXPECT_LT(x.cwiseAbs().maxCoeff(), 1e-4);
+}
+
+TEST(NewtonSolverGTest, AddDampingConvergesOnQuadratic)
+{
+  auto energy = std::make_shared<TestQuadraticEnergy>(2);
+  ES::VXd x(2);
+  x[0] = 3.0;
+  x[1] = 4.0;
+
+  NewtonSolver::SolverParam solverParam;
+  solverParam.lsm = NewtonSolver::LSM_BACKTRACK;
+  solverParam.addDamping = 1;
+  const std::vector<int> fixedDOFs;
+  NewtonSolver solver(x.data(), solverParam, energy, fixedDOFs);
+
+  const SolverResult result = solver.solve(x.data(), 200, 1e-6, 0);
+
+  EXPECT_EQ(result.status, SolveStatus::Converged);
+  EXPECT_LT(x.cwiseAbs().maxCoeff(), 1e-4);
+}
+
 TEST(NewtonSolverGTest, SolveStatusToStringReturnsStableNames)
 {
   EXPECT_STREQ(solveStatusToString(SolveStatus::Converged), "Converged");
