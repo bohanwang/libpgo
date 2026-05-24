@@ -23,11 +23,8 @@ constexpr const char *kTorusVegPath = LIBPGO_TEST_TORUS_VEG;
 
 // Rebuild the FEM energy the long way (the exact chain makeDeformationModel collapses),
 // so the test fails if the facade ever drifts from the documented construction protocol.
-// The mesh must live as long as the energy (manager stores a raw borrow pointer), so we
-// keep it alive outside and use the borrow setMesh.
 std::shared_ptr<DeformationModelEnergy> buildEnergyManually(
-  const pgo::VolumetricMeshes::TetMesh &tetMesh, ES::VXd &restPositionOut,
-  std::unique_ptr<SimulationMesh> &meshOut)
+  const pgo::VolumetricMeshes::TetMesh &tetMesh, ES::VXd &restPositionOut)
 {
   std::unique_ptr<SimulationMesh> mesh = loadTetMesh(&tetMesh);
 
@@ -62,12 +59,6 @@ std::shared_ptr<DeformationModelEnergy> buildEnergyManually(
   auto energy = std::make_shared<DeformationModelEnergy>(std::move(assembler), &restPositionOut, 0);
   energy->setEnableMaterialMaxStep(true);
   energy->setPlasticParams(plasticParams);
-
-  // Return ownership of the mesh to the caller (the energy's chain borrowed it).
-  // With the unique spine, the mesh lives inside the manager, so we don't need to
-  // keep it separately. The meshOut is kept for backward compatibility with the
-  // old test signature; the test now only needs the energy.
-  meshOut = nullptr;
   return energy;
 }
 
@@ -87,8 +78,7 @@ TEST(DeformationModelFactoryGTest, MakeDeformationModelMatchesManualChain)
   pgo::VolumetricMeshes::TetMesh tetMesh(kTorusVegPath);
 
   ES::VXd manualRest;
-  std::unique_ptr<SimulationMesh> manualMesh;
-  auto manual = buildEnergyManually(tetMesh, manualRest, manualMesh);
+  auto manual = buildEnergyManually(tetMesh, manualRest);
 
   DeformationModelBundle bundle = makeDeformationModel(
     tetMesh, DeformationModelElasticMaterial::STABLE_NEO, DeformationModelPlasticMaterial::VOLUMETRIC_DOF6);
