@@ -128,11 +128,11 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
     simulationRestPosition.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
   }
 
-  auto dmm = std::make_unique<SolidDeformationModel::DeformationModelManager>();
-  dmm->setMesh(std::move(simMesh), nullptr, nullptr);  // manager now owns the mesh
-  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::SHELL_FF_DOF0,
-    pgo::SolidDeformationModel::DeformationModelElasticMaterial::KOITER_STVK);
-  dmm->setEnforceSPD(1);
+  auto dmm = std::make_unique<SolidDeformationModel::DeformationModelManager>(
+    std::move(simMesh),
+    pgo::SolidDeformationModel::DeformationModelPlasticMaterial::SHELL_FF_DOF0,
+    pgo::SolidDeformationModel::DeformationModelElasticMaterial::KOITER_STVK,
+    1);
 
   std::vector<double> elementWeights(nele, 1.0);
   auto assembler =

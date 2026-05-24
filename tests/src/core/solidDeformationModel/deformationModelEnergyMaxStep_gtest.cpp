@@ -96,9 +96,7 @@ EnergyFixture makeTetFixture(const std::vector<double> &vertices, const std::vec
 
   fixture.restPositions = gatherRestPositions(*mesh);
 
-  auto manager = std::make_unique<DeformationModelManager>();
-  manager->setMesh(std::move(mesh), nullptr, nullptr);
-  manager->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
+  auto manager = std::make_unique<DeformationModelManager>(std::move(mesh), DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
 
   auto assembler = std::make_unique<DeformationModelAssembler>(std::move(manager), nullptr);
   fixture.energy = std::make_shared<DeformationModelEnergy>(std::move(assembler), &fixture.restPositions, 0);
@@ -134,9 +132,7 @@ EnergyFixture makeCubicFixture(const std::vector<double> &vertices, const std::v
 
   fixture.restPositions = gatherRestPositions(*mesh);
 
-  auto manager = std::make_unique<DeformationModelManager>();
-  manager->setMesh(std::move(mesh), nullptr, nullptr);
-  manager->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
+  auto manager = std::make_unique<DeformationModelManager>(std::move(mesh), DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
 
   auto assembler = std::make_unique<DeformationModelAssembler>(std::move(manager), nullptr);
   fixture.energy = std::make_shared<DeformationModelEnergy>(std::move(assembler), &fixture.restPositions, 0);
@@ -174,9 +170,7 @@ EnergyFixture makeShellFixture()
 
   fixture.restPositions = gatherRestPositions(*mesh);
 
-  auto manager = std::make_unique<DeformationModelManager>();
-  manager->setMesh(std::move(mesh), nullptr, nullptr);
-  manager->init(DeformationModelPlasticMaterial::SHELL_FF_DOF1, DeformationModelElasticMaterial::KOITER_STVK);
+  auto manager = std::make_unique<DeformationModelManager>(std::move(mesh), DeformationModelPlasticMaterial::SHELL_FF_DOF1, DeformationModelElasticMaterial::KOITER_STVK);
 
   auto assembler = std::make_unique<DeformationModelAssembler>(std::move(manager), nullptr);
   fixture.energy = std::make_shared<DeformationModelEnergy>(std::move(assembler), &fixture.restPositions, 0);

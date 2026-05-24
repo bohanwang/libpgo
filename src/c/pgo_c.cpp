@@ -686,10 +686,12 @@ int pgo_run_sim_from_config(const char *configFileName)
     restPosition.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
   }
 
-  std::unique_ptr<SolidDeformationModel::DeformationModelManager> dmm = std::make_unique<SolidDeformationModel::DeformationModelManager>();
-  dmm->setMesh(std::move(simMesh), nullptr, nullptr);  // manager now owns the mesh
-  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, elasticMat);
-  dmm->setEnforceSPD(1);
+  std::unique_ptr<SolidDeformationModel::DeformationModelManager> dmm =
+    std::make_unique<SolidDeformationModel::DeformationModelManager>(
+      std::move(simMesh),
+      pgo::SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6,
+      elasticMat,
+      1);
 
   ES::VXd plasticity(nele * 6);
   ES::M3d I = ES::M3d::Identity();

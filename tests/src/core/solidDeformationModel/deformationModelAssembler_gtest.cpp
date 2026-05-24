@@ -111,9 +111,7 @@ TEST(DeformationModelAssemblerGTest, TetAssemblerRegression)
   const int nvtx = mesh->getNumVertices();
   const int n3 = nvtx * 3;
 
-  auto dmm = std::make_unique<DeformationModelManager>();
-  dmm->setMesh(std::move(mesh), nullptr, nullptr);
-  dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
+  auto dmm = std::make_unique<DeformationModelManager>(std::move(mesh), DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
 
   const int numPlasticParams = dmm->getNumPlasticParameters();
   const int numElasticParams = dmm->getNumElasticParameters();
@@ -162,9 +160,7 @@ TEST(DeformationModelAssemblerGTest, TetVonMisesStressIsZeroAtRestAndNonzeroUnde
   const int nele = mesh->getNumElements();
   const int nvtx = mesh->getNumVertices();
 
-  auto dmm = std::make_unique<DeformationModelManager>();
-  dmm->setMesh(std::move(mesh), nullptr, nullptr);
-  dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
+  auto dmm = std::make_unique<DeformationModelManager>(std::move(mesh), DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
 
   const int numPlasticParams = dmm->getNumPlasticParameters();
   const int numElasticParams = dmm->getNumElasticParameters();
@@ -214,9 +210,7 @@ TEST(DeformationModelAssemblerGTest, ShellAssemblerRegression)
 
   const int nele = mesh->getNumElements();
 
-  auto dmm = std::make_unique<DeformationModelManager>();
-  dmm->setMesh(std::move(mesh), nullptr, nullptr);
-  dmm->init(DeformationModelPlasticMaterial::SHELL_FF_DOF1, DeformationModelElasticMaterial::KOITER_STVK);
+  auto dmm = std::make_unique<DeformationModelManager>(std::move(mesh), DeformationModelPlasticMaterial::SHELL_FF_DOF1, DeformationModelElasticMaterial::KOITER_STVK);
 
   const int numPlasticParams = dmm->getNumPlasticParameters();
   const int numElasticParams = dmm->getNumElasticParameters();
@@ -269,9 +263,7 @@ TEST(DeformationModelAssemblerGTest, CubicAssemblerSmokeRegression)
 
   const int nele = mesh->getNumElements();
 
-  auto dmm = std::make_unique<DeformationModelManager>();
-  dmm->setMesh(std::move(mesh), nullptr, nullptr);
-  dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
+  auto dmm = std::make_unique<DeformationModelManager>(std::move(mesh), DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
 
   const int numPlasticParams = dmm->getNumPlasticParameters();
   const int numElasticParams = dmm->getNumElasticParameters();
@@ -333,9 +325,9 @@ TEST(DeformationModelAssemblerGTest, CubicAssemblerMaterialParamRegression)
     vertexFiberDirections.segment<3>(vi * 3) << 1.0, 0.0, 0.0;
   }
 
-  auto dmm = std::make_unique<DeformationModelManager>();
-  dmm->setMesh(std::move(mesh), elementFiberDirections.data(), vertexFiberDirections.data());
-  dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::HILL_STABLE_NEO);
+  auto dmm = std::make_unique<DeformationModelManager>(
+    std::move(mesh), DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::HILL_STABLE_NEO,
+    1, elementFiberDirections.data(), vertexFiberDirections.data());
 
   const int numPlasticParams = dmm->getNumPlasticParameters();
   const int numElasticParams = dmm->getNumElasticParameters();

@@ -47,14 +47,13 @@ enum class DeformationModelPlasticMaterial
 class DeformationModelManager
 {
 public:
-  DeformationModelManager();
+  DeformationModelManager(std::unique_ptr<SimulationMesh> simulationMesh,
+    DeformationModelPlasticMaterial plasticModelType,
+    DeformationModelElasticMaterial elasticMaterialType,
+    int enforceSPD = 1,
+    const double *elementFiberDirections = nullptr,
+    const double *vertexFiberDirections = nullptr);
   ~DeformationModelManager();
-
-  // Borrow a mesh owned by the caller (caller must keep it alive).
-  void setMesh(const SimulationMesh *simulationMesh, const double *elementFiberDirections = nullptr, const double *vertexFiberDirections = nullptr);
-  // Take ownership of the mesh; access it (borrow) via getMesh().
-  void setMesh(std::unique_ptr<SimulationMesh> simulationMesh, const double *elementFiberDirections = nullptr, const double *vertexFiberDirections = nullptr);
-  void init(DeformationModelPlasticMaterial plasticModelType, DeformationModelElasticMaterial elasticMaterialType);
   void setEnforceSPD(int enable);
   void updateMeshRigidTransformation(const double R[9]);
 
@@ -69,9 +68,10 @@ public:
   const DeformationModel *getDeformationModel(int eleID) const;
 
 protected:
-  void applyMeshSettings(const double *elementFiberDirections, const double *vertexFiberDirections);
-
   DeformationModelManagerImpl *data;
+
+private:
+  void initImpl(DeformationModelPlasticMaterial plasticModelType, DeformationModelElasticMaterial elasticMaterialType);
 };
 
 }  // namespace SolidDeformationModel

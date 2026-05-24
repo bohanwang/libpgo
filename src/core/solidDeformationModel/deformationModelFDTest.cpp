@@ -44,8 +44,8 @@ int SolidDeformationModel::fdTestTetMesh(const char *tetMeshFilename, int numTes
   SPDLOG_LOGGER_INFO(Logging::lgr(), "Loading mesh: {} ...", tetMeshFilename);
 
   VolumetricMeshes::TetMesh tetMesh(tetMeshFilename);
-  auto mesh = loadTetMesh(&tetMesh);
-  if (mesh == nullptr)
+  auto probeMesh = loadTetMesh(&tetMesh);
+  if (probeMesh == nullptr)
     return 1;
 
   std::vector<DeformationModelPlasticMaterial> testingPlasticDOFs = { DeformationModelPlasticMaterial::VOLUMETRIC_DOF6 };
@@ -65,8 +65,8 @@ int SolidDeformationModel::fdTestTetMesh(const char *tetMeshFilename, int numTes
   std::random_device rd;
   std::mt19937 eng(rd());
 
-  int n3 = mesh->getNumVertices() * 3;
-  int nele = mesh->getNumElements();
+  int n3 = probeMesh->getNumVertices() * 3;
+  int nele = probeMesh->getNumElements();
 
   ES::M3d S;
   S << 1.8673, 0.6765, 1.8324,
@@ -79,6 +79,8 @@ int SolidDeformationModel::fdTestTetMesh(const char *tetMeshFilename, int numTes
       SPDLOG_LOGGER_INFO(Logging::lgr(), "*******************************************");
       SPDLOG_LOGGER_INFO(Logging::lgr(), "*******************************************");
       SPDLOG_LOGGER_INFO(Logging::lgr(), "Testing PM: {}; EM: {}", (int)plasticMat, (int)elasticMat);
+
+      auto mesh = loadTetMesh(&tetMesh);
 
       if (elasticMat == DeformationModelElasticMaterial::MOONEY_RIVLIN) {
         ES::M3d Cpq;
@@ -97,9 +99,8 @@ int SolidDeformationModel::fdTestTetMesh(const char *tetMeshFilename, int numTes
         mesh->setMaterial(-1, mat);
       }
 
-      std::unique_ptr<DeformationModelManager> dmm = std::make_unique<DeformationModelManager>();
-      dmm->setMesh(mesh.get());
-      dmm->init(plasticMat, elasticMat);
+      std::unique_ptr<DeformationModelManager> dmm = std::make_unique<DeformationModelManager>(
+        std::move(mesh), plasticMat, elasticMat);
 
       int nplastic = dmm->getNumPlasticParameters();
       int nelastic = 0;
@@ -386,8 +387,8 @@ int SolidDeformationModel::fdTestShellMesh(const char *surfaceMeshFilename, int 
 
   SolidDeformationModel::SimulationMeshENuhMaterial mat(1e5, 0.4, 1e-3);
 
-  auto mesh = SolidDeformationModel::loadShellMesh(surfaceMesh, &mat);
-  if (mesh == nullptr) {
+  auto probeMesh = SolidDeformationModel::loadShellMesh(surfaceMesh, &mat);
+  if (probeMesh == nullptr) {
     return 1;
   }
 
@@ -405,8 +406,8 @@ int SolidDeformationModel::fdTestShellMesh(const char *surfaceMeshFilename, int 
   std::mt19937 eng(rd());
   std::uniform_real_distribution<double> distrib0(1.1, 2);
 
-  int n3 = mesh->getNumVertices() * 3;
-  int nele = mesh->getNumElements();
+  int n3 = probeMesh->getNumVertices() * 3;
+  int nele = probeMesh->getNumElements();
 
   for (DeformationModelPlasticMaterial plasticMat : testingPlasticDOFs) {
     for (const auto elasticMat : testMaterials) {
@@ -414,6 +415,8 @@ int SolidDeformationModel::fdTestShellMesh(const char *surfaceMeshFilename, int 
       SPDLOG_LOGGER_INFO(Logging::lgr(), "*******************************************");
       SPDLOG_LOGGER_INFO(Logging::lgr(), "*******************************************");
       SPDLOG_LOGGER_INFO(Logging::lgr(), "Testing PM: {}; EM: {}", (int)plasticMat, (int)elasticMat);
+
+      auto mesh = SolidDeformationModel::loadShellMesh(surfaceMesh, &mat);
 
       if (elasticMat == DeformationModelElasticMaterial::MOONEY_RIVLIN) {
         ES::M3d Cpq;
@@ -432,9 +435,8 @@ int SolidDeformationModel::fdTestShellMesh(const char *surfaceMeshFilename, int 
         mesh->setMaterial(-1, mat);
       }
 
-      std::unique_ptr<DeformationModelManager> dmm = std::make_unique<DeformationModelManager>();
-      dmm->setMesh(mesh.get());
-      dmm->init(plasticMat, elasticMat);
+      std::unique_ptr<DeformationModelManager> dmm = std::make_unique<DeformationModelManager>(
+        std::move(mesh), plasticMat, elasticMat);
 
       int nplastic = dmm->getNumPlasticParameters();
       int nelastic = dmm->getNumElasticParameters();

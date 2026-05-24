@@ -68,10 +68,9 @@ DeformationModelBundle makeDeformationModel(
     restPosition.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
   }
 
-  auto manager = std::make_unique<DeformationModelManager>();
-  manager->setMesh(std::move(mesh), nullptr, nullptr);  // manager now owns the mesh
-  manager->init(plastic, elastic);
-  manager->setEnforceSPD(opts.enforceSPD ? 1 : 0);
+  auto manager = std::make_unique<DeformationModelManager>(
+    std::move(mesh), plastic, elastic,
+    opts.enforceSPD ? 1 : 0);
 
   ES::VXd elementWeights = opts.elementWeights;
   if (elementWeights.size() == 0)

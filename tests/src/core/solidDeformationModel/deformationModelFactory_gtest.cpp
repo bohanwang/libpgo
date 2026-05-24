@@ -38,10 +38,9 @@ std::shared_ptr<DeformationModelEnergy> buildEnergyManually(
     restPositionOut.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
   }
 
-  auto dmm = std::make_unique<DeformationModelManager>();
-  dmm->setMesh(std::move(mesh), nullptr, nullptr);  // dmm now owns the mesh
-  dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
-  dmm->setEnforceSPD(1);
+  auto dmm = std::make_unique<DeformationModelManager>(
+    std::move(mesh), DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO,
+    1);
 
   const int numPlasticParams = dmm->getNumPlasticParameters();
   ES::VXd plasticParams(static_cast<Eigen::Index>(nele) * numPlasticParams);
