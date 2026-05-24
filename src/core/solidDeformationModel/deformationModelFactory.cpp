@@ -22,30 +22,30 @@ namespace ES = pgo::EigenSupport;
 
 std::shared_ptr<SimulationMesh> makeSimulationMesh(const VolumetricMeshes::VolumetricMesh &mesh)
 {
-  SimulationMesh *raw = nullptr;
+  std::shared_ptr<SimulationMesh> result;
   switch (mesh.getElementType()) {
   case VolumetricMeshes::VolumetricMesh::TET: {
     const auto *tet = dynamic_cast<const VolumetricMeshes::TetMesh *>(&mesh);
     if (!tet)
       throw std::invalid_argument("makeSimulationMesh: element type is TET but object is not a TetMesh.");
-    raw = loadTetMesh(tet);
+    result = loadTetMesh(tet);
     break;
   }
   case VolumetricMeshes::VolumetricMesh::CUBIC: {
     const auto *cubic = dynamic_cast<const VolumetricMeshes::CubicMesh *>(&mesh);
     if (!cubic)
       throw std::invalid_argument("makeSimulationMesh: element type is CUBIC but object is not a CubicMesh.");
-    raw = loadCubicMesh(cubic);
+    result = loadCubicMesh(cubic);
     break;
   }
   default:
     throw std::invalid_argument("makeSimulationMesh: unsupported volumetric element type.");
   }
 
-  if (!raw)
+  if (!result)
     throw std::runtime_error("makeSimulationMesh: failed to create SimulationMesh from volumetric mesh.");
 
-  return std::shared_ptr<SimulationMesh>(raw);
+  return result;
 }
 
 DeformationModelBundle makeDeformationModel(

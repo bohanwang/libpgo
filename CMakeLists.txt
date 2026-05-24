@@ -48,6 +48,24 @@ if(APPLE)
     message(WARNING "CUDA is not supported on macOS; forcing PGO_ENABLE_CUDA=OFF.")
     set(PGO_ENABLE_CUDA OFF CACHE BOOL "Enable CUDA" FORCE)
   endif()
+
+  # Homebrew installs GMP/MPFR (required by CGAL, ftetwild, ...) under a prefix that
+  # is not on the default compiler/linker search path on Apple Silicon. Expose it
+  # globally -- before any third-party (FetchContent) dependency is configured -- so
+  # every target finds gmp.h/mpfr.h without the caller exporting CPATH/LIBRARY_PATH.
+  find_program(PGO_BREW_EXECUTABLE brew)
+  if(PGO_BREW_EXECUTABLE)
+    execute_process(
+      COMMAND ${PGO_BREW_EXECUTABLE} --prefix
+      OUTPUT_VARIABLE PGO_HOMEBREW_PREFIX
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(PGO_HOMEBREW_PREFIX AND EXISTS "${PGO_HOMEBREW_PREFIX}/include")
+      message(STATUS "Adding Homebrew prefix to global search paths: ${PGO_HOMEBREW_PREFIX}")
+      include_directories(SYSTEM "${PGO_HOMEBREW_PREFIX}/include")
+      link_directories("${PGO_HOMEBREW_PREFIX}/lib")
+      list(APPEND CMAKE_PREFIX_PATH "${PGO_HOMEBREW_PREFIX}")
+    endif()
+  endif()
 endif()
 
 include(CTest)

@@ -5,6 +5,8 @@ copyright to USC,MIT,NUS
 
 #pragma once
 
+#include <memory>
+
 namespace pgo
 {
 
@@ -260,14 +262,14 @@ protected:
   SimulationMeshImpl *impl;
 };
 
-SimulationMesh *loadTetMesh(const VolumetricMeshes::TetMesh *tetmesh);
-SimulationMesh *loadCubicMesh(const VolumetricMeshes::CubicMesh *cubicMesh);
+std::shared_ptr<SimulationMesh> loadTetMesh(const VolumetricMeshes::TetMesh *tetmesh);
+std::shared_ptr<SimulationMesh> loadCubicMesh(const VolumetricMeshes::CubicMesh *cubicMesh);
 
-SimulationMesh *loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat, int toTriangle);
-SimulationMesh *loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, int numMaterials, const SimulationMeshMaterial *const *const mat, const int *materialIndices, int toTriangle);
+std::shared_ptr<SimulationMesh> loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat, int toTriangle);
+std::shared_ptr<SimulationMesh> loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, int numMaterials, const SimulationMeshMaterial *const *const mat, const int *materialIndices, int toTriangle);
 
-SimulationMesh *loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat);
-SimulationMesh *loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const int *elementMaterialIndices, const SimulationMeshMaterial *const *mat);
+std::shared_ptr<SimulationMesh> loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat);
+std::shared_ptr<SimulationMesh> loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const int *elementMaterialIndices, const SimulationMeshMaterial *const *mat);
 
 void computeTriangleUV(SimulationMesh *mesh, double scaleFactor);
 }  // namespace SolidDeformationModel

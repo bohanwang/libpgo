@@ -14,8 +14,8 @@ constexpr const char *kCubicBoxVegPath = LIBPGO_TEST_CUBIC_BOX_VEG;
 TEST(SimulationMeshGTest, LoadsCubicMeshFromExampleFile)
 {
   pgo::VolumetricMeshes::CubicMesh cubicMesh(kCubicBoxVegPath);
-  std::unique_ptr<pgo::SolidDeformationModel::SimulationMesh> simMesh(
-    pgo::SolidDeformationModel::loadCubicMesh(&cubicMesh));
+  std::shared_ptr<pgo::SolidDeformationModel::SimulationMesh> simMesh =
+    pgo::SolidDeformationModel::loadCubicMesh(&cubicMesh);
 
   ASSERT_NE(simMesh, nullptr);
   EXPECT_EQ(simMesh->getElementType(), pgo::SolidDeformationModel::SimulationMeshType::CUBIC);

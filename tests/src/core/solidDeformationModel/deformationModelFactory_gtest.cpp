@@ -23,10 +23,14 @@ constexpr const char *kTorusVegPath = LIBPGO_TEST_TORUS_VEG;
 
 // Rebuild the FEM energy the long way (the exact chain makeDeformationModel collapses),
 // so the test fails if the facade ever drifts from the documented construction protocol.
+// meshOut keeps the SimulationMesh alive: DeformationModelManager::setMesh stores a
+// raw pointer, so the mesh must outlive the energy (the facade's bundle does this).
 std::shared_ptr<DeformationModelEnergy> buildEnergyManually(
-  const pgo::VolumetricMeshes::TetMesh &tetMesh, ES::VXd &restPositionOut)
+  const pgo::VolumetricMeshes::TetMesh &tetMesh, ES::VXd &restPositionOut,
+  std::shared_ptr<SimulationMesh> &meshOut)
 {
   std::shared_ptr<SimulationMesh> mesh(loadTetMesh(&tetMesh));
+  meshOut = mesh;
 
   auto dmm = std::make_shared<DeformationModelManager>();
   dmm->setMesh(mesh.get(), nullptr, nullptr);
@@ -76,7 +80,8 @@ TEST(DeformationModelFactoryGTest, MakeDeformationModelMatchesManualChain)
   pgo::VolumetricMeshes::TetMesh tetMesh(kTorusVegPath);
 
   ES::VXd manualRest;
-  auto manual = buildEnergyManually(tetMesh, manualRest);
+  std::shared_ptr<SimulationMesh> manualMesh;
+  auto manual = buildEnergyManually(tetMesh, manualRest, manualMesh);
 
   DeformationModelBundle bundle = makeDeformationModel(
     tetMesh, DeformationModelElasticMaterial::STABLE_NEO, DeformationModelPlasticMaterial::VOLUMETRIC_DOF6);
