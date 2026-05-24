@@ -23,24 +23,29 @@ constexpr const char *kTorusVegPath = LIBPGO_TEST_TORUS_VEG;
 
 // Rebuild the FEM energy the long way (the exact chain makeDeformationModel collapses),
 // so the test fails if the facade ever drifts from the documented construction protocol.
-// meshOut keeps the SimulationMesh alive: DeformationModelManager::setMesh stores a
-// raw pointer, so the mesh must outlive the energy (the facade's bundle does this).
+// The mesh must live as long as the energy (manager stores a raw borrow pointer), so we
+// keep it alive outside and use the borrow setMesh.
 std::shared_ptr<DeformationModelEnergy> buildEnergyManually(
   const pgo::VolumetricMeshes::TetMesh &tetMesh, ES::VXd &restPositionOut,
-  std::shared_ptr<SimulationMesh> &meshOut)
+  std::unique_ptr<SimulationMesh> &meshOut)
 {
-  std::shared_ptr<SimulationMesh> mesh(loadTetMesh(&tetMesh));
-  meshOut = mesh;
+  std::unique_ptr<SimulationMesh> mesh = loadTetMesh(&tetMesh);
 
-  auto dmm = std::make_shared<DeformationModelManager>();
-  dmm->setMesh(mesh.get(), nullptr, nullptr);
+  const int nele = mesh->getNumElements();
+  const int nvtx = mesh->getNumVertices();
+
+  restPositionOut.resize(nvtx * 3);
+  for (int vi = 0; vi < nvtx; vi++) {
+    double p[3];
+    mesh->getVertex(vi, p);
+    restPositionOut.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
+  }
+
+  auto dmm = std::make_unique<DeformationModelManager>();
+  dmm->setMesh(std::move(mesh), nullptr, nullptr);  // dmm now owns the mesh
   dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
   dmm->setEnforceSPD(1);
 
-  std::vector<double> elementWeights(mesh->getNumElements(), 1.0);
-  auto assembler = std::make_shared<DeformationModelAssembler>(dmm, elementWeights.data());
-
-  const int nele = mesh->getNumElements();
   const int numPlasticParams = dmm->getNumPlasticParameters();
   ES::VXd plasticParams(static_cast<Eigen::Index>(nele) * numPlasticParams);
   plasticParams.setZero();
@@ -51,16 +56,18 @@ std::shared_ptr<DeformationModelEnergy> buildEnergyManually(
     pm->toParam(identity.data(), plasticParams.data() + ei * numPlasticParams);
   }
 
-  restPositionOut.resize(mesh->getNumVertices() * 3);
-  for (int vi = 0; vi < mesh->getNumVertices(); vi++) {
-    double p[3];
-    mesh->getVertex(vi, p);
-    restPositionOut.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
-  }
+  std::vector<double> elementWeights(nele, 1.0);
+  auto assembler = std::make_unique<DeformationModelAssembler>(std::move(dmm), elementWeights.data());
 
-  auto energy = std::make_shared<DeformationModelEnergy>(assembler, &restPositionOut, 0);
+  auto energy = std::make_shared<DeformationModelEnergy>(std::move(assembler), &restPositionOut, 0);
   energy->setEnableMaterialMaxStep(true);
   energy->setPlasticParams(plasticParams);
+
+  // Return ownership of the mesh to the caller (the energy's chain borrowed it).
+  // With the unique spine, the mesh lives inside the manager, so we don't need to
+  // keep it separately. The meshOut is kept for backward compatibility with the
+  // old test signature; the test now only needs the energy.
+  meshOut = nullptr;
   return energy;
 }
 
@@ -80,7 +87,7 @@ TEST(DeformationModelFactoryGTest, MakeDeformationModelMatchesManualChain)
   pgo::VolumetricMeshes::TetMesh tetMesh(kTorusVegPath);
 
   ES::VXd manualRest;
-  std::shared_ptr<SimulationMesh> manualMesh;
+  std::unique_ptr<SimulationMesh> manualMesh;
   auto manual = buildEnergyManually(tetMesh, manualRest, manualMesh);
 
   DeformationModelBundle bundle = makeDeformationModel(

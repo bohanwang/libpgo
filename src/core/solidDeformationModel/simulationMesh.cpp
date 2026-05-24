@@ -189,7 +189,7 @@ SimulationMeshImpl::SimulationMeshImpl(int numVertices, const double *vertexPosi
   meshType = mt;
 }
 
-std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadTetMesh(const VolumetricMeshes::TetMesh *tetMesh)
+std::unique_ptr<SimulationMesh> pgo::SolidDeformationModel::loadTetMesh(const VolumetricMeshes::TetMesh *tetMesh)
 {
   std::vector<double> vtx;
   for (int vi = 0; vi < tetMesh->getNumVertices(); vi++) {
@@ -223,10 +223,10 @@ std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadTetMesh(const Vo
   for (auto ptr : materials)
     delete ptr;
 
-  return std::shared_ptr<SimulationMesh>(mesh);
+  return std::unique_ptr<SimulationMesh>(mesh);
 }
 
-std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadCubicMesh(const VolumetricMeshes::CubicMesh *cubicMesh)
+std::unique_ptr<SimulationMesh> pgo::SolidDeformationModel::loadCubicMesh(const VolumetricMeshes::CubicMesh *cubicMesh)
 {
   std::vector<double> vtx;
   for (int vi = 0; vi < cubicMesh->getNumVertices(); vi++) {
@@ -259,10 +259,10 @@ std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadCubicMesh(const 
   for (auto ptr : materials)
     delete ptr;
 
-  return std::shared_ptr<SimulationMesh>(mesh);
+  return std::unique_ptr<SimulationMesh>(mesh);
 }
 
-std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat)
+std::unique_ptr<SimulationMesh> pgo::SolidDeformationModel::loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat)
 {
   std::vector<double> vertices;
   for (int i = 0; i < triMeshGeo.numVertices(); i++) {
@@ -303,10 +303,10 @@ std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadShellMesh(const 
     numElements, 6, elementVertexIndices.data(),
     elementMaterialIndices.data(), 1, &mat, SimulationMeshType::SHELL);
 
-  return std::shared_ptr<SimulationMesh>(mesh);
+  return std::unique_ptr<SimulationMesh>(mesh);
 }
 
-std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const int *elementMaterialIndices_, const SimulationMeshMaterial *const *mat)
+std::unique_ptr<SimulationMesh> pgo::SolidDeformationModel::loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const int *elementMaterialIndices_, const SimulationMeshMaterial *const *mat)
 {
   std::vector<double> vertices;
   for (int i = 0; i < triMeshGeo.numVertices(); i++) {
@@ -347,10 +347,10 @@ std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadShellMesh(const 
     numElements, 6, elementVertexIndices.data(),
     elementMaterialIndices.data(), numElements, mat, SimulationMeshType::SHELL);
 
-  return std::shared_ptr<SimulationMesh>(mesh);
+  return std::unique_ptr<SimulationMesh>(mesh);
 }
 
-std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat, int toTriangle)
+std::unique_ptr<SimulationMesh> pgo::SolidDeformationModel::loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat, int toTriangle)
 {
   if (toTriangle == 1) {
     std::vector<double> vertices(triMeshGeo.numVertices() * 3);
@@ -369,7 +369,7 @@ std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadTriMesh(const Me
       triMeshGeo.numTriangles(), 3, triangles.data(),
       elementMaterialIndices.data(), 1, &mat, SimulationMeshType::TRIANGLE);
 
-    return std::shared_ptr<SimulationMesh>(mesh);
+    return std::unique_ptr<SimulationMesh>(mesh);
   }
   else {
     using EdgeIndex = std::pair<int, int>;
@@ -466,11 +466,11 @@ std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadTriMesh(const Me
       elementMaterialIndices.data(), 1, &mat,
       SimulationMeshType::EDGE_QUAD);
 
-    return std::shared_ptr<SimulationMesh>(mesh);
+    return std::unique_ptr<SimulationMesh>(mesh);
   }
 }
 
-std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, int numMaterials, const SimulationMeshMaterial *const *const mat, const int *materialIndices, int toTriangle)
+std::unique_ptr<SimulationMesh> pgo::SolidDeformationModel::loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, int numMaterials, const SimulationMeshMaterial *const *const mat, const int *materialIndices, int toTriangle)
 {
   if (toTriangle == 1) {
     std::vector<double> vertices(triMeshGeo.numVertices() * 3);
@@ -489,7 +489,7 @@ std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadTriMesh(const Me
       triMeshGeo.numTriangles(), 3, triangles.data(), elementMaterialIndices.data(),
       numMaterials, mat, SimulationMeshType::TRIANGLE);
 
-    return std::shared_ptr<SimulationMesh>(mesh);
+    return std::unique_ptr<SimulationMesh>(mesh);
   }
   else {
     using EdgeIndex = std::pair<int, int>;
@@ -610,7 +610,7 @@ std::shared_ptr<SimulationMesh> pgo::SolidDeformationModel::loadTriMesh(const Me
     for (auto ptr : materials)
       delete ptr;
 
-    return std::shared_ptr<SimulationMesh>(mesh);
+    return std::unique_ptr<SimulationMesh>(mesh);
   }
 }
 

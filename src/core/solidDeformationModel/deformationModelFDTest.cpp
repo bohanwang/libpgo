@@ -97,7 +97,7 @@ int SolidDeformationModel::fdTestTetMesh(const char *tetMeshFilename, int numTes
         mesh->setMaterial(-1, mat);
       }
 
-      std::shared_ptr<DeformationModelManager> dmm = std::make_shared<DeformationModelManager>();
+      std::unique_ptr<DeformationModelManager> dmm = std::make_unique<DeformationModelManager>();
       dmm->setMesh(mesh.get());
       dmm->init(plasticMat, elasticMat);
 
@@ -315,10 +315,10 @@ int SolidDeformationModel::fdTestTetMesh(const char *tetMeshFilename, int numTes
 
         ES::VXd elasticParams;
 
-        std::shared_ptr<DeformationModelAssembler> forceModelAssembler;
-        forceModelAssembler = std::make_shared<DeformationModelAssembler>(dmm, nullptr);
+        std::unique_ptr<DeformationModelAssembler> forceModelAssembler;
+        forceModelAssembler = std::make_unique<DeformationModelAssembler>(std::move(dmm), nullptr);
 
-        std::shared_ptr<DeformationModelEnergy> energy = std::make_shared<DeformationModelEnergy>(forceModelAssembler);
+        std::shared_ptr<DeformationModelEnergy> energy = std::make_shared<DeformationModelEnergy>(std::move(forceModelAssembler));
         energy->setPlasticParams(scales);
 
         fd.testEnergy(energy, true, false, -1.0, x.data(), -1, &gradError, nullptr);
@@ -432,7 +432,7 @@ int SolidDeformationModel::fdTestShellMesh(const char *surfaceMeshFilename, int 
         mesh->setMaterial(-1, mat);
       }
 
-      std::shared_ptr<DeformationModelManager> dmm = std::make_shared<DeformationModelManager>();
+      std::unique_ptr<DeformationModelManager> dmm = std::make_unique<DeformationModelManager>();
       dmm->setMesh(mesh.get());
       dmm->init(plasticMat, elasticMat);
 
@@ -610,10 +610,10 @@ int SolidDeformationModel::fdTestShellMesh(const char *surfaceMeshFilename, int 
 
         ES::VXd elasticParams;
 
-        std::shared_ptr<DeformationModelAssembler> forceModelAssembler;
-        forceModelAssembler = std::make_shared<DeformationModelAssembler>(dmm, nullptr);
+        std::unique_ptr<DeformationModelAssembler> forceModelAssembler;
+        forceModelAssembler = std::make_unique<DeformationModelAssembler>(std::move(dmm), nullptr);
 
-        std::shared_ptr<DeformationModelEnergy> energy = std::make_shared<DeformationModelEnergy>(forceModelAssembler);
+        std::shared_ptr<DeformationModelEnergy> energy = std::make_shared<DeformationModelEnergy>(std::move(forceModelAssembler));
 
         fd.testEnergy(energy, true, false, -1.0, x.data(), -1, &gradError, nullptr);
         fd.testEnergy(energy, false, true, -1.0, x.data(), numTestDOFs, nullptr, &hessError);

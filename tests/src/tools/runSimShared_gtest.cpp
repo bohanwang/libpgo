@@ -460,21 +460,22 @@ TEST(RunSimVolumeMeshIOGTest, InitializesCubicRuntimeMainPath)
   const auto initialized = pgo::RunSim::initializeVolumetricSimulation(
     *volumetricMesh, pgo::SolidDeformationModel::DeformationModelElasticMaterial::STABLE_NEO);
 
-  ASSERT_NE(initialized.simMesh, nullptr);
-  EXPECT_EQ(initialized.simMesh->getElementType(), SimulationMeshType::CUBIC);
-  ASSERT_GT(initialized.simMesh->getNumElements(), 0);
-
-  ASSERT_NE(initialized.dmm, nullptr);
-  ASSERT_NE(initialized.assembler, nullptr);
   ASSERT_NE(initialized.elasticEnergy, nullptr);
 
-  const auto *cubicFEM = dynamic_cast<const CubicMeshDeformationModel *>(initialized.dmm->getDeformationModel(0));
+  const auto &assembler = initialized.elasticEnergy->assembler();
+  const auto &dmm = assembler.getDeformationModelManager();
+  const auto *mesh = dmm.getMesh();
+  ASSERT_NE(mesh, nullptr);
+  EXPECT_EQ(mesh->getElementType(), SimulationMeshType::CUBIC);
+  ASSERT_GT(mesh->getNumElements(), 0);
+
+  const auto *cubicFEM = dynamic_cast<const CubicMeshDeformationModel *>(dmm.getDeformationModel(0));
   ASSERT_NE(cubicFEM, nullptr);
   EXPECT_EQ(cubicFEM->getNumDOFs(), 24);
 
-  EXPECT_EQ(initialized.assembler->getNumDOFs(), initialized.restPosition.size());
+  EXPECT_EQ(assembler.getNumDOFs(), initialized.restPosition.size());
   EXPECT_EQ(initialized.plasticity.size(),
-    initialized.simMesh->getNumElements() * initialized.dmm->getNumPlasticParameters());
+    mesh->getNumElements() * dmm.getNumPlasticParameters());
 
   ES::VXd zero = ES::VXd::Zero(initialized.restPosition.size());
   ES::SpMatD hess;
@@ -484,9 +485,9 @@ TEST(RunSimVolumeMeshIOGTest, InitializesCubicRuntimeMainPath)
   EXPECT_EQ(hess.cols(), initialized.restPosition.size());
   expectAllFinite(hess);
 
-  ES::VXd grad = ES::VXd::Zero(initialized.assembler->getNumDOFs());
-  initialized.assembler->computeGradient(initialized.restPosition.data(), initialized.plasticity.data(), nullptr, grad.data());
-  EXPECT_EQ(grad.size(), initialized.assembler->getNumDOFs());
+  ES::VXd grad = ES::VXd::Zero(assembler.getNumDOFs());
+  assembler.computeGradient(initialized.restPosition.data(), initialized.plasticity.data(), nullptr, grad.data());
+  EXPECT_EQ(grad.size(), assembler.getNumDOFs());
   expectAllFinite(grad);
 }
 

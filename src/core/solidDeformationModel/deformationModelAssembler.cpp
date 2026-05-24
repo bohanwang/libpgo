@@ -92,8 +92,8 @@ void warnIllegalInitialState(pgo::SolidDeformationModel::SimulationMeshType mesh
 }
 }
 
-DeformationModelAssembler::DeformationModelAssembler(std::shared_ptr<const DeformationModelManager> dm, const double *elementFlags_):
-  deformationModelManager(dm)
+DeformationModelAssembler::DeformationModelAssembler(std::unique_ptr<const DeformationModelManager> dm, const double *elementFlags_):
+  deformationModelManager(std::move(dm))
 {
   nele = deformationModelManager->getMesh()->getNumElements();
   nvtx = deformationModelManager->getMesh()->getNumVertices();

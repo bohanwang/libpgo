@@ -1,6 +1,7 @@
 #include "app/output.h"
 
 #include "deformationModelAssembler.h"
+#include "deformationModelEnergy.h"
 #include "simulationMesh.h"
 
 #include <fmt/format.h>
@@ -170,13 +171,16 @@ void RunIPCSimOutput::writeStateAndSurfaceFrame(
 void RunIPCSimOutput::writeVonMisesStressJson(int frame, double timestep,
   const IpcSimulationContext &context, const ES::VXd &displacement) const
 {
-  if (!context.deformationModelAssemblerOwner || !context.simulationMeshOwner)
-    throw std::runtime_error("runIPCSim cannot output von Mises stresses without a simulation mesh and assembler.");
+  if (!context.elasticEnergy)
+    throw std::runtime_error("runIPCSim cannot output von Mises stresses without a deformation energy.");
 
-  const int elementCount = context.simulationMeshOwner->getNumElements();
+  const SolidDeformationModel::DeformationModelAssembler &assembler = context.elasticEnergy->assembler();
+  const SolidDeformationModel::SimulationMesh &mesh = *assembler.getDeformationModelManager().getMesh();
+
+  const int elementCount = mesh.getNumElements();
   std::vector<double> elementStresses(elementCount, 0.0);
   const ES::VXd absolutePositions = context.simulationRestPosition + displacement;
-  context.deformationModelAssemblerOwner->computeVonMisesStresses(
+  assembler.computeVonMisesStresses(
     absolutePositions.data(),
     dataOrNull(context.plasticParams),
     dataOrNull(context.elasticParams),
@@ -186,7 +190,7 @@ void RunIPCSimOutput::writeVonMisesStressJson(int frame, double timestep,
   stressJson["frame"] = frame;
   stressJson["time"] = static_cast<double>(frame) * timestep;
   stressJson["stress_type"] = "von_mises";
-  stressJson["location"] = vonMisesStressLocation(*context.simulationMeshOwner);
+  stressJson["location"] = vonMisesStressLocation(mesh);
   stressJson["values"] = elementStresses;
 
   const std::filesystem::path outputPath = stressPath(frame);

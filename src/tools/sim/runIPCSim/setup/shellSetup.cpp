@@ -111,25 +111,32 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   std::cout << std::endl;
 
   SolidDeformationModel::SimulationMeshENuhMaterial matParam(10000, 0.4, 0.001);
-  std::shared_ptr<SolidDeformationModel::SimulationMesh> simMesh(
-    SolidDeformationModel::loadShellMesh(surfaceMesh, &matParam));
-  std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm =
-    std::make_shared<SolidDeformationModel::DeformationModelManager>();
-
-  dmm->setMesh(simMesh.get(), nullptr, nullptr);
-  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::SHELL_FF_DOF0,
-    pgo::SolidDeformationModel::DeformationModelElasticMaterial::KOITER_STVK);
-  dmm->setEnforceSPD(1);
-
-  std::vector<double> elementWeights(simMesh->getNumElements(), 1.0);
-  std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> assembler =
-    std::make_shared<SolidDeformationModel::DeformationModelAssembler>(dmm, elementWeights.data());
+  std::unique_ptr<SolidDeformationModel::SimulationMesh> simMesh =
+    SolidDeformationModel::loadShellMesh(surfaceMesh, &matParam);
 
   const int n = simMesh->getNumVertices();
   const int n3 = n * 3;
   const int nele = simMesh->getNumElements();
   constexpr double kShellYoungsModulus = 1000000.0;
   constexpr double kShellThickness = 3e-3;
+
+  // Capture the rest pose before the mesh is moved into the manager.
+  ES::VXd simulationRestPosition(n3);
+  for (int vi = 0; vi < n; ++vi) {
+    double p[3];
+    simMesh->getVertex(vi, p);
+    simulationRestPosition.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
+  }
+
+  auto dmm = std::make_unique<SolidDeformationModel::DeformationModelManager>();
+  dmm->setMesh(std::move(simMesh), nullptr, nullptr);  // manager now owns the mesh
+  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::SHELL_FF_DOF0,
+    pgo::SolidDeformationModel::DeformationModelElasticMaterial::KOITER_STVK);
+  dmm->setEnforceSPD(1);
+
+  std::vector<double> elementWeights(nele, 1.0);
+  auto assembler =
+    std::make_unique<SolidDeformationModel::DeformationModelAssembler>(std::move(dmm), elementWeights.data());
 
   ES::VXd elasticParams(5 * nele);
   for (int ei = 0; ei < nele; ++ei) {
@@ -143,15 +150,8 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
     elasticParams[ei * 5 + 4] = kShellThickness;
   }
 
-  ES::VXd simulationRestPosition(n3);
-  for (int vi = 0; vi < n; ++vi) {
-    double p[3];
-    simMesh->getVertex(vi, p);
-    simulationRestPosition.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
-  }
-
   std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy =
-    std::make_shared<SolidDeformationModel::DeformationModelEnergy>(assembler, &simulationRestPosition, 0);
+    std::make_shared<SolidDeformationModel::DeformationModelEnergy>(std::move(assembler), &simulationRestPosition, 0);
   elasticEnergy->setEnableMaterialMaxStep(enableMaterialMaxStep);
   elasticEnergy->setElasticParams(elasticParams);
 
@@ -184,9 +184,6 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   context.surfaceRestPositions = std::move(surfaceRestPositions);
   context.elasticParams = std::move(elasticParams);
   context.surfaceFromSimulationDispMap = W;
-  context.simulationMeshOwner = simMesh;
-  context.deformationModelManagerOwner = dmm;
-  context.deformationModelAssemblerOwner = assembler;
   context.elasticEnergy = elasticEnergy;
   context.pullingEnergies = std::move(pullingEnergies);
   context.pullingTargets = std::move(pullingTargets);

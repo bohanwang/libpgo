@@ -23,9 +23,7 @@ namespace RunSim
 {
 struct InitializedVolumetricSimulation
 {
-  std::shared_ptr<SolidDeformationModel::SimulationMesh> simMesh;
-  std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm;
-  std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> assembler;
+  // The energy is the single owning root: energy -> assembler -> manager -> mesh.
   std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy;
   EigenSupport::VXd plasticity;
   EigenSupport::VXd restPosition;

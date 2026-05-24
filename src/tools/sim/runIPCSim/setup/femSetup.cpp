@@ -21,9 +21,6 @@ InitializedVolumetricSimulation initializeVolumetricSimulation(
   DeformationModelBundle bundle = makeDeformationModel(volumetricMesh, elasticMat, plasticMat, opts);
 
   InitializedVolumetricSimulation initialized;
-  initialized.simMesh = std::move(bundle.mesh);
-  initialized.dmm = std::move(bundle.manager);
-  initialized.assembler = std::move(bundle.assembler);
   initialized.elasticEnergy = std::move(bundle.energy);
   initialized.plasticity = std::move(bundle.plasticParams);
   initialized.restPosition = std::move(bundle.restPosition);

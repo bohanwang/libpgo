@@ -262,14 +262,14 @@ protected:
   SimulationMeshImpl *impl;
 };
 
-std::shared_ptr<SimulationMesh> loadTetMesh(const VolumetricMeshes::TetMesh *tetmesh);
-std::shared_ptr<SimulationMesh> loadCubicMesh(const VolumetricMeshes::CubicMesh *cubicMesh);
+std::unique_ptr<SimulationMesh> loadTetMesh(const VolumetricMeshes::TetMesh *tetmesh);
+std::unique_ptr<SimulationMesh> loadCubicMesh(const VolumetricMeshes::CubicMesh *cubicMesh);
 
-std::shared_ptr<SimulationMesh> loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat, int toTriangle);
-std::shared_ptr<SimulationMesh> loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, int numMaterials, const SimulationMeshMaterial *const *const mat, const int *materialIndices, int toTriangle);
+std::unique_ptr<SimulationMesh> loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat, int toTriangle);
+std::unique_ptr<SimulationMesh> loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, int numMaterials, const SimulationMeshMaterial *const *const mat, const int *materialIndices, int toTriangle);
 
-std::shared_ptr<SimulationMesh> loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat);
-std::shared_ptr<SimulationMesh> loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const int *elementMaterialIndices, const SimulationMeshMaterial *const *mat);
+std::unique_ptr<SimulationMesh> loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat);
+std::unique_ptr<SimulationMesh> loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const int *elementMaterialIndices, const SimulationMeshMaterial *const *mat);
 
 void computeTriangleUV(SimulationMesh *mesh, double scaleFactor);
 }  // namespace SolidDeformationModel

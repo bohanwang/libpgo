@@ -73,7 +73,7 @@ void expectAllFinite(const ES::SpMatD &m)
   }
 }
 
-std::shared_ptr<SimulationMesh> makeSingleElementCubicSimulationMesh()
+std::unique_ptr<SimulationMesh> makeSingleElementCubicSimulationMesh()
 {
   const double vertices[] = {
     0.0, 0.0, 0.0,
@@ -91,7 +91,7 @@ std::shared_ptr<SimulationMesh> makeSingleElementCubicSimulationMesh()
   SimulationMeshENuMaterial baseMaterial(1200.0, 0.45);
   const pgo::SolidDeformationModel::SimulationMeshMaterial *materials[] = { &baseMaterial };
 
-  return std::shared_ptr<SimulationMesh>(new SimulationMesh(
+  return std::unique_ptr<SimulationMesh>(new SimulationMesh(
     8, vertices,
     1, 8, elementVertices,
     elementMaterialIndices, 1, materials,
@@ -104,27 +104,33 @@ TEST(DeformationModelAssemblerGTest, TetAssemblerRegression)
   pgo::Logging::init();
 
   pgo::VolumetricMeshes::TetMesh tetMesh(kTorusVegPath);
-  std::shared_ptr<SimulationMesh> mesh(pgo::SolidDeformationModel::loadTetMesh(&tetMesh));
+  std::unique_ptr<SimulationMesh> mesh = pgo::SolidDeformationModel::loadTetMesh(&tetMesh);
   ASSERT_NE(mesh, nullptr);
 
-  auto dmm = std::make_shared<DeformationModelManager>();
-  dmm->setMesh(mesh.get());
+  const int nele = mesh->getNumElements();
+  const int nvtx = mesh->getNumVertices();
+  const int n3 = nvtx * 3;
+
+  auto dmm = std::make_unique<DeformationModelManager>();
+  dmm->setMesh(std::move(mesh), nullptr, nullptr);
   dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
 
-  auto assembler = std::make_shared<DeformationModelAssembler>(dmm, nullptr);
+  const int numPlasticParams = dmm->getNumPlasticParameters();
+  const int numElasticParams = dmm->getNumElasticParameters();
+  const auto *plasticModel = dynamic_cast<const PlasticModel3DDeformationGradient *>(dmm->getDeformationModel(0)->getPlasticModel());
 
-  ES::VXd x = makePerturbedRestPositions(*mesh);
-  ES::VXd plasticParams(dmm->getNumPlasticParameters() * mesh->getNumElements());
-  ES::VXd elasticParams(dmm->getNumElasticParameters() * mesh->getNumElements());
+  auto assembler = std::make_unique<DeformationModelAssembler>(std::move(dmm), nullptr);
+
+  ES::VXd x = makePerturbedRestPositions(*assembler->getDeformationModelManager().getMesh());
+  ES::VXd plasticParams(numPlasticParams * nele);
+  ES::VXd elasticParams(numElasticParams * nele);
   elasticParams.setZero();
 
-  const auto *plasticModel = dynamic_cast<const PlasticModel3DDeformationGradient *>(
-    dmm->getDeformationModel(0)->getPlasticModel());
   ASSERT_NE(plasticModel, nullptr);
 
   ES::M3d identity = ES::M3d::Identity();
-  for (int ei = 0; ei < mesh->getNumElements(); ei++) {
-    plasticModel->toParam(identity.data(), plasticParams.data() + ei * dmm->getNumPlasticParameters());
+  for (int ei = 0; ei < nele; ei++) {
+    plasticModel->toParam(identity.data(), plasticParams.data() + ei * numPlasticParams);
   }
 
   ES::VXd grad = ES::VXd::Zero(assembler->getNumDOFs());
@@ -141,7 +147,7 @@ TEST(DeformationModelAssemblerGTest, TetAssemblerRegression)
   ES::SpMatD dfda = assembler->get_dfda_Template();
   assembler->compute_df_da(x.data(), dataOrNull(plasticParams), dataOrNull(elasticParams), dfda);
   EXPECT_EQ(dfda.rows(), assembler->getNumDOFs());
-  EXPECT_EQ(dfda.cols(), mesh->getNumElements() * dmm->getNumPlasticParameters());
+  EXPECT_EQ(dfda.cols(), nele * numPlasticParams);
   expectAllFinite(dfda);
 }
 
@@ -150,36 +156,42 @@ TEST(DeformationModelAssemblerGTest, TetVonMisesStressIsZeroAtRestAndNonzeroUnde
   pgo::Logging::init();
 
   pgo::VolumetricMeshes::TetMesh tetMesh(kTorusVegPath);
-  std::shared_ptr<SimulationMesh> mesh(pgo::SolidDeformationModel::loadTetMesh(&tetMesh));
+  std::unique_ptr<SimulationMesh> mesh = pgo::SolidDeformationModel::loadTetMesh(&tetMesh);
   ASSERT_NE(mesh, nullptr);
 
-  auto dmm = std::make_shared<DeformationModelManager>();
-  dmm->setMesh(mesh.get());
+  const int nele = mesh->getNumElements();
+  const int nvtx = mesh->getNumVertices();
+
+  auto dmm = std::make_unique<DeformationModelManager>();
+  dmm->setMesh(std::move(mesh), nullptr, nullptr);
   dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
 
-  auto assembler = std::make_shared<DeformationModelAssembler>(dmm, nullptr);
+  const int numPlasticParams = dmm->getNumPlasticParameters();
+  const int numElasticParams = dmm->getNumElasticParameters();
+  const auto *plasticModel = dynamic_cast<const PlasticModel3DDeformationGradient *>(dmm->getDeformationModel(0)->getPlasticModel());
 
-  ES::VXd plasticParams(dmm->getNumPlasticParameters() * mesh->getNumElements());
-  ES::VXd elasticParams(dmm->getNumElasticParameters() * mesh->getNumElements());
+  auto assembler = std::make_unique<DeformationModelAssembler>(std::move(dmm), nullptr);
+
+  ES::VXd plasticParams(numPlasticParams * nele);
+  ES::VXd elasticParams(numElasticParams * nele);
   elasticParams.setZero();
 
-  const auto *plasticModel = dynamic_cast<const PlasticModel3DDeformationGradient *>(
-    dmm->getDeformationModel(0)->getPlasticModel());
   ASSERT_NE(plasticModel, nullptr);
 
   ES::M3d identity = ES::M3d::Identity();
-  for (int ei = 0; ei < mesh->getNumElements(); ei++) {
-    plasticModel->toParam(identity.data(), plasticParams.data() + ei * dmm->getNumPlasticParameters());
+  for (int ei = 0; ei < nele; ei++) {
+    plasticModel->toParam(identity.data(), plasticParams.data() + ei * numPlasticParams);
   }
 
-  ES::VXd rest = makeRestPositions(*mesh);
-  ES::VXd stresses = ES::VXd::Constant(mesh->getNumElements(), -1.0);
+  const auto &meshPtr = *assembler->getDeformationModelManager().getMesh();
+  ES::VXd rest = makeRestPositions(meshPtr);
+  ES::VXd stresses = ES::VXd::Constant(nele, -1.0);
   assembler->computeVonMisesStresses(rest.data(), dataOrNull(plasticParams), dataOrNull(elasticParams), stresses.data());
   expectAllFinite(stresses);
   EXPECT_LE(stresses.cwiseAbs().maxCoeff(), 1e-8);
 
   ES::VXd stretched = rest;
-  for (int vi = 0; vi < mesh->getNumVertices(); vi++) {
+  for (int vi = 0; vi < nvtx; vi++) {
     stretched[vi * 3] *= 1.01;
   }
   stresses.setConstant(-1.0);
@@ -197,21 +209,27 @@ TEST(DeformationModelAssemblerGTest, ShellAssemblerRegression)
   ASSERT_TRUE(surfaceMesh.load(kShellObjPath));
 
   SimulationMeshENuhMaterial mat(1000.0, 0.45, 1e-3);
-  std::shared_ptr<SimulationMesh> mesh(pgo::SolidDeformationModel::loadShellMesh(surfaceMesh, &mat));
+  std::unique_ptr<SimulationMesh> mesh = pgo::SolidDeformationModel::loadShellMesh(surfaceMesh, &mat);
   ASSERT_NE(mesh, nullptr);
 
-  auto dmm = std::make_shared<DeformationModelManager>();
-  dmm->setMesh(mesh.get());
+  const int nele = mesh->getNumElements();
+
+  auto dmm = std::make_unique<DeformationModelManager>();
+  dmm->setMesh(std::move(mesh), nullptr, nullptr);
   dmm->init(DeformationModelPlasticMaterial::SHELL_FF_DOF1, DeformationModelElasticMaterial::KOITER_STVK);
 
-  auto assembler = std::make_shared<DeformationModelAssembler>(dmm, nullptr);
+  const int numPlasticParams = dmm->getNumPlasticParameters();
+  const int numElasticParams = dmm->getNumElasticParameters();
 
-  ES::VXd x = makePerturbedRestPositions(*mesh);
-  ES::VXd plasticParams = ES::VXd::Constant(dmm->getNumPlasticParameters() * mesh->getNumElements(), 1.2);
-  ES::VXd elasticParams(dmm->getNumElasticParameters() * mesh->getNumElements());
+  auto assembler = std::make_unique<DeformationModelAssembler>(std::move(dmm), nullptr);
 
-  ASSERT_EQ(dmm->getNumElasticParameters(), 5);
-  for (int ei = 0; ei < mesh->getNumElements(); ei++) {
+  const auto &meshPtr = *assembler->getDeformationModelManager().getMesh();
+  ES::VXd x = makePerturbedRestPositions(meshPtr);
+  ES::VXd plasticParams = ES::VXd::Constant(numPlasticParams * nele, 1.2);
+  ES::VXd elasticParams(numElasticParams * nele);
+
+  ASSERT_EQ(numElasticParams, 5);
+  for (int ei = 0; ei < nele; ei++) {
     elasticParams.segment<5>(ei * 5) << 20000.0, 0.45, 10000.0, 0.3, 1e-3;
   }
 
@@ -229,14 +247,14 @@ TEST(DeformationModelAssemblerGTest, ShellAssemblerRegression)
   ES::SpMatD dfda = assembler->get_dfda_Template();
   assembler->compute_df_da(x.data(), dataOrNull(plasticParams), dataOrNull(elasticParams), dfda);
   EXPECT_EQ(dfda.rows(), assembler->getNumDOFs());
-  EXPECT_EQ(dfda.cols(), mesh->getNumElements() * dmm->getNumPlasticParameters());
+  EXPECT_EQ(dfda.cols(), nele * numPlasticParams);
   expectAllFinite(dfda);
 
-  if (dmm->getNumElasticParameters() > 0) {
+  if (numElasticParams > 0) {
     ES::SpMatD dfdb = assembler->get_dfdb_Template();
     assembler->compute_df_db(x.data(), dataOrNull(plasticParams), dataOrNull(elasticParams), dfdb);
     EXPECT_EQ(dfdb.rows(), assembler->getNumDOFs());
-    EXPECT_EQ(dfdb.cols(), mesh->getNumElements() * dmm->getNumElasticParameters());
+    EXPECT_EQ(dfdb.cols(), nele * numElasticParams);
     expectAllFinite(dfdb);
   }
 }
@@ -246,27 +264,32 @@ TEST(DeformationModelAssemblerGTest, CubicAssemblerSmokeRegression)
   pgo::Logging::init();
 
   pgo::VolumetricMeshes::CubicMesh cubicMesh(kCubicBoxVegPath);
-  std::shared_ptr<SimulationMesh> mesh(pgo::SolidDeformationModel::loadCubicMesh(&cubicMesh));
+  std::unique_ptr<SimulationMesh> mesh = pgo::SolidDeformationModel::loadCubicMesh(&cubicMesh);
   ASSERT_NE(mesh, nullptr);
 
-  auto dmm = std::make_shared<DeformationModelManager>();
-  dmm->setMesh(mesh.get());
+  const int nele = mesh->getNumElements();
+
+  auto dmm = std::make_unique<DeformationModelManager>();
+  dmm->setMesh(std::move(mesh), nullptr, nullptr);
   dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
 
-  auto assembler = std::make_shared<DeformationModelAssembler>(dmm, nullptr);
+  const int numPlasticParams = dmm->getNumPlasticParameters();
+  const int numElasticParams = dmm->getNumElasticParameters();
+  const auto *plasticModel = dynamic_cast<const PlasticModel3DDeformationGradient *>(dmm->getDeformationModel(0)->getPlasticModel());
 
-  ES::VXd x = makePerturbedRestPositions(*mesh);
-  ES::VXd plasticParams(dmm->getNumPlasticParameters() * mesh->getNumElements());
-  ES::VXd elasticParams(dmm->getNumElasticParameters() * mesh->getNumElements());
+  auto assembler = std::make_unique<DeformationModelAssembler>(std::move(dmm), nullptr);
+
+  const auto &meshPtr = *assembler->getDeformationModelManager().getMesh();
+  ES::VXd x = makePerturbedRestPositions(meshPtr);
+  ES::VXd plasticParams(numPlasticParams * nele);
+  ES::VXd elasticParams(numElasticParams * nele);
   elasticParams.setZero();
 
-  const auto *plasticModel = dynamic_cast<const PlasticModel3DDeformationGradient *>(
-    dmm->getDeformationModel(0)->getPlasticModel());
   ASSERT_NE(plasticModel, nullptr);
 
   ES::M3d identity = ES::M3d::Identity();
-  for (int ei = 0; ei < mesh->getNumElements(); ei++) {
-    plasticModel->toParam(identity.data(), plasticParams.data() + ei * dmm->getNumPlasticParameters());
+  for (int ei = 0; ei < nele; ei++) {
+    plasticModel->toParam(identity.data(), plasticParams.data() + ei * numPlasticParams);
   }
 
   ES::VXd grad = ES::VXd::Zero(assembler->getNumDOFs());
@@ -283,7 +306,7 @@ TEST(DeformationModelAssemblerGTest, CubicAssemblerSmokeRegression)
   ES::SpMatD dfda = assembler->get_dfda_Template();
   assembler->compute_df_da(x.data(), dataOrNull(plasticParams), dataOrNull(elasticParams), dfda);
   EXPECT_EQ(dfda.rows(), assembler->getNumDOFs());
-  EXPECT_EQ(dfda.cols(), mesh->getNumElements() * dmm->getNumPlasticParameters());
+  EXPECT_EQ(dfda.cols(), nele * numPlasticParams);
   expectAllFinite(dfda);
 }
 
@@ -291,47 +314,53 @@ TEST(DeformationModelAssemblerGTest, CubicAssemblerMaterialParamRegression)
 {
   pgo::Logging::init();
 
-  std::shared_ptr<SimulationMesh> mesh = makeSingleElementCubicSimulationMesh();
+  std::unique_ptr<SimulationMesh> mesh = makeSingleElementCubicSimulationMesh();
   ASSERT_NE(mesh, nullptr);
 
   pgo::SolidDeformationModel::SimulationMeshHillMaterial hillMaterial(2500.0, 0.35, 1.0);
   mesh->appendMaterialToAllElements(&hillMaterial);
 
-  ES::VXd elementFiberDirections = ES::VXd::Zero(mesh->getNumElements() * 3);
-  for (int ei = 0; ei < mesh->getNumElements(); ei++) {
+  const int nele = mesh->getNumElements();
+  const int nvtx = mesh->getNumVertices();
+
+  ES::VXd elementFiberDirections = ES::VXd::Zero(nele * 3);
+  for (int ei = 0; ei < nele; ei++) {
     elementFiberDirections.segment<3>(ei * 3) << 1.0, 0.0, 0.0;
   }
 
-  ES::VXd vertexFiberDirections = ES::VXd::Zero(mesh->getNumVertices() * 3);
-  for (int vi = 0; vi < mesh->getNumVertices(); vi++) {
+  ES::VXd vertexFiberDirections = ES::VXd::Zero(nvtx * 3);
+  for (int vi = 0; vi < nvtx; vi++) {
     vertexFiberDirections.segment<3>(vi * 3) << 1.0, 0.0, 0.0;
   }
 
-  auto dmm = std::make_shared<DeformationModelManager>();
-  dmm->setMesh(mesh.get(), elementFiberDirections.data(), vertexFiberDirections.data());
+  auto dmm = std::make_unique<DeformationModelManager>();
+  dmm->setMesh(std::move(mesh), elementFiberDirections.data(), vertexFiberDirections.data());
   dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::HILL_STABLE_NEO);
 
-  ASSERT_EQ(dmm->getNumElasticParameters(), 1);
+  const int numPlasticParams = dmm->getNumPlasticParameters();
+  const int numElasticParams = dmm->getNumElasticParameters();
+  ASSERT_EQ(numElasticParams, 1);
 
-  auto assembler = std::make_shared<DeformationModelAssembler>(dmm, nullptr);
+  auto assembler = std::make_unique<DeformationModelAssembler>(std::move(dmm), nullptr);
 
-  ES::VXd x = makePerturbedRestPositions(*mesh);
-  ES::VXd plasticParams(dmm->getNumPlasticParameters() * mesh->getNumElements());
-  ES::VXd elasticParams = ES::VXd::Constant(dmm->getNumElasticParameters() * mesh->getNumElements(), 0.75);
+  const auto &meshPtr = *assembler->getDeformationModelManager().getMesh();
+  ES::VXd x = makePerturbedRestPositions(meshPtr);
+  ES::VXd plasticParams(numPlasticParams * nele);
+  ES::VXd elasticParams = ES::VXd::Constant(numElasticParams * nele, 0.75);
 
   const auto *plasticModel = dynamic_cast<const PlasticModel3DDeformationGradient *>(
-    dmm->getDeformationModel(0)->getPlasticModel());
+    assembler->getDeformationModelManager().getDeformationModel(0)->getPlasticModel());
   ASSERT_NE(plasticModel, nullptr);
 
   ES::M3d identity = ES::M3d::Identity();
-  for (int ei = 0; ei < mesh->getNumElements(); ei++) {
-    plasticModel->toParam(identity.data(), plasticParams.data() + ei * dmm->getNumPlasticParameters());
+  for (int ei = 0; ei < nele; ei++) {
+    plasticModel->toParam(identity.data(), plasticParams.data() + ei * numPlasticParams);
   }
 
   ES::SpMatD dfdb = assembler->get_dfdb_Template();
   assembler->compute_df_db(x.data(), dataOrNull(plasticParams), dataOrNull(elasticParams), dfdb);
   EXPECT_EQ(dfdb.rows(), assembler->getNumDOFs());
-  EXPECT_EQ(dfdb.cols(), mesh->getNumElements() * dmm->getNumElasticParameters());
+  EXPECT_EQ(dfdb.cols(), nele * numElasticParams);
   expectAllFinite(dfdb);
   EXPECT_GT(dfdb.norm(), 0.0);
 }

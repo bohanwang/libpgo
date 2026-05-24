@@ -58,6 +58,7 @@ class DeformationModelManagerImpl
 public:
   ~DeformationModelManagerImpl();
 
+  std::unique_ptr<SimulationMesh> ownedMesh;  // owns the mesh; simulationMesh borrows it
   const SimulationMesh *simulationMesh;
 
   std::vector<DeformationModel *> elementFEMs;
@@ -318,7 +319,20 @@ DeformationModelManager::~DeformationModelManager()
 
 void DeformationModelManager::setMesh(const SimulationMesh *simulationMesh, const double *elementFiberDirections, const double *vertexFiberDirections)
 {
+  data->ownedMesh.reset();  // borrow: caller keeps ownership
   data->simulationMesh = simulationMesh;
+  applyMeshSettings(elementFiberDirections, vertexFiberDirections);
+}
+
+void DeformationModelManager::setMesh(std::unique_ptr<SimulationMesh> simulationMesh, const double *elementFiberDirections, const double *vertexFiberDirections)
+{
+  data->ownedMesh = std::move(simulationMesh);  // take ownership
+  data->simulationMesh = data->ownedMesh.get();
+  applyMeshSettings(elementFiberDirections, vertexFiberDirections);
+}
+
+void DeformationModelManager::applyMeshSettings(const double *elementFiberDirections, const double *vertexFiberDirections)
+{
   data->nele = data->simulationMesh->getNumElements();
   data->nvtx = data->simulationMesh->getNumVertices();
 

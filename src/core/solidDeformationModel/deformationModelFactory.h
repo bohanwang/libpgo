@@ -31,20 +31,19 @@ struct DeformationModelOptions
   EigenSupport::VXd elementWeights;
 };
 
-// One ready-to-use FEM deformation model. Ownership is entirely shared_ptr, and the
-// returned energy already has its rest pose and (identity) plastic parameters applied.
+// One ready-to-use FEM deformation model. The energy is the single owning root of
+// the unique_ptr spine (energy -> assembler -> manager -> mesh); borrow the inner
+// objects via energy->assembler() / .getDeformationModelManager() / .getMesh(). The
+// energy already has its rest pose and (identity) plastic parameters applied.
 struct DeformationModelBundle
 {
-  std::shared_ptr<SimulationMesh> mesh;
-  std::shared_ptr<DeformationModelManager> manager;
-  std::shared_ptr<DeformationModelAssembler> assembler;
   std::shared_ptr<DeformationModelEnergy> energy;
   EigenSupport::VXd restPosition;
   EigenSupport::VXd plasticParams;
 };
 
-// Wrap the raw loadTetMesh/loadCubicMesh factories with shared ownership.
-std::shared_ptr<SimulationMesh> makeSimulationMesh(const VolumetricMeshes::VolumetricMesh &mesh);
+// Build a SimulationMesh from a volumetric mesh, dispatching on element type.
+std::unique_ptr<SimulationMesh> makeSimulationMesh(const VolumetricMeshes::VolumetricMesh &mesh);
 
 // Collapse the SimulationMesh -> manager -> assembler -> energy construction chain
 // (with its init-order and ownership requirements) into a single call.
@@ -54,9 +53,9 @@ DeformationModelBundle makeDeformationModel(
   DeformationModelPlasticMaterial plastic = DeformationModelPlasticMaterial::VOLUMETRIC_DOF6,
   const DeformationModelOptions &opts = {});
 
-// Same, reusing an already-built SimulationMesh (shares ownership).
+// Same, taking ownership of an already-built SimulationMesh.
 DeformationModelBundle makeDeformationModel(
-  std::shared_ptr<SimulationMesh> mesh,
+  std::unique_ptr<SimulationMesh> mesh,
   DeformationModelElasticMaterial elastic,
   DeformationModelPlasticMaterial plastic = DeformationModelPlasticMaterial::VOLUMETRIC_DOF6,
   const DeformationModelOptions &opts = {});

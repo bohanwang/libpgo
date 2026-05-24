@@ -83,9 +83,6 @@ IpcSimulationContext buildVolumeLegacyPenaltySimulation(const pgo::ConfigFileJSO
   context.surfaceRestPositions = std::move(surfaceRestPositions);
   context.plasticParams = std::move(initialized.plasticity);
   context.surfaceFromSimulationDispMap = std::move(W);
-  context.simulationMeshOwner = initialized.simMesh;
-  context.deformationModelManagerOwner = initialized.dmm;
-  context.deformationModelAssemblerOwner = initialized.assembler;
   context.elasticEnergy = initialized.elasticEnergy;
   context.pullingEnergies = std::move(pullingEnergies);
   context.pullingTargets = std::move(pullingTargets);

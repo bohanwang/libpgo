@@ -52,8 +52,8 @@ const char *meshTypeName(pgo::SolidDeformationModel::SimulationMeshType meshType
 }
 }  // namespace
 
-DeformationModelEnergy::DeformationModelEnergy(std::shared_ptr<DeformationModelAssembler> fma, const ES::VXd *restp, int offset):
-  forceModelAssembler(fma)
+DeformationModelEnergy::DeformationModelEnergy(std::unique_ptr<DeformationModelAssembler> fma, const ES::VXd *restp, int offset):
+  forceModelAssembler(std::move(fma))
 {
   allDOFs.resize(forceModelAssembler->getNumDOFs());
   std::iota(allDOFs.begin(), allDOFs.end(), offset);
@@ -127,7 +127,7 @@ NonlinearOptimization::MaxStepResult DeformationModelEnergy::computeMaxStepLimit
   const double maxStepSize = observation.alpha;
 
   if (maxStepSize < 1.0) {
-    const auto meshType = forceModelAssembler->getDeformationModelManager()->getMesh()->getElementType();
+    const auto meshType = forceModelAssembler->getDeformationModelManager().getMesh()->getElementType();
 
     if (!observation.hasIllegalInitialState && maxStepSize > 0.0 && maxStepSize < 0.01) {
       if (observation.limitingLocationId >= 0) {
