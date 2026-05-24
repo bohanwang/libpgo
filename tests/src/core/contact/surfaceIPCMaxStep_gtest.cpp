@@ -15,8 +15,8 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
-using pgo::Contact::CIPC::SurfaceIPCCore;
-using pgo::Contact::CIPC::SurfaceIPCTopology;
+using pgo::Contact::IPC::SurfaceIPCCore;
+using pgo::Contact::IPC::SurfaceIPCTopology;
 using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
 using pgo::Profiling::ProfileCounterStat;

@@ -1158,7 +1158,7 @@ TEST(RunIPCSimCliGTest, FloorEnabledLogPrintsFloorParameters)
   const std::string contents = readTextFile(logPath);
   EXPECT_NE(contents.find("floors=1"), std::string::npos);
   EXPECT_NE(contents.find("floor[0].axis=y"), std::string::npos);
-  EXPECT_NE(contents.find("floor[0].side=lower"), std::string::npos);
+  EXPECT_NE(contents.find("floor[0].side=keep_above"), std::string::npos);
   EXPECT_NE(contents.find("floor[0].height=-0.15"), std::string::npos);
   EXPECT_NE(contents.find("floor[0].kappa=4321"), std::string::npos);
 }

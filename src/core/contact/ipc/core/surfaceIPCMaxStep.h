@@ -10,7 +10,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 // `thickness` is the CCD minimum-separation distance (xi). The returned alpha
@@ -35,6 +35,6 @@ double computeExternalMaxStep(
   double slackness,
   double thickness = 0.0);
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

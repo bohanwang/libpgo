@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ipc/embeddedSurfaceFloorPotentialEnergy.h"
+#include "embeddedSurfaceFloorPotentialEnergy.h"
 #include "setup/setup.h"
 
 #include <vector>
@@ -14,11 +14,11 @@ namespace pgo::RunIPCSim
 {
 struct ParsedFloorConfig
 {
-  Contact::CIPC::FloorPenaltyParameters params;
+  Contact::IPC::FloorPenaltyParameters params;
   IpcFloorMotionState motionState;
 };
 
-const char *floorAxisToString(Contact::CIPC::FloorAxis axis);
-const char *floorSideToString(Contact::CIPC::FloorSide side);
+const char *floorAxisToString(Contact::IPC::FloorAxis axis);
+const char *floorSideToString(Contact::IPC::FloorSide side);
 std::vector<ParsedFloorConfig> parseFloorsConfig(const pgo::ConfigFileJSON &jconfig);
 }  // namespace pgo::RunIPCSim

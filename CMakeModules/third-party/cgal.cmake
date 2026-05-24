@@ -57,6 +57,32 @@ if(WIN32)
   endif()
 endif()
 
+# CGAL is header-only here but hard-depends on the native GMP/MPFR (+GMPXX)
+# libraries. On macOS (esp. Apple Silicon) Homebrew installs them under
+# /opt/homebrew, which is not on CMake's default search path, so CGAL's own
+# find_package(GMP) silently fails and gmpxx.h/mpfr.h never get attached unless
+# the caller exports CPATH/CMAKE_PREFIX_PATH. Auto-detect the Homebrew prefix so
+# a plain `cmake --preset base` resolves them.
+if(APPLE)
+  find_program(PGO_BREW_EXECUTABLE brew)
+  if(PGO_BREW_EXECUTABLE)
+    execute_process(
+      COMMAND ${PGO_BREW_EXECUTABLE} --prefix
+      OUTPUT_VARIABLE PGO_HOMEBREW_PREFIX
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(PGO_HOMEBREW_PREFIX)
+      list(APPEND CMAKE_PREFIX_PATH "${PGO_HOMEBREW_PREFIX}")
+    endif()
+  endif()
+endif()
+
+# Make CGAL's FindGMP/FindMPFR/FindGMPXX modules available, then locate the
+# libraries so they are found before (and reused by) find_package(CGAL).
+list(APPEND CMAKE_MODULE_PATH "${CGAL_SOURCE_DIR}/cmake/modules")
+find_package(GMP REQUIRED)
+find_package(MPFR REQUIRED)
+find_package(GMPXX QUIET)
+
 set(CGAL_WITH_GMPXX ON CACHE BOOL "" FORCE)
 set(CGAL_ENABLE_TESTING OFF CACHE BOOL "disable testing" FORCE)
 find_package(CGAL CONFIG COMPONENTS Core REQUIRED PATHS ${CGAL_SOURCE_DIR} NO_DEFAULT_PATH)

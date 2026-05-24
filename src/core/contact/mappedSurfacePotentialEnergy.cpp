@@ -14,7 +14,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 MappedSurfacePotentialEnergy::MappedSurfacePotentialEnergy(
@@ -242,6 +242,6 @@ void MappedSurfacePotentialEnergy::endSurfaceLineSearch() const
 {
 }
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

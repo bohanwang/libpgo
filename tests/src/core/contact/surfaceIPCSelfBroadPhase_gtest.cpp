@@ -17,12 +17,12 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
-using pgo::Contact::CIPC::EEPair;
-using pgo::Contact::CIPC::PTPair;
-using pgo::Contact::CIPC::SelfPairSet;
-using pgo::Contact::CIPC::SurfaceIPCCore;
-using pgo::Contact::CIPC::SurfaceIPCTopology;
-namespace distance = pgo::Contact::CIPC::distance;
+using pgo::Contact::IPC::EEPair;
+using pgo::Contact::IPC::PTPair;
+using pgo::Contact::IPC::SelfPairSet;
+using pgo::Contact::IPC::SurfaceIPCCore;
+using pgo::Contact::IPC::SurfaceIPCTopology;
+namespace distance = pgo::Contact::IPC::distance;
 using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
 using pgo::Profiling::ProfileCounterStat;

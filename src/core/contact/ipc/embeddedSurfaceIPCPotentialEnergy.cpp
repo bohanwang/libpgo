@@ -14,7 +14,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 EmbeddedSurfaceIPCPotentialEnergy::EmbeddedSurfaceIPCPotentialEnergy(
@@ -190,6 +190,6 @@ void EmbeddedSurfaceIPCPotentialEnergy::markObstacleStatic(int32_t objectId)
   surfaceIPCCore_.markObstacleStatic(objectId);
 }
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

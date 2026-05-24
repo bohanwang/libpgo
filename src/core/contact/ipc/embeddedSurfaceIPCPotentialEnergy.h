@@ -14,7 +14,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 using namespace pgo::EigenSupport;
@@ -73,6 +73,6 @@ private:
   mutable SurfaceIPCActiveSet lineSearchActiveSet_;
 };
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

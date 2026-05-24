@@ -22,7 +22,7 @@ copyright to Bohan Wang
 
 namespace pgo {
 namespace Contact {
-namespace CIPC {
+namespace IPC {
 using namespace pgo::EigenSupport;
 static constexpr double kSmallContactAlphaWarnThreshold = 1e-2;
 
@@ -272,6 +272,6 @@ void SurfaceIPCCore::setObstacleTime(double t)
   }
 }
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

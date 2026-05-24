@@ -12,7 +12,7 @@ copyright to Bohan Wang
 
 namespace pgo {
 namespace Contact {
-namespace CIPC {
+namespace IPC {
 namespace autogen {
 
 inline void line_line_distance_hessian(
@@ -304,6 +304,6 @@ inline void line_line_distance_hessian(
 
 
 } // namespace autogen
-} // namespace CIPC
+} // namespace IPC
 } // namespace Contact
 } // namespace pgo

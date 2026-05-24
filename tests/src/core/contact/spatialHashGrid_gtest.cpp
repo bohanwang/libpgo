@@ -5,7 +5,7 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
-using pgo::Contact::CIPC::SpatialHashGrid;
+using pgo::Contact::IPC::SpatialHashGrid;
 
 SpatialHashGrid::AABB makeBox(const ES::V3d &lo, const ES::V3d &hi)
 {

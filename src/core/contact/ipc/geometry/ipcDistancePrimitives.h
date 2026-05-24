@@ -10,7 +10,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 using namespace pgo::EigenSupport;
@@ -118,6 +118,6 @@ PTDistAll computePTSqDistAll(const V3d &p, const V3d &t0,
 
 }  // namespace distance
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

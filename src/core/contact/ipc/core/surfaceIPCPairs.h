@@ -13,7 +13,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 struct PTPair
@@ -92,6 +92,6 @@ struct SelfPairSet
   }
 };
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

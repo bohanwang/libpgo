@@ -11,7 +11,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 void SpatialHashGrid::AABB::init(const EigenSupport::V3d &v, double pad)
@@ -215,6 +215,6 @@ std::uint64_t SpatialHashGrid::queryFilteredOverlapping(
   return hashCandidates;
 }
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

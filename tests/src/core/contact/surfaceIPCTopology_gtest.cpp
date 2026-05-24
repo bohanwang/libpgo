@@ -9,7 +9,7 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
-using pgo::Contact::CIPC::SurfaceIPCTopology;
+using pgo::Contact::IPC::SurfaceIPCTopology;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
 }  // namespace
 

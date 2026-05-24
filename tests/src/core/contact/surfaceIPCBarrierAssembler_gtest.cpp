@@ -19,20 +19,20 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
-using pgo::Contact::CIPC::ExternalPairSet;
-using pgo::Contact::CIPC::EEPair;
-using pgo::Contact::CIPC::ObstacleSurface;
-using pgo::Contact::CIPC::PTPair;
-using pgo::Contact::CIPC::SelfPairSet;
-using pgo::Contact::CIPC::SurfaceIPCCore;
-using pgo::Contact::CIPC::SurfaceIPCTopology;
+using pgo::Contact::IPC::ExternalPairSet;
+using pgo::Contact::IPC::EEPair;
+using pgo::Contact::IPC::ObstacleSurface;
+using pgo::Contact::IPC::PTPair;
+using pgo::Contact::IPC::SelfPairSet;
+using pgo::Contact::IPC::SurfaceIPCCore;
+using pgo::Contact::IPC::SurfaceIPCTopology;
 using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
 using pgo::Contact::CIPCTest::relativeError;
 using pgo::Contact::CIPCTest::sparseToDense;
 using pgo::Profiling::ProfileCounterStat;
 using pgo::Profiling::ProfileStat;
-namespace kernels = pgo::Contact::CIPC::barrier_kernels;
+namespace kernels = pgo::Contact::IPC::barrier_kernels;
 
 const ProfileStat *findStat(const std::vector<ProfileStat> &stats, std::string_view name)
 {
@@ -369,7 +369,7 @@ TEST_F(SurfaceIPCBarrierAssemblerProfilingGTest, ComputeExternalAllRecordsBarrie
           1, 3, 2;
   const ES::VXd obsRest = flattenPositions(obsV);
   ObstacleSurface obs(obsV, obsF,
-    pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
+    pgo::Contact::IPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
   obs.setObjectId(0);
   obs.update(0.0);
   std::vector<ObstacleSurface> obstacles;

@@ -17,7 +17,7 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
-using pgo::Contact::CIPC::SurfaceIPCCore;
+using pgo::Contact::IPC::SurfaceIPCCore;
 using pgo::Contact::CIPCTest::computeFloorEnergy;
 using pgo::Contact::CIPCTest::computeFloorGradient;
 using pgo::Contact::CIPCTest::computeFloorHessian;
@@ -81,13 +81,13 @@ std::array<int, 3> triKey(int a, int b, int c)
   return key;
 }
 
-std::array<int, 4> selfPTKey(const pgo::Contact::CIPC::PTPair &pair)
+std::array<int, 4> selfPTKey(const pgo::Contact::IPC::PTPair &pair)
 {
   const auto tri = triKey(pair.t0, pair.t1, pair.t2);
   return { pair.p, tri[0], tri[1], tri[2] };
 }
 
-std::array<int, 4> selfEEKey(const pgo::Contact::CIPC::EEPair &pair)
+std::array<int, 4> selfEEKey(const pgo::Contact::IPC::EEPair &pair)
 {
   auto edgeA = edgeKey(pair.ea0, pair.ea1);
   auto edgeB = edgeKey(pair.eb0, pair.eb1);
@@ -96,19 +96,19 @@ std::array<int, 4> selfEEKey(const pgo::Contact::CIPC::EEPair &pair)
   return { edgeA[0], edgeA[1], edgeB[0], edgeB[1] };
 }
 
-std::array<int, 5> externalPTKey(const pgo::Contact::CIPC::ExternalPTPair &pair)
+std::array<int, 5> externalPTKey(const pgo::Contact::IPC::ExternalPTPair &pair)
 {
   const auto tri = triKey(pair.obsTri[0], pair.obsTri[1], pair.obsTri[2]);
   return { static_cast<int>(pair.obstacleSlot), pair.dynVertex, tri[0], tri[1], tri[2] };
 }
 
-std::array<int, 5> externalTPKey(const pgo::Contact::CIPC::ExternalTPPair &pair)
+std::array<int, 5> externalTPKey(const pgo::Contact::IPC::ExternalTPPair &pair)
 {
   const auto tri = triKey(pair.dynTri[0], pair.dynTri[1], pair.dynTri[2]);
   return { static_cast<int>(pair.obstacleSlot), tri[0], tri[1], tri[2], pair.obsVertex };
 }
 
-std::array<int, 5> externalEEKey(const pgo::Contact::CIPC::ExternalEEPair &pair)
+std::array<int, 5> externalEEKey(const pgo::Contact::IPC::ExternalEEPair &pair)
 {
   const auto dynEdge = edgeKey(pair.dynEdge[0], pair.dynEdge[1]);
   const auto obsEdge = edgeKey(pair.obsEdge[0], pair.obsEdge[1]);
@@ -124,8 +124,8 @@ bool containsPair(const std::vector<Pair> &pairs, const Pair &target, KeyFn keyF
 }
 
 void expectActiveSetSubset(
-  const pgo::Contact::CIPC::SurfaceIPCActiveSet &exact,
-  const pgo::Contact::CIPC::SurfaceIPCActiveSet &superset)
+  const pgo::Contact::IPC::SurfaceIPCActiveSet &exact,
+  const pgo::Contact::IPC::SurfaceIPCActiveSet &superset)
 {
   for (const auto &pair : exact.selfPairs.ptPairs)
     EXPECT_TRUE(containsPair(superset.selfPairs.ptPairs, pair, selfPTKey));
@@ -334,7 +334,7 @@ TEST(SurfaceIPCCoreGTest, ComputeAllBuildsActiveSetOnce)
 
 TEST(SurfaceIPCCoreGTest, LineSearchActiveSetSupersetContainsExactSampledAlphas)
 {
-  using pgo::Contact::CIPC::ObstacleSurface;
+  using pgo::Contact::IPC::ObstacleSurface;
 
   ES::MXd dynV(4, 3);
   dynV << 0.0, 0.0, 0.32,
@@ -357,7 +357,7 @@ TEST(SurfaceIPCCoreGTest, LineSearchActiveSetSupersetContainsExactSampledAlphas)
   const ES::VXd obsRest = flattenPositions(obsV);
   std::vector<ObstacleSurface> obstacles;
   obstacles.emplace_back(obsV, obsF,
-    pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
+    pgo::Contact::IPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
   obstacles.front().update(0.0);
 
   SurfaceIPCCore::Parameters params;
@@ -394,7 +394,7 @@ TEST(SurfaceIPCCoreGTest, LineSearchActiveSetSupersetContainsExactSampledAlphas)
 
 TEST(SurfaceIPCCoreGTest, ConstructorInjectedObstaclesAssignSequentialSlots)
 {
-  using pgo::Contact::CIPC::ObstacleSurface;
+  using pgo::Contact::IPC::ObstacleSurface;
 
   ES::MXd dynV(4, 3);
   dynV << 0.0, 0.0, 0.0,
@@ -416,7 +416,7 @@ TEST(SurfaceIPCCoreGTest, ConstructorInjectedObstaclesAssignSequentialSlots)
     for (int vi = 0; vi < obsV.rows(); ++vi)
       rest.segment<3>(3 * vi) = obsV.row(vi).transpose();
     return ObstacleSurface(obsV, obsF,
-      pgo::Contact::CIPC::makeLinearTrajectorySampler(rest, ES::V3d::Zero()));
+      pgo::Contact::IPC::makeLinearTrajectorySampler(rest, ES::V3d::Zero()));
   };
 
   std::vector<ObstacleSurface> obstacles;
@@ -460,13 +460,13 @@ TEST(SurfaceIPCCoreGTest, ObstacleSurfaceEmptySamplerThrows)
   F << 0, 1, 2;
 
   EXPECT_THROW(
-    pgo::Contact::CIPC::ObstacleSurface(V, F, pgo::Contact::CIPC::ObstacleSurface::TrajectorySampler{}),
+    pgo::Contact::IPC::ObstacleSurface(V, F, pgo::Contact::IPC::ObstacleSurface::TrajectorySampler{}),
     std::invalid_argument);
 }
 
 TEST(SurfaceIPCCoreGTest, ObstacleSurfaceStoresRestPositionsRowWise)
 {
-  using pgo::Contact::CIPC::ObstacleSurface;
+  using pgo::Contact::IPC::ObstacleSurface;
 
   ES::MXd V(2, 3);
   V << 1.0, 2.0, 3.0,
@@ -483,7 +483,7 @@ TEST(SurfaceIPCCoreGTest, ObstacleSurfaceStoresRestPositionsRowWise)
 
 TEST(SurfaceIPCCoreGTest, ObstacleSurfaceInvalidVertexColumnCountThrows)
 {
-  using pgo::Contact::CIPC::ObstacleSurface;
+  using pgo::Contact::IPC::ObstacleSurface;
 
   ES::MXd V(2, 4);
   V.setZero();
@@ -499,8 +499,8 @@ TEST(SurfaceIPCCoreGTest, ObstacleSurfaceInvalidVertexColumnCountThrows)
 // covers a known triangle.
 TEST(SurfaceIPCCoreGTest, ObstacleSurfaceUpdateRefreshesBroadPhaseCache)
 {
-  using pgo::Contact::CIPC::ObstacleSurface;
-  using pgo::Contact::CIPC::SpatialHashGrid;
+  using pgo::Contact::IPC::ObstacleSurface;
+  using pgo::Contact::IPC::SpatialHashGrid;
 
   ES::MXd V(4, 3);
   V << 0.0, 0.0, 0.0,
@@ -516,7 +516,7 @@ TEST(SurfaceIPCCoreGTest, ObstacleSurfaceUpdateRefreshesBroadPhaseCache)
     rest.segment<3>(3 * vi) = V.row(vi).transpose();
 
   ObstacleSurface obs(V, F,
-    pgo::Contact::CIPC::makeLinearTrajectorySampler(rest, ES::V3d(0.0, 0.0, 1.0)));
+    pgo::Contact::IPC::makeLinearTrajectorySampler(rest, ES::V3d(0.0, 0.0, 1.0)));
   obs.update(0.5);  // moves obstacle by +z 0.5
   const auto &cache = obs.cache();
 
@@ -561,7 +561,7 @@ TEST(SurfaceIPCCoreGTest, ObstacleSurfaceUpdateRefreshesBroadPhaseCache)
 
 TEST(SurfaceIPCCoreGTest, ObstacleSurfaceKeepsOnlyFeatureEdgesForExternalEECache)
 {
-  using pgo::Contact::CIPC::ObstacleSurface;
+  using pgo::Contact::IPC::ObstacleSurface;
 
   ES::MXd V(4, 3);
   V << 0.0, 0.0, 0.0,
@@ -577,7 +577,7 @@ TEST(SurfaceIPCCoreGTest, ObstacleSurfaceKeepsOnlyFeatureEdgesForExternalEECache
     rest.segment<3>(3 * vi) = V.row(vi).transpose();
 
   ObstacleSurface obs(V, F,
-    pgo::Contact::CIPC::makeLinearTrajectorySampler(rest, ES::V3d::Zero()));
+    pgo::Contact::IPC::makeLinearTrajectorySampler(rest, ES::V3d::Zero()));
   obs.update(0.0);
 
   ASSERT_EQ(obs.uniqueEdges().rows(), 5);
@@ -594,7 +594,7 @@ TEST(SurfaceIPCCoreGTest, ObstacleSurfaceKeepsOnlyFeatureEdgesForExternalEECache
 
 TEST(SurfaceIPCCoreGTest, ObstacleSurfaceKeepsSharpInteriorEdgesForExternalEECache)
 {
-  using pgo::Contact::CIPC::ObstacleSurface;
+  using pgo::Contact::IPC::ObstacleSurface;
 
   ES::MXd V(4, 3);
   V << 0.0, 0.0, 0.0,
@@ -610,7 +610,7 @@ TEST(SurfaceIPCCoreGTest, ObstacleSurfaceKeepsSharpInteriorEdgesForExternalEECac
     rest.segment<3>(3 * vi) = V.row(vi).transpose();
 
   ObstacleSurface obs(V, F,
-    pgo::Contact::CIPC::makeLinearTrajectorySampler(rest, ES::V3d::Zero()));
+    pgo::Contact::IPC::makeLinearTrajectorySampler(rest, ES::V3d::Zero()));
   obs.update(0.0);
 
   ASSERT_EQ(obs.uniqueEdges().rows(), 5);

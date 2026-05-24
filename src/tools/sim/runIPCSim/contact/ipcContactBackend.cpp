@@ -1,6 +1,6 @@
 #include "contact/contactBackend.h"
 
-#include "ipc/embeddedSurfaceFloorPotentialEnergy.h"
+#include "embeddedSurfaceFloorPotentialEnergy.h"
 #include "ipc/embeddedSurfaceIPCPotentialEnergy.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
 #include "potentialEnergies.h"

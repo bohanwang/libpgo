@@ -12,7 +12,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 namespace
 {
@@ -150,6 +150,6 @@ ObstacleSurface::TrajectorySampler makeLinearTrajectorySampler(
   };
 }
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

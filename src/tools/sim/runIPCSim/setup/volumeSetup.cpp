@@ -5,7 +5,7 @@
 #include "deformationModelAssembler.h"
 #include "deformationModelEnergy.h"
 #include "deformationModelManager.h"
-#include "ipc/embeddedSurfaceFloorPotentialEnergy.h"
+#include "embeddedSurfaceFloorPotentialEnergy.h"
 #include "ipc/embeddedSurfaceIPCPotentialEnergy.h"
 #include "generateMassMatrix.h"
 #include "libiglInterface.h"
@@ -30,7 +30,7 @@ namespace pgo::RunIPCSim
 {
 namespace ES = pgo::EigenSupport;
 
-Contact::CIPC::SurfaceIPCCore::Parameters makeVolumeIPCParams(const pgo::ConfigFileJSON &jconfig)
+Contact::IPC::SurfaceIPCCore::Parameters makeVolumeIPCParams(const pgo::ConfigFileJSON &jconfig)
 {
   const bool ipcHeuristic = jconfig.exist("ipc-heuristic") ? jconfig.getValue<bool>("ipc-heuristic", 1) : false;
   if (ipcHeuristic) {
@@ -42,7 +42,7 @@ Contact::CIPC::SurfaceIPCCore::Parameters makeVolumeIPCParams(const pgo::ConfigF
   if (!jconfig.exist("ipc-kappa"))
     throwConfigError("Missing required field `ipc-kappa`.");
 
-  Contact::CIPC::SurfaceIPCCore::Parameters ipcParams;
+  Contact::IPC::SurfaceIPCCore::Parameters ipcParams;
   ipcParams.dhat = jconfig.getDouble("ipc-dhat", 1);
   ipcParams.kappa = jconfig.getDouble("ipc-kappa", 1);
   ipcParams.eps_ee = 0.0;
@@ -61,7 +61,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
     throwConfigError("Missing required field `fixed-vertices`.");
 
   const double scale = jconfig.getDouble("scale", 1);
-  const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeVolumeIPCParams(jconfig);
+  const Contact::IPC::SurfaceIPCCore::Parameters ipcParams = makeVolumeIPCParams(jconfig);
   const SolidDeformationModel::DeformationModelElasticMaterial elasticMat = parseVolumeElasticMaterial(jconfig);
   const bool enableMaterialMaxStep = parseEnableMaterialMaxStep(jconfig);
   const std::vector<ParsedFloorConfig> floorConfigs = parseFloorsConfig(jconfig);
@@ -159,7 +159,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   auto obstacles = parseExternalObjects(jconfig, scale, &staticFlags);
   const std::size_t obstacleCount = obstacles.size();
   context.collisionHandler =
-    std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(
+    std::make_shared<Contact::IPC::EmbeddedSurfaceIPCPotentialEnergy>(
       V, F, context.surfaceFromSimulationDispMap, ipcParams, std::move(obstacles));
   context.contactBackend = makeIpcContactBackend();
   for (std::size_t i = 0; i < staticFlags.size(); ++i)
@@ -167,7 +167,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
       context.collisionHandler->markObstacleStatic(static_cast<int32_t>(i));
   for (const ParsedFloorConfig &floorConfig : floorConfigs) {
     auto floorEnergy =
-      std::make_shared<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params);
+      std::make_shared<Contact::IPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params);
     context.floorPotentialEnergies.push_back(floorEnergy);
     context.floorMotionStates.push_back(floorConfig.motionState);
     context.extraGeneralImplicitForceModels.push_back(

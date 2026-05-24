@@ -14,7 +14,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 class SpatialHashGrid
@@ -67,6 +67,6 @@ private:
   std::unordered_map<std::uint64_t, std::vector<int>> cells_;
 };
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

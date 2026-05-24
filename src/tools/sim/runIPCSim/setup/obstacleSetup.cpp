@@ -11,11 +11,11 @@ namespace pgo::RunIPCSim
 {
 namespace ES = pgo::EigenSupport;
 
-std::vector<Contact::CIPC::ObstacleSurface> parseExternalObjects(
+std::vector<Contact::IPC::ObstacleSurface> parseExternalObjects(
   const pgo::ConfigFileJSON &jconfig, double scale,
   std::vector<bool> *outStaticFlags)
 {
-  std::vector<Contact::CIPC::ObstacleSurface> obstacles;
+  std::vector<Contact::IPC::ObstacleSurface> obstacles;
   if (outStaticFlags)
     outStaticFlags->clear();
 
@@ -63,7 +63,7 @@ std::vector<Contact::CIPC::ObstacleSurface> parseExternalObjects(
       restFlat.segment<3>(vi * 3) = V.row(vi).transpose();
 
     ES::V3d velocity(movementArr[0], movementArr[1], movementArr[2]);
-    auto sampler = Contact::CIPC::makeLinearTrajectorySampler(restFlat, velocity);
+    auto sampler = Contact::IPC::makeLinearTrajectorySampler(restFlat, velocity);
 
     obstacles.emplace_back(std::move(V), std::move(F), std::move(sampler));
     if (outStaticFlags)

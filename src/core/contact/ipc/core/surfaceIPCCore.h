@@ -18,7 +18,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 // =========================================================================
@@ -98,6 +98,6 @@ private:
   std::vector<bool> staticObstacles_;
 };
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

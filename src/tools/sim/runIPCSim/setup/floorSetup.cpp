@@ -8,9 +8,9 @@
 
 namespace pgo::RunIPCSim
 {
-using pgo::Contact::CIPC::FloorAxis;
-using pgo::Contact::CIPC::FloorPenaltyParameters;
-using pgo::Contact::CIPC::FloorSide;
+using pgo::Contact::IPC::FloorAxis;
+using pgo::Contact::IPC::FloorPenaltyParameters;
+using pgo::Contact::IPC::FloorSide;
 
 FloorAxis parseFloorAxis(const std::string &axis)
 {
@@ -37,19 +37,19 @@ const char *floorAxisToString(FloorAxis axis)
 }
 FloorSide parseFloorSide(const std::string &side)
 {
-  if (side == "lower")
-    return FloorSide::LOWER;
-  if (side == "upper")
-    return FloorSide::UPPER;
-  throwConfigError("floor `side` must be `lower` or `upper`.");
+  if (side == "lower" || side == "keep_above")
+    return FloorSide::KEEP_ABOVE;
+  if (side == "upper" || side == "keep_below")
+    return FloorSide::KEEP_BELOW;
+  throwConfigError("floor `side` must be `lower`/`keep_above` or `upper`/`keep_below`.");
 }
 const char *floorSideToString(FloorSide side)
 {
   switch (side) {
-    case FloorSide::LOWER:
-      return "lower";
-    case FloorSide::UPPER:
-      return "upper";
+    case FloorSide::KEEP_ABOVE:
+      return "keep_above";
+    case FloorSide::KEEP_BELOW:
+      return "keep_below";
     default:
       return "invalid";
   }
@@ -87,7 +87,7 @@ std::vector<ParsedFloorConfig> parseFloorsConfig(const pgo::ConfigFileJSON &jcon
 
     ParsedFloorConfig floorConfig;
     floorConfig.params.floorAxis = parseFloorAxis(floorJson.at("axis").get<std::string>());
-    floorConfig.params.floorSide = floorJson.contains("side") ? parseFloorSide(floorJson.at("side").get<std::string>()) : FloorSide::LOWER;
+    floorConfig.params.floorSide = floorJson.contains("side") ? parseFloorSide(floorJson.at("side").get<std::string>()) : FloorSide::KEEP_ABOVE;
     floorConfig.params.floorKappa = floorJson.at("kappa").get<double>();
     if (!std::isfinite(floorConfig.params.floorKappa))
       throwConfigError("`floors[].kappa` must be finite.");

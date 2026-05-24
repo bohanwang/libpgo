@@ -16,7 +16,7 @@
 
 namespace pgo {
 namespace Contact {
-namespace CIPC {
+namespace IPC {
 using namespace pgo::EigenSupport;
 
 static V3d vtx(ConstRefVecXd x, int i)
@@ -299,6 +299,6 @@ void computeSelfAll(
   hess.setFromTriplets(triplets.begin(), triplets.end());
 }
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

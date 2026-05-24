@@ -15,7 +15,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 using namespace broad_phase_detail;
@@ -451,6 +451,6 @@ void buildExternalPairsLineSearchSuperset(
   }
 }
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

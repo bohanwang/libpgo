@@ -13,13 +13,13 @@
 #include <vector>
 
 namespace ES = pgo::EigenSupport;
-using pgo::Contact::CIPC::ExternalEEPair;
-using pgo::Contact::CIPC::ExternalPairSet;
-using pgo::Contact::CIPC::ExternalPTPair;
-using pgo::Contact::CIPC::ExternalTPPair;
-using pgo::Contact::CIPC::ObstacleSurface;
-using pgo::Contact::CIPC::SurfaceIPCCore;
-using pgo::Contact::CIPC::SurfaceIPCTopology;
+using pgo::Contact::IPC::ExternalEEPair;
+using pgo::Contact::IPC::ExternalPairSet;
+using pgo::Contact::IPC::ExternalPTPair;
+using pgo::Contact::IPC::ExternalTPPair;
+using pgo::Contact::IPC::ObstacleSurface;
+using pgo::Contact::IPC::SurfaceIPCCore;
+using pgo::Contact::IPC::SurfaceIPCTopology;
 
 static ES::VXd flattenRows(const ES::MXd &V)
 {
@@ -130,7 +130,7 @@ TEST(SurfaceIPCExternalBroadPhaseGTest, BuilderMatchesSurfaceIPCCoreExternalPair
 
   auto makeObs = [&]() {
     ObstacleSurface o(obsV, obsF,
-      pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
+      pgo::Contact::IPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
     o.update(0.0);
     return o;
   };
@@ -179,7 +179,7 @@ TEST(SurfaceIPCExternalBroadPhaseGTest, MovingObstacleProducesGoldenPairsAndWeig
 
   ObstacleSurface obs(
     obsV, obsF,
-    pgo::Contact::CIPC::makeLinearTrajectorySampler(flattenRows(obsV), ES::V3d(0.0, 0.0, -0.15)));
+    pgo::Contact::IPC::makeLinearTrajectorySampler(flattenRows(obsV), ES::V3d(0.0, 0.0, -0.15)));
   obs.setObjectId(7);
   obs.update(1.0);
 
@@ -232,7 +232,7 @@ TEST(SurfaceIPCExternalBroadPhaseGTest, ExternalEEDoesNotUseCoplanarInteriorObst
   const ES::VXd obsRest = flattenRows(obsV);
   ObstacleSurface obs(
     obsV, obsF,
-    pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
+    pgo::Contact::IPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
   obs.setObjectId(0);
   obs.update(0.0);
 
@@ -272,7 +272,7 @@ TEST(SurfaceIPCExternalBroadPhaseGTest, LineSearchSupersetContainsExactExternalP
   const ES::VXd obsRest = flattenRows(obsV);
   ObstacleSurface obs(
     obsV, obsF,
-    pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
+    pgo::Contact::IPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
   obs.setObjectId(3);
   obs.update(0.0);
 
@@ -312,7 +312,7 @@ TEST(SurfaceIPCExternalBroadPhaseGTest, ObstaclePoseCacheTracksSurfaceBounds)
   auto [obsV, obsF] = makeSmallBoxObstacle();
   ObstacleSurface obs(
     obsV, obsF,
-    pgo::Contact::CIPC::makeLinearTrajectorySampler(flattenRows(obsV), ES::V3d(1.0, 2.0, 3.0)));
+    pgo::Contact::IPC::makeLinearTrajectorySampler(flattenRows(obsV), ES::V3d(1.0, 2.0, 3.0)));
   obs.update(0.5);
 
   const auto &surfaceBox = obs.cache().surfaceBox;

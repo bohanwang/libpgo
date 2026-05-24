@@ -16,7 +16,7 @@
 
 namespace pgo {
 namespace Contact {
-namespace CIPC {
+namespace IPC {
 using namespace pgo::EigenSupport;
 
 // =========================================================================
@@ -491,6 +491,6 @@ void computeExternalAll(
   }
 }
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

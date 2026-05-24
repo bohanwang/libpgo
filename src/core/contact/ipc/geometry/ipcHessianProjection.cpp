@@ -6,7 +6,7 @@ copyright to Bohan Wang
 
 namespace pgo {
 namespace Contact {
-namespace CIPC {
+namespace IPC {
 using namespace pgo::EigenSupport;
 
 // =========================================================================
@@ -34,6 +34,6 @@ M12d projectToPSD(const M12d &H)
   return es.eigenvectors() * D * es.eigenvectors().transpose();
 }
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

@@ -6,7 +6,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 namespace barrier_kernels
 {
@@ -101,6 +101,6 @@ DynamicEdgeContribution edgeStaticEdge(
   bool needHessian);
 
 }  // namespace barrier_kernels
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

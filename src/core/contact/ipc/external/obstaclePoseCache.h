@@ -9,7 +9,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 // All quantities that are a deterministic function of an obstacle's sampled
@@ -59,6 +59,6 @@ void buildObstaclePoseCache(
   const EigenSupport::MXi &contactEdges,
   ObstaclePoseCache &cache);
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

@@ -4,7 +4,7 @@
 #include "deformationModelAssembler.h"
 #include "deformationModelEnergy.h"
 #include "deformationModelManager.h"
-#include "ipc/embeddedSurfaceFloorPotentialEnergy.h"
+#include "embeddedSurfaceFloorPotentialEnergy.h"
 #include "ipc/embeddedSurfaceIPCPotentialEnergy.h"
 #include "libiglInterface.h"
 #include "multiVertexPullingSoftConstraints.h"
@@ -26,13 +26,13 @@ namespace pgo::RunIPCSim
 {
 namespace ES = pgo::EigenSupport;
 
-Contact::CIPC::SurfaceIPCCore::Parameters makeShellIPCParams(
+Contact::IPC::SurfaceIPCCore::Parameters makeShellIPCParams(
   const pgo::ConfigFileJSON &jconfig, const pgo::Mesh::BoundingBox &surfaceBox)
 {
   constexpr double kShellYoungsModulus = 1000000.0;
   constexpr double kShellThickness = 3e-3;
 
-  Contact::CIPC::SurfaceIPCCore::Parameters ipcParams;
+  Contact::IPC::SurfaceIPCCore::Parameters ipcParams;
   const bool ipcHeuristic = jconfig.exist("ipc-heuristic") ? jconfig.getValue<bool>("ipc-heuristic", 1) : false;
   if (ipcHeuristic) {
     ipcParams.dhat = surfaceBox.sides().norm() * 1e-3;
@@ -82,7 +82,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   const pgo::Mesh::BoundingBox surfaceBox(surfaceMesh.positions());
   const bool ipcHeuristic = jconfig.exist("ipc-heuristic") ? jconfig.getValue<bool>("ipc-heuristic", 1) : false;
   const bool enableMaterialMaxStep = parseEnableMaterialMaxStep(jconfig);
-  const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeShellIPCParams(jconfig, surfaceBox);
+  const Contact::IPC::SurfaceIPCCore::Parameters ipcParams = makeShellIPCParams(jconfig, surfaceBox);
   const std::vector<ParsedFloorConfig> floorConfigs = parseFloorsConfig(jconfig);
 
   std::cout << "runIPCSim phase2 shell IPC parameters: "
@@ -196,7 +196,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   auto obstacles = parseExternalObjects(jconfig, 1.0, &staticFlags);
   const std::size_t obstacleCount = obstacles.size();
   context.collisionHandler =
-    std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(
+    std::make_shared<Contact::IPC::EmbeddedSurfaceIPCPotentialEnergy>(
       V, F, context.surfaceFromSimulationDispMap, ipcParams, std::move(obstacles));
   context.contactBackend = makeIpcContactBackend();
   for (std::size_t i = 0; i < staticFlags.size(); ++i)
@@ -204,7 +204,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
       context.collisionHandler->markObstacleStatic(static_cast<int32_t>(i));
   for (const ParsedFloorConfig &floorConfig : floorConfigs) {
     auto floorEnergy =
-      std::make_shared<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params);
+      std::make_shared<Contact::IPC::EmbeddedSurfaceFloorPotentialEnergy>(V, context.surfaceFromSimulationDispMap, floorConfig.params);
     context.floorPotentialEnergies.push_back(floorEnergy);
     context.floorMotionStates.push_back(floorConfig.motionState);
     context.extraGeneralImplicitForceModels.push_back(

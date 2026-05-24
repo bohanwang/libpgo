@@ -137,8 +137,6 @@ jobs:
           echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
           echo "CMAKE_PREFIX_PATH=$(brew --prefix)" >> "$GITHUB_ENV"
-          echo "CPATH=$(brew --prefix)/include" >> "$GITHUB_ENV"
-          echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
 
       - name: Configure with preset base and tests enabled
         run: |

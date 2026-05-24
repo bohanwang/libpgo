@@ -11,7 +11,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 void SurfaceIPCTopology::setMesh(const EigenSupport::MXd &V, const EigenSupport::MXi &F)
@@ -68,6 +68,6 @@ void SurfaceIPCTopology::setMesh(const EigenSupport::MXd &V, const EigenSupport:
   }
 }
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

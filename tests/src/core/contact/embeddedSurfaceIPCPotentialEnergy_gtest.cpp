@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 
-#include "ipc/CIPC.h"
 #include "ipc/embeddedSurfaceIPCPotentialEnergy.h"
 #include "potentialEnergies.h"
 #include "scopedProfileSection.h"
@@ -17,9 +16,8 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
-using pgo::Contact::CIPC::CIPCPotentialEnergy;
-using pgo::Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy;
-using pgo::Contact::CIPC::SurfaceIPCCore;
+using pgo::Contact::IPC::EmbeddedSurfaceIPCPotentialEnergy;
+using pgo::Contact::IPC::SurfaceIPCCore;
 using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
 using pgo::Contact::CIPCTest::relativeError;
@@ -57,42 +55,6 @@ ES::SpMatD makeIdentityEmbedding(int n3)
   return W;
 }
 }  // namespace
-
-TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, IdentityEmbeddingMatchesDisplacementWrapper)
-{
-  const auto [V, F] = makeTwoTriangleMesh();
-  const ES::VXd rest = flattenPositions(V);
-  ES::VXd u = ES::VXd::Zero(rest.size());
-  for (int vi = 3; vi < 6; ++vi)
-    u[3 * vi + 2] = 0.01;
-
-  ES::VXd du = ES::VXd::Zero(rest.size());
-  du[11] = -0.005;
-  du[14] = -0.004;
-  du[17] = -0.006;
-
-  const auto params = makeParams();
-  CIPCPotentialEnergy wrapper(params.dhat, params.kappa, true, params.eps_ee);
-  wrapper.slackness = params.slackness;
-  wrapper.setMesh(V, F);
-
-  EmbeddedSurfaceIPCPotentialEnergy adapter(V, F, makeIdentityEmbedding(rest.size()), params);
-
-  ES::VXd wrapperGradient(rest.size());
-  wrapper.gradient(u, wrapperGradient);
-  ES::SpMatD wrapperHessian;
-  wrapper.hessianDirect(u, wrapperHessian);
-
-  ES::VXd adapterGradient(adapter.getNumDOFs());
-  adapter.gradient(u, adapterGradient);
-  ES::SpMatD adapterHessian;
-  adapter.hessianDirect(u, adapterHessian);
-
-  EXPECT_NEAR(adapter.func(u), wrapper.func(u), 1e-10);
-  EXPECT_LT(relativeError(adapterGradient, wrapperGradient), 1e-9);
-  EXPECT_LT(relativeError(sparseToDense(adapterHessian), sparseToDense(wrapperHessian)), 1e-8);
-  EXPECT_NEAR(adapter.computeMaxStepLimit(u, du).alpha, wrapper.computeMaxStepLimit(u, du).alpha, 1e-10);
-}
 
 TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, SparseEmbeddingPullsBackGradientAndHessian)
 {

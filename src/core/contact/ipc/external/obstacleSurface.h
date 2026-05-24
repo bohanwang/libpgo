@@ -10,7 +10,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 class ObstacleSurface
@@ -56,6 +56,6 @@ ObstacleSurface::TrajectorySampler makeLinearTrajectorySampler(
   const EigenSupport::V3d &velocity,
   double t0 = 0.0);
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

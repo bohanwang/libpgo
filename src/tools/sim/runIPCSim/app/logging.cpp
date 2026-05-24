@@ -70,7 +70,7 @@ void RunIPCSimRunScope::logProfileSummaryIfEnabled() const
 
 void logRunIPCSimMaxStepSummary(
   const std::shared_ptr<pgo::SolidDeformationModel::DeformationModelEnergy> &elasticEnergy,
-  const std::shared_ptr<pgo::Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy> &collisionHandler,
+  const std::shared_ptr<pgo::Contact::IPC::EmbeddedSurfaceIPCPotentialEnergy> &collisionHandler,
   const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator)
 {
   auto logger = pgo::Logging::lgr();

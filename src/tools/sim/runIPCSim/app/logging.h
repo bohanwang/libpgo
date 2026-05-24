@@ -6,7 +6,7 @@ namespace pgo
 {
 class ConfigFileJSON;
 
-namespace Contact::CIPC
+namespace Contact::IPC
 {
 class EmbeddedSurfaceIPCPotentialEnergy;
 }
@@ -54,6 +54,6 @@ private:
 
 void logRunIPCSimMaxStepSummary(
   const std::shared_ptr<pgo::SolidDeformationModel::DeformationModelEnergy> &elasticEnergy,
-  const std::shared_ptr<pgo::Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy> &collisionHandler,
+  const std::shared_ptr<pgo::Contact::IPC::EmbeddedSurfaceIPCPotentialEnergy> &collisionHandler,
   const std::shared_ptr<pgo::Simulation::ImplicitBackwardEulerTimeIntegrator> &integrator);
 }  // namespace pgo::RunIPCSim

@@ -12,7 +12,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 enum class FloorAxis : int
@@ -23,16 +23,19 @@ enum class FloorAxis : int
   Z = 2
 };
 
-enum class FloorSide : int
+// Which side of the floor plane the surface is constrained to. The plane sits
+// at floorHeight along floorAxis; the penalty activates once a vertex crosses to
+// the forbidden side.
+enum class FloorSide
 {
-  LOWER = 1,
-  UPPER = -1
+  KEEP_ABOVE,  // surface must stay at or above floorHeight (floor / ground)
+  KEEP_BELOW,  // surface must stay at or below floorHeight (ceiling)
 };
 
 struct FloorPenaltyParameters
 {
   FloorAxis floorAxis = FloorAxis::INVALID;
-  FloorSide floorSide = FloorSide::LOWER;
+  FloorSide floorSide = FloorSide::KEEP_ABOVE;
   double floorHeight = std::numeric_limits<double>::quiet_NaN();
   double floorKappa = std::numeric_limits<double>::quiet_NaN();
 };
@@ -61,6 +64,6 @@ private:
   FloorPenaltyParameters params_;
 };
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

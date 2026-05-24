@@ -193,7 +193,7 @@ void ImplicitBackwardEulerTimeIntegrator::updateD()
   memset(D.valuePtr(), 0, sizeof(double) * D.nonZeros());
 
   // Damping is only supported for energies with fixed hessian topology.
-  // Non-fixed-topology energies (e.g. CIPC contact) are skipped here.
+  // Non-fixed-topology energies (e.g. IPC contact) are skipped here.
   for (size_t i = 0; i < implicitModelsAll.size(); i++) {
     if (!implicitModelsAll[i]->isHessianTopologyFixed())
       continue;

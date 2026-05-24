@@ -10,7 +10,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 double computeExternalEnergy(
@@ -53,6 +53,6 @@ void computeExternalAll(
   EigenSupport::VXd &grad,
   EigenSupport::SpMatD &hess);
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

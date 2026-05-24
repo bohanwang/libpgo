@@ -12,6 +12,6 @@ class ConfigFileJSON;
 
 namespace pgo::RunIPCSim
 {
-std::vector<Contact::CIPC::ObstacleSurface> parseExternalObjects(
+std::vector<Contact::IPC::ObstacleSurface> parseExternalObjects(
   const pgo::ConfigFileJSON &jconfig, double scale, std::vector<bool> *outStaticFlags = nullptr);
 }  // namespace pgo::RunIPCSim

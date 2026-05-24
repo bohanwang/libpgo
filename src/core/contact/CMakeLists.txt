@@ -6,9 +6,8 @@ set(CONTACT_HEADERS
   legacy_penalty/triangleMeshExternalContactHandler.h
   legacy_penalty/triangleMeshSelfContactDetection.h
   legacy_penalty/triangleMeshSelfContactHandler.h
-  ipc/CIPC.h
-  ipc/mappedSurfacePotentialEnergy.h
-  ipc/embeddedSurfaceFloorPotentialEnergy.h
+  mappedSurfacePotentialEnergy.h
+  embeddedSurfaceFloorPotentialEnergy.h
   ipc/embeddedSurfaceIPCPotentialEnergy.h
   ipc/broadPhase/spatialHashGrid.h
   ipc/broadPhase/surfaceIPCBroadPhase.h
@@ -37,9 +36,8 @@ set(CONTACT_SOURCES
   legacy_penalty/triangleMeshExternalContactHandler.cpp
   legacy_penalty/triangleMeshSelfContactDetection.cpp
   legacy_penalty/triangleMeshSelfContactHandler.cpp
-  ipc/CIPC.cpp
-  ipc/mappedSurfacePotentialEnergy.cpp
-  ipc/embeddedSurfaceFloorPotentialEnergy.cpp
+  mappedSurfacePotentialEnergy.cpp
+  embeddedSurfaceFloorPotentialEnergy.cpp
   ipc/embeddedSurfaceIPCPotentialEnergy.cpp
   ipc/broadPhase/spatialHashGrid.cpp
   ipc/broadPhase/surfaceIPCBroadPhase.cpp

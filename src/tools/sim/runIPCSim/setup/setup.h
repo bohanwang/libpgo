@@ -31,7 +31,7 @@ class PotentialEnergy;
 
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 class EmbeddedSurfaceFloorPotentialEnergy;
 class EmbeddedSurfaceIPCPotentialEnergy;
@@ -66,9 +66,9 @@ struct IpcSimulationContext
   std::vector<EigenSupport::VXd> pullingTargetRests;
   pgo::Mesh::TriMeshGeo surfaceMesh;
   std::shared_ptr<RunIPCSimContactBackend> contactBackend;
-  std::shared_ptr<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy> collisionHandler;
+  std::shared_ptr<Contact::IPC::EmbeddedSurfaceIPCPotentialEnergy> collisionHandler;
   std::vector<std::shared_ptr<NonlinearOptimization::PotentialEnergy>> extraGeneralImplicitForceModels;
-  std::vector<std::shared_ptr<Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy>> floorPotentialEnergies;
+  std::vector<std::shared_ptr<Contact::IPC::EmbeddedSurfaceFloorPotentialEnergy>> floorPotentialEnergies;
   std::vector<IpcFloorMotionState> floorMotionStates;
   bool surfacePressureForceEnabled = false;
   int surfacePressureRampSteps = 1;

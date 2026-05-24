@@ -11,7 +11,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 void buildObstaclePoseCache(
@@ -96,6 +96,6 @@ void buildObstaclePoseCache(
   cache.edgeHash.build(cache.edgeBoxes);
 }
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

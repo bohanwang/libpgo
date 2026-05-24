@@ -17,7 +17,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 namespace broad_phase_detail
 {
@@ -196,6 +196,6 @@ inline EigenSupport::V3d obsVtx(const EigenSupport::VXd &pos, int i)
 }
 
 }  // namespace broad_phase_detail
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

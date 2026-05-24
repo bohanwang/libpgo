@@ -9,7 +9,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 struct SurfaceIPCActiveSet
@@ -31,6 +31,6 @@ struct SurfaceIPCActiveSet
   }
 };
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

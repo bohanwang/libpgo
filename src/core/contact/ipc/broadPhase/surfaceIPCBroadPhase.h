@@ -11,7 +11,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 void buildSelfPairs(
@@ -42,6 +42,6 @@ void buildExternalPairsLineSearchSuperset(
   double dhatExternal,
   ExternalPairSet &pairs);
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

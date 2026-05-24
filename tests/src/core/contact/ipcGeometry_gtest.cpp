@@ -8,10 +8,10 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
-namespace barrier = pgo::Contact::CIPC::barrier;
-namespace ccd = pgo::Contact::CIPC::ccd;
-namespace distance = pgo::Contact::CIPC::distance;
-using pgo::Contact::CIPC::projectToPSD;
+namespace barrier = pgo::Contact::IPC::barrier;
+namespace ccd = pgo::Contact::IPC::ccd;
+namespace distance = pgo::Contact::IPC::distance;
+using pgo::Contact::IPC::projectToPSD;
 }  // namespace
 
 TEST(IPCGeometryGTest, BarrierMatchesFiniteDifferenceDerivatives)
@@ -37,7 +37,7 @@ TEST(IPCGeometryGTest, PointTriangleDistanceUsesFaceDistanceForInteriorProjectio
   const ES::V3d t2(0.0, 1.0, 0.0);
 
   EXPECT_NEAR(distance::computePTSqDist(p, t0, t1, t2), 0.01, 1e-14);
-  EXPECT_EQ(distance::classifyPT(p, t0, t1, t2), pgo::Contact::CIPC::PTDistType::PT);
+  EXPECT_EQ(distance::classifyPT(p, t0, t1, t2), pgo::Contact::IPC::PTDistType::PT);
 }
 
 TEST(IPCGeometryGTest, PointTriangleCCDDetectsCrossing)

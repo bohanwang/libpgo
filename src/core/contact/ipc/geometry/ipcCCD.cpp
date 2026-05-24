@@ -12,7 +12,7 @@ copyright to Bohan Wang
 
 namespace pgo {
 namespace Contact {
-namespace CIPC {
+namespace IPC {
 // =========================================================================
 //  CCD — Additive Continuous Collision Detection (ACCD)
 //
@@ -202,6 +202,6 @@ double edgeEdgeCCD(const V3d &ea0, const V3d &ea1,
 
 }  // namespace ccd
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

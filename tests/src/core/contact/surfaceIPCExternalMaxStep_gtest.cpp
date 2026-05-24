@@ -9,9 +9,9 @@
 #include <vector>
 
 namespace ES = pgo::EigenSupport;
-using pgo::Contact::CIPC::ObstacleSurface;
-using pgo::Contact::CIPC::SurfaceIPCCore;
-using pgo::Contact::CIPC::SurfaceIPCTopology;
+using pgo::Contact::IPC::ObstacleSurface;
+using pgo::Contact::IPC::SurfaceIPCCore;
+using pgo::Contact::IPC::SurfaceIPCTopology;
 
 // Dynamic mesh moves into a fixed-pose obstacle: external max-step
 // must clamp alpha < 1 and match SurfaceIPCCore's contribution exactly.
@@ -43,7 +43,7 @@ TEST(SurfaceIPCExternalMaxStepGTest, HelperMatchesSurfaceIPCCoreExternalContribu
   // Sampler is stationary; obstacle stays at its rest pose.
   auto makeObs = [&]() {
     ObstacleSurface o(obsV, obsF,
-      pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
+      pgo::Contact::IPC::makeLinearTrajectorySampler(obsRest, ES::V3d::Zero()));
     o.update(0.0);
     return o;
   };
@@ -115,7 +115,7 @@ TEST(SurfaceIPCExternalMaxStepGTest, ZeroDynamicDisplacementReturnsUnitAlphaEven
   // Obstacle velocity drives it from y=0.5 toward y=-0.5 over a unit time;
   // the sampler is non-trivial but obstacle motion is invisible to max-step.
   ObstacleSurface obs(obsV, obsF,
-    pgo::Contact::CIPC::makeLinearTrajectorySampler(obsRest, ES::V3d(0.0, -1.0, 0.0)));
+    pgo::Contact::IPC::makeLinearTrajectorySampler(obsRest, ES::V3d(0.0, -1.0, 0.0)));
   obs.setObjectId(0);
   obs.update(1.0);
 
