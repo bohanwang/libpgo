@@ -114,7 +114,7 @@ TEST(DeformationModelFactoryGTest, MakeSimulationMeshReturnsSharedOwnership)
   pgo::Logging::init();
 
   pgo::VolumetricMeshes::TetMesh tetMesh(kTorusVegPath);
-  std::shared_ptr<SimulationMesh> mesh = makeSimulationMesh(tetMesh);
+  auto mesh = makeSimulationMesh(tetMesh);
   ASSERT_NE(mesh, nullptr);
   EXPECT_GT(mesh->getNumVertices(), 0);
   EXPECT_GT(mesh->getNumElements(), 0);

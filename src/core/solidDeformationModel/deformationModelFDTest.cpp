@@ -44,7 +44,7 @@ int SolidDeformationModel::fdTestTetMesh(const char *tetMeshFilename, int numTes
   SPDLOG_LOGGER_INFO(Logging::lgr(), "Loading mesh: {} ...", tetMeshFilename);
 
   VolumetricMeshes::TetMesh tetMesh(tetMeshFilename);
-  std::shared_ptr<SimulationMesh> mesh(loadTetMesh(&tetMesh));
+  auto mesh = loadTetMesh(&tetMesh);
   if (mesh == nullptr)
     return 1;
 
@@ -386,7 +386,7 @@ int SolidDeformationModel::fdTestShellMesh(const char *surfaceMeshFilename, int 
 
   SolidDeformationModel::SimulationMeshENuhMaterial mat(1e5, 0.4, 1e-3);
 
-  std::shared_ptr<SimulationMesh> mesh(SolidDeformationModel::loadShellMesh(surfaceMesh, &mat));
+  auto mesh = SolidDeformationModel::loadShellMesh(surfaceMesh, &mat);
   if (mesh == nullptr) {
     return 1;
   }
