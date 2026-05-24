@@ -107,6 +107,13 @@ protected:
   double updateDampingScale(double lambdaScale, double gradMaxNorm, double gradMaxNormLast) const;
   SolveStatus resolveFpLimitFallback(SolveStatus failStatus, double gradMaxNorm, double lambda0, double epsilon);
   void makeLinearSolver(const EigenSupport::SpMatD &A);
+  // Per-subiteration step strategies. applyLineSearchStep returns true when the
+  // loop should stop (status/completedIterations are set in that case).
+  bool trackBestIterate(double gradMaxNorm);
+  bool applyLineSearchStep(const IterationState &state, double lambda0, double epsilon,
+    int verbose, int printGap, int iter, SolveStatus &status, int &completedIterations);
+  void applyBestIterateStep(int verbose, int printGap, int iter);
+  void applyStaticDampingStep(double currentEnergy, int verbose, int printGap, int iter);
 
   PotentialEnergy_const_p energy;
   SolverParam solverParam;
