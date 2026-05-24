@@ -41,6 +41,7 @@ set(SOLID_DEFORMATION_MODEL_HEADERS
 
   deformationModelEnergy.h
   deformationModelAssembler.h
+  deformationModelFactory.h
   hessianMatrixHandle.h
 
   simulationMesh.h
@@ -92,6 +93,7 @@ set(SOLID_DEFORMATION_MODEL_SOURCES
 
   deformationModelEnergy.cpp
   deformationModelAssembler.cpp
+  deformationModelFactory.cpp
 
   simulationMesh.cpp
   deformationModelFDTest.cpp
