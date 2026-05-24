@@ -81,6 +81,131 @@ inline double dura(const hclock::time_point &t1, const hclock::time_point &t2)
   return std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1e6;
 }
 
+void NewtonSolver::StepStrategy::finalize(SolveContext &ctx)
+{
+  Eigen::Map<ES::VXd>(ctx.xOut, s.energy->getNumDOFs()) = s.x;
+}
+
+// Standard damped-Newton with line search; accepts a fraction of the Newton step.
+class NewtonSolver::LineSearchStrategy : public NewtonSolver::StepStrategy
+{
+public:
+  explicit LineSearchStrategy(NewtonSolver &solver): StepStrategy(solver) {}
+
+  bool takeStep(SolveContext &ctx) override
+  {
+    const double eng = ctx.state.energy;
+    const double gradMaxNorm = ctx.state.gradMaxNorm;
+
+    const StepAcceptance accepted = s.runLineSearchStep(eng, ctx.verbose, ctx.printGap, ctx.iter);
+    if (accepted.nonFinite()) {
+      ctx.status = SolveStatus::NonFinite;
+      ctx.completedIterations = ctx.iter + 1;
+      return true;
+    }
+
+    if (accepted.acceptedEnergy > eng) {
+      // Loose relative fallback: if line search can't find descent but Newton already
+      // reduced the gradient by 4+ orders of magnitude from the initial state, treat
+      // this as converged-at-FP-limit rather than failure.
+      ctx.status = s.resolveFpLimitFallback(SolveStatus::LineSearchFailed, gradMaxNorm, ctx.lambda0, ctx.epsilon);
+      ctx.completedIterations = ctx.iter + 1;
+      if (ctx.verbose >= 1) {
+        std::cout << "    Iter=" << ctx.iter << "; line search failed; ||grad||_max=" << gradMaxNorm
+                  << " (lambda0=" << ctx.lambda0 << ", looseRel=" << ctx.lambda0 * kLooseRelFactor << ")"
+                  << "; status=" << solveStatusToString(ctx.status) << "." << std::endl;
+      }
+      return true;
+    }
+
+    s.x += s.deltax * accepted.lineSearchAlpha;
+
+    const double stepSize = accepted.acceptedStepMaxNorm;
+    if (stepSize < kStepTooSmallEps) {
+      // Same loose relative fallback as the line-search-failed branch above.
+      ctx.status = s.resolveFpLimitFallback(SolveStatus::StepTooSmall, gradMaxNorm, ctx.lambda0, ctx.epsilon);
+      ctx.completedIterations = ctx.iter + 1;
+      if (ctx.verbose >= 1) {
+        std::cout << "    Iter=" << ctx.iter << "; dx = " << stepSize
+                  << "; dx too small; ||grad||_max=" << gradMaxNorm
+                  << " (lambda0=" << ctx.lambda0 << ", looseRel=" << ctx.lambda0 * kLooseRelFactor << ")"
+                  << "; status=" << solveStatusToString(ctx.status) << "." << std::endl;
+      }
+      return true;
+    }
+
+    return false;
+  }
+};
+
+// Shared lifecycle for the fixed-step modes: track the lowest-gradient iterate and
+// return that iterate at the end (optionally stopping once the gradient increases).
+class NewtonSolver::HistoryTrackingStrategy : public NewtonSolver::StepStrategy
+{
+public:
+  explicit HistoryTrackingStrategy(NewtonSolver &solver): StepStrategy(solver) {}
+
+  void begin(SolveContext &) override { s.historyGradNormMin = kHistoryGradNormInit; }
+
+  bool beforeStep(SolveContext &ctx) override
+  {
+    const double gradMaxNorm = ctx.state.gradMaxNorm;
+    if (gradMaxNorm < s.historyGradNormMin) {
+      s.historyx.noalias() = s.x;
+      s.historyGradNormMin = gradMaxNorm;
+      return false;
+    }
+    return s.solverParam.stopAfterIncrease != 0;
+  }
+
+  void finalize(SolveContext &ctx) override
+  {
+    if (s.historyGradNormMin < ctx.epsilon)
+      ctx.status = SolveStatus::Converged;
+    if (ctx.verbose >= 1)
+      std::cout << "        Final ||grad||=" << s.historyGradNormMin << std::endl;
+    Eigen::Map<ES::VXd>(ctx.xOut, s.energy->getNumDOFs()) = s.historyx;
+  }
+};
+
+// Full Newton step each iteration, recomputing the gradient afterwards.
+class NewtonSolver::SubiterationOneStrategy : public NewtonSolver::HistoryTrackingStrategy
+{
+public:
+  explicit SubiterationOneStrategy(NewtonSolver &solver): HistoryTrackingStrategy(solver) {}
+
+  bool takeStep(SolveContext &ctx) override
+  {
+    s.x += s.deltax;
+    s.historyx.noalias() = s.x;
+
+    memset(s.grad.data(), 0, sizeof(double) * s.grad.size());
+    s.energy->gradient(s.x, s.grad);
+    s.filterVector(s.grad);
+
+    s.historyGradNormMin = s.grad.norm();
+
+    if (ctx.verbose >= 2 && ctx.iter % ctx.printGap == 0)
+      std::cout << "    f=" << s.energy->func(s.x) << std::endl;
+    return false;
+  }
+};
+
+// Fixed fraction of the Newton step each iteration.
+class NewtonSolver::StaticDampingStrategy : public NewtonSolver::HistoryTrackingStrategy
+{
+public:
+  explicit StaticDampingStrategy(NewtonSolver &solver): HistoryTrackingStrategy(solver) {}
+
+  bool takeStep(SolveContext &ctx) override
+  {
+    if (ctx.verbose >= 2 && ctx.iter % ctx.printGap == 0)
+      std::cout << "        E= " << ctx.state.energy << "; ||grad||_max=" << s.grad.cwiseAbs().maxCoeff() << "; ||grad||=" << s.grad.norm() << std::endl;
+    s.x += s.deltax * s.solverParam.alpha;
+    return false;
+  }
+};
+
 NewtonSolver::NewtonSolver(const double *x_, SolverParam sp, PotentialEnergy_const_p energy_, const std::vector<int> &fixedDOFs_, const double *fixedValues_):
   energy(energy_), solverParam(sp)
 {
@@ -113,6 +238,19 @@ NewtonSolver::NewtonSolver(const double *x_, SolverParam sp, PotentialEnergy_con
     };
 
     lineSearchHandle->nativeLineSearch = std::make_shared<LineSearch>(n3, evalFunc);
+  }
+
+  switch (solverParam.sst) {
+  case SST_SUBITERATION_ONE:
+    stepStrategy = std::make_unique<SubiterationOneStrategy>(*this);
+    break;
+  case SST_SUBITERATION_STATIC_DAMPING:
+    stepStrategy = std::make_unique<StaticDampingStrategy>(*this);
+    break;
+  case SST_SUBITERATION_LINE_SEARCH:
+  default:
+    stepStrategy = std::make_unique<LineSearchStrategy>(*this);
+    break;
   }
 }
 
@@ -166,143 +304,110 @@ void NewtonSolver::makeLinearSolver(const ES::SpMatD &A)
 SolverResult NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
 {
   hclock::time_point t1 = hclock::now();
-  SolveStatus status = SolveStatus::MaxIterations;
-  int completedIterations = 0;
   solveDiagnostics.reset();
 
   x.noalias() = Eigen::Map<ES::VXd>(x_, energy->getNumDOFs());
 
-  if (solverParam.sst == SST_SUBITERATION_ONE || solverParam.sst == SST_SUBITERATION_STATIC_DAMPING) {
-    historyGradNormMin = kHistoryGradNormInit;
-  }
+  SolveContext ctx;
+  ctx.xOut = x_;
+  ctx.epsilon = epsilon;
+  ctx.verbose = verbose;
+  ctx.printGap = (verbose == 3) ? 1 : 10;
 
+  stepStrategy->begin(ctx);
   applyFixedValues();
 
-  int printGap = 10;
-  if (verbose == 2) {
-    printGap = 10;
-  }
-  else if (verbose == 3) {
-    printGap = 1;
-  }
-
-  int iter = 0;
-  double lambdaScale = 1.0;
-  double lambda0 = 1.0;
-  bool hasInitialGradNorm = false;
-  double gradMaxNormLast = 0.0;
-  for (; iter < numIter; iter++) {
-    if (verbose >= 2 && iter % printGap == 0)
-      std::cout << "    Iter=" << iter << std::endl;
+  for (ctx.iter = 0; ctx.iter < numIter; ctx.iter++) {
+    if (verbose >= 2 && ctx.iter % ctx.printGap == 0)
+      std::cout << "    Iter=" << ctx.iter << std::endl;
 
     // we solve f(x_i) + K(x_i) deltax = 0
-    const IterationState state = evaluateCurrentState(iter, epsilon, lambda0, hasInitialGradNorm);
-    if (state.nonFiniteEnergy) {
-      status = SolveStatus::NonFinite;
+    ctx.state = evaluateCurrentState(ctx.iter, epsilon, ctx.lambda0, ctx.hasInitialGradNorm);
+    if (ctx.state.nonFiniteEnergy) {
+      ctx.status = SolveStatus::NonFinite;
       if (verbose >= 1)
-        std::cout << "    Iter=" << iter << "; energy is non-finite; status=" << solveStatusToString(status) << std::endl;
+        std::cout << "    Iter=" << ctx.iter << "; energy is non-finite; status=" << solveStatusToString(ctx.status) << std::endl;
       break;
     }
-    if (state.nonFiniteGradient) {
-      status = SolveStatus::NonFinite;
+    if (ctx.state.nonFiniteGradient) {
+      ctx.status = SolveStatus::NonFinite;
       if (verbose >= 1)
-        std::cout << "    Iter=" << iter << "; gradient is non-finite; status=" << solveStatusToString(status) << std::endl;
+        std::cout << "    Iter=" << ctx.iter << "; gradient is non-finite; status=" << solveStatusToString(ctx.status) << std::endl;
       break;
     }
 
-    const double eng = state.energy;
-    const double gradMaxNorm = state.gradMaxNorm;
-    if (!hasInitialGradNorm) {
-      lambda0 = state.lambda0;
-      gradMaxNormLast = gradMaxNorm;
-      hasInitialGradNorm = true;
+    const double eng = ctx.state.energy;
+    const double gradMaxNorm = ctx.state.gradMaxNorm;
+    if (!ctx.hasInitialGradNorm) {
+      ctx.lambda0 = ctx.state.lambda0;
+      ctx.gradMaxNormLast = gradMaxNorm;
+      ctx.hasInitialGradNorm = true;
     }
 
-    if (verbose >= 2 && iter % printGap == 0)
+    if (verbose >= 2 && ctx.iter % ctx.printGap == 0)
       std::cout << "        E= " << eng << "; ||grad||_max=" << gradMaxNorm << "; ||x||=" << x.norm() << std::endl;
 
     // Convergence test: accept either absolute (||grad||_max < eps) or relative
     // reduction from initial gradient (||grad||_max < lambda0 * relTolFactor).
     // Relative branch handles systems where |E| is large enough that the absolute
     // eps becomes unreachable in double precision (line search saturates at FP floor).
-    if (isConverged(state)) {
-      status = SolveStatus::Converged;
-      completedIterations = iter;
-      solveDiagnostics.recordFinalGradientStats(state.gradNorm, gradMaxNorm);
+    if (isConverged(ctx.state)) {
+      ctx.status = SolveStatus::Converged;
+      ctx.completedIterations = ctx.iter;
+      solveDiagnostics.recordFinalGradientStats(ctx.state.gradNorm, gradMaxNorm);
       if (verbose >= 1) {
-        std::cout << "    Iter=" << iter << "; ||grad||_max=" << gradMaxNorm
-                  << (state.absConverged ? " < eps" : " < lambda0*relTol")
-                  << " (eps=" << epsilon << ", relThreshold=" << state.relThreshold
-                  << "). Done.; status=" << solveStatusToString(status) << std::endl;
+        std::cout << "    Iter=" << ctx.iter << "; ||grad||_max=" << gradMaxNorm
+                  << (ctx.state.absConverged ? " < eps" : " < lambda0*relTol")
+                  << " (eps=" << epsilon << ", relThreshold=" << ctx.state.relThreshold
+                  << "). Done.; status=" << solveStatusToString(ctx.status) << std::endl;
       }
 
       break;
     }
 
-    if (solverParam.sst == SST_SUBITERATION_ONE || solverParam.sst == SST_SUBITERATION_STATIC_DAMPING) {
-      if (trackBestIterate(gradMaxNorm))
-        break;
-    }
+    if (stepStrategy->beforeStep(ctx))
+      break;
 
-    lambdaScale = updateDampingScale(lambdaScale, gradMaxNorm, gradMaxNormLast);
-    gradMaxNormLast = gradMaxNorm;
+    ctx.lambdaScale = updateDampingScale(ctx.lambdaScale, gradMaxNorm, ctx.gradMaxNormLast);
+    ctx.gradMaxNormLast = gradMaxNorm;
 
-    const bool fixedHessianTopology = prepareReducedSystem(lambdaScale, lambda0);
+    const bool fixedHessianTopology = prepareReducedSystem(ctx.lambdaScale, ctx.lambda0);
 
     ensureLinearSolver(fixedHessianTopology);
     if (!solveReducedNewtonDirection(fixedHessianTopology)) {
-      status = SolveStatus::NonFinite;
-      completedIterations = iter + 1;
+      ctx.status = SolveStatus::NonFinite;
+      ctx.completedIterations = ctx.iter + 1;
       if (verbose >= 1)
-        std::cout << "    Iter=" << iter << "; dx is non-finite; status=" << solveStatusToString(status) << std::endl;
+        std::cout << "    Iter=" << ctx.iter << "; dx is non-finite; status=" << solveStatusToString(ctx.status) << std::endl;
       break;
     }
 
-    if (verbose >= 3 && iter % printGap == 0)
+    if (verbose >= 3 && ctx.iter % ctx.printGap == 0)
       std::cout << (A11 * deltaxSmall - rhs).norm() << ' ' << rhs.norm() << std::endl;
 
     if (!expandReducedStep()) {
-      status = SolveStatus::NonFinite;
-      completedIterations = iter + 1;
+      ctx.status = SolveStatus::NonFinite;
+      ctx.completedIterations = ctx.iter + 1;
       if (verbose >= 1)
-        std::cout << "    Iter=" << iter << "; dx is non-finite; status=" << solveStatusToString(status) << std::endl;
+        std::cout << "    Iter=" << ctx.iter << "; dx is non-finite; status=" << solveStatusToString(ctx.status) << std::endl;
       break;
     }
 
     const double rawStepMaxNorm = deltax.cwiseAbs().maxCoeff();
-    if (verbose >= 2 && iter % printGap == 0)
+    if (verbose >= 2 && ctx.iter % ctx.printGap == 0)
       std::cout << "        rawStepMaxNorm=" << rawStepMaxNorm << std::endl;
 
-    // x += alpha delta x
-    if (solverParam.sst == SST_SUBITERATION_LINE_SEARCH) {
-      if (applyLineSearchStep(state, lambda0, epsilon, verbose, printGap, iter, status, completedIterations))
-        break;
-    }
-    else if (solverParam.sst == SST_SUBITERATION_ONE) {
-      applyBestIterateStep(verbose, printGap, iter);
-    }
-    else if (solverParam.sst == SST_SUBITERATION_STATIC_DAMPING) {
-      applyStaticDampingStep(eng, verbose, printGap, iter);
-    }
+    if (stepStrategy->takeStep(ctx))
+      break;
 
     if (stepFunc) {
-      stepFunc(x, iter);
+      stepFunc(x, ctx.iter);
     }
 
-    completedIterations = iter + 1;
+    ctx.completedIterations = ctx.iter + 1;
   }
 
-  if (solverParam.sst == SST_SUBITERATION_ONE || solverParam.sst == SST_SUBITERATION_STATIC_DAMPING) {
-    if (historyGradNormMin < epsilon)
-      status = SolveStatus::Converged;
-
-    if (verbose >= 1)
-      std::cout << "        Final ||grad||=" << historyGradNormMin << std::endl;
-
-    Eigen::Map<ES::VXd>(x_, energy->getNumDOFs()) = historyx;
-  }
-  else
-    Eigen::Map<ES::VXd>(x_, energy->getNumDOFs()) = x;
+  stepStrategy->finalize(ctx);
 
   hclock::time_point t2 = hclock::now();
 
@@ -310,9 +415,9 @@ SolverResult NewtonSolver::solve(double *x_, int numIter, double epsilon, int ve
 
   SPDLOG_LOGGER_INFO(Logging::lgr(), "Newton solve time: {}", timeCost);
   SolverResult result;
-  result.status = status;
-  result.iterations = completedIterations;
-  result.rawStatusCode = static_cast<int>(status);
+  result.status = ctx.status;
+  result.iterations = ctx.completedIterations;
+  result.rawStatusCode = static_cast<int>(ctx.status);
   result.diagnostics = solveDiagnostics;
   if (solveDiagnostics.hasFinalGradientStats) {
     result.hasFinalGradientStats = true;
@@ -320,85 +425,6 @@ SolverResult NewtonSolver::solve(double *x_, int numIter, double epsilon, int ve
     result.finalGradientMaxNorm = solveDiagnostics.finalGradientMaxNorm;
   }
   return result;
-}
-
-bool NewtonSolver::trackBestIterate(double gradMaxNorm)
-{
-  if (gradMaxNorm < historyGradNormMin) {
-    historyx.noalias() = x;
-    historyGradNormMin = gradMaxNorm;
-    return false;
-  }
-  return solverParam.stopAfterIncrease != 0;
-}
-
-bool NewtonSolver::applyLineSearchStep(const IterationState &state, double lambda0, double epsilon,
-  int verbose, int printGap, int iter, SolveStatus &status, int &completedIterations)
-{
-  const double eng = state.energy;
-  const double gradMaxNorm = state.gradMaxNorm;
-
-  const StepAcceptance accepted = runLineSearchStep(eng, verbose, printGap, iter);
-  if (accepted.nonFinite()) {
-    status = SolveStatus::NonFinite;
-    completedIterations = iter + 1;
-    return true;
-  }
-
-  if (accepted.acceptedEnergy > eng) {
-    // Loose relative fallback: if line search can't find descent but Newton already
-    // reduced the gradient by 4+ orders of magnitude from the initial state, treat
-    // this as converged-at-FP-limit rather than failure.
-    status = resolveFpLimitFallback(SolveStatus::LineSearchFailed, gradMaxNorm, lambda0, epsilon);
-    completedIterations = iter + 1;
-    if (verbose >= 1) {
-      std::cout << "    Iter=" << iter << "; line search failed; ||grad||_max=" << gradMaxNorm
-                << " (lambda0=" << lambda0 << ", looseRel=" << lambda0 * kLooseRelFactor << ")"
-                << "; status=" << solveStatusToString(status) << "." << std::endl;
-    }
-    return true;
-  }
-
-  x += deltax * accepted.lineSearchAlpha;
-
-  const double stepSize = accepted.acceptedStepMaxNorm;
-  if (stepSize < kStepTooSmallEps) {
-    // Same loose relative fallback as the line-search-failed branch above.
-    status = resolveFpLimitFallback(SolveStatus::StepTooSmall, gradMaxNorm, lambda0, epsilon);
-    completedIterations = iter + 1;
-    if (verbose >= 1) {
-      std::cout << "    Iter=" << iter << "; dx = " << stepSize
-                << "; dx too small; ||grad||_max=" << gradMaxNorm
-                << " (lambda0=" << lambda0 << ", looseRel=" << lambda0 * kLooseRelFactor << ")"
-                << "; status=" << solveStatusToString(status) << "." << std::endl;
-    }
-    return true;
-  }
-
-  return false;
-}
-
-void NewtonSolver::applyBestIterateStep(int verbose, int printGap, int iter)
-{
-  x += deltax;
-  historyx.noalias() = x;
-
-  memset(grad.data(), 0, sizeof(double) * grad.size());
-  energy->gradient(x, grad);
-  filterVector(grad);
-
-  historyGradNormMin = grad.norm();
-
-  if (verbose >= 2 && iter % printGap == 0)
-    std::cout << "    f=" << energy->func(x) << std::endl;
-}
-
-void NewtonSolver::applyStaticDampingStep(double currentEnergy, int verbose, int printGap, int iter)
-{
-  if (verbose >= 2 && iter % printGap == 0)
-    std::cout << "        E= " << currentEnergy << "; ||grad||_max=" << grad.cwiseAbs().maxCoeff() << "; ||grad||=" << grad.norm() << std::endl;
-
-  x += deltax * solverParam.alpha;
 }
 
 void NewtonSolver::filterVector(ES::VXd &v)

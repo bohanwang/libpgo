@@ -94,6 +94,45 @@ protected:
     bool nonFinite() const { return nonFiniteReason != NonFiniteReason::None; }
   };
 
+  // Mutable per-solve state shared between solve() and the step strategy.
+  struct SolveContext
+  {
+    IterationState state;
+    double *xOut = nullptr;
+    double lambda0 = 1.0;
+    double lambdaScale = 1.0;
+    double gradMaxNormLast = 0.0;
+    bool hasInitialGradNorm = false;
+    double epsilon = 0.0;
+    int verbose = 0;
+    int printGap = 10;
+    int iter = 0;
+    SolveStatus status = SolveStatus::MaxIterations;
+    int completedIterations = 0;
+  };
+
+  // Per-subiteration step strategy. Each concrete strategy owns one mode's full
+  // lifecycle (begin -> beforeStep -> takeStep -> finalize). begin/beforeStep
+  // default to no-ops; the default finalize writes the working x to xOut.
+  // beforeStep/takeStep return true when the iteration loop should stop.
+  class StepStrategy
+  {
+  public:
+    explicit StepStrategy(NewtonSolver &solver): s(solver) {}
+    virtual ~StepStrategy() = default;
+    virtual void begin(SolveContext &ctx) {}
+    virtual bool beforeStep(SolveContext &ctx) { return false; }
+    virtual bool takeStep(SolveContext &ctx) = 0;
+    virtual void finalize(SolveContext &ctx);
+
+  protected:
+    NewtonSolver &s;
+  };
+  class LineSearchStrategy;
+  class HistoryTrackingStrategy;
+  class SubiterationOneStrategy;
+  class StaticDampingStrategy;
+
   void filterVector(EigenSupport::VXd &v);
   void applyFixedValues();
   IterationState evaluateCurrentState(int iter, double epsilon, double lambda0, bool hasInitialGradNorm);
@@ -107,13 +146,6 @@ protected:
   double updateDampingScale(double lambdaScale, double gradMaxNorm, double gradMaxNormLast) const;
   SolveStatus resolveFpLimitFallback(SolveStatus failStatus, double gradMaxNorm, double lambda0, double epsilon);
   void makeLinearSolver(const EigenSupport::SpMatD &A);
-  // Per-subiteration step strategies. applyLineSearchStep returns true when the
-  // loop should stop (status/completedIterations are set in that case).
-  bool trackBestIterate(double gradMaxNorm);
-  bool applyLineSearchStep(const IterationState &state, double lambda0, double epsilon,
-    int verbose, int printGap, int iter, SolveStatus &status, int &completedIterations);
-  void applyBestIterateStep(int verbose, int printGap, int iter);
-  void applyStaticDampingStep(double currentEnergy, int verbose, int printGap, int iter);
 
   PotentialEnergy_const_p energy;
   SolverParam solverParam;
@@ -141,6 +173,7 @@ protected:
   double historyGradNormMin;
   SolveDiagnostics solveDiagnostics;
 
+  std::unique_ptr<StepStrategy> stepStrategy;
   StepFunc stepFunc;
 };
 }  // namespace NonlinearOptimization
