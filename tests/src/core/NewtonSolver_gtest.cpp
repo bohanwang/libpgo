@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "NewtonSolver.h"
+#include "lineSearchAwareEnergy.h"
 #include "pgoLogging.h"
 #include "solveDiagnostics.h"
 
@@ -14,6 +15,7 @@ namespace ES = pgo::EigenSupport;
 using pgo::NonlinearOptimization::NewtonSolver;
 using pgo::NonlinearOptimization::MaxStepResult;
 using pgo::NonlinearOptimization::PotentialEnergy;
+using pgo::NonlinearOptimization::LineSearchAwareEnergy;
 using pgo::NonlinearOptimization::SolveDiagnostics;
 using pgo::NonlinearOptimization::SolverResult;
 using pgo::NonlinearOptimization::SolveStatus;
@@ -32,7 +34,7 @@ void initializeLogging()
   (void)initialized;
 }
 
-class TestQuadraticEnergy : public PotentialEnergy
+class TestQuadraticEnergy : public PotentialEnergy, public LineSearchAwareEnergy
 {
 public:
   explicit TestQuadraticEnergy(int n, MaxStepResult maxStep = MaxStepResult::unconstrained()): n(n), maxStep(maxStep) {}
@@ -183,7 +185,7 @@ public:
   }
 };
 
-class TestNonFiniteTrialEnergy : public PotentialEnergy
+class TestNonFiniteTrialEnergy : public PotentialEnergy, public LineSearchAwareEnergy
 {
 public:
   double func(ES::ConstRefVecXd x) const override

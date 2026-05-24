@@ -1,8 +1,9 @@
 set(NONLINEAROPTIMIZATION_HEADERS 
   automaticDifferentiation_autodiff.h
 
-  potentialEnergy.h 
-  potentialEnergies.h 
+  potentialEnergy.h
+  potentialEnergies.h
+  lineSearchAwareEnergy.h
   solveDiagnostics.h
   solverResult.h
 

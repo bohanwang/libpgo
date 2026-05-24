@@ -129,7 +129,6 @@ public:
   virtual int isQuadratic() const override { return 0; }
   virtual int hasHessianVector() const override { return 0; }
 
-  virtual MaxStepResult computeMaxStepLimit(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return MaxStepResult::unconstrained(); }
 
 protected:
   const ES::VXd &xVals;

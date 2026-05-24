@@ -2,11 +2,13 @@
 
 #include "EigenSupport.h"
 #include "lineSearch.h"
+#include "lineSearchAwareEnergy.h"
 #include "pgoLogging.h"
 #include "scopedProfileSection.h"
 
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <numeric>
 #include <chrono>
 
@@ -34,17 +36,17 @@ constexpr int kSimpleLineSearchMaxIter = 100;
 class LineSearchScope
 {
 public:
-  LineSearchScope(const PotentialEnergy_const_p &energy, EigenSupport::ConstRefVecXd x,
-    EigenSupport::ConstRefVecXd dx, bool active):
-    energy_(energy), active_(active)
+  LineSearchScope(const LineSearchAwareEnergy *energy, EigenSupport::ConstRefVecXd x,
+    EigenSupport::ConstRefVecXd dx):
+    energy_(energy)
   {
-    if (active_)
+    if (energy_)
       energy_->beginLineSearch(x, dx);
   }
 
   ~LineSearchScope()
   {
-    if (active_)
+    if (energy_)
       energy_->endLineSearch();
   }
 
@@ -52,9 +54,17 @@ public:
   LineSearchScope &operator=(const LineSearchScope &) = delete;
 
 private:
-  const PotentialEnergy_const_p &energy_;
-  bool active_ = false;
+  const LineSearchAwareEnergy *energy_ = nullptr;
 };
+
+// Largest alpha a line-search method may probe. Backtracking and the simple
+// search only shrink from alpha=1; golden/Brent may expand the bracket past 1.
+double lineSearchMethodMaxAlpha(NewtonSolver::LineSearchMethod lsm)
+{
+  return (lsm == NewtonSolver::LSM_BACKTRACK || lsm == NewtonSolver::LSM_SIMPLE)
+    ? 1.0
+    : std::numeric_limits<double>::infinity();
+}
 }  // namespace
 
 namespace pgo::NonlinearOptimization
@@ -522,11 +532,14 @@ NewtonSolver::StepAcceptance NewtonSolver::runLineSearchStep(double currentEnerg
   deltax *= accepted.feasibleAlpha;
 
   {
-    // Backtracking and simple line search only evaluate alpha in [0, 1].
-    // Golden/Brent may expand the bracket past 1, which is outside the IPC
-    // swept active-set superset built for this Newton step.
-    const bool useLineSearchActiveSet = solverParam.lsm == LSM_BACKTRACK || solverParam.lsm == LSM_SIMPLE;
-    LineSearchScope lineSearchScope(energy, x, deltax, useLineSearchActiveSet);
+    // Freeze the energy's line-search state (e.g. IPC's swept active-set superset)
+    // only when the energy advertises the capability AND the chosen method stays
+    // within the energy's valid alpha window. Golden/Brent may expand the bracket
+    // past that window, so they run without the frozen state.
+    const auto *lineSearchAware = dynamic_cast<const LineSearchAwareEnergy *>(energy.get());
+    const bool useFrozenActiveSet = lineSearchAware != nullptr &&
+      lineSearchMethodMaxAlpha(solverParam.lsm) <= lineSearchAware->maxValidLineSearchAlpha();
+    LineSearchScope lineSearchScope(useFrozenActiveSet ? lineSearchAware : nullptr, x, deltax);
 
     lineSearchx.noalias() = x + deltax;
     accepted.acceptedEnergy = energy->func(lineSearchx);

@@ -29,7 +29,6 @@ public:
   virtual int getNumDOFs() const { return (int)allDOFs.size(); }
   virtual int hasHessian() const { return 0; }
 
-  virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd, EigenSupport::ConstRefVecXd) const override { return MaxStepResult::unconstrained(); }
 
   const EigenSupport::V3d &getTgtCoM() const { return m_tgtCoM; }
   const EigenSupport::M3d &getProjMat() const { return m_projMat; }

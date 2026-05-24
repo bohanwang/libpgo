@@ -36,7 +36,6 @@ public:
   virtual void getDOFs(std::vector<int> &dofs) const override { dofs = allDOFs; }
   virtual int getNumDOFs() const override { return (int)allDOFs.size(); }
 
-  virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd, EigenSupport::ConstRefVecXd) const override { return MaxStepResult::unconstrained(); }
 
 protected:
   EigenSupport::V3d computePosition(EigenSupport::ConstRefVecXd x, int vid) const;

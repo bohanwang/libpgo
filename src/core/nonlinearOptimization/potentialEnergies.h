@@ -6,6 +6,7 @@ copyright to USC
 #pragma once
 
 #include "potentialEnergy.h"
+#include "lineSearchAwareEnergy.h"
 
 #include <cstdint>
 #include <memory>
@@ -16,7 +17,7 @@ namespace NonlinearOptimization
 {
 class PotentialEnergiesBuffer;
 
-class PotentialEnergies : public PotentialEnergy
+class PotentialEnergies : public PotentialEnergy, public LineSearchAwareEnergy
 {
 public:
   PotentialEnergies(int n);
