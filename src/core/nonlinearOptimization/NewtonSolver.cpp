@@ -17,6 +17,20 @@ using hclock = std::chrono::high_resolution_clock;
 
 namespace
 {
+constexpr double kRelTolFactor = 1e-5;       // absolute->relative gradient tolerance scale
+constexpr double kLooseRelFactor = 1e-4;     // FP-limit "good enough" relative reduction
+constexpr double kGradSmallThreshold = 1e-4; // below this gradient, drop damping entirely
+constexpr double kLambdaScaleFloor = 1e-8;   // below this damping scale, snap to zero
+constexpr double kDampingDecay = 0.9;        // per-iteration damping decay when gradient is not increasing
+constexpr double kStepTooSmallEps = 1e-15;   // accepted step max-norm below this == stalled
+constexpr double kHistoryGradNormInit = 1e100;
+constexpr double kBacktrackArmijo = 0.0001;
+constexpr double kBacktrackShrink = 0.5;
+constexpr double kBacktrackInitAlpha = 1.0;
+constexpr int kLineSearchMaxIter = 50;
+constexpr int kLineSearchMaxIterDescent = 3; // fewer iters when the full step already decreases energy
+constexpr int kSimpleLineSearchMaxIter = 100;
+
 class LineSearchScope
 {
 public:
@@ -69,7 +83,7 @@ NewtonSolver::NewtonSolver(const double *x_, SolverParam sp, PotentialEnergy_con
   deltax.resize(energy->getNumDOFs());
   lineSearchx.resize(energy->getNumDOFs());
   historyx.resize(energy->getNumDOFs());
-  historyGradNormMin = 1e100;
+  historyGradNormMin = kHistoryGradNormInit;
 
   setFixedDOFs(fixedDOFs_, fixedValues_);
 
@@ -94,10 +108,10 @@ NewtonSolver::NewtonSolver(const double *x_, SolverParam sp, PotentialEnergy_con
 
 void NewtonSolver::setFixedDOFs(const std::vector<int> &fixedDOFs_, const double *fixedValues_)
 {
-  if (fixedDOFs_.size() != 0 && fixedDOFs.size() == fixedDOFs_.size() &&
-    std::memcmp(fixedDOFs.data(), fixedDOFs_.data(), sizeof(int) * fixedDOFs.size()) == 0) {
-  }
-  else {
+  const bool sameAsBefore = fixedDOFs_.size() != 0 && fixedDOFs.size() == fixedDOFs_.size() &&
+    std::memcmp(fixedDOFs.data(), fixedDOFs_.data(), sizeof(int) * fixedDOFs.size()) == 0;
+
+  if (!sameAsBefore) {
     fixedDOFs = fixedDOFs_;
 
     // dofs
@@ -116,22 +130,27 @@ void NewtonSolver::setFixedDOFs(const std::vector<int> &fixedDOFs_, const double
       ES::removeRowsCols(sysFull, fixedDOFs, A11);
       ES::removeRowsCols(sysFull, A11, fixedDOFs, A11Mapping);
 
-#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
-      solver = std::make_shared<ES::EigenMKLPardisoSupport>(A11, ES::EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
-        ES::EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
-      solver->analyze(A11);
-#elif defined(PGO_HAS_ORIG_PARDISO)
-      solver = std::make_shared<ES::EigenOrigPardisoSupport>(A11, ES::EigenOrigPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
-        ES::EigenOrigPardisoSupport::ReorderingType::NESTED_DISSECTION_4, 0, 0, 0, 0, 0, 0);
-      solver->analyze(A11);
-#else
-      solver = std::make_shared<EigenSupport::SymSolver>();
-      solver->analyzePattern(A11);
-#endif
+      makeLinearSolver(A11);
     }
   }
 
   fixedValues = ES::Mp<const ES::VXd>(fixedValues_, fixedDOFs_.size());
+}
+
+void NewtonSolver::makeLinearSolver(const ES::SpMatD &A)
+{
+#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
+  solver = std::make_shared<ES::EigenMKLPardisoSupport>(A, ES::EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
+    ES::EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
+  solver->analyze(A);
+#elif defined(PGO_HAS_ORIG_PARDISO)
+  solver = std::make_shared<ES::EigenOrigPardisoSupport>(A, ES::EigenOrigPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
+    ES::EigenOrigPardisoSupport::ReorderingType::NESTED_DISSECTION_4, 0, 0, 0, 0, 0, 0);
+  solver->analyze(A);
+#else
+  solver = std::make_shared<EigenSupport::SymSolver>();
+  solver->analyzePattern(A);
+#endif
 }
 
 SolverResult NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
@@ -144,7 +163,7 @@ SolverResult NewtonSolver::solve(double *x_, int numIter, double epsilon, int ve
   x.noalias() = Eigen::Map<ES::VXd>(x_, energy->getNumDOFs());
 
   if (solverParam.sst == SST_SUBITERATION_ONE || solverParam.sst == SST_SUBITERATION_STATIC_DAMPING) {
-    historyGradNormMin = 1e100;
+    historyGradNormMin = kHistoryGradNormInit;
   }
 
   applyFixedValues();
@@ -157,7 +176,6 @@ SolverResult NewtonSolver::solve(double *x_, int numIter, double epsilon, int ve
     printGap = 1;
   }
 
-  // double error0 = 0;
   int iter = 0;
   double lambdaScale = 1.0;
   double lambda0 = 1.0;
@@ -223,45 +241,10 @@ SolverResult NewtonSolver::solve(double *x_, int numIter, double epsilon, int ve
       }
     }
 
-    // grad too small, we don't need damping
-    if (gradMaxNorm < 1e-4) {
-      lambdaScale = 0.0;
-    }
-    else {
-      // if lambda too small, we set it to zero
-      if (lambdaScale < 1e-8) {
-        lambdaScale = 0;
-      }
-      else {
-        // if gradient increasing, we increase lambda
-        if (gradMaxNorm > gradMaxNormLast) {
-        }
-        else {
-          // otherwise we decrease lambda
-          lambdaScale *= 0.9;
-        }
-
-        // clamp
-        lambdaScale = std::min(lambdaScale, 1.0);
-      }
-    }
+    lambdaScale = updateDampingScale(lambdaScale, gradMaxNorm, gradMaxNormLast);
     gradMaxNormLast = gradMaxNorm;
 
-    // std::cout << "        Damping lambda=" << lambda << std::endl;
-
     const bool fixedHessianTopology = prepareReducedSystem(lambdaScale, lambda0);
-
-    // std::cout << "      rhs: ";
-    // for (int kk = 0; kk < 10; kk++) {
-    //   std::cout << rhs[kk] << ' ';
-    // }
-    // std::cout << std::endl;
-
-    // std::cout << "      A11: ";
-    // for (int kk = 0; kk < 10; kk++) {
-    //   std::cout << A11.valuePtr()[kk] << ' ';
-    // }
-    // std::cout << std::endl;
 
     ensureLinearSolver(fixedHessianTopology);
     if (!solveReducedNewtonDirection(fixedHessianTopology)) {
@@ -283,22 +266,6 @@ SolverResult NewtonSolver::solve(double *x_, int numIter, double epsilon, int ve
       break;
     }
 
-    // for (int kk = 0; kk < 10; kk++) {
-    //   std::cout << deltax[kk] << ' ';
-    // }
-    // std::cout << std::endl;
-
-    // if (iter == 0)
-    //   error0 = deltax.norm();
-    // else {
-    //   if (deltax.norm() < epsilon) {
-    //     if (verbose >= 1)
-    //       std::cout << "    dir too small." << std::endl;
-
-    //     break;
-    //   }
-    // }
-
     const double rawStepMaxNorm = deltax.cwiseAbs().maxCoeff();
     if (verbose >= 2 && iter % printGap == 0)
       std::cout << "        rawStepMaxNorm=" << rawStepMaxNorm << std::endl;
@@ -316,78 +283,30 @@ SolverResult NewtonSolver::solve(double *x_, int numIter, double epsilon, int ve
         // Loose relative fallback: if line search can't find descent but Newton already
         // reduced the gradient by 4+ orders of magnitude from the initial state, treat
         // this as converged-at-FP-limit rather than failure.
-        constexpr double looseRelFactor = 1e-4;
-        const bool looseRelConverged = looseRelativeConverged(gradMaxNorm, lambda0);
-        status = (gradMaxNorm < epsilon || looseRelConverged) ? SolveStatus::Converged : SolveStatus::LineSearchFailed;
+        status = resolveFpLimitFallback(SolveStatus::LineSearchFailed, gradMaxNorm, lambda0, epsilon);
         completedIterations = iter + 1;
-        if (status == SolveStatus::Converged)
-          solveDiagnostics.recordFinalGradientStats(grad.norm(), gradMaxNorm);
         if (verbose >= 1) {
           std::cout << "    Iter=" << iter << "; line search failed; ||grad||_max=" << gradMaxNorm
-                    << " (lambda0=" << lambda0 << ", looseRel=" << lambda0 * looseRelFactor << ")"
+                    << " (lambda0=" << lambda0 << ", looseRel=" << lambda0 * kLooseRelFactor << ")"
                     << "; status=" << solveStatusToString(status) << ". Times: " << lineSearchFailedTimes << std::endl;
         }
         break;
-
-        // solverParam.addDamping = 1;
-        // if (lineSearchFailedTimes == 0) {
-        //   lambdaScale = 1.0;
-        //   lambda0 = grad.cwiseAbs().maxCoeff();
-        // }
-        // else {
-        //   lambdaScale *= 2.0;
-        // }
-
-        // if (lineSearchFailedTimes++ >= 3) {
-        //   if (verbose >= 1) {
-        //     std::cout << "    Iter=" << iter << "; line search failed too many times. Stop." << std::endl;
-        //   }
-
-        //   break;
-        // }
-        // else {
-        //   continue;
-        // }
       }
 
       x += deltax * accepted.lineSearchAlpha;
 
       const double stepSize = accepted.acceptedStepMaxNorm;
-      if (stepSize < 1e-15) {
+      if (stepSize < kStepTooSmallEps) {
         // Same loose relative fallback as the line-search-failed branch above.
-        constexpr double looseRelFactor = 1e-4;
-        const bool looseRelConverged = looseRelativeConverged(gradMaxNorm, lambda0);
-        status = (gradMaxNorm < epsilon || looseRelConverged) ? SolveStatus::Converged : SolveStatus::StepTooSmall;
+        status = resolveFpLimitFallback(SolveStatus::StepTooSmall, gradMaxNorm, lambda0, epsilon);
         completedIterations = iter + 1;
-        if (status == SolveStatus::Converged)
-          solveDiagnostics.recordFinalGradientStats(grad.norm(), gradMaxNorm);
         if (verbose >= 1) {
           std::cout << "    Iter=" << iter << "; dx = " << stepSize
                     << "; dx too small; ||grad||_max=" << gradMaxNorm
-                    << " (lambda0=" << lambda0 << ", looseRel=" << lambda0 * looseRelFactor << ")"
+                    << " (lambda0=" << lambda0 << ", looseRel=" << lambda0 * kLooseRelFactor << ")"
                     << "; status=" << solveStatusToString(status) << ". Times: " << lineSearchFailedTimes << std::endl;
         }
         break;
-
-        // solverParam.addDamping = 1;
-        // if (lineSearchFailedTimes == 0) {
-        //   lambda0 = grad.cwiseAbs().maxCoeff();
-        //   lambdaScale = 1.0;
-        // }
-        // else {
-        //   lambdaScale *= 2.0;
-        // }
-
-        // if (lineSearchFailedTimes++ >= 3) {
-        //   if (verbose >= 1) {
-        //     std::cout << "    Iter=" << iter << "; line search failed too many times. Stop." << std::endl;
-        //   }
-
-        //   break;
-        // }
-        // else {
-        //   continue;
-        // }
       }
     }
     else if (solverParam.sst == SST_SUBITERATION_ONE) {
@@ -483,8 +402,7 @@ NewtonSolver::IterationState NewtonSolver::evaluateCurrentState(int iter, double
   }
 
   state.lambda0 = hasInitialGradNorm ? lambda0 : state.gradMaxNorm;
-  constexpr double relTolFactor = 1e-5;
-  state.relThreshold = state.lambda0 * relTolFactor;
+  state.relThreshold = state.lambda0 * kRelTolFactor;
   state.absConverged = state.gradMaxNorm < epsilon;
   state.relConverged = state.gradMaxNorm < state.relThreshold;
   return state;
@@ -497,8 +415,30 @@ bool NewtonSolver::isConverged(const IterationState &state) const
 
 bool NewtonSolver::looseRelativeConverged(double gradMaxNorm, double lambda0) const
 {
-  constexpr double looseRelFactor = 1e-4;
-  return gradMaxNorm < lambda0 * looseRelFactor;
+  return gradMaxNorm < lambda0 * kLooseRelFactor;
+}
+
+double NewtonSolver::updateDampingScale(double lambdaScale, double gradMaxNorm, double gradMaxNormLast) const
+{
+  if (gradMaxNorm < kGradSmallThreshold)  // grad too small: drop damping entirely
+    return 0.0;
+  if (lambdaScale < kLambdaScaleFloor)  // damping already negligible: snap to zero
+    return 0.0;
+  // When the gradient is increasing we deliberately leave lambdaScale unchanged;
+  // only decay it once the gradient stops increasing.
+  if (gradMaxNorm <= gradMaxNormLast)
+    lambdaScale *= kDampingDecay;
+  return std::min(lambdaScale, 1.0);
+}
+
+SolveStatus NewtonSolver::resolveFpLimitFallback(SolveStatus failStatus, double gradMaxNorm, double lambda0, double epsilon)
+{
+  const bool converged = gradMaxNorm < epsilon || looseRelativeConverged(gradMaxNorm, lambda0);
+  if (converged) {
+    solveDiagnostics.recordFinalGradientStats(grad.norm(), gradMaxNorm);
+    return SolveStatus::Converged;
+  }
+  return failStatus;
 }
 
 bool NewtonSolver::prepareReducedSystem(double lambdaScale, double lambda0)
@@ -526,18 +466,7 @@ bool NewtonSolver::prepareReducedSystem(double lambdaScale, double lambda0)
 void NewtonSolver::ensureLinearSolver(bool fixedHessianTopology)
 {
   if (!fixedHessianTopology || solver == nullptr) {
-#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
-    solver = std::make_shared<ES::EigenMKLPardisoSupport>(A11, ES::EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
-      ES::EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
-    solver->analyze(A11);
-#elif defined(PGO_HAS_ORIG_PARDISO)
-    solver = std::make_shared<ES::EigenOrigPardisoSupport>(A11, ES::EigenOrigPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
-      ES::EigenOrigPardisoSupport::ReorderingType::NESTED_DISSECTION_4, 0, 0, 0, 0, 0, 0);
-    solver->analyze(A11);
-#else
-    solver = std::make_shared<EigenSupport::SymSolver>();
-    solver->analyzePattern(A11);
-#endif
+    makeLinearSolver(A11);
   }
 }
 
@@ -607,9 +536,9 @@ NewtonSolver::StepAcceptance NewtonSolver::runLineSearchStep(double currentEnerg
         std::cout << "    Iter=" << iter << "; trial energy is non-finite; status=" << solveStatusToString(SolveStatus::NonFinite) << std::endl;
     }
     else {
-      int maxIter = 50;
+      int maxIter = kLineSearchMaxIter;
       if (accepted.acceptedEnergy < currentEnergy) {
-        maxIter = 3;
+        maxIter = kLineSearchMaxIterDescent;
       }
 
       if (solverParam.lsm == LSM_GOLDEN) {
@@ -627,13 +556,13 @@ NewtonSolver::StepAcceptance NewtonSolver::runLineSearchStep(double currentEnerg
       else if (solverParam.lsm == LSM_BACKTRACK) {
         lineSearchHandle->nativeLineSearch->setMaxIterations(maxIter);
         LineSearch::Result ret = lineSearchHandle->nativeLineSearch->backtrackingWithInitialValue(
-          x.data(), deltax.data(), currentEnergy, grad.data(), 0.0001, 0.5, 1.0, accepted.acceptedEnergy);
+          x.data(), deltax.data(), currentEnergy, grad.data(), kBacktrackArmijo, kBacktrackShrink, kBacktrackInitAlpha, accepted.acceptedEnergy);
         accepted.lineSearchAlpha = ret.alpha;
         accepted.acceptedEnergy = ret.f;
       }
       else if (solverParam.lsm == LSM_SIMPLE) {
         accepted.acceptedEnergy = currentEnergy;
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < kSimpleLineSearchMaxIter; i++) {
           lineSearchx.noalias() = x + deltax * accepted.lineSearchAlpha;
           accepted.acceptedEnergy = energy->func(lineSearchx);
           if (!std::isfinite(accepted.acceptedEnergy)) {
@@ -678,6 +607,3 @@ NewtonSolver::StepAcceptance NewtonSolver::runLineSearchStep(double currentEnerg
 
   return accepted;
 }
-
-//
-// OPK_DROP(lineSearchHandle);

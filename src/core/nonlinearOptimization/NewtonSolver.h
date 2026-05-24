@@ -104,6 +104,9 @@ protected:
   bool expandReducedStep();
   StepAcceptance runLineSearchStep(double currentEnergy, int verbose, int printGap, int iter);
   bool looseRelativeConverged(double gradMaxNorm, double lambda0) const;
+  double updateDampingScale(double lambdaScale, double gradMaxNorm, double gradMaxNormLast) const;
+  SolveStatus resolveFpLimitFallback(SolveStatus failStatus, double gradMaxNorm, double lambda0, double epsilon);
+  void makeLinearSolver(const EigenSupport::SpMatD &A);
 
   PotentialEnergy_const_p energy;
   SolverParam solverParam;
