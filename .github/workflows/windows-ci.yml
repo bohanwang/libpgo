@@ -52,9 +52,8 @@ jobs:
             mkl-devel `
             ninja `
             numpy `
-            pip `
+            pytest `
             setuptools `
-            tbb-devel `
             wheel
 
       - name: Build and install Python package
@@ -64,11 +63,10 @@ jobs:
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'mingw' -and $_ -notmatch 'Strawberry' }) -join ';'
           $env:CMAKE_GENERATOR = "Ninja"
           $env:CMAKE_ARGS = "-DCMAKE_PREFIX_PATH=$env:CONDA_PREFIX/Library"
-          python -m pip install --upgrade pip
-          python -m pip install ".[test]"
+          python setup.py build_ext --inplace
 
       - name: Run Python API pytest suite
-        run: pytest -q tests/pypgo
+        run: python -m pytest -q tests/pypgo
 
   cmake-build:
     name: CMake Preset Build and Test
@@ -78,6 +76,9 @@ jobs:
     defaults:
       run:
         shell: pwsh
+
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 3
 
     steps:
       - name: Checkout repository
@@ -104,11 +105,11 @@ jobs:
         run: |
           mamba install -y `
             "cmake>=3.29" `
+            imath `
             mkl-devel `
-            ninja `
-            tbb-devel
+            ninja
 
-      - name: Configure with preset base_win and tests enabled
+      - name: Configure with preset base and tests enabled
         run: |
           # The runner ships mingw/Strawberry gfortran on PATH. Eigen's bundled
           # blas/lapack call enable_language(Fortran OPTIONAL), which still fails
@@ -117,11 +118,11 @@ jobs:
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'mingw' -and $_ -notmatch 'Strawberry' }) -join ';'
           # Defer gtest discovery to test time; running the test exes at build
           # time fails on Windows because their runtime DLLs are not co-located.
-          cmake --preset base_win -G Ninja -DBUILD_TESTING=ON `
+          cmake --preset base -G Ninja -DBUILD_TESTING=ON `
             -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST
 
-      - name: Build with preset base_win
-        run: cmake --build build/base_win
+      - name: Build with preset base
+        run: cmake --build --preset base
 
       - name: Run CTest
         run: |
@@ -130,7 +131,7 @@ jobs:
           # etc.) plus the conda runtime (MKL/TBB/GMP/MPFR) on PATH so the test
           # executables load.
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'mingw' -and $_ -notmatch 'Strawberry' }) -join ';'
-          $dllDirs = (Get-ChildItem -Path build/base_win -Recurse -Filter *.dll |
+          $dllDirs = (Get-ChildItem -Path build/base -Recurse -Filter *.dll |
             Select-Object -ExpandProperty DirectoryName -Unique) -join ';'
           $env:PATH = "$dllDirs;$env:CONDA_PREFIX\Library\bin;$env:PATH"
-          ctest --test-dir build/base_win --output-on-failure
+          ctest --test-dir build/base --output-on-failure

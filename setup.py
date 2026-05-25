@@ -1,22 +1,20 @@
-"""
-modified from pybind11 example
-"""
+"""CMake-backed setuptools entry point for pypgo."""
 
 import os
 import re
+import shlex
 import subprocess
 import sys
+import sysconfig
 import platform
 from pathlib import Path
 import shutil
+from typing import List, Optional, Union
 
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
-# if "Win" not in platform.platform():
-#     install_requires=["tbb", "mkl"]
-# else:
-install_requires=[]
+install_requires = ["numpy"]
 
 # Convert distutils Windows platform specifiers to CMake -A arguments
 PLAT_TO_CMAKE = {
@@ -25,6 +23,75 @@ PLAT_TO_CMAKE = {
     "win-arm32": "ARM",
     "win-arm64": "ARM64",
 }
+
+
+def cmake_bool(value: bool) -> str:
+    return "ON" if value else "OFF"
+
+
+def conda_native_prefix(is_windows: bool) -> Optional[Path]:
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if not conda_prefix:
+        return None
+    prefix = Path(conda_prefix)
+    return prefix / "Library" if is_windows else prefix
+
+
+def cmake_prefix_path_entries(raw: Optional[str]) -> List[str]:
+    if not raw:
+        return []
+    return [entry for entry in raw.split(";") if entry]
+
+
+def add_unique_path(paths: List[str], path: Optional[Union[Path, str]]) -> None:
+    if not path:
+        return
+    path_str = os.fspath(path)
+    if path_str and path_str not in paths:
+        paths.append(path_str)
+
+
+def path_has_mkl(prefix: Path) -> bool:
+    include_dir = prefix / "include"
+    return (include_dir / "mkl.h").exists() or (include_dir / "mkl_version.h").exists()
+
+
+def has_mkl_hint(is_windows: bool, cmake_prefix_paths: List[str]) -> bool:
+    if os.environ.get("MKLROOT") and path_has_mkl(Path(os.environ["MKLROOT"])):
+        return True
+
+    candidates = [Path(path) for path in cmake_prefix_paths]
+    conda_prefix = conda_native_prefix(is_windows)
+    if conda_prefix is not None:
+        candidates.append(conda_prefix)
+
+    for candidate in candidates:
+        if path_has_mkl(candidate):
+            return True
+
+    return False
+
+
+def python_mkl_enabled(is_macos: bool, is_windows: bool, cmake_prefix_paths: List[str]) -> bool:
+    mode = os.environ.get("PGO_PYTHON_USE_MKL", "auto").strip().lower()
+    if mode not in {"auto", "on", "off"}:
+        raise RuntimeError("PGO_PYTHON_USE_MKL must be one of: auto, on, off")
+
+    if is_macos:
+        if mode == "on":
+            raise RuntimeError("PGO_PYTHON_USE_MKL=on is not supported on macOS; use PGO_PYTHON_USE_MKL=off or auto.")
+        return False
+
+    if mode == "off":
+        return False
+
+    found_hint = has_mkl_hint(is_windows, cmake_prefix_paths)
+    if mode == "on" and not found_hint:
+        raise RuntimeError(
+            "PGO_PYTHON_USE_MKL=on requires an MKL hint. Install mkl-devel and set "
+            "MKLROOT, CONDA_PREFIX, or CMAKE_PREFIX_PATH to the native MKL prefix."
+        )
+    return found_hint
 
 
 # A CMakeExtension needs a sourcedir instead of a file list.
@@ -47,43 +114,47 @@ class CMakeBuild(build_ext):
 
         debug = int(os.environ.get("DEBUG", 0)) if self.debug is None else self.debug
         cfg = "Debug" if debug else "Release"
+        is_windows = sys.platform.startswith("win")
+        is_macos = sys.platform == "darwin"
+        preset_like = "base"
 
         # CMake lets you override the generator - we need to check this.
         # Can be set with Conda-Build, for example.
         cmake_generator = os.environ.get("CMAKE_GENERATOR", "")
 
-        # Set Python_EXECUTABLE instead if you use PYBIND11_FINDPYTHON
-        # EXAMPLE_VERSION_INFO shows you how to pass a value into the C++ code
-        # from Python.
+        cmake_prefix_paths = cmake_prefix_path_entries(os.environ.get("CMAKE_PREFIX_PATH"))
+        conda_prefix = conda_native_prefix(is_windows)
+        if conda_prefix is not None:
+            add_unique_path(cmake_prefix_paths, conda_prefix)
+            if "MKLROOT" not in os.environ and path_has_mkl(conda_prefix):
+                os.environ["MKLROOT"] = os.fspath(conda_prefix)
+
+        use_mkl = python_mkl_enabled(is_macos, is_windows, cmake_prefix_paths)
+
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}{os.sep}",
-            f"-DPYTHON_EXECUTABLE={sys.executable}",
+            f"-DPython_EXECUTABLE={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
+            f"-DPGO_USE_MKL={cmake_bool(use_mkl)}",
+            "-DPGO_CHECK_CONDA=ON",
+            "-DPGO_ENABLE_FULL=ON",
+            "-DPGO_BUILD_SUBPROJECTS=ON",
+            "-DPGO_ENABLE_PYTHON=ON",
+            "-DPGO_BUILD_C_API=OFF",
+            "-DPGO_ENABLE_ALEMBIC=ON",
+            "-DPGO_ENABLE_GMSH=OFF",
+            "-DPGO_TET_MESHER_USE_TET_WILD=OFF",
+            "-DPGO_ENABLE_OPENVDB=OFF",
         ]
 
-        cmake_args += [f"-DPGO_ENABLE_PYTHON=1", f"-DPGO_BUILD_SUBPROJECTS=1", "-DPGO_ENABLE_ALEMBIC=1", "-DPGO_CHECK_CONDA=1"]
-
-        if "macOS" in platform.platform():
-            cmake_args += [
-                f"-DPGO_USE_MKL=0",
-            ]
-        else:
-            cmake_args += [
-                f"-DPGO_USE_MKL=1",
-            ]
-
-        # enable mkl
-        if "CONDA_PREFIX" in os.environ:
-            if "Windows" in platform.platform():
-                os.environ["MKLROOT"] = os.path.join(os.environ["CONDA_PREFIX"], "Library")
-            else:
-                os.environ["MKLROOT"] = os.environ["CONDA_PREFIX"]
+        if cmake_prefix_paths:
+            cmake_args.append(f"-DCMAKE_PREFIX_PATH={';'.join(cmake_prefix_paths)}")
 
         build_args = []
         # Adding CMake arguments set as environment variable
         # (needed e.g. to build for ARM OSx on conda-forge)
         if "CMAKE_ARGS" in os.environ:
-            cmake_args += [item for item in os.environ["CMAKE_ARGS"].split(" ") if item]
+            cmake_args += [item for item in shlex.split(os.environ["CMAKE_ARGS"]) if item]
 
         # In this example, we pass in the version to C++. You might not need to.
         cmake_args += [f"-DPYPGO_VERSION_INFO={self.distribution.get_version()}"]
@@ -139,7 +210,12 @@ class CMakeBuild(build_ext):
                 # CMake 3.12+ only.
                 build_args += [f"-j{self.parallel}"]
 
-        build_temp = Path(self.build_temp) / ext.name
+        default_build_dir = (
+            Path.cwd()
+            / "build"
+            / f"pypgo-conda-{preset_like}-{sysconfig.get_platform()}-{sys.implementation.cache_tag}-{cfg.lower()}"
+        )
+        build_temp = Path(os.environ.get("PGO_PYTHON_BUILD_DIR", default_build_dir))
         if not build_temp.exists():
             build_temp.mkdir(parents=True)
 
@@ -163,16 +239,6 @@ class CMakeBuild(build_ext):
 
         subprocess.run(["cmake", ext.sourcedir, *cmake_args], cwd=build_temp, check=True)
         subprocess.run(["cmake", "--build", ".", "--target", "pypgo", *build_args], cwd=build_temp, check=True)
-        # subprocess.run(["cmake", "--build", ".", "--target", "pgo_c", *build_args], cwd=build_temp, check=True)
-
-        # if "CONDA_PREFIX" in os.environ:
-        #     if "Windows" in platform.platform():
-        #         install_prefix = os.path.join(os.environ["CONDA_PREFIX"], "Library")
-        #     else:
-        #         install_prefix = os.environ["CONDA_PREFIX"]
-
-        #     subprocess.run(["cmake", "--install", ".", "--prefix", install_prefix, *build_args], cwd=build_temp, check=True)
-
 
 # The information here can also be placed in setup.cfg - better separation of
 # logic and declaration, and simpler if you include description/version in a file.

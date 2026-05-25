@@ -1,0 +1,47 @@
+diff --git a/cmake/modules/CGAL_SetupBoost.cmake b/cmake/modules/CGAL_SetupBoost.cmake
+index ee56102..b643690 100644
+--- a/cmake/modules/CGAL_SetupBoost.cmake
++++ b/cmake/modules/CGAL_SetupBoost.cmake
+@@ -17,16 +17,33 @@ set ( CGAL_Boost_Setup TRUE )
+ 
+ include(${CMAKE_CURRENT_LIST_DIR}/CGAL_TweakFindBoost.cmake)
+ 
+-find_package( Boost 1.72 REQUIRED )
++# find_package( Boost 1.66 REQUIRED )
+ 
+-if(Boost_FOUND AND Boost_VERSION VERSION_LESS 1.72)
+-  if(DEFINED Boost_DIR AND NOT Boost_DIR)
+-    # Unset that cache variable that is set in the cache by FindBoost
+-    # (while it was searching for boost-cmake).
+-    unset(Boost_DIR CACHE)
+-    set(Boost_NO_BOOST_CMAKE TRUE CACHE INTERNAL "Avoid future search of boost-cmake")
+-  endif()
+-endif()
++# if(Boost_FOUND AND Boost_VERSION VERSION_LESS 1.70)
++#   if(DEFINED Boost_DIR AND NOT Boost_DIR)
++#     # Unset that cache variable that is set in the cache by FindBoost
++#     # (while it was searching for boost-cmake).
++#     unset(Boost_DIR CACHE)
++#     set(Boost_NO_BOOST_CMAKE TRUE CACHE INTERNAL "Avoid future search of boost-cmake")
++#   endif()
++# endif()
++set(Boost_FOUND ON)
++set(Boost_INCLUDE_DIRS "")
++set(Boost_LIBRARIES
++  Boost::any
++  Boost::foreach
++  Boost::format
++  Boost::graph
++  Boost::heap
++  Boost::logic
++  Boost::math
++  Boost::multiprecision
++  Boost::property_map
++  Boost::system
++  Boost::thread
++  Boost::variant
++)
++mark_as_advanced(Boost_FOUND Boost_INCLUDE_DIRS Boost_LIBRARIES)
+ 
+ message( STATUS "Boost include dirs: ${Boost_INCLUDE_DIRS}" )
+ message( STATUS "Boost libraries:    ${Boost_LIBRARIES}" )

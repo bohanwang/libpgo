@@ -4,14 +4,14 @@ endif()
 
 message(STATUS "Loading geogram...")
 
-set(GEOGRAM_SUB_BUILD ON CACHE BOOL "" FORCE)
-set(GEOGRAM_LIB_ONLY ON CACHE BOOL "Build geogram lib only" FORCE)
-set(GEOGRAM_WITH_GRAPHICS OFF CACHE BOOL "Disable graphics" FORCE)
-set(GEOGRAM_WITH_HLBFGS ON CACHE BOOL "Non-linear solver (Yang Liu's HLBFGS)" FORCE)
-set(GEOGRAM_WITH_LUA OFF CACHE BOOL "Disable LUA" FORCE)
-set(GEOGRAM_WITH_EXPLORAGRAM OFF CACHE BOOL "Disable exploragram" FORCE)
-set(GEOGRAM_WITH_LEGACY_NUMERICS OFF CACHE BOOL "Disable legacy numerics" FORCE)
-set(GEOGRAM_WITH_TRIANGLE OFF CACHE BOOL "Disable triangle" FORCE)
+pgo_dep_option(GEOGRAM_SUB_BUILD BOOL ON "Building as subproject")
+pgo_dep_option(GEOGRAM_LIB_ONLY BOOL ON "Build geogram lib only")
+pgo_dep_option(GEOGRAM_WITH_GRAPHICS BOOL OFF "Disable graphics")
+pgo_dep_option(GEOGRAM_WITH_HLBFGS BOOL ON "Non-linear solver (Yang Liu's HLBFGS)")
+pgo_dep_option(GEOGRAM_WITH_LUA BOOL OFF "Disable LUA")
+pgo_dep_option(GEOGRAM_WITH_EXPLORAGRAM BOOL OFF "Disable exploragram")
+pgo_dep_option(GEOGRAM_WITH_LEGACY_NUMERICS BOOL OFF "Disable legacy numerics")
+pgo_dep_option(GEOGRAM_WITH_TRIANGLE BOOL OFF "Disable triangle")
 
 include(FetchContent)
 FetchContent_Declare(
@@ -19,13 +19,9 @@ FetchContent_Declare(
   URL https://github.com/BrunoLevy/geogram/releases/download/v1.9.0/geogram_1.9.0.zip
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
-  FIND_PACKAGE_ARGS NAMES geogram
 )
 
-FetchContent_GetProperties(geogram)
-if(NOT geogram_POPULATED)
-  FetchContent_Populate(geogram)
-endif()
+pgo_fetch_populate_compat(geogram "geogram source tree is patched before add_subdirectory")
 
 function(_libpgo_replace_in_file target_file old_text new_text)
   file(READ "${target_file}" _libpgo_file_contents)
@@ -41,14 +37,10 @@ function(_libpgo_replace_in_file target_file old_text new_text)
   file(WRITE "${target_file}" "${_libpgo_file_contents}")
 endfunction()
 
-set(MODIFIED_FILE "${CMAKE_SOURCE_DIR}/CMakeModules/patches/geogram.cmake")
-set(TARGET_FILE "${geogram_SOURCE_DIR}/CMakeLists.txt")
-
-# Read in the content
-file(READ "${MODIFIED_FILE}" content)
-
-# Write the modified content back to the file
-file(WRITE "${TARGET_FILE}" "${content}")
+pgo_apply_patch(
+  "${geogram_SOURCE_DIR}"
+  "${CMAKE_SOURCE_DIR}/CMakeModules/patches/geogram-cmakelists.patch"
+  "Make geogram subproject-friendly and disable its uninstall target")
 
 set(POISSON_RECON_DIR "${geogram_SOURCE_DIR}/src/lib/geogram/third_party/PoissonRecon")
 

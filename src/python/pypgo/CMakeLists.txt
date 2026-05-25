@@ -15,3 +15,8 @@ target_link_libraries(pypgo PRIVATE
 )
 
 target_compile_definitions(pypgo PRIVATE NB_EIGEN)
+
+if(TARGET animationIO)
+  target_link_libraries(pypgo PRIVATE animationIO)
+  target_compile_definitions(pypgo PRIVATE PGO_HAS_ANIMATION_IO)
+endif()

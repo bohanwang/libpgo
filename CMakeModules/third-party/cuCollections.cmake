@@ -4,10 +4,10 @@ endif()
 
 message(STATUS "Loading cuco...")
 
-set(BUILD_TESTS OFF CACHE BOOL "Configure CMake to build tests" FORCE)
-set(BUILD_BENCHMARKS OFF CACHE BOOL "Configure CMake to build (google) benchmarks" FORCE)
-set(BUILD_EXAMPLES OFF CACHE BOOL "Configure CMake to build examples" FORCE)
-set(BUILD_CUCO_TESTS OFF CACHE BOOL "Configure CMake to build cuco tests" FORCE)
+pgo_dep_option(BUILD_TESTS BOOL OFF "Configure CMake to build tests")
+pgo_dep_option(BUILD_BENCHMARKS BOOL OFF "Configure CMake to build (google) benchmarks")
+pgo_dep_option(BUILD_EXAMPLES BOOL OFF "Configure CMake to build examples")
+pgo_dep_option(BUILD_CUCO_TESTS BOOL OFF "Configure CMake to build cuco tests")
 
 include(FetchContent)
 FetchContent_Declare(
@@ -16,9 +16,8 @@ FetchContent_Declare(
   GIT_TAG dev
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
-  FIND_PACKAGE_ARGS NAMES cuco
 )
 
-FetchContent_MakeAvailable(cuco)
+pgo_fetch_make_available(cuco)
 
 message(STATUS "Done.")

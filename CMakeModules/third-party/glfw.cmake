@@ -4,12 +4,12 @@ endif()
 
 message(STATUS "Loading glfw...")
 
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
+pgo_dep_option(BUILD_SHARED_LIBS BOOL OFF "Build shared libraries")
 
-set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "Build the GLFW example programs" FORCE)
-set(GLFW_BUILD_TESTS OFF CACHE BOOL "Build the GLFW test programs" FORCE)
-set(GLFW_BUILD_DOCS OFF CACHE BOOL "Build the GLFW documentation" FORCE)
-set(GLFW_INSTALL OFF CACHE BOOL "Generate installation target" FORCE)
+pgo_dep_option(GLFW_BUILD_EXAMPLES BOOL OFF "Build the GLFW example programs")
+pgo_dep_option(GLFW_BUILD_TESTS BOOL OFF "Build the GLFW test programs")
+pgo_dep_option(GLFW_BUILD_DOCS BOOL OFF "Build the GLFW documentation")
+pgo_dep_option(GLFW_INSTALL BOOL OFF "Generate installation target")
 
 include(FetchContent)
 FetchContent_Declare(
@@ -17,9 +17,8 @@ FetchContent_Declare(
   URL https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
-  FIND_PACKAGE_ARGS NAMES glfw3
 )
 
-FetchContent_MakeAvailable(glfw)
+pgo_fetch_make_available(glfw)
 
 message(STATUS "Done.")

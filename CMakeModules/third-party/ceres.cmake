@@ -4,16 +4,16 @@ endif()
 
 message(STATUS "Loading Ceres...")
 
-set(USE_CUDA OFF CACHE BOOL "use cuda" FORCE)
-set(MINIGLOG ON CACHE BOOL "use mini glog" FORCE)
-set(GFLAGS OFF CACHE BOOL "use gflags" FORCE)
-set(BUILD_TESTING OFF CACHE BOOL "Enable tests" FORCE)
-set(BUILD_DOCUMENTATION OFF CACHE BOOL "Build User's Guide (html)" FORCE)
-set(BUILD_EXAMPLES OFF CACHE BOOL "Build examples" FORCE)
-set(BUILD_BENCHMARKS OFF CACHE BOOL "Build Ceres benchmarking suite" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build Ceres as a shared library." FORCE)
-set(PROVIDE_UNINSTALL_TARGET OFF CACHE BOOL "Add a custom target to ease removal of installed targets" FORCE)
-set(LAPACK OFF CACHE BOOL "Use LAPACK" FORCE)
+pgo_dep_option(USE_CUDA BOOL OFF "use cuda")
+pgo_dep_option(MINIGLOG BOOL ON "use mini glog")
+pgo_dep_option(GFLAGS BOOL OFF "use gflags")
+pgo_dep_option(BUILD_TESTING BOOL OFF "Enable tests")
+pgo_dep_option(BUILD_DOCUMENTATION BOOL OFF "Build User's Guide (html)")
+pgo_dep_option(BUILD_EXAMPLES BOOL OFF "Build examples")
+pgo_dep_option(BUILD_BENCHMARKS BOOL OFF "Build Ceres benchmarking suite")
+pgo_dep_option(BUILD_SHARED_LIBS BOOL OFF "Build Ceres as a shared library.")
+pgo_dep_option(PROVIDE_UNINSTALL_TARGET BOOL OFF "Add a custom target to ease removal of installed targets")
+pgo_dep_option(LAPACK BOOL OFF "Use LAPACK")
 
 include(FetchContent)
 FetchContent_Declare(
@@ -21,9 +21,8 @@ FetchContent_Declare(
   URL http://ceres-solver.org/ceres-solver-2.2.0.tar.gz
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
-  FIND_PACKAGE_ARGS NAMES Ceres
 )
 
-FetchContent_MakeAvailable(ceres)
+pgo_fetch_make_available(ceres)
 
 message(STATUS "Done.")

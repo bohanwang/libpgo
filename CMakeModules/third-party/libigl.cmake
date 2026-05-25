@@ -11,6 +11,6 @@ FetchContent_Declare(
     GIT_TAG main
 )
 
-FetchContent_MakeAvailable(libigl)
+pgo_fetch_make_available(libigl)
 
 message(STATUS "Done.")

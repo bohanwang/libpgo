@@ -110,12 +110,12 @@ list(APPEND CMAKE_MODULE_PATH "${PGO_CMAKE_MODULES}")
 message(STATUS "CMake Module Path: ${CMAKE_MODULE_PATH}")
 
 include(CompilationUtils)
+include(PgoDependencyHelpers)
 
 find_package(OpenMP)
 
 if(OPENMP_FOUND)
   set(OPENMP_FLAG "${OpenMP_CXX_FLAGS}")
-  add_compile_definitions(USE_OPENMP)
 endif()
 
 # openmp may cause mkl pardiso error
@@ -140,6 +140,10 @@ add_flag(compilation_flag_for_debug Clang All INTERFACE -fsanitize=leak)
 
 add_library(compilation_flag INTERFACE)
 add_library(cuda_compilation_flag INTERFACE)
+
+if(OPENMP_FOUND)
+  target_compile_definitions(compilation_flag INTERFACE USE_OPENMP)
+endif()
 
 message(STATUS "PGO compiler: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "OS: ${CMAKE_SYSTEM_NAME}")
@@ -313,22 +317,22 @@ if(PGO_ENABLE_PYTHON)
 endif()
 
 if(TARGET MKL::MKL)
-  add_compile_definitions(PGO_HAS_MKL)
+  target_compile_definitions(compilation_flag INTERFACE PGO_HAS_MKL)
 endif()
 
 if(TARGET CGAL::CGAL)
-  add_compile_definitions(PGO_HAS_CGAL)
+  target_compile_definitions(compilation_flag INTERFACE PGO_HAS_CGAL)
 endif()
 
 if(TARGET Ceres::ceres)
-  add_compile_definitions(PGO_HAS_CERES)
+  target_compile_definitions(compilation_flag INTERFACE PGO_HAS_CERES)
 endif()
 
 if(PGO_OPT_USE_IPOPT)
   find_package(Ipopt)
 
   if(TARGET Ipopt::Core)
-    add_compile_definitions(PGO_HAS_IPOPT)
+    target_compile_definitions(compilation_flag INTERFACE PGO_HAS_IPOPT)
   endif()
 endif()
 
@@ -336,7 +340,7 @@ if(PGO_OPT_USE_KNITRO)
   include(CMakeModules/third-party/knitro.cmake)
 
   if(TARGET Knitro::Knitro)
-    add_compile_definitions(PGO_HAS_KNITRO)
+    target_compile_definitions(compilation_flag INTERFACE PGO_HAS_KNITRO)
   endif()
 endif()
 
@@ -344,7 +348,7 @@ if(PGO_HAS_ORIG_PARDISO)
   include(CMakeModules/third-party/pardiso.cmake)
 
   if(TARGET Pardiso::Pardiso)
-    add_compile_definitions(PGO_HAS_ORIG_PARDISO)
+    target_compile_definitions(compilation_flag INTERFACE PGO_HAS_ORIG_PARDISO)
   endif()
 endif()
 

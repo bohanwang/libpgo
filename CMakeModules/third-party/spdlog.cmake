@@ -10,9 +10,8 @@ FetchContent_Declare(
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.15.2.zip
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
-  FIND_PACKAGE_ARGS NAMES spdlog
 )
 
-FetchContent_MakeAvailable(spdlog)
+pgo_fetch_make_available(spdlog)
 
 message(STATUS "Done.")

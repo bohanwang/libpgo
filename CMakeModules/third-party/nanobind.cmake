@@ -13,6 +13,6 @@ FetchContent_Declare(
   GIT_SHALLOW TRUE
 )
 
-FetchContent_MakeAvailable(nanobind)
+pgo_fetch_make_available(nanobind)
 
 message(STATUS "nanobind ready.")

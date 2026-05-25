@@ -6,10 +6,10 @@ set(_PGO_SAVED_CMAKE_CXX_STANDARD "${CMAKE_CXX_STANDARD}")
 set(_PGO_SAVED_CMAKE_CXX_STANDARD_REQUIRED "${CMAKE_CXX_STANDARD_REQUIRED}")
 set(_PGO_SAVED_CMAKE_CXX_EXTENSIONS "${CMAKE_CXX_EXTENSIONS}")
 
-set(FLOAT_TETWILD_ENABLE_TBB ON CACHE BOOL "" FORCE)
-set(FLOAT_TETWILD_USE_FLOAT OFF CACHE BOOL "" FORCE)
-set(FLOAT_TETWILD_WITH_SANITIZERS OFF CACHE BOOL "" FORCE)
-set(FLOAT_TETWILD_WITH_EXACT_ENVELOPE OFF CACHE BOOL "" FORCE)
+pgo_dep_option(FLOAT_TETWILD_ENABLE_TBB BOOL ON "Enable TBB in fTetWild")
+pgo_dep_option(FLOAT_TETWILD_USE_FLOAT BOOL OFF "Use float precision in fTetWild")
+pgo_dep_option(FLOAT_TETWILD_WITH_SANITIZERS BOOL OFF "Enable fTetWild sanitizers")
+pgo_dep_option(FLOAT_TETWILD_WITH_EXACT_ENVELOPE BOOL OFF "Enable fTetWild exact envelope")
 
 function(_libpgo_patch_ftetwild_geogram target_file)
   file(READ "${target_file}" _libpgo_geogram_cmake)
@@ -52,16 +52,16 @@ function(_libpgo_prepare_ftetwild_geogram)
     set(GEO_PLATFORM "Linux64-gcc")
   endif()
 
-  set(VORPALINE_PLATFORM ${GEO_PLATFORM} CACHE STRING "" FORCE)
-  set(GEOGRAM_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-  set(GEOGRAM_BUILD_STATIC ON CACHE BOOL "" FORCE)
-  set(GEOGRAM_SUB_BUILD ON CACHE BOOL "Building as subproject" FORCE)
-  set(GEOGRAM_LIB_ONLY ON CACHE BOOL "Build geogram lib only" FORCE)
-  set(GEOGRAM_WITH_GRAPHICS OFF CACHE BOOL "Disable graphics" FORCE)
-  set(GEOGRAM_WITH_LUA OFF CACHE BOOL "Disable LUA" FORCE)
-  set(GEOGRAM_WITH_EXPLORAGRAM OFF CACHE BOOL "Disable exploragram" FORCE)
-  set(GEOGRAM_WITH_LEGACY_NUMERICS OFF CACHE BOOL "Disable legacy numerics" FORCE)
-  set(GEOGRAM_WITH_TRIANGLE OFF CACHE BOOL "Disable triangle" FORCE)
+  pgo_dep_option(VORPALINE_PLATFORM STRING "${GEO_PLATFORM}" "Geogram platform")
+  pgo_dep_option(GEOGRAM_BUILD_SHARED BOOL OFF "Build geogram shared library")
+  pgo_dep_option(GEOGRAM_BUILD_STATIC BOOL ON "Build geogram static library")
+  pgo_dep_option(GEOGRAM_SUB_BUILD BOOL ON "Building as subproject")
+  pgo_dep_option(GEOGRAM_LIB_ONLY BOOL ON "Build geogram lib only")
+  pgo_dep_option(GEOGRAM_WITH_GRAPHICS BOOL OFF "Disable graphics")
+  pgo_dep_option(GEOGRAM_WITH_LUA BOOL OFF "Disable LUA")
+  pgo_dep_option(GEOGRAM_WITH_EXPLORAGRAM BOOL OFF "Disable exploragram")
+  pgo_dep_option(GEOGRAM_WITH_LEGACY_NUMERICS BOOL OFF "Disable legacy numerics")
+  pgo_dep_option(GEOGRAM_WITH_TRIANGLE BOOL OFF "Disable triangle")
 
   FetchContent_Declare(
     geogram
@@ -69,10 +69,7 @@ function(_libpgo_prepare_ftetwild_geogram)
     GIT_TAG v1.9.6
   )
 
-  FetchContent_GetProperties(geogram)
-  if(NOT geogram_POPULATED)
-    FetchContent_Populate(geogram)
-  endif()
+  pgo_fetch_populate_compat(geogram "fTetWild patches geogram before add_subdirectory")
 
   _libpgo_patch_ftetwild_geogram("${geogram_SOURCE_DIR}/CMakeLists.txt")
   add_subdirectory(${geogram_SOURCE_DIR} ${geogram_BINARY_DIR} EXCLUDE_FROM_ALL)
@@ -92,7 +89,7 @@ FetchContent_Declare(
   GIT_TAG d7d99bb4387a07895b9adce058dc7305f6b6e5ab
 )
 
-FetchContent_MakeAvailable(ftetwild)
+pgo_fetch_make_available(ftetwild)
 
 set(CMAKE_CXX_STANDARD "${_PGO_SAVED_CMAKE_CXX_STANDARD}")
 set(CMAKE_CXX_STANDARD_REQUIRED "${_PGO_SAVED_CMAKE_CXX_STANDARD_REQUIRED}")

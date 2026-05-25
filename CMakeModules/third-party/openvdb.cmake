@@ -4,14 +4,14 @@ endif()
 
 message(STATUS "Loading OpenVDB...")
 
-set(OPENVDB_BUILD_MAYA_PLUGIN OFF CACHE BOOL "Build OpenVDB Maya plugin" FORCE)
-set(OPENVDB_ENABLE_UNINSTALL OFF CACHE BOOL "Adds a CMake uninstall target." FORCE)
-set(USE_HOUDINI OFF CACHE BOOL "Houdini" FORCE)
-set(USE_MAYA OFF CACHE BOOL "Maya" FORCE)
-set(USE_BLOSC OFF CACHE BOOL "Use Blosc compression" FORCE)
+pgo_dep_option(OPENVDB_BUILD_MAYA_PLUGIN BOOL OFF "Build OpenVDB Maya plugin")
+pgo_dep_option(OPENVDB_ENABLE_UNINSTALL BOOL OFF "Adds a CMake uninstall target.")
+pgo_dep_option(USE_HOUDINI BOOL OFF "Houdini")
+pgo_dep_option(USE_MAYA BOOL OFF "Maya")
+pgo_dep_option(USE_BLOSC BOOL OFF "Use Blosc compression")
 
 if(WIN32)
-  set(USE_ZLIB CACHE BOOL "Maya" OFF)
+  pgo_dep_option(USE_ZLIB BOOL OFF "Use ZLIB")
 endif()
 
 include(FetchContent)
@@ -20,9 +20,8 @@ FetchContent_Declare(
     URL https://github.com/AcademySoftwareFoundation/openvdb/archive/refs/tags/v12.1.1.zip
     EXCLUDE_FROM_ALL
     DOWNLOAD_EXTRACT_TIMESTAMP ON
-    FIND_PACKAGE_ARGS NAMES OpenVDB
 )
-FetchContent_MakeAvailable(openvdb)
+pgo_fetch_make_available(openvdb)
 
 if(DEFINED boost_SOURCE_DIR)
   file(GLOB PGO_OPENVDB_BOOST_INCLUDE_DIRS "${boost_SOURCE_DIR}/libs/*/include")

@@ -66,14 +66,15 @@ Do `pip install ./dist/your-chosen.whl` to install the package. Note that the pa
 
 ## Compilation
 
-Going forward, it is assumed that all specified prerequisites are installed and that a Conda environment is used for python.
+### Dependency ownership
 
-Install prerequisites:
+The build uses three dependency layers:
 
-```bash
-conda install tbb tbb-devel mkl mkl-devel
-conda install conda-forge::imath
-```
+- FetchContent-managed C++ dependencies are always built from source by this repository: Eigen, fmt, spdlog, nlohmann_json, TBB, SuiteSparse, Ceres, Boost, CGAL, geogram, libigl, Alembic, OpenVDB, and nanobind.
+- External native SDKs and toolchain packages come from the system, Homebrew, apt, conda, or vendor installers: compilers, CMake, Ninja, GMP, MPFR, Imath, BLAS/LAPACK, MKL, CUDA, Gmsh, Knitro, and Pardiso.
+- Conda owns the Python API build environment: Python, pytest, numpy, setuptools/wheel, CMake/Ninja, and native runtime packages such as MKL/Imath when needed.
+
+For `pypgo`, use one conda environment for both Python packages and native build/runtime packages. This keeps Python, MKL, Imath, and runtime library lookup in the same prefix.
 
 ### CMake Presets
 
@@ -85,52 +86,172 @@ cmake --preset <configure-preset>
 cmake --build --preset <build-preset> [--target <target>...]
 ```
 
-Configure presets define feature flags and build directories. Build presets define parallel build options and map to a configure preset.
+Configure presets define feature flags and build directories. Build presets map to configure presets. Build parallelism is controlled by `CMAKE_BUILD_PARALLEL_LEVEL` or command-line `--parallel`, not by shared presets.
 
 #### Configure Presets
 
-`base` is the default preset for CI and local development. It enables MKL and the full feature stack; unsupported options are auto-disabled per platform (see note below).
+`base` is the default preset for CI and local development. It enables MKL and Alembic, while heavier optional features such as Gmsh, TetWild, OpenVDB, CUDA, Knitro, and Pardiso are enabled only by explicit presets or cache overrides.
 
 | Configure preset | Binary directory | Purpose / key options |
 | --- | --- | --- |
-| `base` | `build/base` | Release baseline with MKL (`PGO_USE_MKL=ON`) and full stack (Alembic/Gmsh/TetWild). |
+| `base` | `build/base` | Release baseline with MKL (`PGO_USE_MKL=ON`) and Alembic; Gmsh, TetWild, and OpenVDB off by default. |
 | `base_debug` | `build/base_debug` | `base` in Debug mode. |
-| `base_win` | `build/base_win` | Windows-oriented release baseline: MKL on, Alembic/Gmsh/TetWild off. |
 | `debug` | *(hidden fragment)* | Inheritance fragment that sets `CMAKE_BUILD_TYPE=Debug`. |
-| `knitro` | *(hidden fragment)* | Inheritance fragment enabling Knitro (`PGO_OPT_USE_KNITRO=ON`) with `KNITRO_LIBRARY_HINT`. |
-| `pardiso` | *(hidden fragment)* | Inheritance fragment enabling original Pardiso (`PGO_HAS_ORIG_PARDISO=ON`) with `PARDISO_LIBRARY_HINT`. |
+| `knitro` | *(hidden fragment)* | Inheritance fragment enabling Knitro (`PGO_OPT_USE_KNITRO=ON`). |
+| `pardiso` | *(hidden fragment)* | Inheritance fragment enabling original Pardiso (`PGO_HAS_ORIG_PARDISO=ON`). |
 | `cuda` | *(hidden fragment)* | Inheritance fragment enabling CUDA (`PGO_ENABLE_CUDA=ON`). |
 | `base_knitro` | `build/base_knitro` | `base` + `knitro` (Linux). |
 | `base_knitro_cuda` | `build/base_knitro_cuda` | `base` + `knitro` + `cuda` (Linux). |
+| `all` | `build/all` | `base` + `knitro` + `pardiso` + `cuda` in Release mode (Linux). |
 | `all_debug` | `build/all_debug` | `base` + `knitro` + `pardiso` + `cuda` in Debug mode (Linux). |
-| `all_release` | `build/all_release` | `base` + `knitro` + `pardiso` + `cuda` in Release mode (Linux). |
+| `base_cuda` | `build/base_cuda` | `base` + `cuda` in Release mode (Linux/Windows). |
 | `base_cuda_debug` | `build/base_cuda_debug` | `base` + `cuda` in Debug mode (Linux/Windows). |
-| `base_cuda_release` | `build/base_cuda_release` | `base` + `cuda` in Release mode (Linux/Windows). |
-| `base_cuda_win` | `build/base_cuda_win` | `base_win` + `cuda`, with Windows `cudss_DIR` hint. |
 
 The `debug`, `knitro`, `pardiso`, and `cuda` presets are hidden inheritance fragments: they are meant to be composed into other presets and are not selectable directly.
+
+Machine-specific SDK paths belong in the untracked `CMakeUserPresets.json`, not in the shared presets. For example, local profiles can inherit `all` or `base_cuda` and provide `KNITRO_LIBRARY_HINT`, `PARDISO_LIBRARY_HINT`, or `cudss_DIR` there:
+
+```json
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "local-all",
+            "inherits": "all",
+            "cacheVariables": {
+                "KNITRO_LIBRARY_HINT": "/opt/artelys/knitro-15.0.1-Linux64",
+                "PARDISO_LIBRARY_HINT": "/opt/panua-pardiso-20240229-linux"
+            }
+        },
+        {
+            "name": "local-base-cuda",
+            "inherits": "base_cuda",
+            "cacheVariables": {
+                "cudss_DIR": "C:/Program Files/NVIDIA cuDSS/v0.7/lib/13/cmake/cudss"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "local-all",
+            "configurePreset": "local-all",
+            "jobs": 32
+        },
+        {
+            "name": "local-base-cuda",
+            "configurePreset": "local-base-cuda",
+            "jobs": 32
+        }
+    ]
+}
+```
+
+```bash
+cmake --preset local-all
+cmake --build --preset local-all
+```
+
+The shared `all` preset remains path-free; use it directly when the required SDKs are already discoverable from the environment.
 
 #### Build Presets
 
 | Build preset | Configure preset | Typical use |
 | --- | --- | --- |
-| `base` | `base` | Release build with MKL/full stack. |
+| `base` | `base` | Release build with MKL and Alembic. |
 | `base_debug` | `base_debug` | Debug build. |
+| `base_knitro` | `base_knitro` | Release build with Knitro. |
+| `base_knitro_cuda` | `base_knitro_cuda` | Release build with Knitro and CUDA. |
+| `all` | `all` | Release build with all optional solvers/features (Linux). |
 | `all_debug` | `all_debug` | Debug build with all optional solvers/features (Linux). |
-| `all_release` | `all_release` | Release build with all optional solvers/features (Linux). |
+| `base_cuda` | `base_cuda` | Release build with CUDA (Linux/Windows). |
 | `base_cuda_debug` | `base_cuda_debug` | Debug build with CUDA (Linux/Windows). |
-| `base_cuda_release` | `base_cuda_release` | Release build with CUDA (Linux/Windows). |
-
-Some configure presets are composition-oriented and currently have no dedicated build preset (for example: `base_win`, `base_cuda_win`, `base_knitro`, `base_knitro_cuda`).
 
 Platform auto-disable: on macOS, configuring with `base` (or any MKL/CUDA preset) emits a warning and forces `PGO_USE_MKL=OFF` and `PGO_ENABLE_CUDA=OFF`. On Windows, `PGO_ENABLE_OPENVDB=ON` is similarly forced off. This means the same `base` preset works across Linux, Windows, and macOS.
 
-### Install libpgo
+### Install pypgo into a conda environment
+
+The Python package follows the CI shape: create one conda environment, install native/Python build requirements into it, then build the extension in place.
+
+Linux with conda-provided MKL:
+
+```bash
+conda create -n libpgo -c conda-forge python=3.12 "cmake>=3.29" ninja mkl-devel numpy pytest setuptools wheel
+conda activate libpgo
+
+sudo apt-get install -y build-essential libblas-dev libgmp-dev libimath-dev liblapack-dev libmpfr-dev pkg-config zlib1g-dev
+
+python setup.py build_ext --inplace
+python -m pytest -q tests/pypgo
+```
+
+macOS without MKL:
+
+```bash
+conda create -n libpgo -c conda-forge python=3.12 "cmake>=3.29" ninja numpy pytest setuptools wheel
+conda activate libpgo
+
+brew install gmp mpfr imath
+
+python setup.py build_ext --inplace
+python -m pytest -q tests/pypgo
+```
+
+Windows with conda-provided MKL should run from an x64 MSVC developer shell:
+
+```bash
+conda create -n libpgo -c conda-forge python=3.12 "cmake>=3.29" ninja mkl-devel imath numpy pytest setuptools wheel
+conda activate libpgo
+
+python setup.py build_ext --inplace
+python -m pytest -q tests/pypgo
+```
+
+For a minimal local install, after native prerequisites are available:
+
+```bash
+cd libpgo
+conda activate libpgo
+python setup.py build_ext --inplace
+python -c "import pypgo; print(pypgo.__doc__)"
+```
+
+`pypgo` uses `PGO_PYTHON_USE_MKL=auto` by default. The accepted values are:
+
+- `auto`: enable MKL only when `MKLROOT`, `CONDA_PREFIX`, or `CMAKE_PREFIX_PATH` points to an MKL-capable native prefix.
+- `on`: require MKL and fail early if no MKL hint is available.
+- `off`: always configure `pypgo` with `PGO_USE_MKL=OFF`.
+
+The Python package build enables nanobind bindings directly and does not build the C API by default (`PGO_BUILD_C_API=OFF`). Alembic is enabled on Linux/macOS for `convert_animation_to_abc` and disabled on Windows; Gmsh, TetWild, and OpenVDB are off by default for `pypgo` and can be overridden through `CMAKE_ARGS`.
+
+`setup.py` automatically adds the active conda prefix to CMake's package search path. Use `CMAKE_ARGS` only when you need extra local SDK paths or feature overrides.
+
+The editable conda build uses a persistent CMake build directory under `build/pypgo-conda-base-<platform>-<python-tag>-<config>/`, so repeated builds reuse downloaded FetchContent dependencies. Override it with `PGO_PYTHON_BUILD_DIR` when you want a separate Python build tree.
+
+After changing C++ binding or library sources, rebuild the extension
+incrementally before running Python code:
+
+```bash
+python setup.py build_ext --inplace
+python src/python/pypgo/pgo_test_01.py
+```
+
+Running Python uses the already built extension and does not rebuild it by itself. Use `build_ext --inplace` for the normal edit-build-run loop.
+
+### Install pypgo with pip
 
 ```bash
 cd libpgo
 pip install .
 ```
+
+To build a wheel package for the current platform and Python version:
+
+```bash
+cd libpgo
+python setup.py bdist_wheel
+```
+
+The generated wheel is written to `dist/pypgo-*.whl` and can be installed with `pip install dist/pypgo-*.whl`.
 
 If `ninja` has been installed, it will compile source files in parallel. If it is not installed,
 set `CMAKE_BUILD_PARALLEL_LEVEL` to `n`, where `n` is the number of threads for compilation, to control the parallel compilation.
@@ -141,7 +262,7 @@ If you want to use the library with your C++ code or modify the source code, you
 
 ### Windows & Ubuntu
 
-The default `base` preset enables the MKL/full-feature stack. Install [MKL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html) first, then:
+The default `base` preset enables MKL and Alembic, with heavier optional features disabled unless explicitly requested. Install [MKL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html) first, then:
 
 ```bash
 cd libpgo
@@ -174,7 +295,7 @@ cmake --preset base_debug
 cmake --build --preset base_debug
 ```
 
-The `base` preset keeps the full feature stack enabled (including Alembic/Gmsh/TetWild). Alembic and Gmsh related features still depend on local third-party libraries (such as imath and gmsh).
+The `base` preset keeps Alembic enabled, while Gmsh, TetWild, and OpenVDB are off by default. Enable them explicitly when you need those tools, for example `cmake --preset base -DPGO_ENABLE_GMSH=ON -DPGO_TET_MESHER_USE_TET_WILD=ON`.
 
 ---
 
@@ -316,10 +437,10 @@ Basic TetGen config:
 }
 ```
 
-The fTetWild backend is enabled by default in the main presets on macOS/Linux. Build it in the preset build tree:
+The fTetWild backend is optional. Enable it when configuring, then build it in the preset build tree:
 
 ```bash
-cmake --preset base
+cmake --preset base -DPGO_TET_MESHER_USE_TET_WILD=ON
 cmake --build --preset base --target tetMesher
 ```
 
@@ -358,7 +479,7 @@ Config fields:
 ## Third-party libraries
 
 This library use the following third-party libraries:<br>
-alembic, argparse, autodiff, boost, ceres, cgal, fmt, geogram, gmesh, json, knitro, libigl, mkl, pybind11, spdlog, suitesparse, tbb, tinyobj-loader
+alembic, argparse, autodiff, boost, ceres, cgal, fmt, geogram, gmesh, json, knitro, libigl, mkl, spdlog, suitesparse, tbb, tinyobj-loader
 
 ---
 
