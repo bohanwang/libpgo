@@ -83,6 +83,10 @@ endfunction()
 # global targets such as Eigen's and Geogram's "uninstall".
 _libpgo_prepare_ftetwild_geogram()
 
+if(WIN32 AND GMP_INCLUDE_DIR AND NOT GMP_INCLUDE_DIRS)
+  set(GMP_INCLUDE_DIRS "${GMP_INCLUDE_DIR}" CACHE PATH "Include path to GMP" FORCE)
+endif()
+
 FetchContent_Declare(
   ftetwild
   GIT_REPOSITORY https://github.com/wildmeshing/fTetWild.git
