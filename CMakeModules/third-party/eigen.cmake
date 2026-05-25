@@ -4,6 +4,7 @@ else()
 
   set(BUILD_TESTING OFF CACHE BOOL "eigen build test" FORCE)
   set(BUILD_EXAMPLES OFF CACHE BOOL "eigen build examples" FORCE)
+  set(EIGEN_BUILD_DOC OFF CACHE BOOL "eigen build doc" FORCE)
   set(EIGEN_BUILD_CMAKE_PACKAGE ON CACHE BOOL "eigen build cmake package" FORCE)
 
   include(FetchContent)
@@ -14,7 +15,6 @@ else()
     # GIT_TAG fb2fca90be39783f76ba05b521360afeeda265f2
     EXCLUDE_FROM_ALL
     DOWNLOAD_EXTRACT_TIMESTAMP ON
-    FIND_PACKAGE_ARGS NAMES Eigen3
   )
 
   FetchContent_MakeAvailable(Eigen3)

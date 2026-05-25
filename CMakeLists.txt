@@ -11,6 +11,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(PGO_USE_MKL "Use MKL" OFF)
 option(PGO_ENABLE_PYTHON "Build python module" OFF)
+option(PGO_BUILD_C_API "Build C API library (pgo_c)" ON)
 option(PGO_ENABLE_FULL "Enable all functionalities" OFF)
 option(PGO_ENABLE_CUDA "Enable CUDA" OFF)
 option(PGO_BUILD_SUBPROJECTS "Include subprojects" OFF)
@@ -53,18 +54,23 @@ if(APPLE)
   # is not on the default compiler/linker search path on Apple Silicon. Expose it
   # globally -- before any third-party (FetchContent) dependency is configured -- so
   # every target finds gmp.h/mpfr.h without the caller exporting CPATH/LIBRARY_PATH.
-  find_program(PGO_BREW_EXECUTABLE brew)
-  if(PGO_BREW_EXECUTABLE)
-    execute_process(
-      COMMAND ${PGO_BREW_EXECUTABLE} --prefix
-      OUTPUT_VARIABLE PGO_HOMEBREW_PREFIX
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if(PGO_HOMEBREW_PREFIX AND EXISTS "${PGO_HOMEBREW_PREFIX}/include")
-      message(STATUS "Adding Homebrew prefix to global search paths: ${PGO_HOMEBREW_PREFIX}")
-      include_directories(SYSTEM "${PGO_HOMEBREW_PREFIX}/include")
-      link_directories("${PGO_HOMEBREW_PREFIX}/lib")
-      list(APPEND CMAKE_PREFIX_PATH "${PGO_HOMEBREW_PREFIX}")
+  set(PGO_HOMEBREW_PREFIX "" CACHE PATH "Homebrew installation prefix")
+  if(NOT PGO_HOMEBREW_PREFIX)
+    find_program(PGO_BREW_EXECUTABLE brew)
+    if(PGO_BREW_EXECUTABLE)
+      execute_process(
+        COMMAND ${PGO_BREW_EXECUTABLE} --prefix
+        OUTPUT_VARIABLE PGO_HOMEBREW_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+      set(PGO_HOMEBREW_PREFIX "${PGO_HOMEBREW_PREFIX}" CACHE PATH "Homebrew installation prefix" FORCE)
     endif()
+  endif()
+
+  if(PGO_HOMEBREW_PREFIX AND EXISTS "${PGO_HOMEBREW_PREFIX}/include")
+    message(STATUS "Adding Homebrew prefix to global search paths: ${PGO_HOMEBREW_PREFIX}")
+    include_directories(SYSTEM "${PGO_HOMEBREW_PREFIX}/include")
+    link_directories("${PGO_HOMEBREW_PREFIX}/lib")
+    list(APPEND CMAKE_PREFIX_PATH "${PGO_HOMEBREW_PREFIX}")
   endif()
 endif()
 
@@ -303,7 +309,7 @@ if(PGO_TET_MESHER_USE_TET_WILD)
 endif()
 
 if(PGO_ENABLE_PYTHON)
-  include(CMakeModules/third-party/pybind11.cmake)
+  include(CMakeModules/third-party/nanobind.cmake)
 endif()
 
 if(TARGET MKL::MKL)
@@ -472,10 +478,6 @@ endif()
 
 if(PGO_BUILD_SUBPROJECTS)
   add_subdirectory(projects)
-endif()
-
-if(PGO_ENABLE_PYTHON)
-  include(CMakeModules/python_list.cmake)
 endif()
 
 # generate config file to be used in common build tree

@@ -5,6 +5,21 @@ endif()
 message(STATUS "Loading Boost...")
 include(FetchContent)
 
+set(BOOST_INCLUDE_LIBRARIES
+  any
+  foreach
+  format
+  graph
+  heap
+  logic
+  math
+  multiprecision
+  property_map
+  system
+  thread
+  variant
+  CACHE STRING "Boost libraries used by CGAL/libpgo" FORCE)
+
 # set(FETCHCONTENT_QUIET OFF)
 FetchContent_Declare(
   boost

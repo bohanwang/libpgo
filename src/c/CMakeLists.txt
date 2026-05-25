@@ -60,7 +60,7 @@ install(EXPORT pgo_cTargets
   NAMESPACE pgo::
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/pgo/")
 
-if(PGO_ENABLE_PYTHON)
+if(PGO_BUILD_C_API)
   add_library(pgo_c_static STATIC ${LIBPGO_C_SOURCES} ${LIBPGO_C_HEADERS})
   target_include_directories(pgo_c_static PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 

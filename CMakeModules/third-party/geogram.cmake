@@ -5,7 +5,13 @@ endif()
 message(STATUS "Loading geogram...")
 
 set(GEOGRAM_SUB_BUILD ON CACHE BOOL "" FORCE)
+set(GEOGRAM_LIB_ONLY ON CACHE BOOL "Build geogram lib only" FORCE)
+set(GEOGRAM_WITH_GRAPHICS OFF CACHE BOOL "Disable graphics" FORCE)
 set(GEOGRAM_WITH_HLBFGS ON CACHE BOOL "Non-linear solver (Yang Liu's HLBFGS)" FORCE)
+set(GEOGRAM_WITH_LUA OFF CACHE BOOL "Disable LUA" FORCE)
+set(GEOGRAM_WITH_EXPLORAGRAM OFF CACHE BOOL "Disable exploragram" FORCE)
+set(GEOGRAM_WITH_LEGACY_NUMERICS OFF CACHE BOOL "Disable legacy numerics" FORCE)
+set(GEOGRAM_WITH_TRIANGLE OFF CACHE BOOL "Disable triangle" FORCE)
 
 include(FetchContent)
 FetchContent_Declare(
