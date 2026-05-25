@@ -1,4 +1,4 @@
-if(TARGET Boost::thread AND TARGET Boost::system AND TARGET Boost::iostreams)
+if(TARGET Boost::boost OR TARGET Boost::headers)
   return()
 endif()
 
@@ -22,20 +22,11 @@ set(BOOST_LIBRARYDIR "${PGO_BOOST_PREFIX}/lib" CACHE PATH "Boost library directo
 set(Boost_NO_SYSTEM_PATHS ON CACHE BOOL "Restrict Boost lookup to conda" FORCE)
 set(Boost_NO_BOOST_CMAKE OFF CACHE BOOL "Prefer conda Boost CMake config" FORCE)
 
-find_package(Boost CONFIG REQUIRED COMPONENTS
-  any
-  foreach
-  format
-  graph
-  heap
-  iostreams
-  logic
-  math
-  multiprecision
-  property_map
-  system
-  thread
-  variant
-)
+find_package(Boost CONFIG REQUIRED)
+
+if(NOT TARGET Boost::boost AND TARGET Boost::headers)
+  add_library(Boost::boost INTERFACE IMPORTED)
+  target_link_libraries(Boost::boost INTERFACE Boost::headers)
+endif()
 
 message(STATUS "Done.")
