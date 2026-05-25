@@ -55,6 +55,7 @@ jobs:
             numpy \
             pytest \
             setuptools \
+            tbb-devel \
             wheel
 
       - name: Install APT prerequisites
@@ -119,8 +120,10 @@ jobs:
         run: |
           mamba install -y \
             "cmake>=3.29" \
+            gmsh \
             mkl-devel \
-            ninja
+            ninja \
+            tbb-devel
 
       - name: Install APT prerequisites
         run: |
@@ -131,7 +134,6 @@ jobs:
             gcc \
             git \
             libblas-dev \
-            libgmsh-dev \
             libgmp-dev \
             libimath-dev \
             liblapack-dev \

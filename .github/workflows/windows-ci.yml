@@ -54,6 +54,7 @@ jobs:
             numpy `
             pytest `
             setuptools `
+            tbb-devel `
             wheel
 
       - name: Build and install Python package
@@ -105,9 +106,11 @@ jobs:
         run: |
           mamba install -y `
             "cmake>=3.29" `
+            gmsh `
             imath `
             mkl-devel `
-            ninja
+            ninja `
+            tbb-devel
 
       - name: Configure with preset base and tests enabled
         run: |

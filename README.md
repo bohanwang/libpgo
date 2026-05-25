@@ -32,17 +32,17 @@ Do `pip install ./dist/your-chosen.whl` to install the package. Note that the pa
     3. Visual Studio 2022 (We tested on 17.9.5, Windows)\
         Earlier Visual Studio 2022 versions might work.
 
-3. GMP and MPFR for **Ubuntu** and **Mac OS**\
+3. GMP, MPFR, and TBB for **Ubuntu** and **Mac OS**\
     This can be installed on Ubuntu by
 
     ```bash
-    sudo apt install libgmp-dev libmpfr-dev
+    sudo apt install libgmp-dev libmpfr-dev libtbb-dev
     ```
 
     Or it can be installed on Mac OS by
 
     ```bash
-    brew install gmp mpfr imath
+    brew install gmp mpfr imath tbb
     ```
 
 4. (Optional) Ninja\
@@ -70,11 +70,19 @@ Do `pip install ./dist/your-chosen.whl` to install the package. Note that the pa
 
 The build uses three dependency layers:
 
-- FetchContent-managed C++ dependencies are always built from source by this repository: Eigen, fmt, spdlog, nlohmann_json, TBB, SuiteSparse, Ceres, Boost, CGAL, geogram, libigl, Alembic, OpenVDB, and nanobind.
-- External native SDKs and toolchain packages come from the system, Homebrew, apt, conda, or vendor installers: compilers, CMake, Ninja, GMP, MPFR, Imath, BLAS/LAPACK, MKL, CUDA, Gmsh, Knitro, and Pardiso.
-- Conda owns the Python API build environment: Python, pytest, numpy, setuptools/wheel, CMake/Ninja, and native runtime packages such as MKL/Imath when needed.
+- FetchContent-managed C++ dependencies are always built from source by this repository: Eigen, fmt, spdlog, nlohmann_json, SuiteSparse, Ceres, Boost, CGAL, geogram, libigl, Alembic, and nanobind.
+- External native SDKs and toolchain packages come from the system, Homebrew, apt, conda, or vendor installers: compilers, CMake, Ninja, GMP, MPFR, Imath, BLAS/LAPACK, TBB, OpenVDB, MKL, CUDA, Gmsh, Knitro, and Pardiso.
+- Conda owns the Python API build environment: Python, pytest, numpy, setuptools/wheel, CMake/Ninja, and native runtime packages such as TBB, MKL, and Imath when needed.
 
 For `pypgo`, use one conda environment for both Python packages and native build/runtime packages. This keeps Python, MKL, Imath, and runtime library lookup in the same prefix.
+
+For Gmsh support on Linux, macOS, and Windows, install the conda-forge package into the active build environment before configuring with `PGO_ENABLE_GMSH=ON`:
+
+```bash
+mamba install -c conda-forge gmsh
+# or
+conda install -c conda-forge gmsh
+```
 
 ### CMake Presets
 
@@ -90,11 +98,11 @@ Configure presets define feature flags and build directories. Build presets map 
 
 #### Configure Presets
 
-`base` is the default preset for CI and local development. It enables MKL and Alembic, while heavier optional features such as Gmsh, TetWild, OpenVDB, CUDA, Knitro, and Pardiso are enabled only by explicit presets or cache overrides.
+`base` is the default preset for CI and local development. It enables MKL, Alembic, Gmsh, TetWild, and OpenVDB. CUDA, Knitro, and Pardiso are enabled only by explicit presets or cache overrides.
 
 | Configure preset | Binary directory | Purpose / key options |
 | --- | --- | --- |
-| `base` | `build/base` | Release baseline with MKL (`PGO_USE_MKL=ON`) and Alembic; Gmsh, TetWild, and OpenVDB off by default. |
+| `base` | `build/base` | Release baseline with MKL (`PGO_USE_MKL=ON`), Alembic, Gmsh, TetWild, and OpenVDB. |
 | `base_debug` | `build/base_debug` | `base` in Debug mode. |
 | `debug` | *(hidden fragment)* | Inheritance fragment that sets `CMAKE_BUILD_TYPE=Debug`. |
 | `knitro` | *(hidden fragment)* | Inheritance fragment enabling Knitro (`PGO_OPT_USE_KNITRO=ON`). |
@@ -166,7 +174,7 @@ The shared `all` preset remains path-free; use it directly when the required SDK
 | `base_cuda` | `base_cuda` | Release build with CUDA (Linux/Windows). |
 | `base_cuda_debug` | `base_cuda_debug` | Debug build with CUDA (Linux/Windows). |
 
-Platform auto-disable: on macOS, configuring with `base` (or any MKL/CUDA preset) emits a warning and forces `PGO_USE_MKL=OFF` and `PGO_ENABLE_CUDA=OFF`. On Windows, `PGO_ENABLE_OPENVDB=ON` is similarly forced off. This means the same `base` preset works across Linux, Windows, and macOS.
+Platform auto-disable: on macOS, configuring with `base` (or any MKL/CUDA preset) emits a warning and forces `PGO_USE_MKL=OFF` and `PGO_ENABLE_CUDA=OFF`. This means the same `base` preset works across Linux, Windows, and macOS.
 
 ### Install pypgo into a conda environment
 
@@ -175,7 +183,7 @@ The Python package follows the CI shape: create one conda environment, install n
 Linux with conda-provided MKL:
 
 ```bash
-conda create -n libpgo -c conda-forge python=3.12 "cmake>=3.29" ninja mkl-devel numpy pytest setuptools wheel
+conda create -n libpgo -c conda-forge python=3.12 "cmake>=3.29" ninja mkl-devel tbb-devel numpy pytest setuptools wheel
 conda activate libpgo
 
 sudo apt-get install -y build-essential libblas-dev libgmp-dev libimath-dev liblapack-dev libmpfr-dev pkg-config zlib1g-dev
@@ -187,7 +195,7 @@ python -m pytest -q tests/pypgo
 macOS without MKL:
 
 ```bash
-conda create -n libpgo -c conda-forge python=3.12 "cmake>=3.29" ninja numpy pytest setuptools wheel
+conda create -n libpgo -c conda-forge python=3.12 "cmake>=3.29" ninja tbb-devel numpy pytest setuptools wheel
 conda activate libpgo
 
 brew install gmp mpfr imath
@@ -199,7 +207,7 @@ python -m pytest -q tests/pypgo
 Windows with conda-provided MKL should run from an x64 MSVC developer shell:
 
 ```bash
-conda create -n libpgo -c conda-forge python=3.12 "cmake>=3.29" ninja mkl-devel imath numpy pytest setuptools wheel
+conda create -n libpgo -c conda-forge python=3.12 "cmake>=3.29" ninja mkl-devel tbb-devel imath numpy pytest setuptools wheel
 conda activate libpgo
 
 python setup.py build_ext --inplace
@@ -221,7 +229,7 @@ python -c "import pypgo; print(pypgo.__doc__)"
 - `on`: require MKL and fail early if no MKL hint is available.
 - `off`: always configure `pypgo` with `PGO_USE_MKL=OFF`.
 
-The Python package build enables nanobind bindings directly and does not build the C API by default (`PGO_BUILD_C_API=OFF`). Alembic is enabled on Linux/macOS for `convert_animation_to_abc` and disabled on Windows; Gmsh, TetWild, and OpenVDB are off by default for `pypgo` and can be overridden through `CMAKE_ARGS`.
+The Python package build enables nanobind bindings directly and does not build the C API by default (`PGO_BUILD_C_API=OFF`). Alembic is enabled on Linux/macOS for `convert_animation_to_abc` and disabled on Windows; Gmsh, TetWild, and OpenVDB are off by default for `pypgo` and can be overridden through `CMAKE_ARGS`. When enabling Gmsh, install `gmsh` into the same conda environment. When enabling OpenVDB, install `openvdb`, `libboost-devel`, and `tbb-devel` into the same conda environment.
 
 `setup.py` automatically adds the active conda prefix to CMake's package search path. Use `CMAKE_ARGS` only when you need extra local SDK paths or feature overrides.
 
@@ -262,7 +270,7 @@ If you want to use the library with your C++ code or modify the source code, you
 
 ### Windows & Ubuntu
 
-The default `base` preset enables MKL and Alembic, with heavier optional features disabled unless explicitly requested. Install [MKL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html) first, then:
+The default `base` preset enables MKL, Alembic, Gmsh, TetWild, and OpenVDB. Install [MKL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html) and any enabled external packages first, then:
 
 ```bash
 cd libpgo
@@ -272,7 +280,7 @@ cmake --build --preset base
 
 To build without MKL, override the option: `cmake --preset base -DPGO_USE_MKL=OFF`.
 
-> On Windows, a few extra steps are need before running the preset commands above. First, the library should be configured in "x64 Native Tools Command Prompt for VS 2022". In addition, before running the commands above, run `c:\Program Files (x86)\Intel\oneAPI\setvars.bat` to setup the environments for MKL, where `c:\Program Files (x86)\Intel\oneAPI` is the path to the oneAPI installation. Once setup, run above commands. OpenVDB is not supported on Windows and is forced off automatically.
+> On Windows, a few extra steps are need before running the preset commands above. First, the library should be configured in "x64 Native Tools Command Prompt for VS 2022". In addition, before running the commands above, run `c:\Program Files (x86)\Intel\oneAPI\setvars.bat` to setup the environments for MKL, where `c:\Program Files (x86)\Intel\oneAPI` is the path to the oneAPI installation. Once setup, run above commands. OpenVDB is available when a compatible external package, such as conda-forge `openvdb`, is installed and `PGO_ENABLE_OPENVDB=ON` is set.
 
 > On Ubuntu, a similar procedure is needed. Before configuring the library with presets, run `bash /opt/intel/oneapi/setvars.sh` to setup the MKL environments for the subsequent CMake configuration.
 
@@ -295,7 +303,7 @@ cmake --preset base_debug
 cmake --build --preset base_debug
 ```
 
-The `base` preset keeps Alembic enabled, while Gmsh, TetWild, and OpenVDB are off by default. Enable them explicitly when you need those tools, for example `cmake --preset base -DPGO_ENABLE_GMSH=ON -DPGO_TET_MESHER_USE_TET_WILD=ON`.
+The `base` preset keeps Alembic, Gmsh, TetWild, and OpenVDB enabled. For Gmsh, install the conda-forge package first, for example `mamba install -c conda-forge gmsh`, then configure with `-DPGO_ENABLE_GMSH=ON` when using custom presets or overrides. For OpenVDB, install the external packages first, for example `mamba install -c conda-forge openvdb libboost-devel tbb-devel`, then configure with `-DPGO_ENABLE_OPENVDB=ON`.
 
 ---
 

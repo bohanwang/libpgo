@@ -20,9 +20,9 @@
                 "PGO_ENABLE_PYTHON": "ON",
                 "PGO_BUILD_C_API": "ON",
                 "PGO_ENABLE_ALEMBIC": "ON",
-                "PGO_ENABLE_GMSH": "OFF",
-                "PGO_TET_MESHER_USE_TET_WILD": "OFF",
-                "PGO_ENABLE_OPENVDB": "OFF"
+                "PGO_ENABLE_GMSH": "ON",
+                "PGO_TET_MESHER_USE_TET_WILD": "ON",
+                "PGO_ENABLE_OPENVDB": "ON"
             }
         },
         {

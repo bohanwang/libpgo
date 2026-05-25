@@ -302,7 +302,7 @@ NB_MODULE(pypgo, m) {
     });
     return nb::ndarray<nb::numpy, double>(
       values->data(),
-      { static_cast<size_t>(tetmesh->numTets()), static_cast<size_t>(9), static_cast<size_t>(12) },
+      { static_cast<size_t>(tetmesh->numTets()), static_cast<size_t>(12), static_cast<size_t>(9) },
       owner);
   }, "tetmesh"_a);
 

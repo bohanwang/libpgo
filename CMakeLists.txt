@@ -33,12 +33,6 @@ option(PGO_TET_MESHER_USE_TET_WILD "Enable fTetWild backend for tetMesher" OFF)
 
 project(libpgo LANGUAGES CXX C)
 
-# Platform capability guards: force-disable options unsupported on the host OS.
-if(WIN32 AND PGO_ENABLE_OPENVDB)
-  message(WARNING "OpenVDB is not supported on Windows; forcing PGO_ENABLE_OPENVDB=OFF.")
-  set(PGO_ENABLE_OPENVDB OFF CACHE BOOL "Enable OpenVDB support" FORCE)
-endif()
-
 if(APPLE)
   if(PGO_USE_MKL)
     message(WARNING "MKL is not supported on macOS; forcing PGO_USE_MKL=OFF.")

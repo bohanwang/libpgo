@@ -47,6 +47,7 @@ jobs:
             numpy \
             pytest \
             setuptools \
+            tbb-devel \
             wheel
 
       - name: Install Homebrew prerequisites
@@ -95,7 +96,9 @@ jobs:
         run: |
           mamba install -y \
             "cmake>=3.29" \
-            ninja
+            gmsh \
+            ninja \
+            tbb-devel
 
       - name: Install Homebrew prerequisites
         run: brew install gmp mpfr imath
@@ -104,7 +107,7 @@ jobs:
         run: |
           echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
-          echo "CMAKE_PREFIX_PATH=$(brew --prefix)" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${CONDA_PREFIX};$(brew --prefix)" >> "$GITHUB_ENV"
 
       - name: Configure with preset base and tests enabled
         run: |
