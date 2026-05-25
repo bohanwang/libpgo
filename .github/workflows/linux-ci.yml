@@ -120,7 +120,8 @@ jobs:
             mkl-devel \
             ninja \
             openvdb \
-            tbb-devel
+            tbb-devel \
+            zlib
 
       - name: Install APT prerequisites
         run: |

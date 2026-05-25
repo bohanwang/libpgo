@@ -135,7 +135,7 @@ Linux:
 ```bash
 mamba create -n libpgo -c conda-forge python=3.12
 conda activate libpgo
-mamba install -y "cmake>=3.29" gmsh libboost-devel mkl-devel ninja openvdb tbb-devel
+mamba install -y "cmake>=3.29" gmsh libboost-devel mkl-devel ninja openvdb tbb-devel zlib
 
 cmake --preset base -DBUILD_TESTING=ON
 cmake --build --preset base --parallel 3
@@ -147,7 +147,7 @@ macOS:
 ```bash
 mamba create -n libpgo -c conda-forge python=3.12
 conda activate libpgo
-mamba install -y "cmake>=3.29" gmsh libboost-devel ninja openvdb tbb-devel
+mamba install -y "cmake>=3.29" gmsh libboost-devel ninja openvdb tbb-devel zlib
 
 cmake --preset base -DBUILD_TESTING=ON
 cmake --build --preset base
@@ -159,7 +159,7 @@ Windows:
 ```powershell
 mamba create -n libpgo -c conda-forge python=3.12
 conda activate libpgo
-mamba install -y "cmake>=3.29" gmsh imath libboost-devel mkl-devel ninja openvdb tbb-devel
+mamba install -y "cmake>=3.29" gmsh imath libboost-devel mkl-devel ninja openvdb tbb-devel zlib
 
 cmake --preset base -G Ninja -DBUILD_TESTING=ON `
   -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST
@@ -193,8 +193,8 @@ the shared presets. Use it for local `KNITRO_LIBRARY_HINT`,
 ### Dependency Ownership
 
 - Conda supplies CMake, Ninja, Python packages, and most native runtime/build
-  packages: Boost, MKL, TBB, Gmsh, OpenVDB, Imath, numpy, pytest, setuptools,
-  and wheel.
+  packages: Boost, MKL, TBB, Gmsh, OpenVDB, Imath, zlib, numpy, pytest,
+  setuptools, and wheel.
 - The host package manager supplies platform basics that are awkward to keep
   fully inside conda: Linux compiler/system BLAS/GMP/MPFR headers and macOS
   Homebrew GMP/MPFR/Imath.

@@ -97,7 +97,8 @@ jobs:
             libboost-devel \
             ninja \
             openvdb \
-            tbb-devel
+            tbb-devel \
+            zlib
 
       - name: Install Homebrew prerequisites
         run: brew install gmp mpfr imath

@@ -115,7 +115,8 @@ jobs:
             mkl-devel `
             ninja `
             openvdb `
-            tbb-devel
+            tbb-devel `
+            zlib
 
       - name: Remove incompatible Fortran tools from PATH
         run: |
