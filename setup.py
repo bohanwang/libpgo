@@ -6,7 +6,6 @@ import shlex
 import subprocess
 import sys
 import sysconfig
-import platform
 from pathlib import Path
 import shutil
 from typing import List, Optional, Union
@@ -15,18 +14,6 @@ from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
 install_requires = ["numpy"]
-
-# Convert distutils Windows platform specifiers to CMake -A arguments
-PLAT_TO_CMAKE = {
-    "win32": "Win32",
-    "win-amd64": "x64",
-    "win-arm32": "ARM",
-    "win-arm64": "ARM64",
-}
-
-
-def cmake_bool(value: bool) -> str:
-    return "ON" if value else "OFF"
 
 
 def conda_native_prefix(is_windows: bool) -> Optional[Path]:
@@ -51,49 +38,6 @@ def add_unique_path(paths: List[str], path: Optional[Union[Path, str]]) -> None:
         paths.append(path_str)
 
 
-def path_has_mkl(prefix: Path) -> bool:
-    include_dir = prefix / "include"
-    return (include_dir / "mkl.h").exists() or (include_dir / "mkl_version.h").exists()
-
-
-def has_mkl_hint(is_windows: bool, cmake_prefix_paths: List[str]) -> bool:
-    if os.environ.get("MKLROOT") and path_has_mkl(Path(os.environ["MKLROOT"])):
-        return True
-
-    candidates = [Path(path) for path in cmake_prefix_paths]
-    conda_prefix = conda_native_prefix(is_windows)
-    if conda_prefix is not None:
-        candidates.append(conda_prefix)
-
-    for candidate in candidates:
-        if path_has_mkl(candidate):
-            return True
-
-    return False
-
-
-def python_mkl_enabled(is_macos: bool, is_windows: bool, cmake_prefix_paths: List[str]) -> bool:
-    mode = os.environ.get("PGO_PYTHON_USE_MKL", "auto").strip().lower()
-    if mode not in {"auto", "on", "off"}:
-        raise RuntimeError("PGO_PYTHON_USE_MKL must be one of: auto, on, off")
-
-    if is_macos:
-        if mode == "on":
-            raise RuntimeError("PGO_PYTHON_USE_MKL=on is not supported on macOS; use PGO_PYTHON_USE_MKL=off or auto.")
-        return False
-
-    if mode == "off":
-        return False
-
-    found_hint = has_mkl_hint(is_windows, cmake_prefix_paths)
-    if mode == "on" and not found_hint:
-        raise RuntimeError(
-            "PGO_PYTHON_USE_MKL=on requires an MKL hint. Install mkl-devel and set "
-            "MKLROOT, CONDA_PREFIX, or CMAKE_PREFIX_PATH to the native MKL prefix."
-        )
-    return found_hint
-
-
 # A CMakeExtension needs a sourcedir instead of a file list.
 # The name must be the _single_ output extension from the CMake build.
 # If you need multiple extensions, see scikit-build.
@@ -115,36 +59,17 @@ class CMakeBuild(build_ext):
         debug = int(os.environ.get("DEBUG", 0)) if self.debug is None else self.debug
         cfg = "Debug" if debug else "Release"
         is_windows = sys.platform.startswith("win")
-        is_macos = sys.platform == "darwin"
-        preset_like = "base"
-
-        # CMake lets you override the generator - we need to check this.
-        # Can be set with Conda-Build, for example.
-        cmake_generator = os.environ.get("CMAKE_GENERATOR", "")
+        preset_name = os.environ.get("PGO_PYTHON_CMAKE_PRESET", "python-build")
 
         cmake_prefix_paths = cmake_prefix_path_entries(os.environ.get("CMAKE_PREFIX_PATH"))
         conda_prefix = conda_native_prefix(is_windows)
         if conda_prefix is not None:
             add_unique_path(cmake_prefix_paths, conda_prefix)
-            if "MKLROOT" not in os.environ and path_has_mkl(conda_prefix):
-                os.environ["MKLROOT"] = os.fspath(conda_prefix)
-
-        use_mkl = python_mkl_enabled(is_macos, is_windows, cmake_prefix_paths)
 
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}{os.sep}",
             f"-DPython_EXECUTABLE={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
-            f"-DPGO_USE_MKL={cmake_bool(use_mkl)}",
-            "-DPGO_CHECK_CONDA=ON",
-            "-DPGO_ENABLE_FULL=ON",
-            "-DPGO_BUILD_SUBPROJECTS=ON",
-            "-DPGO_ENABLE_PYTHON=ON",
-            "-DPGO_BUILD_C_API=OFF",
-            "-DPGO_ENABLE_ALEMBIC=ON",
-            "-DPGO_ENABLE_GMSH=OFF",
-            "-DPGO_TET_MESHER_USE_TET_WILD=OFF",
-            "-DPGO_ENABLE_OPENVDB=OFF",
         ]
 
         if cmake_prefix_paths:
@@ -159,41 +84,12 @@ class CMakeBuild(build_ext):
         # In this example, we pass in the version to C++. You might not need to.
         cmake_args += [f"-DPYPGO_VERSION_INFO={self.distribution.get_version()}"]
 
-        if self.compiler.compiler_type != "msvc":
-            # Using Ninja-build since it a) is available as a wheel and b)
-            # multithreads automatically. MSVC would require all variables be
-            # exported for Ninja to pick it up, which is a little tricky to do.
-            # Users can override the generator with CMAKE_GENERATOR in CMake
-            # 3.15+.
-            if not cmake_generator or cmake_generator == "Ninja":
-                try:
-                    import ninja
+        try:
+            import ninja
 
-                    ninja_executable_path = Path(ninja.BIN_DIR) / "ninja"
-                    cmake_args += [
-                        "-GNinja",
-                        f"-DCMAKE_MAKE_PROGRAM:FILEPATH={ninja_executable_path}",
-                    ]
-                except ImportError:
-                    pass
-
-        else:
-            # Single config generators are handled "normally"
-            single_config = any(x in cmake_generator for x in {"NMake", "Ninja"})
-
-            # CMake allows an arch-in-generator style for backward compatibility
-            contains_arch = any(x in cmake_generator for x in {"ARM", "Win64"})
-
-            # Specify the arch if using MSVC generator, but only if it doesn't
-            # contain a backward-compatibility arch spec already in the
-            # generator name.
-            if not single_config and not contains_arch:
-                cmake_args += ["-A", PLAT_TO_CMAKE[self.plat_name]]
-
-            # Multi-config generators have a different way to specify configs
-            if not single_config:
-                cmake_args += [f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{cfg.upper()}={extdir}"]
-                build_args += ["--config", cfg]
+            cmake_args.append(f"-DCMAKE_MAKE_PROGRAM:FILEPATH={Path(ninja.BIN_DIR) / 'ninja'}")
+        except ImportError:
+            pass
 
         if sys.platform.startswith("darwin"):
             # Cross-compile support for macOS - respect ARCHFLAGS if set
@@ -203,41 +99,36 @@ class CMakeBuild(build_ext):
 
         # Set CMAKE_BUILD_PARALLEL_LEVEL to control the parallel build level
         # across all generators.
-        if "CMAKE_BUILD_PARALLEL_LEVEL" not in os.environ:
-            # self.parallel is a Python 3 only way to set parallel jobs by hand
-            # using -j in the build_ext call, not supported by pip or PyPA-build.
-            if hasattr(self, "parallel") and self.parallel:
-                # CMake 3.12+ only.
-                build_args += [f"-j{self.parallel}"]
+        parallel = getattr(self, "parallel", None)
+        if "CMAKE_BUILD_PARALLEL_LEVEL" not in os.environ and parallel:
+            build_args += [f"-j{parallel}"]
 
         default_build_dir = (
             Path.cwd()
             / "build"
-            / f"pypgo-conda-{preset_like}-{sysconfig.get_platform()}-{sys.implementation.cache_tag}-{cfg.lower()}"
+            / f"pypgo-conda-{preset_name}-{sysconfig.get_platform()}-{sys.implementation.cache_tag}-{cfg.lower()}"
         )
         build_temp = Path(os.environ.get("PGO_PYTHON_BUILD_DIR", default_build_dir))
+        build_temp = build_temp.resolve()
         if not build_temp.exists():
             build_temp.mkdir(parents=True)
 
-        # e.g., copy a known DLL into the same folder as the built .pyd/.so
-        # for the extension named mypackage._example
-        if "Windows" in platform.platform():
-            ext_build_path = self.get_ext_fullpath(ext.name)
-            ext_dir = os.path.dirname(os.path.abspath(ext_build_path))
-            if not os.path.exists(ext_dir):
-                os.makedirs(ext_dir, exist_ok=True)
+        if is_windows:
+            ext_dir = (Path.cwd() / self.get_ext_fullpath(ext.name)).resolve().parent
+            ext_dir.mkdir(parents=True, exist_ok=True)
 
-            third_party_folder = (Path.cwd() / "third-party").resolve()
+            third_party_folder = Path.cwd() / "third-party"
+            for folder in ["gmp-msvc/release", "mpfr-msvc/release"]:
+                for dll in (third_party_folder / folder).glob("*.dll"):
+                    dest_dll = ext_dir / dll.name
+                    print(f"copying {dll} to {dest_dll}")
+                    shutil.copyfile(dll, dest_dll)
 
-            for folder in [f"{third_party_folder}/gmp-msvc/release", f"{third_party_folder}/mpfr-msvc/release"]:
-                for file in os.listdir(folder):
-                    full_filename = os.path.join(folder, file)
-                    if os.path.isfile(full_filename) and file.lower().endswith(".dll"):
-                        dest_dll = os.path.join(ext_dir, file)
-                        print(f"copying {full_filename} to {dest_dll}")
-                        shutil.copyfile(full_filename, dest_dll)
-
-        subprocess.run(["cmake", ext.sourcedir, *cmake_args], cwd=build_temp, check=True)
+        subprocess.run(
+            ["cmake", "--preset", preset_name, "-B", os.fspath(build_temp), *cmake_args],
+            cwd=ext.sourcedir,
+            check=True,
+        )
         subprocess.run(["cmake", "--build", ".", "--target", "pypgo", *build_args], cwd=build_temp, check=True)
 
 # The information here can also be placed in setup.cfg - better separation of

@@ -16,10 +16,15 @@ pgo_fetch_populate_compat(CGAL "CGAL source tree is patched before find_package(
 
 set(CGAL_SOURCE_DIR "${CMAKE_BINARY_DIR}/_deps/cgal-src")
 set(CGAL_BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/cgal-build")
-pgo_apply_patch(
-  "${CGAL_SOURCE_DIR}"
-  "${CMAKE_SOURCE_DIR}/CMakeModules/patches/cgal-setup-boost.patch"
-  "Use fetched Boost targets in CGAL_SetupBoost.cmake")
+
+set(MODIFIED_FILE "${CMAKE_SOURCE_DIR}/CMakeModules/patches/CGAL_SetupBoost.cmake")
+set(CGAL_SETUP_BOOST_FILE "${CGAL_SOURCE_DIR}/cmake/modules/CGAL_SetupBoost.cmake")
+if(NOT EXISTS "${CGAL_SETUP_BOOST_FILE}")
+  message(FATAL_ERROR "CGAL setup file not found: ${CGAL_SETUP_BOOST_FILE}")
+endif()
+
+file(READ "${MODIFIED_FILE}" content)
+file(WRITE "${CGAL_SETUP_BOOST_FILE}" "${content}")
 
 # gmp for windows
 if(WIN32)

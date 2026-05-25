@@ -123,6 +123,7 @@ jobs:
             gmsh \
             mkl-devel \
             ninja \
+            openvdb \
             tbb-devel
 
       - name: Install APT prerequisites
@@ -144,6 +145,7 @@ jobs:
       - name: Configure build environment
         run: |
           echo "CMAKE_PREFIX_PATH=${CONDA_PREFIX};/usr" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
           echo "LIBRARY_PATH=/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> "$GITHUB_ENV"
 

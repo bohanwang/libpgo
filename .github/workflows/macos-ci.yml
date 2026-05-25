@@ -98,6 +98,7 @@ jobs:
             "cmake>=3.29" \
             gmsh \
             ninja \
+            openvdb \
             tbb-devel
 
       - name: Install Homebrew prerequisites
@@ -107,6 +108,7 @@ jobs:
         run: |
           echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "DYLD_LIBRARY_PATH=${CONDA_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
           echo "CMAKE_PREFIX_PATH=${CONDA_PREFIX};$(brew --prefix)" >> "$GITHUB_ENV"
 
       - name: Configure with preset base and tests enabled

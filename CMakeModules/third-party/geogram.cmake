@@ -37,10 +37,11 @@ function(_libpgo_replace_in_file target_file old_text new_text)
   file(WRITE "${target_file}" "${_libpgo_file_contents}")
 endfunction()
 
-pgo_apply_patch(
-  "${geogram_SOURCE_DIR}"
-  "${CMAKE_SOURCE_DIR}/CMakeModules/patches/geogram-cmakelists.patch"
-  "Make geogram subproject-friendly and disable its uninstall target")
+set(MODIFIED_FILE "${CMAKE_SOURCE_DIR}/CMakeModules/patches/geogram.cmake")
+set(TARGET_FILE "${geogram_SOURCE_DIR}/CMakeLists.txt")
+
+file(READ "${MODIFIED_FILE}" content)
+file(WRITE "${TARGET_FILE}" "${content}")
 
 set(POISSON_RECON_DIR "${geogram_SOURCE_DIR}/src/lib/geogram/third_party/PoissonRecon")
 

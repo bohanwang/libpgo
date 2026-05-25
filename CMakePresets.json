@@ -33,6 +33,25 @@
             }
         },
         {
+            "name": "python-build",
+            "hidden": false,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/python-build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "PGO_USE_MKL": "OFF",
+                "PGO_CHECK_CONDA": "ON",
+                "PGO_ENABLE_FULL": "ON",
+                "PGO_BUILD_SUBPROJECTS": "ON",
+                "PGO_ENABLE_PYTHON": "ON",
+                "PGO_BUILD_C_API": "OFF",
+                "PGO_ENABLE_ALEMBIC": "ON",
+                "PGO_ENABLE_GMSH": "OFF",
+                "PGO_TET_MESHER_USE_TET_WILD": "OFF",
+                "PGO_ENABLE_OPENVDB": "OFF"
+            }
+        },
+        {
             "name": "knitro",
             "hidden": true,
             "cacheVariables": {
@@ -121,6 +140,13 @@
         {
             "name": "base",
             "configurePreset": "base"
+        },
+        {
+            "name": "python-build",
+            "configurePreset": "python-build",
+            "targets": [
+                "pypgo"
+            ]
         },
         {
             "name": "base_debug",

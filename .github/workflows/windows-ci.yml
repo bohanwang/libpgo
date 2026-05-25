@@ -60,10 +60,8 @@ jobs:
       - name: Build and install Python package
         run: |
           # Strip mingw/Strawberry gfortran so Eigen's optional Fortran probe
-          # does not pick an MSVC-incompatible compiler. Build with Ninja + MSVC.
+          # does not pick an MSVC-incompatible compiler.
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'mingw' -and $_ -notmatch 'Strawberry' }) -join ';'
-          $env:CMAKE_GENERATOR = "Ninja"
-          $env:CMAKE_ARGS = "-DCMAKE_PREFIX_PATH=$env:CONDA_PREFIX/Library"
           python setup.py build_ext --inplace
 
       - name: Run Python API pytest suite
@@ -110,6 +108,7 @@ jobs:
             imath `
             mkl-devel `
             ninja `
+            openvdb `
             tbb-devel
 
       - name: Configure with preset base and tests enabled
@@ -119,6 +118,8 @@ jobs:
           # fatally when a found compiler is incompatible with the MSVC toolchain.
           # Drop those directories so no Fortran compiler is discovered.
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'mingw' -and $_ -notmatch 'Strawberry' }) -join ';'
+          $env:CMAKE_PREFIX_PATH = "$env:CONDA_PREFIX\Library"
+          $env:PATH = "$env:CONDA_PREFIX\Library\bin;$env:PATH"
           # Defer gtest discovery to test time; running the test exes at build
           # time fails on Windows because their runtime DLLs are not co-located.
           cmake --preset base -G Ninja -DBUILD_TESTING=ON `
