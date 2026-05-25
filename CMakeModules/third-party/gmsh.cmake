@@ -5,6 +5,7 @@ endif()
 include(FindPackageHandleStandardArgs)
 
 set(_pgo_gmsh_prefix_hints)
+set(_pgo_gmsh_use_config TRUE)
 
 if(PGO_CHECK_CONDA AND NOT "$ENV{CONDA_PREFIX}" STREQUAL "")
     if(WIN32)
@@ -12,6 +13,7 @@ if(PGO_CHECK_CONDA AND NOT "$ENV{CONDA_PREFIX}" STREQUAL "")
     else()
         list(APPEND _pgo_gmsh_prefix_hints "$ENV{CONDA_PREFIX}")
     endif()
+    set(_pgo_gmsh_use_config FALSE)
 endif()
 
 list(APPEND _pgo_gmsh_prefix_hints
@@ -44,20 +46,22 @@ function(_pgo_alias_existing_gmsh_target result_var)
     set(${result_var} FALSE PARENT_SCOPE)
 endfunction()
 
-find_package(Gmsh CONFIG QUIET
-    PATHS ${_pgo_gmsh_prefix_hints}
-)
-_pgo_alias_existing_gmsh_target(_pgo_gmsh_found_config_target)
-if(_pgo_gmsh_found_config_target)
-    return()
-endif()
+if(_pgo_gmsh_use_config)
+    find_package(Gmsh CONFIG QUIET
+        PATHS ${_pgo_gmsh_prefix_hints}
+    )
+    _pgo_alias_existing_gmsh_target(_pgo_gmsh_found_config_target)
+    if(_pgo_gmsh_found_config_target)
+        return()
+    endif()
 
-find_package(gmsh CONFIG QUIET
-    PATHS ${_pgo_gmsh_prefix_hints}
-)
-_pgo_alias_existing_gmsh_target(_pgo_gmsh_found_config_target)
-if(_pgo_gmsh_found_config_target)
-    return()
+    find_package(gmsh CONFIG QUIET
+        PATHS ${_pgo_gmsh_prefix_hints}
+    )
+    _pgo_alias_existing_gmsh_target(_pgo_gmsh_found_config_target)
+    if(_pgo_gmsh_found_config_target)
+        return()
+    endif()
 endif()
 
 if(NOT GMSH_INCLUDE_DIR)
