@@ -32,7 +32,7 @@ jobs:
         with:
           miniforge-variant: Miniforge3
           miniforge-version: latest
-          activate-environment: libpgo-ci
+          activate-environment: libpgo
           auto-activate-base: false
           use-mamba: true
           python-version: "3.12"
@@ -45,6 +45,7 @@ jobs:
             "cmake>=3.29" \
             ninja \
             numpy \
+            pip \
             pytest \
             setuptools \
             tbb-devel \
@@ -53,13 +54,8 @@ jobs:
       - name: Install Homebrew prerequisites
         run: brew install gmp mpfr imath
 
-      - name: Configure build environment
-        run: |
-          echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
-
       - name: Build and install Python package
-        run: python setup.py build_ext --inplace
+        run: python -m pip install -e . --no-build-isolation
 
       - name: Run Python API pytest suite
         run: python -m pytest -q tests/pypgo
@@ -85,7 +81,7 @@ jobs:
         with:
           miniforge-variant: Miniforge3
           miniforge-version: latest
-          activate-environment: libpgo-ci
+          activate-environment: libpgo
           auto-activate-base: false
           use-mamba: true
           python-version: "3.12"
@@ -103,13 +99,6 @@ jobs:
 
       - name: Install Homebrew prerequisites
         run: brew install gmp mpfr imath
-
-      - name: Configure build environment
-        run: |
-          echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
-          echo "DYLD_LIBRARY_PATH=${CONDA_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
-          echo "CMAKE_PREFIX_PATH=${CONDA_PREFIX};$(brew --prefix)" >> "$GITHUB_ENV"
 
       - name: Configure with preset base and tests enabled
         run: |
