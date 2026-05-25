@@ -5,6 +5,7 @@ endif()
 message(STATUS "Loading spdlog...")
 
 include(FetchContent)
+pgo_dep_option(SPDLOG_FMT_EXTERNAL_HO BOOL ON "Use the existing header-only fmt target in spdlog")
 FetchContent_Declare(
   spdlog
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.15.2.zip
