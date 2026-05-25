@@ -9,8 +9,8 @@ The source code extends [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) an
 
 Conda is the recommended build environment for both the Python package and the
 native CMake build. Use one conda environment for Python packages and native
-runtime/build packages so CMake, Python, MKL, TBB, Gmsh, OpenVDB, and other
-dependencies are resolved from a consistent prefix.
+runtime/build packages so CMake, Python, Boost, MKL, TBB, Gmsh, OpenVDB, and
+other dependencies are resolved from a consistent prefix.
 
 - The Python package build uses the smaller `python-build` CMake preset.
 - The native CMake build uses the `base` preset, which enables the full default
@@ -23,6 +23,10 @@ channel. `mamba` is used below for speed; `conda install` works too if you
 prefer it.
 
 ### System Prerequisites
+
+Install conda: See [Conda Installation](https://www.anaconda.com/docs/getting-started/miniconda/install/overview#choose-your-installation-guide).
+
+Install mamba: See [Mamba Installation](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html#automatic-install).
 
 Linux:
 
@@ -60,7 +64,7 @@ Linux:
 ```bash
 mamba create -n libpgo -c conda-forge python=3.12
 conda activate libpgo
-mamba install -y "cmake>=3.29" mkl-devel ninja numpy pip pytest setuptools tbb-devel wheel
+mamba install -y "cmake>=3.29" libboost-devel mkl-devel ninja numpy pip pytest setuptools tbb-devel wheel
 
 python -m pip install -e . --no-build-isolation
 python -m pytest -q tests/pypgo
@@ -71,7 +75,7 @@ macOS:
 ```bash
 mamba create -n libpgo -c conda-forge python=3.12
 conda activate libpgo
-mamba install -y "cmake>=3.29" ninja numpy pip pytest setuptools tbb-devel wheel
+mamba install -y "cmake>=3.29" libboost-devel ninja numpy pip pytest setuptools tbb-devel wheel
 
 python -m pip install -e . --no-build-isolation
 python -m pytest -q tests/pypgo
@@ -82,7 +86,7 @@ Windows:
 ```powershell
 mamba create -n libpgo -c conda-forge python=3.12
 conda activate libpgo
-mamba install -y "cmake>=3.29" imath mkl-devel ninja numpy pip pytest setuptools tbb-devel wheel
+mamba install -y "cmake>=3.29" imath libboost-devel mkl-devel ninja numpy pip pytest setuptools tbb-devel wheel
 
 python -m pip install -e . --no-build-isolation
 python -m pytest -q tests/pypgo
@@ -131,7 +135,7 @@ Linux:
 ```bash
 mamba create -n libpgo -c conda-forge python=3.12
 conda activate libpgo
-mamba install -y "cmake>=3.29" gmsh mkl-devel ninja openvdb tbb-devel
+mamba install -y "cmake>=3.29" gmsh libboost-devel mkl-devel ninja openvdb tbb-devel
 
 cmake --preset base -DBUILD_TESTING=ON
 cmake --build --preset base --parallel 3
@@ -143,7 +147,7 @@ macOS:
 ```bash
 mamba create -n libpgo -c conda-forge python=3.12
 conda activate libpgo
-mamba install -y "cmake>=3.29" gmsh ninja openvdb tbb-devel
+mamba install -y "cmake>=3.29" gmsh libboost-devel ninja openvdb tbb-devel
 
 cmake --preset base -DBUILD_TESTING=ON
 cmake --build --preset base
@@ -155,7 +159,7 @@ Windows:
 ```powershell
 mamba create -n libpgo -c conda-forge python=3.12
 conda activate libpgo
-mamba install -y "cmake>=3.29" gmsh imath mkl-devel ninja openvdb tbb-devel
+mamba install -y "cmake>=3.29" gmsh imath libboost-devel mkl-devel ninja openvdb tbb-devel
 
 cmake --preset base -G Ninja -DBUILD_TESTING=ON `
   -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST
@@ -189,14 +193,14 @@ the shared presets. Use it for local `KNITRO_LIBRARY_HINT`,
 ### Dependency Ownership
 
 - Conda supplies CMake, Ninja, Python packages, and most native runtime/build
-  packages: MKL, TBB, Gmsh, OpenVDB, Imath, numpy, pytest, setuptools, and
-  wheel.
+  packages: Boost, MKL, TBB, Gmsh, OpenVDB, Imath, numpy, pytest, setuptools,
+  and wheel.
 - The host package manager supplies platform basics that are awkward to keep
   fully inside conda: Linux compiler/system BLAS/GMP/MPFR headers and macOS
   Homebrew GMP/MPFR/Imath.
 - FetchContent-managed C++ dependencies are downloaded and built by this
-  repository: Eigen, fmt, spdlog, nlohmann_json, SuiteSparse, Ceres, Boost,
-  CGAL, geogram, libigl, Alembic, nanobind, and related internal dependencies.
+  repository: Eigen, fmt, spdlog, nlohmann_json, SuiteSparse, Ceres, CGAL,
+  geogram, libigl, Alembic, nanobind, and related internal dependencies.
 
 ---
 

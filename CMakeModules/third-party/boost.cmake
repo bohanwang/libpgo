@@ -1,29 +1,41 @@
-if(TARGET Boost::boost)
+if(TARGET Boost::thread AND TARGET Boost::system AND TARGET Boost::iostreams)
   return()
 endif()
 
-message(STATUS "Loading Boost...")
-include(FetchContent)
+message(STATUS "Loading Boost from conda...")
 
-pgo_dep_option(BOOST_INCLUDE_LIBRARIES STRING
-  "any;foreach;format;graph;heap;logic;math;multiprecision;property_map;system;thread;variant"
-  "Boost libraries used by CGAL/libpgo")
-
-# set(FETCHCONTENT_QUIET OFF)
-FetchContent_Declare(
-  boost
-  URL https://github.com/boostorg/boost/releases/download/boost-1.85.0/boost-1.85.0-cmake.tar.xz
-  EXCLUDE_FROM_ALL
-  DOWNLOAD_EXTRACT_TIMESTAMP ON
-)
-
-pgo_fetch_make_available(boost)
-
-if(DEFINED boost_SOURCE_DIR)
-  pgo_dep_option(Boost_NO_SYSTEM_PATHS BOOL ON "Restrict Boost lookup to fetched Boost")
-  pgo_dep_option(Boost_NO_BOOST_CMAKE BOOL ON "Avoid external boost-cmake package lookup")
-  pgo_dep_option(Boost_INCLUDE_DIR PATH "${boost_SOURCE_DIR}/libs/config/include" "Fetched Boost include directory for FindBoost compatibility")
-  pgo_dep_option(Boost_INCLUDE_DIRS STRING "${boost_SOURCE_DIR}/libs/config/include" "Fetched Boost include directories for FindBoost compatibility")
+if(NOT PGO_CHECK_CONDA OR "$ENV{CONDA_PREFIX}" STREQUAL "")
+  message(FATAL_ERROR "Boost is required from the active conda environment. Activate conda and install libboost-devel.")
 endif()
+
+if(WIN32)
+  set(PGO_BOOST_PREFIX "$ENV{CONDA_PREFIX}/Library")
+else()
+  set(PGO_BOOST_PREFIX "$ENV{CONDA_PREFIX}")
+endif()
+
+list(PREPEND CMAKE_PREFIX_PATH "${PGO_BOOST_PREFIX}")
+
+set(BOOST_ROOT "${PGO_BOOST_PREFIX}" CACHE PATH "Boost prefix" FORCE)
+set(BOOST_INCLUDEDIR "${PGO_BOOST_PREFIX}/include" CACHE PATH "Boost include directory" FORCE)
+set(BOOST_LIBRARYDIR "${PGO_BOOST_PREFIX}/lib" CACHE PATH "Boost library directory" FORCE)
+set(Boost_NO_SYSTEM_PATHS ON CACHE BOOL "Restrict Boost lookup to conda" FORCE)
+set(Boost_NO_BOOST_CMAKE OFF CACHE BOOL "Prefer conda Boost CMake config" FORCE)
+
+find_package(Boost CONFIG REQUIRED COMPONENTS
+  any
+  foreach
+  format
+  graph
+  heap
+  iostreams
+  logic
+  math
+  multiprecision
+  property_map
+  system
+  thread
+  variant
+)
 
 message(STATUS "Done.")

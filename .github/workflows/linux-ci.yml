@@ -50,6 +50,7 @@ jobs:
         run: |
           mamba install -y \
             "cmake>=3.29" \
+            libboost-devel \
             mkl-devel \
             ninja \
             numpy \
@@ -115,6 +116,7 @@ jobs:
           mamba install -y \
             "cmake>=3.29" \
             gmsh \
+            libboost-devel \
             mkl-devel \
             ninja \
             openvdb \

@@ -49,6 +49,7 @@ jobs:
           mamba install -y `
             "cmake>=3.29" `
             imath `
+            libboost-devel `
             mkl-devel `
             ninja `
             numpy `
@@ -57,6 +58,13 @@ jobs:
             setuptools `
             tbb-devel `
             wheel
+
+      - name: Remove incompatible Fortran tools from PATH
+        run: |
+          $env:PATH = ($env:PATH -split ';' | Where-Object {
+            $_ -notmatch 'mingw' -and $_ -notmatch 'Strawberry'
+          }) -join ';'
+          "PATH=$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build and install Python package
         run: python -m pip install -e . --no-build-isolation
@@ -103,10 +111,18 @@ jobs:
             "cmake>=3.29" `
             gmsh `
             imath `
+            libboost-devel `
             mkl-devel `
             ninja `
             openvdb `
             tbb-devel
+
+      - name: Remove incompatible Fortran tools from PATH
+        run: |
+          $env:PATH = ($env:PATH -split ';' | Where-Object {
+            $_ -notmatch 'mingw' -and $_ -notmatch 'Strawberry'
+          }) -join ';'
+          "PATH=$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Configure with preset base and tests enabled
         run: |
