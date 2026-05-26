@@ -20,7 +20,7 @@ set(BOOST_ROOT "${PGO_BOOST_PREFIX}" CACHE PATH "Boost prefix" FORCE)
 set(BOOST_INCLUDEDIR "${PGO_BOOST_PREFIX}/include" CACHE PATH "Boost include directory" FORCE)
 set(BOOST_LIBRARYDIR "${PGO_BOOST_PREFIX}/lib" CACHE PATH "Boost library directory" FORCE)
 set(Boost_USE_STATIC_LIBS OFF)
-set(Boost_USE_STATIC_LIBS OFF CACHE BOOL "Use conda shared Boost libraries" FORCE)
+set(Boost_USE_STATIC_LIBS OFF CACHE BOOL "Use conda static Boost libraries" FORCE)
 set(Boost_NO_SYSTEM_PATHS ON CACHE BOOL "Restrict Boost lookup to conda" FORCE)
 set(Boost_NO_BOOST_CMAKE OFF CACHE BOOL "Prefer conda Boost CMake config" FORCE)
 

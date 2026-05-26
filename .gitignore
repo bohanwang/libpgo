@@ -73,3 +73,6 @@ paper/*
 *_output
 
 *.avi
+
+
+dist/
