@@ -5,17 +5,17 @@ endif()
 
 message(STATUS "Loading Nlopt...")
 
-set(NLOPT_CXX ON CACHE INTERNAL "enable cxx routines" FORCE)
-set(NLOPT_FORTRAN OFF CACHE INTERNAL "enable fortran" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "Build NLopt as a shared library" FORCE)
-set(NLOPT_PYTHON OFF CACHE INTERNAL "build python bindings" FORCE)
-set(NLOPT_OCTAVE OFF CACHE INTERNAL "build octave bindings" FORCE)
-set(NLOPT_MATLAB OFF CACHE INTERNAL "build matlab bindings" FORCE)
-set(NLOPT_GUILE OFF CACHE INTERNAL "build guile bindings" FORCE)
-set(NLOPT_JAVA OFF CACHE INTERNAL "build java bindings" FORCE)
-set(NLOPT_SWIG OFF CACHE INTERNAL "use SWIG to build bindings" FORCE)
-set(NLOPT_LUKSAN ON CACHE INTERNAL "enable LGPL Luksan solvers" FORCE)
-set(NLOPT_TESTS OFF CACHE INTERNAL "build unit tests" FORCE)
+pgo_dep_option(NLOPT_CXX INTERNAL ON "enable cxx routines")
+pgo_dep_option(NLOPT_FORTRAN INTERNAL OFF "enable fortran")
+pgo_dep_option(BUILD_SHARED_LIBS INTERNAL OFF "Build NLopt as a shared library")
+pgo_dep_option(NLOPT_PYTHON INTERNAL OFF "build python bindings")
+pgo_dep_option(NLOPT_OCTAVE INTERNAL OFF "build octave bindings")
+pgo_dep_option(NLOPT_MATLAB INTERNAL OFF "build matlab bindings")
+pgo_dep_option(NLOPT_GUILE INTERNAL OFF "build guile bindings")
+pgo_dep_option(NLOPT_JAVA INTERNAL OFF "build java bindings")
+pgo_dep_option(NLOPT_SWIG INTERNAL OFF "use SWIG to build bindings")
+pgo_dep_option(NLOPT_LUKSAN INTERNAL ON "enable LGPL Luksan solvers")
+pgo_dep_option(NLOPT_TESTS INTERNAL OFF "build unit tests")
 
 
 include(FetchContent)
@@ -24,9 +24,8 @@ FetchContent_Declare(
   URL https://github.com/stevengj/nlopt/archive/refs/tags/v2.10.0.zip
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
-  FIND_PACKAGE_ARGS NAMES NLopt
 )
 
-FetchContent_MakeAvailable(NLopt)
+pgo_fetch_make_available(NLopt)
 
 message(STATUS "Done.")

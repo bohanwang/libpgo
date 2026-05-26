@@ -12,7 +12,7 @@ copyright to Bohan Wang
 
 namespace pgo {
 namespace Contact {
-namespace CIPC {
+namespace IPC {
 static constexpr double kEps = 1e-20;  // numerical guard
 
 // =========================================================================
@@ -306,7 +306,7 @@ M9d peSqDistHess(const V3d &p, const V3d &e0, const V3d &e1)
 {
   // Analytical Hessian via auto-generated symbolic derivatives
   double H_data[81];
-  pgo::Contact::CIPC::autogen::point_line_distance_hessian_3D(
+  pgo::Contact::IPC::autogen::point_line_distance_hessian_3D(
     p[0], p[1], p[2],
     e0[0], e0[1], e0[2],
     e1[0], e1[1], e1[2],
@@ -336,7 +336,7 @@ V12d ptSqDistGrad(const V3d &p, const V3d &t0,
 {
   // Analytical gradient via auto-generated symbolic derivatives
   double g_data[12];
-  pgo::Contact::CIPC::autogen::point_plane_distance_gradient(
+  pgo::Contact::IPC::autogen::point_plane_distance_gradient(
     p[0], p[1], p[2],
     t0[0], t0[1], t0[2],
     t1[0], t1[1], t1[2],
@@ -349,7 +349,7 @@ M12d ptSqDistHess(const V3d &p, const V3d &t0,
   const V3d &t1, const V3d &t2)
 {
   double H_data[144];
-  pgo::Contact::CIPC::autogen::point_plane_distance_hessian(
+  pgo::Contact::IPC::autogen::point_plane_distance_hessian(
     p[0], p[1], p[2],
     t0[0], t0[1], t0[2],
     t1[0], t1[1], t1[2],
@@ -393,7 +393,7 @@ V12d eeSqDistGrad(const V3d &ea0, const V3d &ea1,
   const V3d &eb0, const V3d &eb1)
 {
   double g_data[12];
-  pgo::Contact::CIPC::autogen::line_line_distance_gradient(
+  pgo::Contact::IPC::autogen::line_line_distance_gradient(
     ea0[0], ea0[1], ea0[2],
     ea1[0], ea1[1], ea1[2],
     eb0[0], eb0[1], eb0[2],
@@ -406,7 +406,7 @@ M12d eeSqDistHess(const V3d &ea0, const V3d &ea1,
   const V3d &eb0, const V3d &eb1)
 {
   double H_data[144];
-  pgo::Contact::CIPC::autogen::line_line_distance_hessian(
+  pgo::Contact::IPC::autogen::line_line_distance_hessian(
     ea0[0], ea0[1], ea0[2],
     ea1[0], ea1[1], ea1[2],
     eb0[0], eb0[1], eb0[2],
@@ -466,7 +466,7 @@ V12d eeMollifierGrad(const V3d &ea0, const V3d &ea1,
 
   // dx/dvertices (analytical)
   double gx_data[12];
-  pgo::Contact::CIPC::autogen::edge_edge_cross_squarednorm_gradient(
+  pgo::Contact::IPC::autogen::edge_edge_cross_squarednorm_gradient(
     ea0[0], ea0[1], ea0[2], ea1[0], ea1[1], ea1[2],
     eb0[0], eb0[1], eb0[2], eb1[0], eb1[1], eb1[2],
     gx_data);
@@ -492,14 +492,14 @@ M12d eeMollifierHess(const V3d &ea0, const V3d &ea1,
   double d2moll_dx2 = -2.0 * one_div_eps * one_div_eps;
 
   double gx_data[12];
-  pgo::Contact::CIPC::autogen::edge_edge_cross_squarednorm_gradient(
+  pgo::Contact::IPC::autogen::edge_edge_cross_squarednorm_gradient(
     ea0[0], ea0[1], ea0[2], ea1[0], ea1[1], ea1[2],
     eb0[0], eb0[1], eb0[2], eb1[0], eb1[1], eb1[2],
     gx_data);
   V12d gx = Eigen::Map<V12d>(gx_data);
 
   double Hx_data[144];
-  pgo::Contact::CIPC::autogen::edge_edge_cross_squarednorm_hessian(
+  pgo::Contact::IPC::autogen::edge_edge_cross_squarednorm_hessian(
     ea0[0], ea0[1], ea0[2], ea1[0], ea1[1], ea1[2],
     eb0[0], eb0[1], eb0[2], eb1[0], eb1[1], eb1[2],
     Hx_data);
@@ -807,8 +807,145 @@ M12d computeEESqDistHess(const V3d &ea0, const V3d &ea1,
   return H12;
 }
 
+// ----- Combined dispatchers (classify once) -----
+
+PTDistAll computePTSqDistAll(const V3d &p, const V3d &t0,
+  const V3d &t1, const V3d &t2)
+{
+  PTDistAll result;
+  auto tp = classifyPT(p, t0, t1, t2);
+  switch (tp) {
+  case PTDistType::PP_PT0: {
+    V6d g6 = ppSqDistGrad(p, t0);
+    M6d H6 = ppSqDistHess(p, t0);
+    result.d2 = ppSqDist(p, t0);
+    embedPP(0, 1, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case PTDistType::PP_PT1: {
+    V6d g6 = ppSqDistGrad(p, t1);
+    M6d H6 = ppSqDistHess(p, t1);
+    result.d2 = ppSqDist(p, t1);
+    embedPP(0, 2, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case PTDistType::PP_PT2: {
+    V6d g6 = ppSqDistGrad(p, t2);
+    M6d H6 = ppSqDistHess(p, t2);
+    result.d2 = ppSqDist(p, t2);
+    embedPP(0, 3, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case PTDistType::PE_PT0T1: {
+    V9d g9 = peSqDistGrad(p, t0, t1);
+    M9d H9 = peSqDistHess(p, t0, t1);
+    result.d2 = peSqDist(p, t0, t1);
+    int slots[3] = { 0, 1, 2 };
+    embedPE(slots, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case PTDistType::PE_PT1T2: {
+    V9d g9 = peSqDistGrad(p, t1, t2);
+    M9d H9 = peSqDistHess(p, t1, t2);
+    result.d2 = peSqDist(p, t1, t2);
+    int slots[3] = { 0, 2, 3 };
+    embedPE(slots, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case PTDistType::PE_PT2T0: {
+    V9d g9 = peSqDistGrad(p, t2, t0);
+    M9d H9 = peSqDistHess(p, t2, t0);
+    result.d2 = peSqDist(p, t2, t0);
+    int slots[3] = { 0, 3, 1 };
+    embedPE(slots, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case PTDistType::PT:
+    result.d2 = ptSqDist(p, t0, t1, t2);
+    result.grad = ptSqDistGrad(p, t0, t1, t2);
+    result.hess = ptSqDistHess(p, t0, t1, t2);
+    break;
+  }
+  return result;
+}
+
+EEDistAll computeEESqDistAll(const V3d &ea0, const V3d &ea1,
+  const V3d &eb0, const V3d &eb1)
+{
+  EEDistAll result;
+  auto tp = classifyEE(ea0, ea1, eb0, eb1);
+  switch (tp) {
+  case EEDistType::PP_Ea0Eb0: {
+    V6d g6 = ppSqDistGrad(ea0, eb0);
+    M6d H6 = ppSqDistHess(ea0, eb0);
+    result.d2 = ppSqDist(ea0, eb0);
+    embedPP(0, 2, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PP_Ea0Eb1: {
+    V6d g6 = ppSqDistGrad(ea0, eb1);
+    M6d H6 = ppSqDistHess(ea0, eb1);
+    result.d2 = ppSqDist(ea0, eb1);
+    embedPP(0, 3, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PP_Ea1Eb0: {
+    V6d g6 = ppSqDistGrad(ea1, eb0);
+    M6d H6 = ppSqDistHess(ea1, eb0);
+    result.d2 = ppSqDist(ea1, eb0);
+    embedPP(1, 2, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PP_Ea1Eb1: {
+    V6d g6 = ppSqDistGrad(ea1, eb1);
+    M6d H6 = ppSqDistHess(ea1, eb1);
+    result.d2 = ppSqDist(ea1, eb1);
+    embedPP(1, 3, g6, H6, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PE_Ea0_Eb: {
+    V9d g9 = peSqDistGrad(ea0, eb0, eb1);
+    M9d H9 = peSqDistHess(ea0, eb0, eb1);
+    result.d2 = peSqDist(ea0, eb0, eb1);
+    int s[3] = { 0, 2, 3 };
+    embedPE(s, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PE_Ea1_Eb: {
+    V9d g9 = peSqDistGrad(ea1, eb0, eb1);
+    M9d H9 = peSqDistHess(ea1, eb0, eb1);
+    result.d2 = peSqDist(ea1, eb0, eb1);
+    int s[3] = { 1, 2, 3 };
+    embedPE(s, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PE_Eb0_Ea: {
+    V9d g9 = peSqDistGrad(eb0, ea0, ea1);
+    M9d H9 = peSqDistHess(eb0, ea0, ea1);
+    result.d2 = peSqDist(eb0, ea0, ea1);
+    int s[3] = { 2, 0, 1 };
+    embedPE(s, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::PE_Eb1_Ea: {
+    V9d g9 = peSqDistGrad(eb1, ea0, ea1);
+    M9d H9 = peSqDistHess(eb1, ea0, ea1);
+    result.d2 = peSqDist(eb1, ea0, ea1);
+    int s[3] = { 3, 0, 1 };
+    embedPE(s, g9, H9, result.grad, result.hess);
+    break;
+  }
+  case EEDistType::EE:
+    result.d2 = eeSqDist(ea0, ea1, eb0, eb1);
+    result.grad = eeSqDistGrad(ea0, ea1, eb0, eb1);
+    result.hess = eeSqDistHess(ea0, ea1, eb0, eb1);
+    break;
+  }
+  return result;
+}
+
 }  // namespace distance
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

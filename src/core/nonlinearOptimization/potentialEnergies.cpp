@@ -7,11 +7,9 @@ copyright to USC
 #include "pgoLogging.h"
 #include "EigenSupport.h"
 
-#include <tbb/concurrent_vector.h>
-#include <tbb/parallel_for.h>
-
 #include <numeric>
 #include <iostream>
+#include <vector>
 
 using namespace pgo::NonlinearOptimization;
 namespace ES = pgo::EigenSupport;
@@ -49,11 +47,9 @@ PotentialEnergies::~PotentialEnergies()
 
 void PotentialEnergies::init()
 {
-  // std::vector<ES::TripletD> entries;
-  tbb::concurrent_vector<ES::TripletD> entries;
+  std::vector<ES::TripletD> entries;
   for (auto energy : potentialEnergies) {
     ES::SpMatD h;
-    energy->createHessian(h);
 
     std::vector<int> dofs;
     energy->getDOFs(dofs);
@@ -71,14 +67,16 @@ void PotentialEnergies::init()
 
     // Only include fixed-topology energies in hessianAll
     if (energy->isHessianTopologyFixed()) {
-      tbb::parallel_for((ES::IDX)0, h.outerSize(), [&](ES::IDX outeri) {
+      energy->createHessian(h);
+      entries.reserve(entries.size() + static_cast<std::size_t>(h.nonZeros()));
+      for (ES::IDX outeri = 0; outeri < h.outerSize(); ++outeri) {
         for (ES::SpMatD::InnerIterator it(h, outeri); it; ++it) {
           entries.emplace_back(
             (ES::SpMatD::StorageIndex)dofs[it.row()],
             (ES::SpMatD::StorageIndex)dofs[it.col()],
             1.0);
         }
-      });
+      }
     }
 
     buffer->hessianMatrices.push_back(h);
@@ -280,6 +278,62 @@ void PotentialEnergies::hessianDirect(EigenSupport::ConstRefVecXd x, EigenSuppor
   }
 }
 
+void PotentialEnergies::gradient_hessian(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad, EigenSupport::SpMatD &hess) const
+{
+  grad.setZero();
+
+  hess = hessianAll;
+  std::memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
+
+  for (size_t i = 0; i < potentialEnergies.size(); i++) {
+    if (energyCoeffs[i] == 0)
+      continue;
+
+    mapx(x, energyDOFs[i], buffer->xlocals[i]);
+    buffer->gradients[i].setZero();
+
+    if (potentialEnergies[i]->isHessianTopologyFixed()) {
+      potentialEnergies[i]->gradient(buffer->xlocals[i], buffer->gradients[i]);
+
+      if (buffer->hessianMatrices[i].nonZeros()) {
+        potentialEnergies[i]->hessian(buffer->xlocals[i], buffer->hessianMatrices[i]);
+        ES::addSmallToBig(energyCoeffs[i], buffer->hessianMatrices[i], hess, 1.0, hessianMatrixMappings[i]);
+      }
+    }
+    else {
+      ES::SpMatD Ki;
+      potentialEnergies[i]->gradient_hessian(buffer->xlocals[i], buffer->gradients[i], Ki);
+      if (Ki.nonZeros()) {
+        ES::SpMatD KiGlobal(nAll, nAll);
+        std::vector<ES::TripletD> entries;
+        entries.reserve(Ki.nonZeros());
+        for (Eigen::Index outeri = 0; outeri < Ki.outerSize(); outeri++) {
+          for (ES::SpMatD::InnerIterator it(Ki, outeri); it; ++it) {
+            entries.emplace_back(
+              (ES::SpMatD::StorageIndex)energyDOFs[i][it.row()],
+              (ES::SpMatD::StorageIndex)energyDOFs[i][it.col()],
+              it.value() * energyCoeffs[i]);
+          }
+        }
+        KiGlobal.setFromTriplets(entries.begin(), entries.end());
+        hess = hess + KiGlobal;
+      }
+    }
+
+    for (Eigen::Index j = 0; j < buffer->gradients[i].size(); j++)
+      grad[energyDOFs[i][j]] += buffer->gradients[i][j] * energyCoeffs[i];
+  }
+}
+
+double PotentialEnergies::func_grad_hessian(
+  EigenSupport::ConstRefVecXd x,
+  EigenSupport::RefVecXd grad,
+  EigenSupport::SpMatD &hess) const
+{
+  gradient_hessian(x, grad, hess);
+  return func(x);
+}
+
 MaxStepResult PotentialEnergies::computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
 {
   MaxStepResult result = MaxStepResult::unconstrained();
@@ -289,4 +343,24 @@ MaxStepResult PotentialEnergies::computeMaxStepLimit(EigenSupport::ConstRefVecXd
     result = mergeMaxStepResults(result, potentialEnergies[i]->computeMaxStepLimit(buffer->xlocals[i], buffer->vecs[i]));
   }
   return result;
+}
+
+void PotentialEnergies::beginLineSearch(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
+{
+  for (size_t i = 0; i < potentialEnergies.size(); i++) {
+    const auto *aware = dynamic_cast<const LineSearchAwareEnergy *>(potentialEnergies[i].get());
+    if (!aware)
+      continue;
+    mapx(x, energyDOFs[i], buffer->xlocals[i]);
+    mapx(dx, energyDOFs[i], buffer->vecs[i]);
+    aware->beginLineSearch(buffer->xlocals[i], buffer->vecs[i]);
+  }
+}
+
+void PotentialEnergies::endLineSearch() const
+{
+  for (const auto &energy : potentialEnergies) {
+    if (const auto *aware = dynamic_cast<const LineSearchAwareEnergy *>(energy.get()))
+      aware->endLineSearch();
+  }
 }

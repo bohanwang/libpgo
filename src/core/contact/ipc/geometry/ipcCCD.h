@@ -10,7 +10,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 namespace ccd
@@ -32,6 +32,6 @@ double edgeEdgeCCD(const EigenSupport::V3d &ea0, const EigenSupport::V3d &ea1,
 
 }  // namespace ccd
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

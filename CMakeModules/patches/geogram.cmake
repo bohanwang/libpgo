@@ -46,7 +46,7 @@ if(NOT GEOGRAM_SUB_BUILD)
    option(GEOGRAM_LIB_ONLY "Libraries only (no example programs/no viewer)" OFF)
    option(GEOGRAM_WITH_FPG "Predicate generator (Sylvain Pion's FPG)" OFF)
    option(GEOGRAM_USE_SYSTEM_GLFW3 "Use the version of GLFW3 installed in the system if found" OFF)
-   option(GEOGRAM_WITH_GARGANTUA "64-bit indices" OFF)   
+   option(GEOGRAM_WITH_GARGANTUA "64-bit indices" OFF)
 endif()
 
 include(cmake/geo_detect_platform.cmake)
@@ -231,5 +231,3 @@ configure_file(
 
 # This must always be last!
 include(CPack)
-
-

@@ -16,7 +16,7 @@ copyright to Bohan Wang
 
 namespace pgo {
 namespace Contact {
-namespace CIPC {
+namespace IPC {
 namespace autogen {
 
 // =========================================================================
@@ -608,6 +608,6 @@ inline void edge_edge_cross_squarednorm_hessian(
 
 
 } // namespace autogen
-} // namespace CIPC
+} // namespace IPC
 } // namespace Contact
 } // namespace pgo

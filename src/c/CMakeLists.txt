@@ -31,6 +31,10 @@ foreach(lib ${PGO_GLOBAL_LIBRARY_TARGETS})
   endif()
 endforeach()
 
+if(TARGET animationIO)
+  target_compile_definitions(pgo_c PRIVATE PGO_HAS_ANIMATION_IO)
+endif()
+
 add_flag_poxis(pgo_c PRIVATE -fvisibility=hidden)
 add_link_flag(pgo_c GNU All -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pgo_c.version)
 add_link_flag(pgo_c AppleClang All -Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/pgo_c.symbol.txt)
@@ -56,7 +60,7 @@ install(EXPORT pgo_cTargets
   NAMESPACE pgo::
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/pgo/")
 
-if(PGO_ENABLE_PYTHON)
+if(PGO_BUILD_C_API)
   add_library(pgo_c_static STATIC ${LIBPGO_C_SOURCES} ${LIBPGO_C_HEADERS})
   target_include_directories(pgo_c_static PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -65,4 +69,8 @@ if(PGO_ENABLE_PYTHON)
       target_link_libraries(pgo_c_static PUBLIC ${lib})
     endif()
   endforeach()
+
+  if(TARGET animationIO)
+    target_compile_definitions(pgo_c_static PRIVATE PGO_HAS_ANIMATION_IO)
+  endif()
 endif()

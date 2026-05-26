@@ -4,19 +4,19 @@ endif()
 
 message(STATUS "Loading alembic...")
 
-set(USE_ARNOLD OFF CACHE BOOL "Include Arnold stuff" FORCE)
-set(USE_BINARIES OFF CACHE BOOL "Include binaries" FORCE)
-set(USE_EXAMPLES OFF CACHE BOOL "Include examples" FORCE)
-set(USE_HDF5 OFF CACHE BOOL "Include HDF5 stuff" FORCE)
-set(USE_MAYA OFF CACHE BOOL "Include Maya stuff" FORCE)
-set(USE_PRMAN OFF CACHE BOOL "Include PRMan stuff" FORCE)
-set(USE_PYALEMBIC OFF CACHE BOOL "Include PyAlembic stuff" FORCE)
-set(USE_STATIC_BOOST OFF CACHE BOOL "Build with static Boost libs" FORCE)
-set(USE_STATIC_HDF5 OFF CACHE BOOL "Build with static HDF5 libs" FORCE)
-set(USE_TESTS OFF CACHE BOOL "Include Alembic tests" FORCE)
-set(ALEMBIC_BUILD_LIBS ON CACHE BOOL "Build library, if off use external alembic libs" FORCE)
-set(ALEMBIC_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
-set(ALEMBIC_DEBUG_WARNINGS_AS_ERRORS ON CACHE BOOL "In debug mode build with warnings as errors" FORCE)
+pgo_dep_option(USE_ARNOLD BOOL OFF "Include Arnold stuff")
+pgo_dep_option(USE_BINARIES BOOL OFF "Include binaries")
+pgo_dep_option(USE_EXAMPLES BOOL OFF "Include examples")
+pgo_dep_option(USE_HDF5 BOOL OFF "Include HDF5 stuff")
+pgo_dep_option(USE_MAYA BOOL OFF "Include Maya stuff")
+pgo_dep_option(USE_PRMAN BOOL OFF "Include PRMan stuff")
+pgo_dep_option(USE_PYALEMBIC BOOL OFF "Include PyAlembic stuff")
+pgo_dep_option(USE_STATIC_BOOST BOOL OFF "Build with static Boost libs")
+pgo_dep_option(USE_STATIC_HDF5 BOOL OFF "Build with static HDF5 libs")
+pgo_dep_option(USE_TESTS BOOL OFF "Include Alembic tests")
+pgo_dep_option(ALEMBIC_BUILD_LIBS BOOL ON "Build library, if off use external alembic libs")
+pgo_dep_option(ALEMBIC_SHARED_LIBS BOOL OFF "Build shared libraries")
+pgo_dep_option(ALEMBIC_DEBUG_WARNINGS_AS_ERRORS BOOL ON "In debug mode build with warnings as errors")
 
 include(FetchContent)
 FetchContent_Declare(
@@ -24,13 +24,11 @@ FetchContent_Declare(
   URL https://github.com/alembic/alembic/archive/refs/tags/1.8.9.zip
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
-  FIND_PACKAGE_ARGS NAMES alembic
 )
 
-FetchContent_MakeAvailable(alembic)
+pgo_fetch_make_available(alembic)
 
 message(STATUS "Done.")
-
 
 
 

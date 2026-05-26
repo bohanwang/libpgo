@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -31,7 +32,7 @@ class RunSimBatchRunnerTest(unittest.TestCase):
 
         case = cases["cubic_box_squash"]
 
-        self.assertEqual(build_dir, REPO_ROOT / "build" / "base_no_mkl")
+        self.assertEqual(build_dir, REPO_ROOT / "build" / "base")
         self.assertEqual(
             case.sim_config,
             REPO_ROOT / "examples" / "ipc" / "cubic" / "box-squash" / "box-ipc.json",
@@ -43,13 +44,22 @@ class RunSimBatchRunnerTest(unittest.TestCase):
         self.assertTrue(case.log)
         self.assertEqual(jobs["squash_regression"].cases, ("tet_box_squash", "cubic_box_squash"))
         self.assertEqual(jobs["squash_regression"].stages, ("sim", "abc"))
+        self.assertEqual(
+            cases["shell_hang"].sim_config,
+            REPO_ROOT / "examples" / "ipc" / "shell" / "shell-hang" / "shell-ipc.json",
+        )
+        self.assertEqual(
+            cases["shell_drop"].sim_config,
+            REPO_ROOT / "examples" / "ipc" / "shell" / "shell-drop" / "shell-ipc.json",
+        )
+        self.assertEqual(jobs["shell"].cases, ("shell_hang", "shell_drop"))
 
         commands = runner.build_commands(build_dir, case, jobs["squash_regression"].stages, overwrite=False)
         self.assertEqual(commands[0].label, "sim")
         self.assertEqual(
             commands[0].argv,
             [
-                str(REPO_ROOT / "build" / "base_no_mkl" / "bin" / "runIPCSim"),
+                str(REPO_ROOT / "build" / "base" / "bin" / "runIPCSim"),
                 str(case.sim_config),
                 "--log",
             ],
@@ -58,7 +68,7 @@ class RunSimBatchRunnerTest(unittest.TestCase):
         self.assertEqual(
             commands[1].argv,
             [
-                str(REPO_ROOT / "build" / "base_no_mkl" / "bin" / "convertAnimation"),
+                str(REPO_ROOT / "build" / "base" / "bin" / "convertAnimation"),
                 str(case.anim_config),
             ],
         )
@@ -81,7 +91,7 @@ class RunSimBatchRunnerTest(unittest.TestCase):
 {
   "cases": {
     "known": {
-      "sim_config": "examples/ipc/shell/shell-ipc.json"
+      "sim_config": "examples/ipc/shell/shell-hang/shell-ipc.json"
     }
   },
   "jobs": [
@@ -107,7 +117,7 @@ class RunSimBatchRunnerTest(unittest.TestCase):
 {
   "cases": {
     "known": {
-      "sim_config": "examples/ipc/shell/shell-ipc.json"
+      "sim_config": "examples/ipc/shell/shell-hang/shell-ipc.json"
     }
   },
   "jobs": [
@@ -131,6 +141,50 @@ class RunSimBatchRunnerTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "render_config"):
             runner.build_commands(build_dir, cases["tet_box_squash"], ("render",), overwrite=False)
+
+    def test_cli_runs_single_case_by_name(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(RUNNER_PATH),
+                "--config",
+                str(REPO_ROOT / "examples" / "ipc" / "ipc_batch.json"),
+                "--case",
+                "cubic_box_with_sphere_lite",
+                "--dry-run",
+            ],
+            cwd=REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("== case cubic_box_with_sphere_lite ==", result.stdout)
+        self.assertIn("box-with-sphere-lite/box-ipc.json --log", result.stdout)
+        self.assertIn("box-with-sphere-lite/anim.json", result.stdout)
+
+    def test_cli_runs_shell_drop_case_by_name(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(RUNNER_PATH),
+                "--config",
+                str(REPO_ROOT / "examples" / "ipc" / "ipc_batch.json"),
+                "--case",
+                "shell_drop",
+                "--dry-run",
+            ],
+            cwd=REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("== case shell_drop ==", result.stdout)
+        self.assertIn("shell/shell-drop/shell-ipc.json --log", result.stdout)
+        self.assertIn("shell/shell-drop/anim.json", result.stdout)
 
 
 if __name__ == "__main__":

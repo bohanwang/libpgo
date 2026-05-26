@@ -1,9 +1,11 @@
 set(NONLINEAROPTIMIZATION_HEADERS 
   automaticDifferentiation_autodiff.h
 
-  potentialEnergy.h 
-  potentialEnergies.h 
+  potentialEnergy.h
+  potentialEnergies.h
+  lineSearchAwareEnergy.h
   solveDiagnostics.h
+  solverResult.h
 
   potentialEnergyFromConstraintFunctions.h
   
@@ -21,6 +23,7 @@ set(NONLINEAROPTIMIZATION_HEADERS
 
 set(NONLINEAROPTIMIZATION_SOURCES 
   potentialEnergies.cpp
+  solverResult.cpp
   
   constraintFunctions.cpp constraintFunctionsAssember.cpp 
   linearConstraintFunctions.cpp
@@ -40,12 +43,12 @@ if(TARGET Knitro::Knitro)
   set(NONLINEAROPTIMIZATION_SOURCES ${NONLINEAROPTIMIZATION_SOURCES} knitroProblem.cpp knitroOptimizer.cpp)
 endif()
 
-if(TARGET Ipopt::Ipopt)
+if(TARGET Ipopt::Core)
   set(NONLINEAROPTIMIZATION_HEADERS ${NONLINEAROPTIMIZATION_HEADERS} IpoptProblem.h IpoptOptimizer.h)
   set(NONLINEAROPTIMIZATION_SOURCES ${NONLINEAROPTIMIZATION_SOURCES} IpoptProblem.cpp IpoptOptimizer.cpp)
 endif()
 
-set(NONLINEAROPTIMIZATION_DEPS eigenSupport pgoLogging autodiff::autodiff)
+set(NONLINEAROPTIMIZATION_DEPS eigenSupport pgoLogging autodiff::autodiff profiling)
 
 foreach(tgt ${NONLINEAROPTIMIZATION_DEPS})
   if(NOT TARGET ${tgt})
@@ -64,6 +67,6 @@ if(TARGET Knitro::Knitro)
   target_link_libraries(nonlinearOptimization PRIVATE Knitro::Knitro)
 endif()
 
-if(TARGET Ipopt::Ipopt)
-  target_link_libraries(nonlinearOptimization PRIVATE Ipopt::Ipopt)
+if(TARGET Ipopt::Core)
+  target_link_libraries(nonlinearOptimization PRIVATE Ipopt::Core)
 endif()

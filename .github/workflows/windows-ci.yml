@@ -1,0 +1,135 @@
+name: Windows CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - original/*
+      - codex/**
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-build-and-test:
+    name: Python Build and Test
+    runs-on: windows-2022
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: libpgo
+          auto-activate-base: false
+          use-mamba: true
+          python-version: "3.12"
+          channels: conda-forge
+          channel-priority: strict
+
+      - name: Install Conda packages
+        run: |
+          mamba install -y `
+            "cmake>=3.29" `
+            imath `
+            libboost-devel `
+            mkl-devel `
+            ninja `
+            numpy `
+            pip `
+            pytest `
+            setuptools `
+            tbb-devel `
+            wheel
+
+      - name: Remove incompatible Fortran tools from PATH
+        run: |
+          $env:PATH = ($env:PATH -split ';' | Where-Object {
+            $_ -notmatch 'mingw' -and $_ -notmatch 'Strawberry'
+          }) -join ';'
+          "PATH=$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build and install Python package
+        run: python -m pip install -e . --no-build-isolation
+
+      - name: Run Python API pytest suite
+        run: python -m pytest -q tests/pypgo
+
+  cmake-build:
+    name: CMake Preset Build and Test
+    runs-on: windows-2022
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: pwsh
+
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: libpgo
+          auto-activate-base: false
+          use-mamba: true
+          python-version: "3.12"
+          channels: conda-forge
+          channel-priority: strict
+
+      - name: Install Conda packages
+        run: |
+          mamba install -y `
+            "cmake>=3.29" `
+            gmsh `
+            imath `
+            libboost-devel `
+            mkl-devel `
+            ninja `
+            openvdb `
+            tbb-devel `
+            zlib
+
+      - name: Remove incompatible Fortran tools from PATH
+        run: |
+          $env:PATH = ($env:PATH -split ';' | Where-Object {
+            $_ -notmatch 'mingw' -and $_ -notmatch 'Strawberry'
+          }) -join ';'
+          "PATH=$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Configure with preset base
+        run: cmake --preset base -G Ninja
+
+      - name: Build with preset base
+        run: cmake --build --preset base
+
+      - name: Run CTest
+        run: ctest --test-dir build/base --output-on-failure

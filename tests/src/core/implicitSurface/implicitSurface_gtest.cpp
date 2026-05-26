@@ -8,8 +8,9 @@
 #include "geometry/shellThickening.h"
 #include "geometry/sphereField.h"
 
-#ifdef PGO_HAS_OPENVDB
 #include "extraction/openVDBExtractor.h"
+
+#ifdef PGO_HAS_OPENVDB
 #include <openvdb/openvdb.h>
 #endif
 
@@ -693,8 +694,8 @@ TEST(OpenVDBExtractorTest, SphereShellMeshIsNonEmpty)
   IS::validateOpenVDBOptions(opts);
 
   auto shell = IS::buildOpenVDBSphereShell(sphere, 0.2, opts);
-  ASSERT_NE(shell, nullptr);
-  EXPECT_NE(shell->grid, nullptr);
+  ASSERT_TRUE(shell != nullptr);
+  EXPECT_TRUE(shell->grid != nullptr);
 
   pgo::Mesh::TriMeshGeo outMesh;
   IS::extractOpenVDBLevelSet(*shell, opts, outMesh);
@@ -716,7 +717,7 @@ TEST(OpenVDBExtractorTest, BallLevelSetMeshIsNonEmpty)
   IS::validateOpenVDBOptions(opts);
 
   auto ball = IS::buildOpenVDBBallLevelSet(sphere, opts);
-  ASSERT_NE(ball, nullptr);
+  ASSERT_TRUE(ball != nullptr);
 
   pgo::Mesh::TriMeshGeo outMesh;
   IS::extractOpenVDBLevelSet(*ball, opts, outMesh);
@@ -736,7 +737,7 @@ TEST(OpenVDBExtractorTest, MeshShellExtractionIsNonEmpty)
   IS::validateOpenVDBOptions(opts);
 
   auto shell = IS::buildOpenVDBShellFromMesh(sphereMesh, 0.1, opts);
-  ASSERT_NE(shell, nullptr);
+  ASSERT_TRUE(shell != nullptr);
 
   pgo::Mesh::TriMeshGeo outMesh;
   IS::extractOpenVDBLevelSet(*shell, opts, outMesh);
@@ -763,11 +764,11 @@ TEST(OpenVDBExtractorTest, CSGUnionOfTwoShells)
 
   auto shell1 = IS::buildOpenVDBSphereShell(sphere1, 0.15, opts);
   auto shell2 = IS::buildOpenVDBSphereShell(sphere2, 0.15, opts);
-  ASSERT_NE(shell1, nullptr);
-  ASSERT_NE(shell2, nullptr);
+  ASSERT_TRUE(shell1 != nullptr);
+  ASSERT_TRUE(shell2 != nullptr);
 
   auto combined = IS::combineOpenVDBLevelSets(*shell1, *shell2, IS::BooleanOp::Union);
-  ASSERT_NE(combined, nullptr);
+  ASSERT_TRUE(combined != nullptr);
 
   pgo::Mesh::TriMeshGeo outMesh;
   IS::extractOpenVDBLevelSet(*combined, opts, outMesh);
@@ -800,7 +801,7 @@ TEST(OpenVDBExtractorTest, CSGIntersectionReducesVolume)
   IS::validateOpenVDBOptions(opts);
 
   auto ball = IS::buildOpenVDBBallLevelSet(sphere, opts);
-  ASSERT_NE(ball, nullptr);
+  ASSERT_TRUE(ball != nullptr);
 
   pgo::Mesh::TriMeshGeo meshBall;
   IS::extractOpenVDBLevelSet(*ball, opts, meshBall);
@@ -808,7 +809,7 @@ TEST(OpenVDBExtractorTest, CSGIntersectionReducesVolume)
 
   // Intersection of ball with itself = same ball
   auto intersection = IS::combineOpenVDBLevelSets(*ball, *ball, IS::BooleanOp::Intersection);
-  ASSERT_NE(intersection, nullptr);
+  ASSERT_TRUE(intersection != nullptr);
 
   pgo::Mesh::TriMeshGeo meshIntersection;
   IS::extractOpenVDBLevelSet(*intersection, opts, meshIntersection);

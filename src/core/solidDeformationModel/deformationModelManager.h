@@ -5,6 +5,8 @@ copyright to USC, MIT, NUS
 
 #pragma once
 
+#include <memory>
+
 namespace pgo
 {
 namespace SolidDeformationModel
@@ -45,11 +47,13 @@ enum class DeformationModelPlasticMaterial
 class DeformationModelManager
 {
 public:
-  DeformationModelManager();
+  DeformationModelManager(std::unique_ptr<SimulationMesh> simulationMesh,
+    DeformationModelPlasticMaterial plasticModelType,
+    DeformationModelElasticMaterial elasticMaterialType,
+    int enforceSPD = 1,
+    const double *elementFiberDirections = nullptr,
+    const double *vertexFiberDirections = nullptr);
   ~DeformationModelManager();
-
-  void setMesh(const SimulationMesh *simulationMesh, const double *elementFiberDirections = nullptr, const double *vertexFiberDirections = nullptr);
-  void init(DeformationModelPlasticMaterial plasticModelType, DeformationModelElasticMaterial elasticMaterialType);
   void setEnforceSPD(int enable);
   void updateMeshRigidTransformation(const double R[9]);
 
@@ -65,6 +69,9 @@ public:
 
 protected:
   DeformationModelManagerImpl *data;
+
+private:
+  void initImpl(DeformationModelPlasticMaterial plasticModelType, DeformationModelElasticMaterial elasticMaterialType);
 };
 
 }  // namespace SolidDeformationModel

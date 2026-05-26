@@ -1,0 +1,149 @@
+name: Linux CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - original/*
+      - codex/**
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  python-build-and-test:
+    name: Python Build and Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: libpgo
+          auto-activate: true
+          use-mamba: true
+          python-version: "3.12"
+          channels: conda-forge
+          channel-priority: strict
+          conda-remove-defaults: true
+
+      - name: Install Conda packages
+        run: |
+          mamba install -y \
+            "cmake>=3.29" \
+            libboost-devel \
+            mkl-devel \
+            ninja \
+            numpy \
+            pip \
+            pytest \
+            setuptools \
+            tbb-devel \
+            wheel
+
+      - name: Install APT prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            g++ \
+            gcc \
+            git \
+            libblas-dev \
+            libgmp-dev \
+            libimath-dev \
+            liblapack-dev \
+            libmpfr-dev \
+            pkg-config \
+            zlib1g-dev
+
+      - name: Build and install Python package
+        run: python -m pip install -e . --no-build-isolation
+
+      - name: Run Python API pytest suite
+        run: python -m pytest -q tests/pypgo
+
+  cmake-build:
+    name: CMake Preset Build and Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: libpgo
+          auto-activate: true
+          use-mamba: true
+          python-version: "3.12"
+          channels: conda-forge
+          channel-priority: strict
+          conda-remove-defaults: true
+
+      - name: Install Conda packages
+        run: |
+          mamba install -y \
+            "cmake>=3.29" \
+            gmsh \
+            libboost-devel \
+            mkl-devel \
+            ninja \
+            openvdb \
+            tbb-devel \
+            zlib
+
+      - name: Install APT prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            g++ \
+            gcc \
+            git \
+            libblas-dev \
+            libgmp-dev \
+            libimath-dev \
+            liblapack-dev \
+            libmpfr-dev \
+            pkg-config \
+            zlib1g-dev
+
+      - name: Configure with preset base
+        run: cmake --preset base
+
+      - name: Build with preset base
+        run: cmake --build --preset base --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+
+      - name: Run CTest
+        run: ctest --test-dir build/base --output-on-failure

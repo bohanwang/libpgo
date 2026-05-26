@@ -27,9 +27,9 @@ public:
 
   virtual double func_grad(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad) const { gradient(x, grad); return func(x); }
   virtual double func_grad_hessian(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad, EigenSupport::SpMatD &hess) const { gradient(x, grad), hessian(x, hess); return func(x); }
+  virtual void gradient_hessian(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad, EigenSupport::SpMatD &hess) const { gradient(x, grad); hessianDirect(x, hess); }
 
   virtual void hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const;
-
   virtual void createHessian(EigenSupport::SpMatD &hess) const = 0;
 
   virtual void getDOFs(std::vector<int> &dofs) const = 0;
@@ -40,7 +40,9 @@ public:
   virtual int hasHessian() const { return 1; }
   virtual int isHessianTopologyFixed() const { return 1; }
 
-  virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const = 0;
+  // Largest feasible step along dx before a barrier (FEM element inversion, contact
+  // CCD, ...) is violated. Energies without such a barrier keep the default.
+  virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const { return MaxStepResult::unconstrained(); }
 };
 
 typedef std::shared_ptr<PotentialEnergy> PotentialEnergy_p;

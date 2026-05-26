@@ -208,11 +208,6 @@ void extractOpenVDBLevelSet(const OpenVDBLevelSet &levelSet,
 
 #else  // !PGO_HAS_OPENVDB
 
-void validateOpenVDBOptions(const OpenVDBOptions &options)
-{
-  // Validating options without OpenVDB is a no-op; actual usage will throw.
-}
-
 std::unique_ptr<OpenVDBLevelSet> buildOpenVDBShellFromMesh(
   const Mesh::TriMeshGeo &, double, const OpenVDBOptions &)
 {

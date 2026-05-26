@@ -12,11 +12,9 @@ FetchContent_Declare(
   URL https://github.com/NVIDIA/cccl/releases/download/v3.1.3/cccl-src-v3.1.3.zip
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
-  FIND_PACKAGE_ARGS 3.1.3
 )
 
-FetchContent_MakeAvailable(cccl)
+pgo_fetch_make_available(cccl)
 
 message(STATUS "Done.")
-
 

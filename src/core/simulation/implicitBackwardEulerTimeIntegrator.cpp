@@ -53,14 +53,14 @@ const NonlinearOptimization::SolveDiagnostics &ImplicitBackwardEulerTimeIntegrat
 
 void ImplicitBackwardEulerTimeIntegrator::doTimestep(int updateq, int verbose, int printResidual)
 {
-  const int ret = tryTimestep(updateq, verbose, printResidual);
-  if (ret != 0) {
-    throw std::runtime_error(std::string("ImplicitBackwardEulerTimeIntegrator timestep failed with solverRet=") +
-      NewtonSolver::solveStatusToString(ret));
+  const SolverResult result = tryTimestep(updateq, verbose, printResidual);
+  if (!acceptsDynamicSolveStatus(result.status)) {
+    throw std::runtime_error(std::string("ImplicitBackwardEulerTimeIntegrator timestep failed with status=") +
+      solveStatusToString(result.status));
   }
 }
 
-int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, int printResidual)
+SolverResult ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, int printResidual)
 {
   assembleImplicitModels();
 
@@ -92,33 +92,39 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
               << " dt=" << timestep << std::endl;
   }
 
-  solverRet = solver->solve(needRenew, z, g, lambda, uRangeLow, uRangeHi,
+  eulerEnergy->clearCachedImplicitEnergyComponents();
+  lastSolverResult = solver->solve(needRenew, z, g, lambda, uRangeLow, uRangeHi,
     constraintsRangeLow, constraintsRangeHi, eulerEnergy, constraints,
     nIter, eps, verbose, solverConfigFilename.length() ? solverConfigFilename.c_str() : nullptr,
     solverOption);
 
+  const SolveDiagnostics &diagnostics = lastSolverResult.diagnostics;
   double residualNorm = 0.0;
   double residualMaxNorm = 0.0;
-  ES::VXd residual(n3), rhs = ES::VXd::Zero(n3 - fixedDOFs.size());
-  if (printResidual || verbose || solverRet != 0) {
-    residual.setZero();
-    eulerEnergy->gradient(z, residual);
-    ES::transferBigToSmall(residual, rhs, rhsb2s);
-    residualNorm = rhs.norm();
-    residualMaxNorm = rhs.cwiseAbs().maxCoeff();
+  if (printResidual || verbose || lastSolverResult.status != SolveStatus::Converged) {
+    if (diagnostics.hasFinalGradientStats) {
+      residualNorm = diagnostics.finalGradientNorm;
+      residualMaxNorm = diagnostics.finalGradientMaxNorm;
+    }
+    else {
+      ES::VXd residual(n3), rhs = ES::VXd::Zero(n3 - fixedDOFs.size());
+      residual.setZero();
+      eulerEnergy->gradient(z, residual);
+      ES::transferBigToSmall(residual, rhs, rhsb2s);
+      residualNorm = rhs.norm();
+      residualMaxNorm = rhs.cwiseAbs().maxCoeff();
+    }
   }
 
-  const bool acceptedTimestep = solverRet == 0 ||
-    solverRet == static_cast<int>(NewtonSolver::SolveStatus::MaxIterations) ||
-    solverRet == static_cast<int>(NewtonSolver::SolveStatus::StepTooSmall);
+  const bool acceptedTimestep = acceptsDynamicSolveStatus(lastSolverResult.status);
 
-  if (solverRet != 0) {
-    std::cout << "Warning: solverRet = " << NewtonSolver::solveStatusToString(solverRet) << "\n";
+  if (lastSolverResult.status != SolveStatus::Converged) {
+    std::cout << "Warning: status = " << solveStatusToString(lastSolverResult.status) << "\n";
   }
 
   if (verbose) {
     std::cout << "ImplicitBackwardEuler timestep end: T" << timestepID
-              << " solverRet=" << NewtonSolver::solveStatusToString(solverRet)
+              << " status=" << solveStatusToString(lastSolverResult.status)
               << " residual=" << residualNorm
               << " residualMax=" << residualMaxNorm
               << " accepted=" << (acceptedTimestep ? "true" : "false")
@@ -127,16 +133,16 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
 
   if (printResidual) {
     std::cout << "    T" << timestepID << ": ||g||=" << residualNorm
-              << "; Solver Ret: " << solverRet
-              << " (" << NewtonSolver::solveStatusToString(solverRet) << ")" << std::endl;
+              << "; status=" << solveStatusToString(lastSolverResult.status)
+              << " rawStatusCode=" << lastSolverResult.rawStatusCode << std::endl;
 
     std::cout << "    Energy components:\n";
-    eulerEnergy->printImplicitEnergy(z);
+    eulerEnergy->printImplicitEnergy(z, diagnostics.hasFinalGradientStats);
   }
 
   if (!acceptedTimestep) {
     TimeIntegrator::doTimestep(0, verbose, printResidual);
-    return solverRet;
+    return lastSolverResult;
   }
 
   if (finiteDifferenceTestFlag)
@@ -159,7 +165,7 @@ int ImplicitBackwardEulerTimeIntegrator::tryTimestep(int updateq, int verbose, i
   }
 
   TimeIntegrator::doTimestep(updateq, verbose, printResidual);
-  return 0;
+  return lastSolverResult;
 }
 
 void ImplicitBackwardEulerTimeIntegrator::setSolution(ES::ConstRefVecXd newz)
@@ -187,7 +193,7 @@ void ImplicitBackwardEulerTimeIntegrator::updateD()
   memset(D.valuePtr(), 0, sizeof(double) * D.nonZeros());
 
   // Damping is only supported for energies with fixed hessian topology.
-  // Non-fixed-topology energies (e.g. CIPC contact) are skipped here.
+  // Non-fixed-topology energies (e.g. IPC contact) are skipped here.
   for (size_t i = 0; i < implicitModelsAll.size(); i++) {
     if (!implicitModelsAll[i]->isHessianTopologyFixed())
       continue;

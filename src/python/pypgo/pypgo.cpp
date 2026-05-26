@@ -1,430 +1,480 @@
-#include "pypgo.h"
+#include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
+#include <nanobind/eigen/dense.h>
+#include <nanobind/eigen/sparse.h>
+#include <nanobind/stl/vector.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/shared_ptr.h>
+#include <nanobind/trampoline.h>
 
-#include <pybind11/pybind11.h>
-#include <pybind11/numpy.h>
+#include "EigenSupport.h"
+#include "generateTetMeshMatrix.h"
+#include "geometryQuery.h"
+#include "solveDiagnostics.h"
+#include "solverResult.h"
+#include "potentialEnergy.h"
+#include "potentialEnergies.h"
+#include "minimizeEnergy.h"
+#include "NewtonSolver.h"
+#include "pgoLogging.h"
+#include "tetMesh.h"
+#include "tetMeshGeo.h"
 
-#include <Eigen/Dense>
+#include "ipc/core/surfaceIPCCore.h"
+#include "embeddedSurfaceFloorPotentialEnergy.h"
+#include "ipc/embeddedSurfaceIPCPotentialEnergy.h"
 
-#include <iostream>
-#include <chrono>
-#include <fstream>
-
-namespace py = pybind11;
-
-#define STRINGIFY(x) #x
-#define MACRO_STRINGIFY(x) STRINGIFY(x)
-
-void pypgo_init(py::module &m)
-{
-  py::class_<TetMeshGeo> TetMeshGeo_class(m, "TetMeshGeo");
-  TetMeshGeo_class.def(py::init<>());
-
-  py::class_<TriMeshGeo> TriMeshGeo_class(m, "TriMeshGeo");
-  TriMeshGeo_class.def(py::init<>());
-
-  py::class_<TetMesh> TetMesh_class(m, "TetMesh");
-  TetMesh_class.def(py::init<>());
-
-  py::class_<SmoothRSEnergy> SmoothRSEnergy_class(m, "SmoothRSEnergy");
-  SmoothRSEnergy_class.def(py::init<>());
-
-  py::class_<SparseMatrix> SparseMatrix_class(m, "SparseMatrix");
-  SparseMatrix_class.def(py::init<>());
-
-  using pyArrayFloat = py::array_t<float, py::array::c_style | py::array::forcecast>;
-  using pyArrayInt = py::array_t<int, py::array::c_style | py::array::forcecast>;
-
-  m.def(
-    "create_tetmeshgeo", [](pyArrayFloat vertices, pyArrayInt elements) -> TetMeshGeo {
-      py::buffer_info vtxInfo = vertices.request();
-      py::buffer_info tetInfo = elements.request();
-
-      if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.format != py::format_descriptor<float>::format()) {
-        std::cerr << "Wrong vertex type:" << vtxInfo.ndim << ',' << vtxInfo.format << std::endl;
-        return TetMeshGeo();
-      }
-
-#if defined(_WIN32)
-      if (tetInfo.ndim != (py::ssize_t)1) {
-#else
-      if (tetInfo.ndim != (py::ssize_t)1 || (tetInfo.format != py::format_descriptor<int>::format())) {
+#if defined(PGO_HAS_ANIMATION_IO)
+#  include "animationLoader.h"
 #endif
-        std::cerr << "Wrong tet type:" << tetInfo.ndim << ',' << tetInfo.format << ',' << py::format_descriptor<int64_t>::format() << std::endl;
-        return TetMeshGeo();
-      }
 
-      Eigen::VectorXd vertexPosDouble = Eigen::Map<const Eigen::VectorXf>((float *)vtxInfo.ptr, vtxInfo.size).cast<double>();
-      Eigen::VectorXi tets = Eigen::Map<const Eigen::VectorXi>((int *)tetInfo.ptr, tetInfo.size);
+namespace nb = nanobind;
+using namespace nb::literals;
 
-      pgoTetMeshGeoStructHandle tetmesh = pgo_create_tetmeshgeo((int)vertexPosDouble.size() / 3, vertexPosDouble.data(), (int)tets.size() / 4, tets.data());
-      return TetMeshGeo(tetmesh);
-    });
+using pgo::NonlinearOptimization::PotentialEnergy;
+using pgo::NonlinearOptimization::MaxStepResult;
+using pgo::NonlinearOptimization::SolveStatus;
+using pgo::NonlinearOptimization::SolverResult;
+using pgo::NonlinearOptimization::PotentialEnergies;
+using pgo::NonlinearOptimization::NewtonSolver;
+namespace EnergyOptimizer = pgo::NonlinearOptimization::EnergyOptimizer;
 
-  m.def(
-    "create_tetmeshgeo_from_file", [](const std::string &filename) -> TetMeshGeo {
-      pgoTetMeshGeoStructHandle tetmesh = pgo_create_tetmeshgeo_from_file(const_cast<char *>(filename.c_str()));
-      return TetMeshGeo(tetmesh);
-    });
+using CRefXd = pgo::EigenSupport::ConstRefVecXd;
+using RefXd  = pgo::EigenSupport::RefVecXd;
+using SMat = pgo::EigenSupport::SpMatD;
+using TetMeshGeoPtr = std::shared_ptr<pgo::Mesh::TetMeshGeo>;
 
-  m.def("tetmeshgeo_get_num_vertices", [](TetMeshGeo m) -> int {
-    return pgo_tetmeshgeo_get_num_vertices(m.handle);
-  });
+struct SparseMatrix {
+  SparseMatrix() = default;
+  explicit SparseMatrix(pgo::EigenSupport::SpMatD m): mat(std::move(m)) {}
+  pgo::EigenSupport::SpMatD mat;
+};
 
-  m.def("tetmeshgeo_get_num_tets", [](TetMeshGeo m) -> int {
-    return pgo_tetmeshgeo_get_num_tets(m.handle);
-  });
+using SparseMatrixPtr = std::shared_ptr<SparseMatrix>;
 
-  m.def("tetmeshgeo_get_vertices", [](TetMeshGeo m) -> py::array_t<float> {
-    Eigen::VectorXd vtx(pgo_tetmeshgeo_get_num_vertices(m.handle) * 3);
-    pgo_tetmeshgeo_get_vertices(m.handle, vtx.data());
+namespace {
 
-    auto ret = py::array_t<float>(vtx.size());
-    py::buffer_info binfo = ret.request();
-    (Eigen::Map<Eigen::VectorXf>((float *)binfo.ptr, vtx.size())) = vtx.cast<float>();
-    return ret;
-  });
+void require_flat(const nb::ndarray<nb::ro, nb::c_contig, nb::device::cpu> &a, size_t multiple, const char *name) {
+  if (a.ndim() != 1) {
+    throw std::runtime_error(std::string(name) + " must be a flat 1D array");
+  }
+  if (a.size() % multiple != 0) {
+    throw std::runtime_error(std::string(name) + " size is not divisible by " + std::to_string(multiple));
+  }
+}
 
-  m.def("tetmeshgeo_get_tets", [](TetMeshGeo m) -> py::array_t<int> {
-    auto ret = py::array_t<int>(pgo_tetmeshgeo_get_num_tets(m.handle) * 4);
-    py::buffer_info binfo = ret.request();
+std::vector<double> ndarray_to_double_vector(const nb::ndarray<nb::ro, nb::c_contig, nb::device::cpu> &a, const char *name) {
+  require_flat(a, 1, name);
+  std::vector<double> values(a.size());
 
-    pgo_tetmeshgeo_get_tets(m.handle, (int *)binfo.ptr);
+  if (a.dtype() == nb::dtype<double>()) {
+    const double *ptr = static_cast<const double *>(a.data());
+    std::copy(ptr, ptr + a.size(), values.begin());
+  }
+  else if (a.dtype() == nb::dtype<float>()) {
+    const float *ptr = static_cast<const float *>(a.data());
+    std::transform(ptr, ptr + a.size(), values.begin(), [](float v) { return static_cast<double>(v); });
+  }
+  else {
+    throw std::runtime_error(std::string(name) + " must have dtype float32 or float64");
+  }
 
-    return ret;
-  });
+  return values;
+}
 
-  m.def("destroy_tetmeshgeo", [](TetMeshGeo tetmesh) {
-    pgo_destroy_tetmeshgeo(tetmesh.handle);
-  });
+std::vector<int> ndarray_to_int_vector(const nb::ndarray<nb::ro, nb::c_contig, nb::device::cpu> &a, const char *name) {
+  require_flat(a, 1, name);
+  std::vector<int> values(a.size());
 
-  m.def("create_tetmesh", [](pyArrayFloat vertices, pyArrayInt elements, float E, float nu, float density) -> TetMesh {
-    py::buffer_info vtxInfo = vertices.request();
-    py::buffer_info tetInfo = elements.request();
+  if (a.dtype() == nb::dtype<int>()) {
+    const int *ptr = static_cast<const int *>(a.data());
+    std::copy(ptr, ptr + a.size(), values.begin());
+  }
+  else if (a.dtype() == nb::dtype<int64_t>()) {
+    const int64_t *ptr = static_cast<const int64_t *>(a.data());
+    std::transform(ptr, ptr + a.size(), values.begin(), [](int64_t v) { return static_cast<int>(v); });
+  }
+  else {
+    throw std::runtime_error(std::string(name) + " must have dtype int32 or int64");
+  }
 
-    if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.format != py::format_descriptor<float>::format()) {
-      std::cerr << "Wrong vertex type:" << vtxInfo.ndim << ',' << vtxInfo.format << std::endl;
-      return TetMesh();
+  return values;
+}
+
+Eigen::VectorXi sparse_rows(const pgo::EigenSupport::SpMatD &mat) {
+  Eigen::VectorXi rows(static_cast<Eigen::Index>(mat.nonZeros()));
+  Eigen::Index inc = 0;
+  for (int outer = 0; outer < mat.outerSize(); ++outer) {
+    for (pgo::EigenSupport::SpMatD::InnerIterator it(mat, outer); it; ++it) {
+      rows[inc++] = static_cast<int>(it.row());
     }
+  }
+  return rows;
+}
 
-    if (tetInfo.ndim != (py::ssize_t)1 || (tetInfo.format != py::format_descriptor<int>::format())) {
-      std::cerr << "Wrong tet type:" << tetInfo.ndim << ',' << tetInfo.format << ',' << py::format_descriptor<int64_t>::format() << std::endl;
-      return TetMesh();
+Eigen::VectorXi sparse_cols(const pgo::EigenSupport::SpMatD &mat) {
+  Eigen::VectorXi cols(static_cast<Eigen::Index>(mat.nonZeros()));
+  Eigen::Index inc = 0;
+  for (int outer = 0; outer < mat.outerSize(); ++outer) {
+    for (pgo::EigenSupport::SpMatD::InnerIterator it(mat, outer); it; ++it) {
+      cols[inc++] = static_cast<int>(it.col());
     }
+  }
+  return cols;
+}
 
-    Eigen::VectorXd vertexPosDouble = Eigen::Map<const Eigen::VectorXf>((float *)vtxInfo.ptr, vtxInfo.size).cast<double>();
-    Eigen::VectorXi tets = Eigen::Map<const Eigen::VectorXi>((int *)tetInfo.ptr, tetInfo.size);
-
-    pgoTetMeshStructHandle tetmesh = pgo_create_tetmesh((int)vertexPosDouble.size() / 3, vertexPosDouble.data(), (int)tets.size() / 4, tets.data(), (double)E, (double)nu, (double)density);
-    return TetMesh(tetmesh);
-  });
-
-  m.def("create_tetmesh_from_file", [](const std::string &tetmeshFilename) -> TetMesh {
-    pgoTetMeshStructHandle tetmesh = pgo_create_tetmesh_from_file(const_cast<char *>(tetmeshFilename.c_str()));
-    return TetMesh(tetmesh);
-  });
-
-  m.def("save_tetmesh_to_file", [](const TetMesh &tetmesh, const std::string &tetmeshFilename) {
-    pgo_save_tetmesh_to_file(tetmesh.handle, const_cast<char *>(tetmeshFilename.c_str()));
-  });
-
-  m.def("get_tetmesh_vertex_positions", [](TetMesh &tetmesh) -> py::array_t<float> {
-    int nVertices = pgo_tetmesh_get_num_vertices(tetmesh.handle);
-    Eigen::VectorXd vertices(nVertices * 3);
-    pgo_tetmesh_get_vertices(tetmesh.handle, vertices.data());
-    auto ret = py::array_t<float>(nVertices * 3);
-    py::buffer_info binfo = ret.request();
-    (Eigen::Map<Eigen::VectorXf>((float *)binfo.ptr, nVertices * 3)) = vertices.cast<float>();
-    ret.resize({ nVertices, 3 });
-    return ret;
-  });
-
-  m.def("get_tetmesh_element_indices", [](TetMesh &tetmesh) -> py::array_t<int> {
-    int nElements = pgo_tetmesh_get_num_tets(tetmesh.handle);
-    Eigen::VectorXi elements(nElements * 4);
-    pgo_tetmesh_get_elements(tetmesh.handle, elements.data());
-    auto ret = py::array_t<int>(nElements * 4);
-    py::buffer_info binfo = ret.request();
-    (Eigen::Map<Eigen::VectorXi>((int *)binfo.ptr, nElements * 4)) = elements.cast<int>();
-    ret.resize({ nElements, 4 });
-    return ret;
-  });
-
-  m.def("update_tetmesh_vertices", [](TetMesh &tetmesh, pyArrayFloat vtxNew) -> TetMesh {
-    py::buffer_info vtxInfo = vtxNew.request();
-    if (vtxInfo.ndim != (py::ssize_t)2 || vtxInfo.shape[1] != 3 || vtxInfo.format != py::format_descriptor<float>::format()) {
-      std::cerr << "Wrong vertex type:" << vtxInfo.ndim << ',' << vtxInfo.format << std::endl;
-      return tetmesh;
+Eigen::VectorXd sparse_values(const pgo::EigenSupport::SpMatD &mat) {
+  Eigen::VectorXd values(static_cast<Eigen::Index>(mat.nonZeros()));
+  Eigen::Index inc = 0;
+  for (int outer = 0; outer < mat.outerSize(); ++outer) {
+    for (pgo::EigenSupport::SpMatD::InnerIterator it(mat, outer); it; ++it) {
+      values[inc++] = it.value();
     }
+  }
+  return values;
+}
 
-    vtxNew.resize({ vtxInfo.shape[0] * 3 });
+}  // namespace
 
-    Eigen::VectorXd vtxNewDouble = Eigen::Map<const Eigen::VectorXf>((float *)vtxInfo.ptr, vtxInfo.shape[0] * 3).cast<double>();
-    pgoTetMeshStructHandle tetmeshNewHandle = pgo_tetmesh_update_vertices(tetmesh.handle, vtxNewDouble.data());
-    TetMesh tetmeshNew = TetMesh(tetmeshNewHandle);
-    return tetmeshNew;
+// ── Trampoline for PotentialEnergy ──
+struct PyPotentialEnergy : PotentialEnergy {
+  NB_TRAMPOLINE(PotentialEnergy, 7);
+
+  double func(CRefXd x) const override {
+    NB_OVERRIDE_PURE(func, x);
+  }
+  void gradient(CRefXd x, RefXd grad) const override {
+    NB_OVERRIDE_PURE(gradient, x, grad);
+  }
+  void hessian(CRefXd x, SMat &hess) const override {
+    NB_OVERRIDE_PURE(hessian, x, hess);
+  }
+  void createHessian(SMat &hess) const override {
+    NB_OVERRIDE_PURE(createHessian, hess);
+  }
+  void getDOFs(std::vector<int> &dofs) const override {
+    NB_OVERRIDE_PURE(getDOFs, dofs);
+  }
+  int getNumDOFs() const override {
+    NB_OVERRIDE_PURE(getNumDOFs);
+  }
+  MaxStepResult computeMaxStepLimit(CRefXd x, CRefXd dx) const override {
+    NB_OVERRIDE(computeMaxStepLimit, x, dx);
+  }
+};
+
+NB_MODULE(pypgo, m) {
+  m.doc() = "libpgo nanobind bindings";
+
+  nb::class_<pgo::Mesh::TetMeshGeo>(m, "TetMeshGeo");
+  nb::class_<SparseMatrix>(m, "SparseMatrix");
+
+  m.def("init", []() {
+    pgo::Logging::init();
   });
 
-  m.def(
-    "create_element_laplacian_matrix", [](TetMeshGeo tetmesh, int face_neighbor, int n_repreat, int scale) -> SparseMatrix {
-      pgoSparseMatrixStructHandle mat = pgo_create_tet_laplacian_matrix(tetmesh.handle, face_neighbor, n_repreat, scale);
-      return SparseMatrix(mat);
-    });
-
-  m.def(
-    "create_tet_biharmonic_gradient_matrix", [](TetMeshGeo tetmesh, int face_neighbor, int scale) -> SparseMatrix {
-      pgoSparseMatrixStructHandle mat = pgo_create_tet_biharmonic_gradient_matrix(tetmesh.handle, face_neighbor, scale);
-      return SparseMatrix(mat);
-    });
-
-  m.def(
-    "conjugate_mv", [](SparseMatrix m, pyArrayFloat v) -> double {
-      py::buffer_info binfo = v.request();
-      Eigen::VectorXd vd = (Eigen::Map<Eigen::VectorXf>((float *)binfo.ptr, binfo.size)).cast<double>();
-
-      double ret = pgo_conjugate_mv(m.handle, vd.data());
-      return ret;
-    });
-
-  // m.def(
-  //   "sp_mv", [](SparseMatrix m, pyArrayFloat v) -> py::array_t<float> {
-  //     py::buffer_info binfo = v.request();
-  //     Eigen::VectorXd vd = (Eigen::Map<Eigen::VectorXf>((float *)binfo.ptr, binfo.size)).cast<double>();
-
-  //     auto ret = py::array_t<float>(binfo.size);
-  //     py::buffer_info binfo_out = ret.request();
-
-  //     Eigen::VectorXd voutd;
-  //     pgo_sp_mv(m.handle, vd.data(), voutd.data());
-  //     return ret;
-  //   });
-
-  m.def("sparse_matrix_get_num_entries", [](SparseMatrix m) -> int64_t {
-    pgoSparseMatrixStructHandle mat = m.handle;
-    return pgo_sparse_matrix_get_num_entries(mat);
-  });
-
-  m.def("sparse_matrix_get_row_indices", [](SparseMatrix m) -> py::array_t<int> {
-    pgoSparseMatrixStructHandle mat = m.handle;
-    int64_t nonZeros = pgo_sparse_matrix_get_num_entries(mat);
-    auto ret = py::array_t<int>(nonZeros);
-    py::buffer_info bInfo = ret.request();
-    pgo_sparse_matrix_get_row_indices(mat, (int *)bInfo.ptr);
-    return ret;
-  });
-
-  m.def("sparse_matrix_get_col_indices", [](SparseMatrix m) -> py::array_t<int> {
-    pgoSparseMatrixStructHandle mat = m.handle;
-    int64_t nonZeros = pgo_sparse_matrix_get_num_entries(mat);
-    auto ret = py::array_t<int>(nonZeros);
-    py::buffer_info bInfo = ret.request();
-    pgo_sparse_matrix_get_col_indices(mat, (int *)bInfo.ptr);
-    return ret;
-  });
-
-  m.def("sparse_matrix_get_values", [](SparseMatrix m) -> py::array_t<float> {
-    pgoSparseMatrixStructHandle mat = m.handle;
-    int64_t nonZeros = pgo_sparse_matrix_get_num_entries(mat);
-    auto ret = py::array_t<float>(nonZeros);
-    py::buffer_info bInfo = ret.request();
-    Eigen::VectorXd values(nonZeros);
-    pgo_sparse_matrix_get_values(mat, values.data());
-    (Eigen::Map<Eigen::VectorXf>((float *)bInfo.ptr, nonZeros)) = values.cast<float>();
-    return ret;
-  });
-
-  m.def("destroy_sparse_matrix", [](SparseMatrix m) {
-    pgo_destroy_sparse_matrix(m.handle);
-  });
-
-  m.def("create_tet_gradient_matrix", [](TetMeshGeo m) -> SparseMatrix {
-    return SparseMatrix(pgo_create_tet_gradient_matrix(m.handle));
-  });
-
-  m.def("create_tet_gradient_per_element_matrix", [](TetMeshGeo m) -> py::array_t<float> {
-    int nTets = pgo_tetmeshgeo_get_num_tets(m.handle);
-    Eigen::VectorXd v(nTets * 9 * 12);
-    pgo_create_tet_gradient_per_element_matrix(m.handle, v.data());
-
-    auto ret = py::array_t<float>({ nTets, 12, 9 });
-    py::buffer_info bInfo = ret.request();
-    (Eigen::Map<Eigen::VectorXf>((float *)bInfo.ptr, v.size())) = v.cast<float>();
-
-    return ret;
-  });
-
-  m.def("create_smooth_rs_energy", [](TetMeshGeo tetmesh, double coeffR, double coeffS) -> SmoothRSEnergy {
-    std::cout << "zz" << coeffR << ',' << coeffS << std::endl;
-    pgoSmoothRSEnergyStructHandle h = pgo_create_smooth_rs_energy(tetmesh.handle, coeffR, coeffS);
-    return SmoothRSEnergy(h);
-  });
-
-  m.def("destroy_smooth_rs_energy", [](SmoothRSEnergy energy) {
-    pgo_destroy_smooth_rs_energy(energy.handle);
-  });
-
-  m.def("smooth_rs_energy_func", [](SmoothRSEnergy energy, py::array_t<float> x) -> double {
-    py::buffer_info xInfo = x.request();
-
-    if (xInfo.ndim != (py::ssize_t)1 || xInfo.format != py::format_descriptor<float>::format()) {
-      std::cerr << "Wrong x type:" << xInfo.format << std::endl;
-      return 1e20;
+  m.def("convert_animation_to_abc", [](const std::string &configFileName, const std::string &outputFolder) {
+#if defined(PGO_HAS_ANIMATION_IO)
+    pgo::AnimationIO::AnimationLoader loader;
+    if (loader.load(configFileName.c_str()) != 0) {
+      return 1;
     }
-
-    Eigen::VectorXd xDouble = Eigen::Map<const Eigen::VectorXf>((float *)xInfo.ptr, xInfo.size).cast<double>();
-    return pgo_smooth_rs_energy_func(energy.handle, xDouble.data());
-  });
-
-  m.def("smooth_rs_energy_grad", [](SmoothRSEnergy energy, py::array_t<float> x) -> py::array_t<float> {
-    py::buffer_info xInfo = x.request();
-    auto grad = py::array_t<float>(xInfo.size);
-
-    py::buffer_info gradInfo = grad.request();
-    memset(gradInfo.ptr, 0, sizeof(float) * gradInfo.size);
-
-    if (xInfo.ndim != (py::ssize_t)1 || xInfo.format != py::format_descriptor<float>::format()) {
-      std::cerr << "Wrong x type:" << xInfo.format << std::endl;
-      return grad;
-    }
-
-    Eigen::VectorXd xDouble = Eigen::Map<const Eigen::VectorXf>((float *)xInfo.ptr, xInfo.size).cast<double>();
-    Eigen::VectorXd gradDouble(xInfo.size);
-    gradDouble.setZero();
-    pgo_smooth_rs_energy_grad(energy.handle, xDouble.data(), gradDouble.data());
-
-    (Eigen::Map<Eigen::VectorXf>((float *)gradInfo.ptr, gradInfo.size)) = gradDouble.cast<float>();
-
-    return grad;
-  });
-
-  m.def(
-    "create_trimeshgeo", [](pyArrayFloat vertices, pyArrayInt triangles) -> TriMeshGeo {
-      py::buffer_info vtxInfo = vertices.request();
-      py::buffer_info triInfo = triangles.request();
-
-      if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.format != py::format_descriptor<float>::format()) {
-        std::cerr << "Wrong vertex type:" << vtxInfo.ndim << ',' << vtxInfo.format << std::endl;
-        return TriMeshGeo();
-      }
-
-#if defined(_WIN32)
-      if (triInfo.ndim != (py::ssize_t)1) {
+    return loader.saveABC(outputFolder.c_str());
 #else
-        if (triInfo.ndim != (py::ssize_t)1 || (triInfo.format != py::format_descriptor<int>::format())) {
+    (void)configFileName;
+    (void)outputFolder;
+    return 1;
 #endif
-        std::cerr << "Wrong tri type:" << triInfo.ndim << ',' << triInfo.format << ',' << py::format_descriptor<int64_t>::format() << std::endl;
-        return TriMeshGeo();
+  }, "config_file_name"_a, "output_folder"_a);
+
+  m.def("create_tetmeshgeo",
+    [](const nb::ndarray<nb::ro, nb::c_contig, nb::device::cpu> &vertices,
+       const nb::ndarray<nb::ro, nb::c_contig, nb::device::cpu> &tets) {
+      require_flat(vertices, 3, "vertices");
+      require_flat(tets, 4, "tets");
+      std::vector<double> vertexData = ndarray_to_double_vector(vertices, "vertices");
+      std::vector<int> tetData = ndarray_to_int_vector(tets, "tets");
+      return std::make_shared<pgo::Mesh::TetMeshGeo>(
+        static_cast<int>(vertexData.size() / 3), vertexData.data(),
+        static_cast<int>(tetData.size() / 4), tetData.data());
+    },
+    "vertices"_a, "tets"_a);
+
+  m.def("create_tetmeshgeo_from_file", [](const std::string &filename) -> TetMeshGeoPtr {
+    pgo::VolumetricMeshes::TetMesh mesh(filename.c_str());
+    auto tetmesh = std::make_shared<pgo::Mesh::TetMeshGeo>();
+    mesh.exportMeshGeometry(*tetmesh);
+    return tetmesh;
+  }, "filename"_a);
+
+  m.def("tetmeshgeo_get_num_vertices", [](const TetMeshGeoPtr &tetmesh) {
+    return tetmesh->numVertices();
+  }, "tetmesh"_a);
+
+  m.def("tetmeshgeo_get_num_tets", [](const TetMeshGeoPtr &tetmesh) {
+    return tetmesh->numTets();
+  }, "tetmesh"_a);
+
+  m.def("tetmeshgeo_get_vertices", [](const TetMeshGeoPtr &tetmesh) {
+    Eigen::VectorXd vertices(tetmesh->numVertices() * 3);
+    for (int vi = 0; vi < tetmesh->numVertices(); ++vi) {
+      vertices.segment<3>(vi * 3) = tetmesh->pos(vi);
+    }
+    return vertices;
+  }, "tetmesh"_a);
+
+  m.def("tetmeshgeo_get_tets", [](const TetMeshGeoPtr &tetmesh) {
+    Eigen::VectorXi tets(tetmesh->numTets() * 4);
+    for (int ti = 0; ti < tetmesh->numTets(); ++ti) {
+      tets[ti * 4] = tetmesh->tet(ti)[0];
+      tets[ti * 4 + 1] = tetmesh->tet(ti)[1];
+      tets[ti * 4 + 2] = tetmesh->tet(ti)[2];
+      tets[ti * 4 + 3] = tetmesh->tet(ti)[3];
+    }
+    return tets;
+  }, "tetmesh"_a);
+
+  m.def("destroy_tetmeshgeo", [](TetMeshGeoPtr &) {}, "tetmesh"_a);
+
+  m.def("sparse_matrix_get_num_entries", [](const SparseMatrixPtr &mat) {
+    return static_cast<int64_t>(mat->mat.nonZeros());
+  }, "matrix"_a);
+
+  m.def("sparse_matrix_get_row_indices", [](const SparseMatrixPtr &mat) {
+    return sparse_rows(mat->mat);
+  }, "matrix"_a);
+
+  m.def("sparse_matrix_get_col_indices", [](const SparseMatrixPtr &mat) {
+    return sparse_cols(mat->mat);
+  }, "matrix"_a);
+
+  m.def("sparse_matrix_get_values", [](const SparseMatrixPtr &mat) {
+    return sparse_values(mat->mat);
+  }, "matrix"_a);
+
+  m.def("destroy_sparse_matrix", [](SparseMatrixPtr &) {}, "matrix"_a);
+
+  m.def("create_tet_laplacian_matrix",
+    [](const TetMeshGeoPtr &tetmesh, int faceNeighbor, int repeat, int scale) {
+      namespace ES = pgo::EigenSupport;
+      ES::SpMatD L;
+      pgo::SolidDeformationModel::TetMeshMatrix::generateBasicElementLaplacianMatrix(*tetmesh, L, faceNeighbor, scale);
+      if (repeat > 1) {
+        ES::SpMatD Ln;
+        ES::expandN(L, Ln, repeat);
+        L = std::move(Ln);
+      }
+      return std::make_shared<SparseMatrix>(std::move(L));
+    },
+    "tetmesh"_a, "face_neighbor"_a, "repeat"_a, "scale"_a);
+
+  m.def("create_element_laplacian_matrix",
+    [](const TetMeshGeoPtr &tetmesh, int faceNeighbor, int repeat, int scale) {
+      namespace ES = pgo::EigenSupport;
+      ES::SpMatD L;
+      pgo::SolidDeformationModel::TetMeshMatrix::generateBasicElementLaplacianMatrix(*tetmesh, L, faceNeighbor, scale);
+      if (repeat > 1) {
+        ES::SpMatD Ln;
+        ES::expandN(L, Ln, repeat);
+        L = std::move(Ln);
+      }
+      return std::make_shared<SparseMatrix>(std::move(L));
+    },
+    "tetmesh"_a, "face_neighbor"_a, "repeat"_a, "scale"_a);
+
+  m.def("create_tet_gradient_matrix", [](const TetMeshGeoPtr &tetmesh) {
+    namespace ES = pgo::EigenSupport;
+    ES::SpMatD G;
+    pgo::SolidDeformationModel::TetMeshMatrix::generateGradientMatrix(*tetmesh, G);
+    return std::make_shared<SparseMatrix>(std::move(G));
+  }, "tetmesh"_a);
+
+  m.def("create_tet_gradient_per_element_matrix", [](const TetMeshGeoPtr &tetmesh) {
+    namespace ES = pgo::EigenSupport;
+    auto values = new std::vector<double>(static_cast<size_t>(tetmesh->numTets()) * 9 * 12);
+    for (int i = 0; i < tetmesh->numTets(); ++i) {
+      ES::M9x12d G;
+      pgo::SolidDeformationModel::TetMeshMatrix::generateElementGradientMatrix(*tetmesh, i, G);
+      ES::Mp<ES::M9x12d>(values->data() + static_cast<size_t>(i) * 9 * 12) = G;
+    }
+    nb::capsule owner(values, [](void *p) noexcept {
+      delete static_cast<std::vector<double> *>(p);
+    });
+    return nb::ndarray<nb::numpy, double>(
+      values->data(),
+      { static_cast<size_t>(tetmesh->numTets()), static_cast<size_t>(12), static_cast<size_t>(9) },
+      owner);
+  }, "tetmesh"_a);
+
+  m.def("create_tet_biharmonic_gradient_matrix",
+    [](const TetMeshGeoPtr &tetmesh, int faceNeighbor, int scale) {
+      namespace ES = pgo::EigenSupport;
+      ES::SpMatD L;
+      pgo::SolidDeformationModel::TetMeshMatrix::generateBasicElementLaplacianMatrix(*tetmesh, L, faceNeighbor, 0);
+
+      ES::SpMatD Ln;
+      ES::expandN(L, Ln, 9);
+
+      ES::SpMatD G;
+      pgo::SolidDeformationModel::TetMeshMatrix::generateGradientMatrix(*tetmesh, G);
+
+      ES::SpMatD LG;
+      ES::mm(Ln, G, LG);
+
+      ES::SpMatD GTLTLG;
+      if (scale) {
+        std::vector<double> eleVols(tetmesh->numTets());
+        for (int ei = 0; ei < tetmesh->numTets(); ++ei) {
+          eleVols[ei] = std::abs(pgo::Mesh::getTetDeterminant(
+            tetmesh->pos(ei, 0), tetmesh->pos(ei, 1), tetmesh->pos(ei, 2), tetmesh->pos(ei, 3)));
+        }
+
+        double maxVol = *std::max_element(eleVols.begin(), eleVols.end());
+        for (int ei = 0; ei < tetmesh->numTets(); ++ei) {
+          eleVols[ei] /= maxVol;
+        }
+
+        ES::SpMatD M;
+        std::vector<ES::TripletD> entries;
+        for (int i = 0; i < tetmesh->numTets(); ++i) {
+          for (int j = 0; j < 9; ++j) {
+            entries.emplace_back(i * 9 + j, i * 9 + j, 1.0 / eleVols[i]);
+          }
+        }
+        M.resize(Ln.rows(), Ln.cols());
+        M.setFromTriplets(entries.begin(), entries.end());
+
+        ES::SpMatD MLG;
+        ES::mm(M, LG, MLG);
+        ES::mm(LG, MLG, GTLTLG, 1);
+      }
+      else {
+        ES::mm(LG, LG, GTLTLG, 1);
       }
 
-      Eigen::VectorXd vertexPosDouble = Eigen::Map<const Eigen::VectorXf>((float *)vtxInfo.ptr, vtxInfo.size).cast<double>();
-      Eigen::VectorXi tris = Eigen::Map<const Eigen::VectorXi>((int *)triInfo.ptr, triInfo.size);
+      return std::make_shared<SparseMatrix>(std::move(GTLTLG));
+    },
+    "tetmesh"_a, "face_neighbor"_a, "scale"_a);
 
-      pgoTriMeshGeoStructHandle trimesh = pgo_create_trimeshgeo((int)vertexPosDouble.size() / 3, vertexPosDouble.data(), (int)tris.size() / 3, tris.data());
-      return TriMeshGeo(trimesh);
-    });
+  // ── MaxStepResult ──
+  nb::class_<MaxStepResult>(m, "MaxStepResult")
+    .def(nb::init<>())
+    .def_rw("alpha", &MaxStepResult::alpha)
+    .def_rw("material_alpha", &MaxStepResult::materialAlpha)
+    .def_rw("contact_alpha", &MaxStepResult::contactAlpha)
+    .def_rw("material_clamped", &MaxStepResult::materialClamped)
+    .def_rw("contact_clamped", &MaxStepResult::contactClamped)
+    .def_static("unconstrained", &MaxStepResult::unconstrained);
 
-  m.def("trimeshgeo_get_num_vertices", [](TriMeshGeo m) -> int {
-    return pgo_trimeshgeo_get_num_vertices(m.handle);
-  });
+  // ── SolveStatus ──
+  nb::enum_<SolveStatus>(m, "SolveStatus")
+    .value("Converged", SolveStatus::Converged)
+    .value("MaxIterations", SolveStatus::MaxIterations)
+    .value("LineSearchFailed", SolveStatus::LineSearchFailed)
+    .value("StepTooSmall", SolveStatus::StepTooSmall)
+    .value("NonFinite", SolveStatus::NonFinite);
 
-  m.def("trimeshgeo_get_num_triangles", [](TriMeshGeo m) -> int {
-    return pgo_trimeshgeo_get_num_triangles(m.handle);
-  });
+  // ── SolverResult ──
+  nb::class_<SolverResult>(m, "SolverResult")
+    .def(nb::init<>())
+    .def_ro("status", &SolverResult::status)
+    .def_ro("iterations", &SolverResult::iterations);
 
-  m.def("trimeshgeo_get_vertices", [](TriMeshGeo m) -> py::array_t<float> {
-    Eigen::VectorXd vtx(pgo_trimeshgeo_get_num_vertices(m.handle) * 3);
-    pgo_trimeshgeo_get_vertices(m.handle, vtx.data());
+  // ── NewtonSolver params ──
+  nb::enum_<NewtonSolver::LineSearchMethod>(m, "LineSearchMethod")
+    .value("GOLDEN", NewtonSolver::LSM_GOLDEN)
+    .value("BRENTS", NewtonSolver::LSM_BRENTS)
+    .value("BACKTRACK", NewtonSolver::LSM_BACKTRACK)
+    .value("SIMPLE", NewtonSolver::LSM_SIMPLE);
 
-    auto ret = py::array_t<float>(vtx.size());
-    py::buffer_info binfo = ret.request();
-    (Eigen::Map<Eigen::VectorXf>((float *)binfo.ptr, vtx.size())) = vtx.cast<float>();
-    return ret;
-  });
+  nb::class_<NewtonSolver::SolverParam>(m, "NewtonSolverParams")
+    .def(nb::init<>())
+    .def_rw("alpha", &NewtonSolver::SolverParam::alpha)
+    .def_rw("line_search_method", &NewtonSolver::SolverParam::lsm)
+    .def_rw("stop_after_increase", &NewtonSolver::SolverParam::stopAfterIncrease)
+    .def_rw("add_damping", &NewtonSolver::SolverParam::addDamping);
 
-  m.def("trimeshgeo_get_triangles", [](TriMeshGeo m) -> py::array_t<int> {
-    auto ret = py::array_t<int>(pgo_trimeshgeo_get_num_triangles(m.handle) * 3);
-    py::buffer_info binfo = ret.request();
+  // ── PotentialEnergy (base + trampoline) ──
+  nb::class_<PotentialEnergy, PyPotentialEnergy>(m, "PotentialEnergy")
+    .def(nb::init<>())
+    .def("func", &PotentialEnergy::func)
+    .def("gradient", &PotentialEnergy::gradient)
+    .def("hessian", &PotentialEnergy::hessian)
+    .def("create_hessian", &PotentialEnergy::createHessian)
+    .def("get_num_dofs", &PotentialEnergy::getNumDOFs)
+    .def("compute_max_step_limit", &PotentialEnergy::computeMaxStepLimit);
 
-    pgo_trimeshgeo_get_triangles(m.handle, (int *)binfo.ptr);
+  // ── PotentialEnergies ──
+  nb::class_<PotentialEnergies, PotentialEnergy>(m, "PotentialEnergies")
+    .def(nb::init<int>())
+    .def("add", &PotentialEnergies::addPotentialEnergy, "energy"_a, "coeff"_a = 1.0)
+    .def("init", &PotentialEnergies::init);
 
-    return ret;
-  });
+  // ── SolverType ──
+  nb::enum_<pgo::NonlinearOptimization::EnergyOptimizer::SolverType>(m, "SolverType")
+    .value("IPOPT", pgo::NonlinearOptimization::EnergyOptimizer::SolverType::ST_IPOPT)
+    .value("KNITRO", pgo::NonlinearOptimization::EnergyOptimizer::SolverType::ST_KNITRO)
+    .value("NEWTON", pgo::NonlinearOptimization::EnergyOptimizer::SolverType::ST_NEWTON);
 
-  m.def("destroy_trimeshgeo", [](TriMeshGeo m) {
-    pgo_destroy_trimeshgeo(m.handle);
-  });
+  // ── minimize ──
+  m.def("minimize", [](Eigen::Ref<Eigen::VectorXd> x,
+                        std::shared_ptr<const PotentialEnergy> energy,
+                        pgo::NonlinearOptimization::EnergyOptimizer::SolverType solver,
+                        int maxIter, double eps, int verbose) {
+    Eigen::VectorXd xlow = Eigen::VectorXd::Constant(x.size(), -1e100);
+    Eigen::VectorXd xhi  = Eigen::VectorXd::Constant(x.size(),  1e100);
+    return EnergyOptimizer::minimize(x, energy, xlow, xhi, solver, maxIter, eps, verbose);
+  }, "x"_a, "energy"_a, "solver"_a = pgo::NonlinearOptimization::EnergyOptimizer::SolverType::ST_NEWTON,
+     "max_iter"_a = 100, "eps"_a = 1e-6, "verbose"_a = 0);
 
-  m.def("mesh_segmentation", [](TriMeshGeo m, int nSegs) -> py::array_t<int> {
-    auto ret = py::array_t<int>(pgo_trimeshgeo_get_num_triangles(m.handle));
-    py::buffer_info binfo = ret.request();
+  // ── NewtonSolver ──
+  nb::class_<NewtonSolver>(m, "NewtonSolver")
+    .def(nb::init<const double*, NewtonSolver::SolverParam,
+                   std::shared_ptr<const PotentialEnergy>,
+                   const std::vector<int>&, const double*>(),
+         "x0"_a, "params"_a, "energy"_a, "fixed_dofs"_a, "fixed_values"_a = nb::none())
+    .def("solve", [](NewtonSolver &self, Eigen::Ref<Eigen::VectorXd> x,
+                      int numIter, double eps, int verbose) {
+      return self.solve(x.data(), numIter, eps, verbose);
+    }, "x"_a, "num_iter"_a = 100, "eps"_a = 1e-6, "verbose"_a = 0);
 
-    pgo_mesh_segmentation(m.handle, nSegs, (int *)binfo.ptr);
+  // ── IPC parameters ──
+  nb::class_<pgo::Contact::IPC::SurfaceIPCCore::Parameters>(m, "IPCCoreParams")
+    .def(nb::init<>())
+    .def_rw("dhat", &pgo::Contact::IPC::SurfaceIPCCore::Parameters::dhat)
+    .def_rw("kappa", &pgo::Contact::IPC::SurfaceIPCCore::Parameters::kappa)
+    .def_rw("eps_ee", &pgo::Contact::IPC::SurfaceIPCCore::Parameters::eps_ee)
+    .def_rw("slackness", &pgo::Contact::IPC::SurfaceIPCCore::Parameters::slackness);
 
-    return ret;
-  });
+  nb::enum_<pgo::Contact::IPC::FloorAxis>(m, "FloorAxis")
+    .value("INVALID", pgo::Contact::IPC::FloorAxis::INVALID)
+    .value("X", pgo::Contact::IPC::FloorAxis::X)
+    .value("Y", pgo::Contact::IPC::FloorAxis::Y)
+    .value("Z", pgo::Contact::IPC::FloorAxis::Z);
 
-  m.def("mesh_isotropic_remeshing", [](TriMeshGeo m, double targetEdgeLength, int nIter, double angleThreshold) -> TriMeshGeo {
-    return TriMeshGeo(pgo_mesh_isotropic_remeshing(m.handle, targetEdgeLength, nIter, angleThreshold));
-  });
+  nb::enum_<pgo::Contact::IPC::FloorSide>(m, "FloorSide")
+    .value("KEEP_ABOVE", pgo::Contact::IPC::FloorSide::KEEP_ABOVE)
+    .value("KEEP_BELOW", pgo::Contact::IPC::FloorSide::KEEP_BELOW);
 
-  m.def("trimesh_closest_distances", [](TriMeshGeo m, pyArrayFloat queryPt) -> py::array_t<float> {
-    py::buffer_info quertPtInfo = queryPt.request();
-    if (quertPtInfo.ndim != (py::ssize_t)1 || quertPtInfo.format != py::format_descriptor<float>::format()) {
-      std::cerr << "Wrong vertex type:" << quertPtInfo.ndim << ',' << quertPtInfo.format << std::endl;
-      return py::array_t<float>();
-    }
+  nb::class_<pgo::Contact::IPC::FloorPenaltyParameters>(m, "FloorPenaltyParams")
+    .def(nb::init<>())
+    .def_rw("axis", &pgo::Contact::IPC::FloorPenaltyParameters::floorAxis)
+    .def_rw("side", &pgo::Contact::IPC::FloorPenaltyParameters::floorSide)
+    .def_rw("height", &pgo::Contact::IPC::FloorPenaltyParameters::floorHeight)
+    .def_rw("kappa", &pgo::Contact::IPC::FloorPenaltyParameters::floorKappa);
 
-    auto ret = py::array_t<float>(quertPtInfo.size / 3);
+  // ── Contact energies ──
+  nb::class_<pgo::Contact::IPC::EmbeddedSurfaceIPCPotentialEnergy, PotentialEnergy>(m, "IPCEnergy")
+    .def(nb::init<const Eigen::MatrixXd&, const Eigen::MatrixXi&,
+                   const Eigen::SparseMatrix<double>&,
+                   const pgo::Contact::IPC::SurfaceIPCCore::Parameters&>(),
+         "surface_rest"_a, "surface_triangles"_a, "embedding"_a,
+         "ipc_params"_a = pgo::Contact::IPC::SurfaceIPCCore::Parameters{})
+    .def("mark_obstacle_static",
+         &pgo::Contact::IPC::EmbeddedSurfaceIPCPotentialEnergy::markObstacleStatic);
 
-    Eigen::VectorXd queryPtDouble = Eigen::Map<const Eigen::VectorXf>((float *)quertPtInfo.ptr, quertPtInfo.size).cast<double>();
-    Eigen::VectorXd queryDist(quertPtInfo.size / 3);
-    pgo_trimesh_closest_distances(m.handle, (int)quertPtInfo.size / 3, queryPtDouble.data(), queryDist.data(), nullptr);
-
-    py::buffer_info binfo = ret.request();
-    (Eigen::Map<Eigen::VectorXf>((float *)binfo.ptr, binfo.size)) = queryDist.cast<float>();
-
-    return ret;
-  });
-
-  m.def("tetmesh_barycentric_weights", [](TetMeshGeo m, pyArrayFloat queryPt) -> std::tuple<py::array_t<float>, py::array_t<int>> {
-    py::buffer_info quertPtInfo = queryPt.request();
-    if (quertPtInfo.ndim != (py::ssize_t)1 || quertPtInfo.format != py::format_descriptor<float>::format()) {
-      std::cerr << "Wrong vertex type:" << quertPtInfo.ndim << ',' << quertPtInfo.format << std::endl;
-      return std::tuple<py::array_t<float>, py::array_t<int>>();
-    }
-
-    auto ret_w = py::array_t<float>(quertPtInfo.size / 3 * 4);
-    auto ret_i = py::array_t<int>(quertPtInfo.size / 3);
-
-    py::buffer_info winfo = ret_w.request();
-    py::buffer_info iinfo = ret_i.request();
-
-    Eigen::VectorXd queryPtDouble = Eigen::Map<const Eigen::VectorXf>((float *)quertPtInfo.ptr, quertPtInfo.size).cast<double>();
-    Eigen::VectorXd queryW(quertPtInfo.size / 3 * 4);
-
-    pgo_tetmesh_barycentric_weights(m.handle, (int)quertPtInfo.size / 3, queryPtDouble.data(), queryW.data(), (int *)iinfo.ptr);
-
-    (Eigen::Map<Eigen::VectorXf>((float *)winfo.ptr, winfo.size)) = queryW.cast<float>();
-
-    return std::make_tuple(ret_w, ret_i);
-  });
-
-  m.def(
-    "run_sim_from_config", [](const std::string &filename) -> int {
-      return pgo_run_sim_from_config(filename.c_str());
-    });
-
-  m.def(
-    "convert_animation_to_abc", [](const std::string &configFilename, const std::string &outputFolder) -> int {
-      return pgo_convert_animation_to_abc(configFilename.c_str(), outputFolder.c_str());
-    });
-
-  m.def("debug", []() {
-    std::cout << "Test!!!" << std::endl;
-  });
-
-#ifdef VERSION_INFO
-  m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
-#else
-  m.attr("__version__") = "dev";
-#endif
+  nb::class_<pgo::Contact::IPC::EmbeddedSurfaceFloorPotentialEnergy, PotentialEnergy>(m, "FloorEnergy")
+    .def(nb::init<const Eigen::MatrixXd&, const Eigen::SparseMatrix<double>&,
+                   const pgo::Contact::IPC::FloorPenaltyParameters&>(),
+         "surface_rest"_a, "embedding"_a, "params"_a);
 }

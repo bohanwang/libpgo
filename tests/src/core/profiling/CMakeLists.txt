@@ -1,4 +1,4 @@
 add_executable(scopedProfileSection_gtest scopedProfileSection_gtest.cpp)
 target_link_libraries(scopedProfileSection_gtest PRIVATE GTest::gtest_main profiling)
 set_property(TARGET scopedProfileSection_gtest PROPERTY FOLDER "tests/gtest")
-gtest_discover_tests(scopedProfileSection_gtest)
+pgo_gtest_discover_tests(scopedProfileSection_gtest)

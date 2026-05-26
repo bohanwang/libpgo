@@ -8,6 +8,7 @@ copyright to USC,MIT,NUS
 #include "potentialEnergy.h"
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace pgo
@@ -19,8 +20,11 @@ class DeformationModelAssembler;
 class DeformationModelEnergy : public NonlinearOptimization::PotentialEnergy
 {
 public:
-  DeformationModelEnergy(std::shared_ptr<DeformationModelAssembler> fma, const EigenSupport::VXd *restPosition = nullptr, int offset = 0);
+  DeformationModelEnergy(std::unique_ptr<DeformationModelAssembler> fma, const EigenSupport::VXd *restPosition = nullptr, int offset = 0);
   virtual ~DeformationModelEnergy();
+
+  // Borrow the owned assembler (e.g. for stress queries).
+  const DeformationModelAssembler &assembler() const { return *forceModelAssembler; }
 
   virtual double func(EigenSupport::ConstRefVecXd x) const override;
   virtual void gradient(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad) const override;
@@ -36,7 +40,7 @@ public:
   void setEnableMaterialMaxStep(bool enable) { enableMaterialMaxStep_ = enable; }
   bool isMaterialMaxStepEnabled() const { return enableMaterialMaxStep_; }
 protected:
-  std::shared_ptr<DeformationModelAssembler> forceModelAssembler;
+  std::unique_ptr<DeformationModelAssembler> forceModelAssembler;
 
   std::vector<int> allDOFs;
   EigenSupport::VXd restPosition;

@@ -1,5 +1,5 @@
 set(PGOLOGGING_HEADERS pgoLogging.h fmtEigen.h)
-set(PGOLOGGING_DEPS Eigen3::Eigen spdlog::spdlog_header_only fmt::fmt-header-only)
+set(PGOLOGGING_DEPS Eigen3::Eigen spdlog::spdlog fmt::fmt-header-only)
 
 foreach(tgt ${PGOLOGGING_DEPS})
   if(NOT TARGET ${tgt})

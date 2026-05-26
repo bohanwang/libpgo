@@ -1,0 +1,11 @@
+{
+  "meshes": [
+    {
+      "name": "bunny-drop-lite-ipc-cubic",
+      "driving-mesh": "bunny.obj",
+      "sequence": "ret-cubic-bunny-lite-ipc/surface/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [0, 200]
+    }
+  ]
+}

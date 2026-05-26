@@ -9,9 +9,31 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
-using pgo::Contact::CIPC::SurfaceIPCTopology;
+using pgo::Contact::IPC::SurfaceIPCTopology;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
 }  // namespace
+
+TEST(SurfaceIPCTopologyGTest, InvalidTriangleColumnCountThrows)
+{
+  ES::MXd V(3, 3);
+  V.setZero();
+  ES::MXi F(1, 4);
+  F.setZero();
+
+  SurfaceIPCTopology topology;
+  EXPECT_THROW(topology.setMesh(V, F), std::invalid_argument);
+}
+
+TEST(SurfaceIPCTopologyGTest, OutOfRangeTriangleIndexThrows)
+{
+  ES::MXd V(3, 3);
+  V.setZero();
+  ES::MXi F(1, 3);
+  F << 0, 1, 3;
+
+  SurfaceIPCTopology topology;
+  EXPECT_THROW(topology.setMesh(V, F), std::invalid_argument);
+}
 
 TEST(SurfaceIPCTopologyGTest, SetMeshBuildsEdgesWeightsAndDofs)
 {

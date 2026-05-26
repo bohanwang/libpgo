@@ -10,10 +10,10 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
-using pgo::Contact::CIPC::EmbeddedSurfaceFloorPotentialEnergy;
-using pgo::Contact::CIPC::FloorAxis;
-using pgo::Contact::CIPC::FloorPenaltyParameters;
-using pgo::Contact::CIPC::FloorSide;
+using pgo::Contact::IPC::EmbeddedSurfaceFloorPotentialEnergy;
+using pgo::Contact::IPC::FloorAxis;
+using pgo::Contact::IPC::FloorPenaltyParameters;
+using pgo::Contact::IPC::FloorSide;
 using pgo::Contact::CIPCTest::computeFloorEnergy;
 using pgo::Contact::CIPCTest::computeFloorGradient;
 using pgo::Contact::CIPCTest::computeFloorHessian;
@@ -48,9 +48,14 @@ FloorPenaltyParameters makeFloorParams(FloorAxis axis = FloorAxis::Z)
   return params;
 }
 
+double floorSideTestSign(FloorSide floorSide)
+{
+  return floorSide == FloorSide::KEEP_ABOVE ? 1.0 : -1.0;
+}
+
 double computeSidedFloorEnergy(const ES::VXd &x, double floorHeight, double floorKappa, int floorAxis, FloorSide floorSide)
 {
-  const double sideSign = static_cast<double>(floorSide);
+  const double sideSign = floorSideTestSign(floorSide);
   double energy = 0.0;
   for (int vi = 0; vi < x.size() / 3; ++vi) {
     const double dzEff = sideSign * (x[3 * vi + floorAxis] - floorHeight);
@@ -62,7 +67,7 @@ double computeSidedFloorEnergy(const ES::VXd &x, double floorHeight, double floo
 
 ES::VXd computeSidedFloorGradient(const ES::VXd &x, double floorHeight, double floorKappa, int floorAxis, FloorSide floorSide)
 {
-  const double sideSign = static_cast<double>(floorSide);
+  const double sideSign = floorSideTestSign(floorSide);
   ES::VXd g = ES::VXd::Zero(x.size());
   for (int vi = 0; vi < x.size() / 3; ++vi) {
     const double dzEff = sideSign * (x[3 * vi + floorAxis] - floorHeight);
@@ -74,7 +79,7 @@ ES::VXd computeSidedFloorGradient(const ES::VXd &x, double floorHeight, double f
 
 ES::MXd computeSidedFloorHessian(const ES::VXd &x, double floorHeight, double floorKappa, int floorAxis, FloorSide floorSide)
 {
-  const double sideSign = static_cast<double>(floorSide);
+  const double sideSign = floorSideTestSign(floorSide);
   ES::MXd H = ES::MXd::Zero(x.size(), x.size());
   for (int vi = 0; vi < x.size() / 3; ++vi) {
     const double dzEff = sideSign * (x[3 * vi + floorAxis] - floorHeight);
@@ -195,7 +200,7 @@ TEST(EmbeddedSurfaceFloorPotentialEnergyGTest, UpperSidePenalizesPointsAboveHeig
 
   FloorPenaltyParameters params = makeFloorParams(FloorAxis::X);
   params.floorHeight = 0.05;
-  params.floorSide = FloorSide::UPPER;
+  params.floorSide = FloorSide::KEEP_BELOW;
   EmbeddedSurfaceFloorPotentialEnergy energy(V, makeIdentityEmbedding(rest.size()), params);
 
   const ES::VXd surfacePositions = rest + u;
@@ -264,6 +269,6 @@ TEST(EmbeddedSurfaceFloorPotentialEnergyGTest, InvalidAxisThrows)
   EXPECT_THROW(EmbeddedSurfaceFloorPotentialEnergy(V, W, invalidAxis), std::invalid_argument);
 
   FloorPenaltyParameters invalidSide = makeFloorParams();
-  invalidSide.floorSide = static_cast<FloorSide>(0);
+  invalidSide.floorSide = static_cast<FloorSide>(99);
   EXPECT_THROW(EmbeddedSurfaceFloorPotentialEnergy(V, W, invalidSide), std::invalid_argument);
 }

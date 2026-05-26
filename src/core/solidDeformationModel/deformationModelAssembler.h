@@ -27,7 +27,7 @@ public:
     int limitingLocationId = -1;
   };
 
-  DeformationModelAssembler(std::shared_ptr<const DeformationModelManager> dm, const double *elementFlags = nullptr);
+  DeformationModelAssembler(std::unique_ptr<const DeformationModelManager> dm, const double *elementFlags = nullptr);
   virtual ~DeformationModelAssembler();
 
   double computeEnergy(const double *x, const double *plasticParams, const double *elasticParams) const;
@@ -44,7 +44,7 @@ public:
 
   int getNumDOFs() const { return n3; }
 
-  std::shared_ptr<const DeformationModelManager> getDeformationModelManager() const { return deformationModelManager; }
+  const DeformationModelManager &getDeformationModelManager() const { return *deformationModelManager; }
   const EigenSupport::SpMatD &getHessianTemplate() const { return KTemplate; }
   const EigenSupport::SpMatD &get_dfda_Template() const { return dfdaTemplate; }
   const EigenSupport::SpMatD &get_dfdb_Template() const { return dfdbTemplate; }
@@ -53,7 +53,7 @@ protected:
   void getPlasticParameters(int ele, const double *paramsAll, double *param) const;
   void getElasticParameters(int ele, const double *paramsAll, double *param) const;
 
-  std::shared_ptr<const DeformationModelManager> deformationModelManager;
+  std::unique_ptr<const DeformationModelManager> deformationModelManager;
   DeformationModelAssemblerCacheData *data;
 
   int n3, nele, nvtx, neleVtx, localDOFs;

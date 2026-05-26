@@ -1,8 +1,7 @@
 #include "TRBDF2TimeIntegratorHelper.h"
 #include "TRBDF2TimeIntegrator.h"
 #include "deformationModelEnergy.h"
-#include "embeddedSurfaceIPCPotentialEnergy.h"
-#include "CIPC.h"
+#include "ipc/embeddedSurfaceIPCPotentialEnergy.h"
 
 #include <iostream>
 
@@ -78,6 +77,76 @@ void TRBDF2TimeIntegratorEnergy::hessian(ES::ConstRefVecXd x, ES::SpMatD &hess) 
 
   // cblas_daxpy((int)A.nonZeros(), 1.0, A.valuePtr(), 1, hess.valuePtr(), 1);
   (ES::Mp<ES::VXd>(hess.valuePtr(), hess.nonZeros())) += ES::Mp<const ES::VXd>(A.valuePtr(), A.nonZeros());
+}
+
+void TRBDF2TimeIntegratorEnergy::gradient_hessian(ES::ConstRefVecXd x, ES::RefVecXd grad, ES::SpMatD &hess) const
+{
+  ES::mv(A, x, grad, 0);
+
+  hess = intg->hessianAll;
+  memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
+  (ES::Mp<ES::VXd>(hess.valuePtr(), hess.nonZeros())) += ES::Mp<const ES::VXd>(A.valuePtr(), A.nonZeros());
+
+  for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
+    ES::VXd &fint = *intg->implicitModelsAll_fint[i];
+    fint.setZero();
+
+    if (intg->implicitModelsAll[i]->isHessianTopologyFixed()) {
+      ES::SpMatD &K = *intg->implicitModelsAll_K[i];
+      const ES::SpMatI &mapping = *intg->implicitModelsAll_Kmaping[i];
+
+      intg->implicitModelsAll[i]->gradient(x, fint);
+      intg->implicitModelsAll[i]->hessian(x, K);
+      ES::addSmallToBig(1.0, K, hess, 1.0, mapping, 1);
+    }
+    else {
+      ES::SpMatD Ki;
+      intg->implicitModelsAll[i]->gradient_hessian(x, fint, Ki);
+      if (Ki.nonZeros())
+        hess = hess + Ki;
+    }
+
+    grad += fint;
+  }
+
+  grad += b;
+}
+
+double TRBDF2TimeIntegratorEnergy::func_grad_hessian(ES::ConstRefVecXd x, ES::RefVecXd grad, ES::SpMatD &hess) const
+{
+  ES::mv(A, x, grad, 0);
+  double energy = ES::vTMv(A, x, intg->temp0, 0) * 0.5;
+
+  hess = intg->hessianAll;
+  memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
+  (ES::Mp<ES::VXd>(hess.valuePtr(), hess.nonZeros())) += ES::Mp<const ES::VXd>(A.valuePtr(), A.nonZeros());
+
+  for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
+    ES::VXd &fint = *intg->implicitModelsAll_fint[i];
+    fint.setZero();
+
+    if (intg->implicitModelsAll[i]->isHessianTopologyFixed()) {
+      energy += intg->implicitModelsAll[i]->func(x);
+
+      ES::SpMatD &K = *intg->implicitModelsAll_K[i];
+      const ES::SpMatI &mapping = *intg->implicitModelsAll_Kmaping[i];
+      intg->implicitModelsAll[i]->gradient(x, fint);
+      intg->implicitModelsAll[i]->hessian(x, K);
+      ES::addSmallToBig(1.0, K, hess, 1.0, mapping, 1);
+    }
+    else {
+      ES::SpMatD Ki;
+      energy += intg->implicitModelsAll[i]->func_grad_hessian(x, fint, Ki);
+      if (Ki.nonZeros())
+        hess = hess + Ki;
+    }
+
+    grad += fint;
+  }
+
+  energy += x.dot(b);
+  grad += b;
+  return energy;
 }
 
 void TRBDF2TimeIntegratorEnergy::getDOFs(std::vector<int> &dofs) const

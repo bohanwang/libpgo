@@ -1,0 +1,11 @@
+{
+  "meshes": [
+    {
+      "name": "dragon-dyn-drop-lite-ipc-cubic",
+      "driving-mesh": "dragon.obj",
+      "sequence": "ret-cubic-dragon-dyn-lite-ipc/surface/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [0, 400]
+    }
+  ]
+}

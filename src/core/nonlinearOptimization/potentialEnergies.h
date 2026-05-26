@@ -6,6 +6,7 @@ copyright to USC
 #pragma once
 
 #include "potentialEnergy.h"
+#include "lineSearchAwareEnergy.h"
 
 #include <cstdint>
 #include <memory>
@@ -16,7 +17,7 @@ namespace NonlinearOptimization
 {
 class PotentialEnergiesBuffer;
 
-class PotentialEnergies : public PotentialEnergy
+class PotentialEnergies : public PotentialEnergy, public LineSearchAwareEnergy
 {
 public:
   PotentialEnergies(int n);
@@ -36,8 +37,13 @@ public:
   virtual double func(EigenSupport::ConstRefVecXd x) const override;
   virtual void gradient(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad) const override;
   virtual void hessian(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const override;
+  virtual double func_grad_hessian(
+    EigenSupport::ConstRefVecXd x,
+    EigenSupport::RefVecXd grad,
+    EigenSupport::SpMatD &hess) const override;
   virtual void hessianVector(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd vec, EigenSupport::RefVecXd hessVec) const override;
   virtual void createHessian(EigenSupport::SpMatD &hess) const override { hess = hessianAll; }
+  virtual void gradient_hessian(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad, EigenSupport::SpMatD &hess) const override;
 
   virtual void getDOFs(std::vector<int> &dofs) const override { dofs = allDOFs; }
   virtual int getNumDOFs() const override { return nAll; }
@@ -52,6 +58,8 @@ public:
   virtual void hessianDirect(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const override;
 
   virtual MaxStepResult computeMaxStepLimit(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override;
+  virtual void beginLineSearch(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override;
+  virtual void endLineSearch() const override;
 
   void printEnergy(EigenSupport::ConstRefVecXd x) const;
 

@@ -24,14 +24,17 @@
 #include "generateMassMatrix.h"
 #include "generateSurfaceMesh.h"
 #include "barycentricCoordinates.h"
-#include "triangleMeshExternalContactHandler.h"
+#include "legacy_penalty/triangleMeshExternalContactHandler.h"
 #include "configFileJSON.h"
-#include "pointPenetrationEnergy.h"
-#include "triangleMeshSelfContactHandler.h"
-#include "pointTrianglePairCouplingEnergyWithCollision.h"
+#include "legacy_penalty/pointPenetrationEnergy.h"
+#include "legacy_penalty/triangleMeshSelfContactHandler.h"
+#include "legacy_penalty/pointTrianglePairCouplingEnergyWithCollision.h"
 #include "linearPotentialEnergy.h"
 #include "NewtonSolver.h"
-#include "animationLoader.h"
+
+#if defined(PGO_HAS_ANIMATION_IO)
+#  include "animationLoader.h"
+#endif
 
 #if defined(PGO_HAS_MKL)
 #  include "smoothRSEnergy.h"
@@ -669,21 +672,26 @@ int pgo_run_sim_from_config(const char *configFileName)
   InterpolationCoordinates::BarycentricCoordinates bc(surfaceMesh.numVertices(), surfaceRestPositions.data(), &tetMesh);
   ES::SpMatD W = bc.generateInterpolationMatrix();
 
-  // initialize fem
-  std::shared_ptr<SolidDeformationModel::SimulationMesh> simMesh(SolidDeformationModel::loadTetMesh(&tetMesh));
-  std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm = std::make_shared<SolidDeformationModel::DeformationModelManager>();
-
-  dmm->setMesh(simMesh.get(), nullptr, nullptr);
-  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, elasticMat);
-  dmm->setEnforceSPD(1);
-
-  std::vector<double> elementWeights(simMesh->getNumElements(), 1.0);
-  std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> assembler =
-    std::make_shared<SolidDeformationModel::DeformationModelAssembler>(dmm, elementWeights.data());
+  // initialize fem (unique ownership spine: energy -> assembler -> manager -> mesh)
+  std::unique_ptr<SolidDeformationModel::SimulationMesh> simMesh = SolidDeformationModel::loadTetMesh(&tetMesh);
 
   int n = simMesh->getNumVertices();
   int n3 = n * 3;
   int nele = simMesh->getNumElements();
+
+  ES::VXd restPosition(n3);
+  for (int vi = 0; vi < n; vi++) {
+    double p[3];
+    simMesh->getVertex(vi, p);
+    restPosition.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
+  }
+
+  std::unique_ptr<SolidDeformationModel::DeformationModelManager> dmm =
+    std::make_unique<SolidDeformationModel::DeformationModelManager>(
+      std::move(simMesh),
+      pgo::SolidDeformationModel::DeformationModelPlasticMaterial::VOLUMETRIC_DOF6,
+      elasticMat,
+      1);
 
   ES::VXd plasticity(nele * 6);
   ES::M3d I = ES::M3d::Identity();
@@ -697,15 +705,12 @@ int pgo_run_sim_from_config(const char *configFileName)
     pm->toParam(I.data(), plasticity.data() + ei * dmm->getNumPlasticParameters());
   }
 
-  ES::VXd restPosition(n3);
-  for (int vi = 0; vi < n; vi++) {
-    double p[3];
-    simMesh->getVertex(vi, p);
-    restPosition.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
-  }
+  std::vector<double> elementWeights(nele, 1.0);
+  std::unique_ptr<SolidDeformationModel::DeformationModelAssembler> assembler =
+    std::make_unique<SolidDeformationModel::DeformationModelAssembler>(std::move(dmm), elementWeights.data());
 
   std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy =
-    std::make_shared<SolidDeformationModel::DeformationModelEnergy>(assembler, &restPosition, 0);
+    std::make_shared<SolidDeformationModel::DeformationModelEnergy>(std::move(assembler), &restPosition, 0);
   elasticEnergy->setPlasticParams(plasticity);
 
   ES::VXd zero(n3);
@@ -969,7 +974,8 @@ int pgo_run_sim_from_config(const char *configFileName)
 }
 
 int pgo_convert_animation_to_abc(const char *configFileName, const char *outputFolder)
-{  
+{
+#if defined(PGO_HAS_ANIMATION_IO)
   pgo::Mesh::initPredicates();
   pgo::AnimationIO::AnimationLoader loader;
   if (loader.load(configFileName) != 0) {
@@ -977,4 +983,9 @@ int pgo_convert_animation_to_abc(const char *configFileName, const char *outputF
   }
 
   return loader.saveABC(outputFolder);
+#else
+  (void)configFileName;
+  (void)outputFolder;
+  return 1;
+#endif
 }

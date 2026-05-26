@@ -13,28 +13,32 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(googletest)
 
+function(pgo_gtest_discover_tests target)
+  if(WIN32 AND TARGET pgo_c)
+    set_property(TARGET ${target} PROPERTY TEST_LAUNCHER
+      "${CMAKE_COMMAND};-E;env;--modify;PATH=path_list_prepend:$<TARGET_FILE_DIR:pgo_c>")
+  endif()
+
+  gtest_discover_tests(${target}
+    DISCOVERY_MODE PRE_TEST
+    DISCOVERY_TIMEOUT 30
+    ${ARGN})
+endfunction()
+
 add_executable(pgo_c_gtest pgo_c_gtest.cpp)
 target_include_directories(pgo_c_gtest PRIVATE ${CMAKE_SOURCE_DIR}/src/c)
 target_link_libraries(pgo_c_gtest PRIVATE GTest::gtest_main pgo_c)
-target_compile_definitions(pgo_c_gtest PRIVATE LIBPGO_TEST_TORUS_VEG="${CMAKE_SOURCE_DIR}/examples/legacy/tet/torus.veg")
+target_compile_definitions(pgo_c_gtest PRIVATE LIBPGO_TEST_TORUS_VEG="${CMAKE_SOURCE_DIR}/tests/fixtures/legacy/tet/torus.veg")
+if(TARGET MKL::MKL)
+  target_compile_definitions(pgo_c_gtest PRIVATE PGO_HAS_MKL)
+endif()
 set_property(TARGET pgo_c_gtest PROPERTY FOLDER "tests/gtest")
-gtest_discover_tests(pgo_c_gtest)
+pgo_gtest_discover_tests(pgo_c_gtest)
 
 add_executable(mesh_gtest mesh_gtest.cpp)
 target_include_directories(mesh_gtest PRIVATE ${CMAKE_SOURCE_DIR}/src/core/mesh)
 target_link_libraries(mesh_gtest PRIVATE GTest::gtest_main mesh)
 set_property(TARGET mesh_gtest PROPERTY FOLDER "tests/gtest")
-gtest_discover_tests(mesh_gtest)
-
-add_test(
-  NAME compile_flags_regression
-  COMMAND ${CMAKE_COMMAND}
-    -DPROJECT_SOURCE_DIR=${CMAKE_SOURCE_DIR}
-    -DTEST_ROOT=${CMAKE_BINARY_DIR}/compile_flags_regression
-    -DTEST_GENERATOR=${CMAKE_GENERATOR}
-    -DTEST_C_COMPILER=${CMAKE_C_COMPILER}
-    -DTEST_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/compile_flags_regression.cmake
-)
+pgo_gtest_discover_tests(mesh_gtest)
 
 add_subdirectory(src)

@@ -5,6 +5,8 @@ copyright to USC,MIT,NUS
 
 #pragma once
 
+#include <memory>
+
 namespace pgo
 {
 
@@ -28,7 +30,7 @@ public:
   SimulationMeshMaterial() {}
   virtual ~SimulationMeshMaterial() {}
 
-  virtual SimulationMeshMaterial *clone() const = 0;
+  virtual std::unique_ptr<SimulationMeshMaterial> clone() const = 0;
 };
 
 class SimulationMeshENuMaterial : public SimulationMeshMaterial
@@ -50,7 +52,7 @@ public:
   double getNu() const { return nu; }
   double getCompressionRatio() const { return J; }
 
-  virtual SimulationMeshMaterial *clone() const override { return new SimulationMeshENuMaterial(E, nu, J); }
+  std::unique_ptr<SimulationMeshMaterial> clone() const override { return std::make_unique<SimulationMeshENuMaterial>(E, nu, J); }
 
 protected:
   double E = 6e3, nu = 0.4;
@@ -69,7 +71,7 @@ public:
   void seth(double h_) { h = h_; }
   double geth() const { return h; }
 
-  virtual SimulationMeshMaterial *clone() const override { return new SimulationMeshENuhMaterial(E, nu, h, J); }
+  std::unique_ptr<SimulationMeshMaterial> clone() const override { return std::make_unique<SimulationMeshENuhMaterial>(E, nu, h, J); }
 
 protected:
   double h = 1e-4;
@@ -91,7 +93,7 @@ public:
   double getGamma() const { return gamma; }
   double getLo() const { return lo; }
 
-  virtual SimulationMeshMaterial *clone() const override { return new SimulationMeshHillMaterial(E_act, gamma, lo); }
+  std::unique_ptr<SimulationMeshMaterial> clone() const override { return std::make_unique<SimulationMeshHillMaterial>(E_act, gamma, lo); }
 
 protected:
   double E_act = 0.1e6, gamma = 1, lo = 0.6;
@@ -186,9 +188,9 @@ public:
   int getM() const { return M; }
   int getN() const { return N; }
 
-  virtual SimulationMeshMaterial *clone() const override
+  std::unique_ptr<SimulationMeshMaterial> clone() const override
   {
-    return new SimulationMeshMooneyRivlinMaterial(N, M, C, D);
+    return std::make_unique<SimulationMeshMooneyRivlinMaterial>(N, M, C, D);
   }
 
 protected:
@@ -208,7 +210,7 @@ public:
   void seth(double h_) { h = h_; }
   double geth() const { return h; }
 
-  virtual SimulationMeshMaterial *clone() const override { return new SimulationMeshMooneyRivlinhMaterial(N, M, C, D, h); }
+  std::unique_ptr<SimulationMeshMaterial> clone() const override { return std::make_unique<SimulationMeshMooneyRivlinhMaterial>(N, M, C, D, h); }
 
 protected:
   double h = 1e-4;
@@ -260,14 +262,14 @@ protected:
   SimulationMeshImpl *impl;
 };
 
-SimulationMesh *loadTetMesh(const VolumetricMeshes::TetMesh *tetmesh);
-SimulationMesh *loadCubicMesh(const VolumetricMeshes::CubicMesh *cubicMesh);
+std::unique_ptr<SimulationMesh> loadTetMesh(const VolumetricMeshes::TetMesh *tetmesh);
+std::unique_ptr<SimulationMesh> loadCubicMesh(const VolumetricMeshes::CubicMesh *cubicMesh);
 
-SimulationMesh *loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat, int toTriangle);
-SimulationMesh *loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, int numMaterials, const SimulationMeshMaterial *const *const mat, const int *materialIndices, int toTriangle);
+std::unique_ptr<SimulationMesh> loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat, int toTriangle);
+std::unique_ptr<SimulationMesh> loadTriMesh(const Mesh::TriMeshGeo &triMeshGeo, int numMaterials, const SimulationMeshMaterial *const *const mat, const int *materialIndices, int toTriangle);
 
-SimulationMesh *loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat);
-SimulationMesh *loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const int *elementMaterialIndices, const SimulationMeshMaterial *const *mat);
+std::unique_ptr<SimulationMesh> loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const SimulationMeshMaterial *mat);
+std::unique_ptr<SimulationMesh> loadShellMesh(const Mesh::TriMeshGeo &triMeshGeo, const int *elementMaterialIndices, const SimulationMeshMaterial *const *mat);
 
 void computeTriangleUV(SimulationMesh *mesh, double scaleFactor);
 }  // namespace SolidDeformationModel

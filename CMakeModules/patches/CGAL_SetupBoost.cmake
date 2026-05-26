@@ -29,18 +29,18 @@ include(${CMAKE_CURRENT_LIST_DIR}/CGAL_TweakFindBoost.cmake)
 # endif()
 set(Boost_FOUND ON)
 set(Boost_INCLUDE_DIRS "")
-set(Boost_LIBRARIES 
-  Boost::any 
+set(Boost_LIBRARIES
+  Boost::any
   Boost::foreach
   Boost::format
   Boost::graph
   Boost::heap
   Boost::logic
-  Boost::math 
-  Boost::multiprecision 
-  Boost::property_map 
-  Boost::system 
-  Boost::thread 
+  Boost::math
+  Boost::multiprecision
+  Boost::property_map
+  Boost::system
+  Boost::thread
   Boost::variant
 )
 mark_as_advanced(Boost_FOUND Boost_INCLUDE_DIRS Boost_LIBRARIES)

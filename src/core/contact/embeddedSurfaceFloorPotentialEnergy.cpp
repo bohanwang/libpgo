@@ -12,7 +12,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 namespace
@@ -31,15 +31,18 @@ int floorAxisToIndex(FloorAxis axis)
   }
 }
 
+// Sign that orients the penalty so that dzEff < 0 always means "on the
+// forbidden side": KEEP_ABOVE penalizes pos < floorHeight, KEEP_BELOW penalizes
+// pos > floorHeight.
 double floorSideToSign(FloorSide side)
 {
   switch (side) {
-    case FloorSide::LOWER:
+    case FloorSide::KEEP_ABOVE:
       return 1.0;
-    case FloorSide::UPPER:
+    case FloorSide::KEEP_BELOW:
       return -1.0;
     default:
-      throw std::invalid_argument("FloorPenaltyParameters.floorSide must be LOWER or UPPER.");
+      throw std::invalid_argument("FloorPenaltyParameters.floorSide must be KEEP_ABOVE or KEEP_BELOW.");
   }
 }
 }  // namespace
@@ -118,6 +121,6 @@ void EmbeddedSurfaceFloorPotentialEnergy::computeSurfaceHessian(
   surfaceHessian.setFromTriplets(triplets.begin(), triplets.end());
 }
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

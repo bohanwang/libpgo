@@ -28,9 +28,9 @@ target_link_libraries(mesh PUBLIC ${MESH_DEPS})
 # use cgal predicates, the old code has some problems when running on modern hardware
 # intersection_tunicate.cpp predicates_Shewchuk.c
 if(TARGET CGAL::CGAL)
-  target_compile_definitions(mesh PUBLIC PGO_USE_CGAL_PREDICATES)
-  target_link_libraries(mesh PUBLIC CGAL::CGAL)
+  target_compile_definitions(mesh PRIVATE PGO_USE_CGAL_PREDICATES)
+  target_link_libraries(mesh PRIVATE CGAL::CGAL)
 endif()
 
-target_link_libraries(mesh PUBLIC TBB::tbb)
-target_link_libraries(mesh PUBLIC tiny_obj_loader)
+target_link_libraries(mesh PRIVATE TBB::tbb)
+target_link_libraries(mesh PRIVATE tiny_obj_loader)

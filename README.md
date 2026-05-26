@@ -5,180 +5,281 @@ The source code extends [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) an
 
 ---
 
-## Prebuilt (Experimental)
-The wheel package of following platform have been provided for ease of use. They are in `./dist` folder:
-- Ubuntu 24.04: `ubuntu24.04/pypgo-0.0.3-cp312-cp312-linux_x86_64.whl`. Note that you still need to install `gmp` and `mpfr` as suggested in the prerequisites. You may `apt install` them if needed.
-- Ubuntu 22.04: `ubuntu22.04/pypgo-0.0.2-cp311-cp311-linux_x86_64.whl`. Note that you still need to install `gmp` and `mpfr` as suggested in the prerequisites. You may `apt install` them if needed. This version depends on a lower version of the libc, so it should be more compatible.
-- Windows: `win11/pypgo-0.0.3-cp312-cp312-win_amd64.whl`. The package is built under Windows 11, Visual Studio 2022. In theory, it supports other windows platforms.
-- MacOS Arm: `pypgo-0.0.3-cp312-cp312-macosx_26_0_arm64.whl`. The package is built under Tahoe 26.0.1 on Apple M3.
+## Build With Conda
 
-Do `pip install ./dist/your-chosen.whl` to install the package. Note that the packages are experimental.
+Conda is the recommended build environment for both the Python package and the
+native CMake build. Use one conda environment for Python packages and native
+runtime/build packages so CMake, Python, Boost, MKL, TBB, Gmsh, OpenVDB, and
+other dependencies are resolved from a consistent prefix.
 
----
+- The Python package build uses the smaller `python-build` CMake preset.
+- The native CMake build uses the `base` preset, which enables the full default
+  feature set including Gmsh, OpenVDB, TBB, and MKL where supported.
+- Platform compilers still come from the host system: GCC/Clang on Linux,
+  Apple Clang on macOS, and Visual Studio 2022 on Windows.
 
-## Prerequisites
+Use Miniforge/Mambaforge when possible, and keep packages on the `conda-forge`
+channel. `mamba` is used below for speed; `conda install` works too if you
+prefer it.
 
-1. CMake >= **3.29**\
-    We use several functionalities that are only supported by 3.29+. 
-    > In most cases, both system's CMake and Conda Environment's CMake have a lower version of CMake unfortunately. In this sitation, please install a new CMake into your system. The latest CMake, either pre-built binaries or source files, can be obtained directly from the [official](https://cmake.org/download/) website. Once installed, hook `cmake` to the newly installed one, either by adding the `your-new-cmake/bin` to the front of the `PATH` or by replacing the existing `cmake` executable with the new one.
+### System Prerequisites
 
-2. Compilers
-    1. GCC **11, 12, 13** for Ubuntu\
-        We use C++20, so only GCC 11, 12, and 13 are supported. You can get new gcc using `apt` or compile a new one from its source code.
+Install conda: See [Conda Installation](https://www.anaconda.com/docs/getting-started/miniconda/install/overview#choose-your-installation-guide).
 
-    2. Apple Clang (We tested on 15.0.0, Mac OS 14.5)\
-        Earlier versions might work if it supports C++20.
+Install mamba: See [Mamba Installation](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html#automatic-install).
 
-    3. Visual Studio 2022 (We tested on 17.9.5, Windows)\
-        Earlier Visual Studio 2022 versions might work.
-
-3. GMP and MPFR for **Ubuntu** and **Mac OS**\
-    This can be installed on Ubuntu by
-
-    ```bash
-    sudo apt install libgmp-dev libmpfr-dev
-    ```
-
-    Or it can be installed on Mac OS by
-
-    ```bash
-    brew install gmp mpfr imath
-    ```
-
-4. (Optional) Ninja\
-    It can be installed by
-
-    ```bash
-    pip install ninja
-    ```
-
-    for better compilation performance
-
-5. (Optional) numpy\
-    This is used for running tests.
-
-6. (Optional) Blender and ffmpeg\
-    These are used by `scripts/render_abc_preview.py` when rendering Alembic
-    `.abc` animations to GIF previews. The script finds Blender on `PATH`, via
-    the `BLENDER` environment variable, or at
-    `/Applications/Blender.app/Contents/MacOS/Blender` on macOS. It finds ffmpeg
-    on `PATH` or via the `FFMPEG` environment variable.
-
-## Compilation
-
-Going forward, it is assumed that all specified prerequisites are installed and that a Conda environment is used for python.
-
-Install prerequisites:
+Linux:
 
 ```bash
-conda install tbb tbb-devel mkl mkl-devel
-conda install conda-forge::imath
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends \
+  build-essential g++ gcc git \
+  libblas-dev libgmp-dev libimath-dev liblapack-dev libmpfr-dev \
+  pkg-config zlib1g-dev
 ```
 
-### CMake Presets
+macOS:
 
-Native C++ builds in this repository are preset-driven:
+```bash
+brew install gmp mpfr imath
+```
+
+Windows:
+
+- Install Visual Studio 2022 with the C++ desktop workload.
+- Run builds from an x64 MSVC developer shell.
+
+Blender and ffmpeg are optional. They are only needed by
+`scripts/render_abc_preview.py` for Alembic GIF previews.
+
+### Python Package Build
+
+The Python extension is installed in editable mode with pip. During that
+install, `setup.py` calls the `python-build` CMake preset. That preset enables
+the Python binding and keeps heavy optional native features such as Gmsh,
+TetWild, and OpenVDB off by default.
+
+Linux:
+
+```bash
+mamba create -n libpgo -c conda-forge python=3.12
+conda activate libpgo
+mamba install -y "cmake>=3.29" libboost-devel mkl-devel ninja numpy pip pytest setuptools tbb-devel wheel
+
+python -m pip install -e . --no-build-isolation
+python -m pytest -q tests/pypgo
+```
+
+macOS:
+
+```bash
+mamba create -n libpgo -c conda-forge python=3.12
+conda activate libpgo
+mamba install -y "cmake>=3.29" libboost-devel ninja numpy pip pytest setuptools tbb-devel wheel
+
+python -m pip install -e . --no-build-isolation
+python -m pytest -q tests/pypgo
+```
+
+Windows:
+
+```powershell
+mamba create -n libpgo -c conda-forge python=3.12
+conda activate libpgo
+mamba install -y "cmake>=3.29" imath libboost-devel mkl-devel ninja numpy pip pytest setuptools tbb-devel wheel
+
+python -m pip install -e . --no-build-isolation
+python -m pytest -q tests/pypgo
+```
+
+Useful Python build knobs:
+
+- `PGO_PYTHON_CMAKE_PRESET=python-build` selects the configure preset used by
+  `setup.py`; this is the default.
+- `PGO_PYTHON_BUILD_DIR=/path/to/build` chooses the persistent build directory.
+  By default it is under
+  `build/pypgo-conda-python-build-<platform>-<python-tag>-<config>/`.
+- `CMAKE_ARGS="-DPGO_USE_MKL=ON"` or similar can override preset options.
+
+After editing C++ binding code, reinstall the editable package before running
+Python code:
+
+```bash
+python -m pip install -e . --no-build-isolation
+python src/python/pypgo/pgo_test_01.py
+```
+
+To build a wheel:
+
+```bash
+python setup.py bdist_wheel
+pip install dist/pypgo-*.whl
+```
+
+### Native CMake Build
+
+Native builds are CMake-preset driven. The default native build uses the `base`
+preset:
 
 ```bash
 cmake --list-presets
-cmake --preset <configure-preset>
-cmake --build --preset <build-preset> [--target <target>...]
-```
-
-Configure presets define feature flags and build directories. Build presets define parallel build options and map to a configure preset.
-
-#### Configure Presets
-
-| Configure preset | Binary directory | Purpose / key options |
-| --- | --- | --- |
-| `base_no_mkl` | `build/base_no_mkl` | Release baseline without MKL. Full stack on: `PGO_ENABLE_FULL=ON`, Alembic/Gmsh/TetWild enabled. |
-| `base` | `build/base` | Release baseline with MKL (`PGO_USE_MKL=ON`) and full stack enabled (non-macOS). |
-| `base_win` | `build/base_win` | Windows-oriented release baseline: MKL on, Alembic/Gmsh/TetWild off. |
-| `debug` | *(fragment preset)* | Inheritance fragment that sets `CMAKE_BUILD_TYPE=Debug`. |
-| `knitro` | *(fragment preset)* | Inheritance fragment enabling Knitro (`PGO_OPT_USE_KNITRO=ON`) with `KNITRO_LIBRARY_HINT`. |
-| `pardiso` | *(fragment preset)* | Inheritance fragment enabling original Pardiso (`PGO_HAS_ORIG_PARDISO=ON`) with `PARDISO_LIBRARY_HINT`. |
-| `cuda` | *(fragment preset)* | Inheritance fragment enabling CUDA (`PGO_ENABLE_CUDA=ON`). |
-| `base_knitro` | `build/base_knitro` | `base` + `knitro` (non-macOS). |
-| `base_knitro_cuda` | `build/base_knitro_cuda` | `base` + `knitro` + `cuda` (non-macOS). |
-| `all_debug` | `build/all_debug` | `base` + `knitro` + `pardiso` + `cuda` in Debug mode (non-macOS). |
-| `all_release` | `build/all_release` | `base` + `knitro` + `pardiso` + `cuda` in Release mode (non-macOS). |
-| `base_cuda_debug` | `build/base_cuda_debug` | `base` + `cuda` in Debug mode (non-macOS). |
-| `base_no_mkl_debug` | `build/base_no_mkl_debug` | `base_no_mkl` in Debug mode. |
-| `base_cuda_release` | `build/base_cuda_release` | `base` + `cuda` in Release mode (non-macOS). |
-| `base_cuda_win` | `build/base_cuda_win` | `base_win` + `cuda`, with Windows `cudss_DIR` hint. |
-
-#### Build Presets
-
-| Build preset | Configure preset | Typical use |
-| --- | --- | --- |
-| `base` | `base` | Release build with MKL/full stack (non-macOS). |
-| `all_debug` | `all_debug` | Debug build with all optional solvers/features (non-macOS). |
-| `all_release` | `all_release` | Release build with all optional solvers/features (non-macOS). |
-| `base_cuda_debug` | `base_cuda_debug` | Debug build with CUDA (non-macOS). |
-| `base_no_mkl_debug` | `base_no_mkl_debug` | Debug build without MKL. |
-| `base_no_mkl_release` | `base_no_mkl` | Release build without MKL. |
-| `base_cuda_release` | `base_cuda_release` | Release build with CUDA (non-macOS). |
-
-Some configure presets are composition-oriented and currently have no dedicated build preset (for example: `base_win`, `base_cuda_win`, `base_knitro`, `base_knitro_cuda`).
-
-On macOS, use the no-MKL preset family only: `base_no_mkl`, `base_no_mkl_release`, and `base_no_mkl_debug`.
-
-### Install libpgo
-
-```bash
-cd libpgo
-pip install .
-```
-
-If `ninja` has been installed, it will compile source files in parallel. If it is not installed,
-set `CMAKE_BUILD_PARALLEL_LEVEL` to `n`, where `n` is the number of threads for compilation, to control the parallel compilation.
-
-### Setup without Python
-
-If you want to use the library with your C++ code or modify the source code, you may build it without python.
-
-### Windows & Ubuntu
-
-To compile the lib with basic functionality (no MKL):
-
-```bash
-cd libpgo
-cmake --preset base_no_mkl
-cmake --build --preset base_no_mkl_release
-```
-
-To enable the MKL/full-feature stack, install [MKL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html). Then,
-
-```bash
-cd libpgo
 cmake --preset base
 cmake --build --preset base
+ctest --test-dir build/base --output-on-failure
 ```
 
-> On Windows, a few extra steps are need before running the preset commands above. First, the library should be configured in "x64 Native Tools Command Prompt for VS 2022". In addition, before running the commands above, run `c:\Program Files (x86)\Intel\oneAPI\setvars.bat` to setup the environments for MKL, where `c:\Program Files (x86)\Intel\oneAPI` is the path to the oneAPI installation. Once setup, run above commands.
+Install the full conda package set first.
 
-> On Ubuntu, a similar procedure is needed. Before configuring the library with presets, run `bash /opt/intel/oneapi/setvars.sh` to setup the MKL environments for the subsequent CMake configuration.
-
-### Mac OS
-
-On macOS, MKL is not supported. Use only the no-MKL presets.
-
-Release build:
+Linux:
 
 ```bash
-cd libpgo
-cmake --preset base_no_mkl
-cmake --build --preset base_no_mkl_release
+mamba create -n libpgo -c conda-forge python=3.12
+conda activate libpgo
+mamba install -y "cmake>=3.29" gmsh libboost-devel mkl-devel ninja openvdb tbb-devel zlib
+
+cmake --preset base
+cmake --build --preset base --parallel 3
+ctest --test-dir build/base --output-on-failure
 ```
 
-Debug build:
+macOS:
 
 ```bash
-cmake --preset base_no_mkl_debug
-cmake --build --preset base_no_mkl_debug
+mamba create -n libpgo -c conda-forge python=3.12
+conda activate libpgo
+mamba install -y "cmake>=3.29" gmsh libboost-devel ninja openvdb tbb-devel zlib
+
+cmake --preset base
+cmake --build --preset base
+ctest --test-dir build/base --output-on-failure
 ```
 
-The `base_no_mkl` preset already keeps the full non-MKL feature stack enabled (including Alembic/Gmsh/TetWild). Alembic and Gmsh related features still depend on local third-party libraries (such as imath and gmsh).
+Windows:
+
+```powershell
+mamba create -n libpgo -c conda-forge python=3.12
+conda activate libpgo
+mamba install -y "cmake>=3.29" gmsh imath libboost-devel mkl-devel ninja openvdb tbb-devel zlib
+
+cmake --preset base -G Ninja
+cmake --build --preset base
+
+ctest --test-dir build/base --output-on-failure
+```
+
+The `base` preset enables MKL, Alembic, Gmsh, TetWild, OpenVDB, the Python
+binding, and the C API. On macOS, CMake automatically forces `PGO_USE_MKL=OFF`
+and `PGO_ENABLE_CUDA=OFF`.
+
+Other shared presets are available for debug, CUDA, Knitro, and Pardiso builds:
+
+| Configure preset | Binary directory | Purpose |
+| --- | --- | --- |
+| `base` | `build/base` | Default release build. |
+| `python-build` | `build/python-build` | Python extension preset used by `setup.py`. |
+| `base_debug` | `build/base_debug` | Debug build. |
+| `base_cuda` | `build/base_cuda` | `base` plus CUDA. |
+| `base_cuda_debug` | `build/base_cuda_debug` | Debug CUDA build. |
+| `base_knitro` | `build/base_knitro` | `base` plus Knitro. |
+| `base_knitro_cuda` | `build/base_knitro_cuda` | Knitro plus CUDA. |
+| `all` | `build/all` | `base` plus Knitro, Pardiso, and CUDA. |
+| `all_debug` | `build/all_debug` | Debug version of `all`. |
+
+Machine-specific SDK paths belong in untracked `CMakeUserPresets.json`, not in
+the shared presets. Use it for local `KNITRO_LIBRARY_HINT`,
+`PARDISO_LIBRARY_HINT`, `cudss_DIR`, or similar paths.
+
+Example `CMakeUserPresets.json` (local, optional):
+
+<details>
+<summary>Click to expand example</summary>
+
+```json
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "local-base",
+            "displayName": "Local base",
+            "description": "Local IDE profile inheriting the shared base preset.",
+            "inherits": "base",
+            "environment": {
+                "CONDA_PREFIX": "/Users/jinceyang/miniconda3/envs/libpgo"
+            }
+        },
+        {
+            "name": "local-base-debug",
+            "displayName": "Local base debug",
+            "description": "Local IDE profile inheriting the shared base_debug preset.",
+            "inherits": "base_debug",
+            "environment": {
+                "CONDA_PREFIX": "/Users/jinceyang/miniconda3/envs/libpgo"
+            }
+        },
+        {
+            "name": "local-all",
+            "displayName": "Local all",
+            "description": "Local IDE profile inheriting all with local Knitro/Pardiso hints.",
+            "inherits": "all",
+            "environment": {
+                "CONDA_PREFIX": "/Users/jinceyang/miniconda3/envs/libpgo"
+            },
+            "cacheVariables": {
+                "KNITRO_LIBRARY_HINT": "/opt/artelys/knitro-15.0.1-Linux64",
+                "PARDISO_LIBRARY_HINT": "/opt/panua-pardiso-20240229-linux"
+            }
+        },
+        {
+            "name": "local-base-cuda",
+            "displayName": "Local base CUDA",
+            "description": "Local IDE profile inheriting base_cuda with local cuDSS hint.",
+            "inherits": "base_cuda",
+            "environment": {
+                "CONDA_PREFIX": "/Users/jinceyang/miniconda3/envs/libpgo"
+            },
+            "cacheVariables": {
+                "cudss_DIR": "C:/Program Files/NVIDIA cuDSS/v0.7/lib/13/cmake/cudss"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "local-base",
+            "configurePreset": "local-base",
+            "jobs": 32
+        },
+        {
+            "name": "local-base-debug",
+            "configurePreset": "local-base-debug",
+            "jobs": 32
+        },
+        {
+            "name": "local-all",
+            "configurePreset": "local-all",
+            "jobs": 32
+        },
+        {
+            "name": "local-base-cuda",
+            "configurePreset": "local-base-cuda",
+            "jobs": 32
+        }
+    ]
+}
+```
+
+</details>
+
+### Dependency Ownership
+
+- Conda supplies CMake, Ninja, Python packages, and most native runtime/build
+  packages: Boost, MKL, TBB, Gmsh, OpenVDB, Imath, zlib, numpy, pytest,
+  setuptools, and wheel.
+- The host package manager supplies platform basics that are awkward to keep
+  fully inside conda: Linux compiler/system BLAS/GMP/MPFR headers and macOS
+  Homebrew GMP/MPFR/Imath.
+- FetchContent-managed C++ dependencies are downloaded and built by this
+  repository: Eigen, fmt, spdlog, nlohmann_json, SuiteSparse, Ceres, CGAL,
+  geogram, libigl, Alembic, nanobind, and related internal dependencies.
 
 ---
 
@@ -189,8 +290,8 @@ The primary runnable examples in this repository are now IPC examples driven by 
 Build the IPC tools:
 
 ```bash
-cmake --preset base_no_mkl
-cmake --build --preset base_no_mkl_release --target runIPCSim convertAnimation
+cmake --preset base
+cmake --build --preset base --target runIPCSim convertAnimation
 ```
 
 Run named IPC batches from the JSON config:
@@ -198,6 +299,7 @@ Run named IPC batches from the JSON config:
 ```bash
 scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job squash_regression --dry-run
 scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job squash_regression --skip-existing
+scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --case cubic_box_with_sphere_lite --overwrite
 scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job all_ipc_abc
 ```
 
@@ -210,35 +312,45 @@ Blender to render `.abc` frames and ffmpeg to encode a GIF:
 
 ```bash
 scripts/render_abc_preview.py --config my_render_config.json --overwrite
-
 scripts/run_sim_batch.py --config examples/ipc/ipc_batch.json --job sim --overwrite
 ```
 
 Run representative IPC cases from the repo root:
 
 ```bash
-build/base_no_mkl/bin/runIPCSim examples/ipc/shell/shell-ipc.json
-build/base_no_mkl/bin/runIPCSim examples/ipc/tet/box-hang/box-ipc.json
-build/base_no_mkl/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc.json
+build/base/bin/runIPCSim examples/ipc/shell/shell-hang/shell-ipc.json
+build/base/bin/runIPCSim examples/ipc/shell/shell-drop/shell-ipc.json
+build/base/bin/runIPCSim examples/ipc/tet/box-hang/box-ipc.json
+build/base/bin/runIPCSim examples/ipc/cubic/box-with-sphere/box-ipc.json
 ```
 
 Convert dumped frame sequences to Alembic:
 
 ```bash
-build/base_no_mkl/bin/convertAnimation examples/ipc/shell/anim.json
-build/base_no_mkl/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
-build/base_no_mkl/bin/convertAnimation examples/ipc/cubic/box-with-sphere/anim.json
+build/base/bin/convertAnimation examples/ipc/shell/shell-hang/anim.json
+build/base/bin/convertAnimation examples/ipc/shell/shell-drop/anim.json
+build/base/bin/convertAnimation examples/ipc/tet/box-hang/anim.json
+build/base/bin/convertAnimation examples/ipc/cubic/box-with-sphere/anim.json
 ```
 
 For the full IPC case list and per-case notes, see [`examples/ipc/README.md`](./examples/ipc/README.md).
 
-For non-IPC legacy examples (`runSim`, `runShellSim`, `pgo_run_sim.py`, `pgo_dump_abc.py`), see [`examples/legacy/README.md`](./examples/legacy/README.md).
+Legacy penalty-based volume contact is available through the same entrypoint:
+
+```bash
+build/base/bin/runIPCSim --legacy path/to/legacy-volume-config.json
+```
+
+`runIPCSim` accepts both `"sim-type": "dynamic"` and `"sim-type": "static"`. Static mode performs a one-shot Newton solve from the rest state, writes the same unified `states/deform0000.u` and `surface/ret0000.obj` layout as dynamic mode, and does not support `restart-from-u`. Static output is written only after Newton convergence; unconstrained gravity-only static drops, including legacy penalty-contact drops without attachments, are expected to fail instead of producing a partial state.
+
+`--legacy` accepts the old volume JSON shape with either `tet-mesh` or `cubic-mesh` and uses the penalty contact model instead of IPC contact. Legacy static mode preserves the old volume static semantics: it solves elastic, attachment, and external-force energies without adding the legacy penalty contact energies. Shell legacy configs are no longer supported; use the IPC shell examples above for shell simulations.
+
+Solver status is reported through the shared `SolverResult` / `SolveStatus` API used by `NewtonSolver`, `EnergyOptimizer`, and `TimeIntegratorSolver`. Static runs require `Converged` before writing output. Dynamic implicit Euler currently preserves the legacy timestep policy: `Converged`, `MaxIterations`, and `StepTooSmall` are accepted timestep statuses, while other statuses are failures. External solvers keep backend-specific return codes in `SolverResult::rawStatusCode`.
 
 Optional Python API smoke test:
 
 ```bash
-cd examples
-python ../src/python/pypgo/pgo_test_01.py
+python src/python/pypgo/pgo_test_01.py
 ```
 
 ## Tools
@@ -250,18 +362,18 @@ python ../src/python/pypgo/pgo_test_01.py
 Build the tool:
 
 ```bash
-cmake --preset base_no_mkl
-cmake --build --preset base_no_mkl_release --target cubicMesher
+cmake --preset base
+cmake --build --preset base --target cubicMesher
 ```
 
 Basic usage:
 
 ```bash
-build/base_no_mkl/bin/cubicMesher \
---input-mesh examples/legacy/cubic/box/box.obj \
+build/base/bin/cubicMesher \
+--input-mesh examples/ipc/cubic/box/box.obj \
 --resolution 4 \
---output-mesh examples/legacy/cubic/box/box.veg \
---output-surface examples/legacy/cubic/box/box-surface.obj \
+--output-mesh /tmp/libpgo-box.veg \
+--output-surface /tmp/libpgo-box-surface.obj \
 --E 10000000 \
 --nu 0.45 \
 --density 1000
@@ -275,23 +387,21 @@ Main arguments:
 - `--output-surface`: optional extracted surface `.obj`
 - `--E`, `--nu`, `--density`: isotropic material parameters written into the output mesh
 
-Generated legacy cubic assets are stored under `examples/legacy/cubic/`. See [`examples/legacy/cubic/README.md`](./examples/legacy/cubic/README.md) for detailed commands and case notes.
-
 ### Tet Mesher
 
 `tetMesher` converts a closed triangle surface mesh into a tetrahedral `.veg` simulation mesh from a JSON job config. The JSON selects the backend, backend parameters, input/output paths, and optional generated boundary surface export. Paths inside the config are resolved relative to the config file.
 
-Build `tetMesher` in the default no-MKL preset:
+Build `tetMesher` with the default `base` preset:
 
 ```bash
-cmake --preset base_no_mkl
-cmake --build --preset base_no_mkl_release --target tetMesher
+cmake --preset base
+cmake --build --preset base --target tetMesher
 ```
 
 Run a tet meshing job:
 
 ```bash
-build/base_no_mkl/bin/tetMesher --config path/to/tetmesh.json
+build/base/bin/tetMesher --config path/to/tetmesh.json
 ```
 
 Basic TetGen config:
@@ -310,11 +420,11 @@ Basic TetGen config:
 }
 ```
 
-The fTetWild backend is enabled by default in the main presets on macOS/Linux. Build it in the preset build tree:
+The fTetWild backend is optional. Enable it when configuring, then build it in the preset build tree:
 
 ```bash
-cmake --preset base_no_mkl
-cmake --build --preset base_no_mkl_release --target tetMesher
+cmake --preset base -DPGO_TET_MESHER_USE_TET_WILD=ON
+cmake --build --preset base --target tetMesher
 ```
 
 Basic fTetWild config:
@@ -349,22 +459,10 @@ Config fields:
 - `tetwild.epsr`: fTetWild relative envelope tolerance
 - `tetwild.stop_energy`, `tetwild.max_threads`: fTetWild optimization controls
 
-### Legacy Non-IPC Examples
-
-The non-IPC example suite has been moved to `examples/legacy/`.
-
-Use [`examples/legacy/README.md`](./examples/legacy/README.md) for:
-
-- `runSim` and `runShellSim` legacy case commands
-- Python wrappers `pgo_run_sim.py` and `pgo_dump_abc.py`
-- legacy case layout and migration notes
-
----
-
 ## Third-party libraries
 
 This library use the following third-party libraries:<br>
-alembic, argparse, autodiff, boost, ceres, cgal, fmt, geogram, gmesh, json, knitro, libigl, mkl, pybind11, spdlog, suitesparse, tbb, tinyobj-loader
+alembic, argparse, autodiff, boost, ceres, cgal, fmt, geogram, gmesh, json, knitro, libigl, mkl, spdlog, suitesparse, tbb, tinyobj-loader
 
 ---
 

@@ -13,7 +13,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 struct SurfaceIPCTopology
@@ -29,6 +29,6 @@ struct SurfaceIPCTopology
   int numSurfaceDOFs() const { return 3 * numVerts; }
 };
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

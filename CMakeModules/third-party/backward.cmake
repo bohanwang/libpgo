@@ -6,4 +6,4 @@ FetchContent_Declare(backward
     GIT_TAG master  # or a version tag, such as v1.6
     SYSTEM          # optional, the Backward include directory will be treated as system directory
 )
-FetchContent_MakeAvailable(backward)
+pgo_fetch_make_available(backward)

@@ -1,8 +1,7 @@
 #include "implicitBackwardEulerTimeIntegratorHelper.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
 #include "deformationModelEnergy.h"
-#include "embeddedSurfaceIPCPotentialEnergy.h"
-#include "CIPC.h"
+#include "ipc/embeddedSurfaceIPCPotentialEnergy.h"
 
 #include <iostream>
 
@@ -76,6 +75,90 @@ void ImplicitBackwardEulerEnergy::hessian(ES::ConstRefVecXd x, ES::SpMatD &hess)
   (ES::Mp<ES::VXd>(hess.valuePtr(), hess.nonZeros())) +=ES::Mp<const ES::VXd>(intg->A.valuePtr(), intg->A.nonZeros());
 }
 
+void ImplicitBackwardEulerEnergy::gradient_hessian(ES::ConstRefVecXd x, ES::RefVecXd grad, ES::SpMatD &hess) const
+{
+  ES::mv(intg->A, x, grad, 0);
+
+  hess = intg->hessianAll;
+  memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
+  (ES::Mp<ES::VXd>(hess.valuePtr(), hess.nonZeros())) += ES::Mp<const ES::VXd>(intg->A.valuePtr(), intg->A.nonZeros());
+
+  for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
+    ES::VXd &fint = *intg->implicitModelsAll_fint[i];
+    fint.setZero();
+
+    if (intg->implicitModelsAll[i]->isHessianTopologyFixed()) {
+      ES::SpMatD &K = *intg->implicitModelsAll_K[i];
+      const ES::SpMatI &mapping = *intg->implicitModelsAll_Kmaping[i];
+
+      intg->implicitModelsAll[i]->gradient(x, fint);
+      intg->implicitModelsAll[i]->hessian(x, K);
+      ES::addSmallToBig(1.0, K, hess, 1.0, mapping, 1);
+    }
+    else {
+      ES::SpMatD Ki;
+      intg->implicitModelsAll[i]->gradient_hessian(x, fint, Ki);
+      if (Ki.nonZeros())
+        hess = hess + Ki;
+    }
+
+    grad += fint;
+  }
+
+  grad -= intg->b;
+}
+
+double ImplicitBackwardEulerEnergy::func_grad_hessian(ES::ConstRefVecXd x, ES::RefVecXd grad, ES::SpMatD &hess) const
+{
+  // x is u (the full position)
+  // A·u
+  ES::mv(intg->A, x, grad, 0);
+
+  // 0.5·uᵀ·A·u
+  double mainEnergy = ES::vTMv(intg->A, x, intg->temp0, 0) * 0.5;
+  double energy = mainEnergy;
+  std::vector<double> componentEnergies;
+  componentEnergies.reserve(intg->implicitModelsAll.size());
+
+  hess = intg->hessianAll;
+  memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
+  (ES::Mp<ES::VXd>(hess.valuePtr(), hess.nonZeros())) += ES::Mp<const ES::VXd>(intg->A.valuePtr(), intg->A.nonZeros());
+
+  for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
+    ES::VXd &fint = *intg->implicitModelsAll_fint[i];
+    fint.setZero();
+
+    if (intg->implicitModelsAll[i]->isHessianTopologyFixed()) {
+      // Material: energy + gradient + hessian separately
+      const double modelEnergy = intg->implicitModelsAll[i]->func(x);
+      energy += modelEnergy;
+      componentEnergies.push_back(modelEnergy);
+
+      ES::SpMatD &K = *intg->implicitModelsAll_K[i];
+      const ES::SpMatI &mapping = *intg->implicitModelsAll_Kmaping[i];
+      intg->implicitModelsAll[i]->gradient(x, fint);
+      intg->implicitModelsAll[i]->hessian(x, K);
+      ES::addSmallToBig(1.0, K, hess, 1.0, mapping, 1);
+    }
+    else {
+      // IPC: combined energy + gradient + hessian (1 buildActiveSet)
+      ES::SpMatD Ki;
+      const double modelEnergy = intg->implicitModelsAll[i]->func_grad_hessian(x, fint, Ki);
+      energy += modelEnergy;
+      componentEnergies.push_back(modelEnergy);
+      if (Ki.nonZeros())
+        hess = hess + Ki;
+    }
+    grad += fint;
+  }
+
+  mainEnergy -= x.dot(intg->b);
+  energy -= x.dot(intg->b);
+  grad -= intg->b;
+  cacheImplicitEnergyComponents(mainEnergy, componentEnergies);
+  return energy;
+}
+
 void ImplicitBackwardEulerEnergy::getDOFs(std::vector<int> &dofs) const
 {
   dofs = intg->allDOFs;
@@ -91,8 +174,16 @@ int ImplicitBackwardEulerEnergy::getNumDOFs() const
   return intg->n3;
 }
 
-void ImplicitBackwardEulerEnergy::printImplicitEnergy(ES::ConstRefVecXd x) const
+void ImplicitBackwardEulerEnergy::printImplicitEnergy(ES::ConstRefVecXd x, bool allowCachedComponents) const
 {
+  if (allowCachedComponents && hasCachedImplicitEnergyComponents()) {
+    std::cout << "  main: " << cachedMainEnergy << '\n';
+    for (size_t i = 0; i < cachedImplicitModelEnergies.size(); i++) {
+      std::cout << "  sub " << i << ": " << cachedImplicitModelEnergies[i] << '\n';
+    }
+    return;
+  }
+
   // x is u (the full position)
   //std::cout << "Energy: ";
   // 0.5 Au^2
@@ -111,6 +202,30 @@ void ImplicitBackwardEulerEnergy::printImplicitEnergy(ES::ConstRefVecXd x) const
 
     std::cout << "  sub " << i << ": " << tempEnergy << '\n';
   }
+}
+
+void ImplicitBackwardEulerEnergy::clearCachedImplicitEnergyComponents() const
+{
+  hasCachedEnergyComponents = false;
+  cachedImplicitModelEnergies.clear();
+}
+
+void ImplicitBackwardEulerEnergy::cacheImplicitEnergyComponents(
+  double mainEnergy, const std::vector<double> &componentEnergies) const
+{
+  hasCachedEnergyComponents = true;
+  cachedMainEnergy = mainEnergy;
+  cachedImplicitModelEnergies = componentEnergies;
+}
+
+bool ImplicitBackwardEulerEnergy::hasCachedImplicitEnergyComponents() const
+{
+  if (!hasCachedEnergyComponents)
+    return false;
+  if (cachedImplicitModelEnergies.size() != intg->implicitModelsAll.size())
+    return false;
+
+  return true;
 }
 
 int ImplicitBackwardEulerEnergy::isHessianTopologyFixed() const

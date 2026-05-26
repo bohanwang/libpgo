@@ -8,12 +8,12 @@ copyright to USC
 #include "NewtonSolver.h"
 #include "potentialEnergy.h"
 
-#ifdef USE_IPOPT
+#ifdef PGO_HAS_IPOPT
 #  include "IpoptProblem.h"
 #  include "IpoptOptimizer.h"
-#endif  // USE_IPOPT
+#endif  // PGO_HAS_IPOPT
 
-#ifdef USE_KNITRO
+#ifdef PGO_HAS_KNITRO
 #  include "knitroProblem.h"
 #  include "knitroOptimizer.h"
 
@@ -31,9 +31,10 @@ struct KnitroData
 }  // namespace EnergyOptimizer
 }  // namespace NonlinearOptimization
 }  // namespace pgo
-#endif
+#endif  // PGO_HAS_KNITRO
 
 #include <iostream>
+#include <stdexcept>
 
 using namespace pgo;
 using namespace pgo::NonlinearOptimization;
@@ -47,11 +48,11 @@ namespace NonlinearOptimization
 {
 namespace EnergyOptimizer
 {
-int minimizeUsingIpopt(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
+SolverResult minimizeUsingIpopt(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
   EigenSupport::RefVecXd lambda, EigenSupport::RefVecXd g, ConstraintFunctions_const_p constraints, EigenSupport::ConstRefVecXd clow, EigenSupport::ConstRefVecXd chi,
   int maxIter, double eps, int verbose);
 
-int minimizeUsingNewton(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
+SolverResult minimizeUsingNewton(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
   EigenSupport::RefVecXd lambda, EigenSupport::RefVecXd g, ConstraintFunctions_const_p constraints, EigenSupport::ConstRefVecXd clow, EigenSupport::ConstRefVecXd chi,
   int maxIter, double eps, int verbose);
 
@@ -59,7 +60,7 @@ int minimizeUsingNewton(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy
 }  // namespace NonlinearOptimization
 }  // namespace pgo
 
-int EnergyOptimizer::minimize(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
+SolverResult EnergyOptimizer::minimize(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
   EigenSupport::RefVecXd lambda, EigenSupport::RefVecXd g, ConstraintFunctions_const_p constraints, EigenSupport::ConstRefVecXd clow, EigenSupport::ConstRefVecXd chi,
   SolverType solverType, int maxIter, double eps, int verbose)
 {
@@ -73,10 +74,10 @@ int EnergyOptimizer::minimize(EigenSupport::RefVecXd x, PotentialEnergy_const_p 
     return minimizeUsingKnitro(x, energy, xlow, xhi, lambda, g, constraints, clow, chi, maxIter, eps, verbose, nullptr);
   }
 
-  return -1;
+  return makeSolverResult(SolveStatus::UnsupportedBackend, static_cast<int>(SolveStatus::UnsupportedBackend));
 }
 
-int EnergyOptimizer::minimize(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
+SolverResult EnergyOptimizer::minimize(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
   SolverType solverType, int maxIter, double eps, int verbose)
 {
   ES::VXd lambda, g, clow, chi;
@@ -90,14 +91,14 @@ int EnergyOptimizer::minimize(EigenSupport::RefVecXd x, PotentialEnergy_const_p 
     return minimizeUsingKnitro(x, energy, xlow, xhi, lambda, g, nullptr, clow, chi, maxIter, eps, verbose, nullptr);
   }
 
-  return -1;
+  return makeSolverResult(SolveStatus::UnsupportedBackend, static_cast<int>(SolveStatus::UnsupportedBackend));
 }
 
-int EnergyOptimizer::minimizeUsingIpopt(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
+SolverResult EnergyOptimizer::minimizeUsingIpopt(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
   EigenSupport::RefVecXd lambda, EigenSupport::RefVecXd g, ConstraintFunctions_const_p constraints, EigenSupport::ConstRefVecXd clow, EigenSupport::ConstRefVecXd chi,
   int maxIter, double eps, int verbose)
 {
-#if defined(USE_IPOPT)
+#if defined(PGO_HAS_IPOPT)
   if (constraints) {
     Ipopt::SmartPtr<IpoptProblem> problem = new IpoptProblem(energy, constraints);
     problem->setInit(x);
@@ -123,7 +124,7 @@ int EnergyOptimizer::minimizeUsingIpopt(EigenSupport::RefVecXd x, PotentialEnerg
     if (lambda.size() > 0)
       lambda = problem->getFinalLambda();
 
-    return solverRet;
+    return makeIpoptSolverResult(solverRet);
   }
   else {
     Ipopt::SmartPtr<IpoptProblem> problem = new IpoptProblem(energy);
@@ -140,7 +141,7 @@ int EnergyOptimizer::minimizeUsingIpopt(EigenSupport::RefVecXd x, PotentialEnerg
     int solverRet = solver.solve();
     x = problem->getFinalx();
 
-    return solverRet;
+    return makeIpoptSolverResult(solverRet);
   }
 #else
   (void)x, (void)energy;
@@ -148,15 +149,14 @@ int EnergyOptimizer::minimizeUsingIpopt(EigenSupport::RefVecXd x, PotentialEnerg
   (void)lambda, (void)g, (void)constraints, (void)clow, (void)chi;
   (void)maxIter, (void)eps, (void)verbose;
   throw std::runtime_error("No Ipopt Module");
-  return 1;
 #endif
 }
 
-int EnergyOptimizer::minimizeUsingKnitro(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
+SolverResult EnergyOptimizer::minimizeUsingKnitro(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
   EigenSupport::RefVecXd lambda, EigenSupport::RefVecXd g, ConstraintFunctions_const_p constraints, EigenSupport::ConstRefVecXd clow, EigenSupport::ConstRefVecXd chi,
   int maxIter, double eps, int verbose, const char *filename, int parallelEval, CallbackFunc callback, KnitroData ** /*data*/, double feasTol)
 {
-#if defined(USE_KNITRO)
+#if defined(PGO_HAS_KNITRO)
   if (constraints) {
     std::unique_ptr<KnitroProblem> problem = std::make_unique<KnitroProblem>(energy, constraints);
     problem->setInit(x);
@@ -215,7 +215,7 @@ int EnergyOptimizer::minimizeUsingKnitro(EigenSupport::RefVecXd x, PotentialEner
     if (g.size() > 0)
       g = Eigen::Map<const ES::VXd>(solver.getg(), problem->getm());
 
-    return solverRet;
+    return makeKnitroSolverResult(solverRet);
   }
   else {
     std::shared_ptr<KnitroProblem> problem = std::make_shared<KnitroProblem>(energy);
@@ -262,7 +262,7 @@ int EnergyOptimizer::minimizeUsingKnitro(EigenSupport::RefVecXd x, PotentialEner
 
     x = Eigen::Map<const ES::VXd>(solver.getx(), problem->getn());
 
-    return solverRet;
+    return makeKnitroSolverResult(solverRet);
   }
 #else
   std::cout << "Knitro not found. Using IPOPT" << std::endl;
@@ -270,11 +270,11 @@ int EnergyOptimizer::minimizeUsingKnitro(EigenSupport::RefVecXd x, PotentialEner
 #endif
 }
 
-int EnergyOptimizer::minimizeUsingKnitroDense(EigenSupport::RefVecXd x, PotentialEnergyDense_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
+SolverResult EnergyOptimizer::minimizeUsingKnitroDense(EigenSupport::RefVecXd x, PotentialEnergyDense_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
   EigenSupport::RefVecXd lambda, EigenSupport::RefVecXd g, ConstraintFunctionsDense_const_p constraints, EigenSupport::ConstRefVecXd clow, EigenSupport::ConstRefVecXd chi,
   int maxIter, double eps, int verbose, const char *filename, int parallelEval, CallbackFunc callback, KnitroData ** /*data*/, double feasTol)
 {
-#if defined(USE_KNITRO)
+#if defined(PGO_HAS_KNITRO)
   if (constraints) {
     std::unique_ptr<KnitroProblem> problem = std::make_unique<KnitroProblem>(energy, constraints);
     problem->setInit(x);
@@ -333,7 +333,7 @@ int EnergyOptimizer::minimizeUsingKnitroDense(EigenSupport::RefVecXd x, Potentia
     if (g.size() > 0)
       g = Eigen::Map<const ES::VXd>(solver.getg(), problem->getm());
 
-    return solverRet;
+    return makeKnitroSolverResult(solverRet);
   }
   else {
     std::shared_ptr<KnitroProblem> problem = std::make_shared<KnitroProblem>(energy);
@@ -380,28 +380,30 @@ int EnergyOptimizer::minimizeUsingKnitroDense(EigenSupport::RefVecXd x, Potentia
 
     x = Eigen::Map<const ES::VXd>(solver.getx(), problem->getn());
 
-    return solverRet;
+    return makeKnitroSolverResult(solverRet);
   }
 #else
-  std::cout << "Knitro not found. exit(1)" << std::endl;
-  exit(1);
-
-  return 1;
+  (void)x, (void)energy;
+  (void)xlow, (void)xhi;
+  (void)lambda, (void)g, (void)constraints, (void)clow, (void)chi;
+  (void)maxIter, (void)eps, (void)verbose;
+  (void)filename, (void)parallelEval, (void)callback, (void)feasTol;
+  throw std::runtime_error("No Knitro Module");
 #endif
 }
 
-int EnergyOptimizer::minimizeUsingApproximateActiveSet(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
+SolverResult EnergyOptimizer::minimizeUsingApproximateActiveSet(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
   EigenSupport::RefVecXd lambda, EigenSupport::RefVecXd g, ConstraintFunctions_const_p constraints, EigenSupport::ConstRefVecXd clow, EigenSupport::ConstRefVecXd chi,
   int maxIter, double eps, double equalityThreshold, int verbose)
 {
-#if defined(USE_IPOPT)
+#if defined(PGO_HAS_IPOPT)
   if (constraints) {
     Ipopt::SmartPtr<IpoptProblem> problem = new IpoptProblem(energy, constraints);
     problem->setRange(xlow, xhi);
 
     ES::VXd clow1 = clow, chi1 = chi;
 
-    auto minf = [&]() {
+    auto minf = [&]() -> SolverResult {
       problem->setInit(x);
       problem->setConstraintsRange(clow1, chi1);
 
@@ -419,16 +421,13 @@ int EnergyOptimizer::minimizeUsingApproximateActiveSet(EigenSupport::RefVecXd x,
       g = problem->getFinalg();
       lambda = problem->getFinalLambda();
 
-      if (solverRet != 0)
-        return solverRet;
-      else
-        return 0;
+      return makeIpoptSolverResult(solverRet);
     };
 
     // solve first time
-    int solverRet = minf();
-    if (solverRet < 0)
-      return solverRet;
+    SolverResult solverResult = minf();
+    if (!acceptsStrictSolveStatus(solverResult.status))
+      return solverResult;
 
     for (Eigen::Index i = 0; i < g.size(); i++) {
       if (g[i] < 1e-10) {
@@ -438,9 +437,9 @@ int EnergyOptimizer::minimizeUsingApproximateActiveSet(EigenSupport::RefVecXd x,
     }
 
     while (1) {
-      solverRet = minf();
-      if (solverRet < 0)
-        return solverRet;
+      solverResult = minf();
+      if (!acceptsStrictSolveStatus(solverResult.status))
+        return solverResult;
 
       // deactivate all pulling constraints
       bool isGood = true;
@@ -477,7 +476,7 @@ int EnergyOptimizer::minimizeUsingApproximateActiveSet(EigenSupport::RefVecXd x,
 
     std::cout << std::endl;
 
-    return solverRet;
+    return solverResult;
   }
   else {
     Ipopt::SmartPtr<IpoptProblem> problem = new IpoptProblem(energy);
@@ -494,7 +493,7 @@ int EnergyOptimizer::minimizeUsingApproximateActiveSet(EigenSupport::RefVecXd x,
     int solverRet = solver.solve();
     x = problem->getFinalx();
 
-    return solverRet;
+    return makeIpoptSolverResult(solverRet);
   }
 #else
   (void)x, (void)energy;
@@ -503,12 +502,10 @@ int EnergyOptimizer::minimizeUsingApproximateActiveSet(EigenSupport::RefVecXd x,
   (void)maxIter, (void)eps, (void)verbose;
   (void)equalityThreshold;
   throw std::runtime_error("No Ipopt Module");
-
-  return 1;
 #endif
 }
 
-int EnergyOptimizer::minimizeUsingNewton(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
+SolverResult EnergyOptimizer::minimizeUsingNewton(EigenSupport::RefVecXd x, PotentialEnergy_const_p energy, EigenSupport::ConstRefVecXd xlow, EigenSupport::ConstRefVecXd xhi,
   EigenSupport::RefVecXd lambda, EigenSupport::RefVecXd g, ConstraintFunctions_const_p constraints, EigenSupport::ConstRefVecXd clow, EigenSupport::ConstRefVecXd chi,
   int maxIter, double eps, int verbose)
 {
@@ -546,7 +543,7 @@ int EnergyOptimizer::minimizeUsingNewton(EigenSupport::RefVecXd x, PotentialEner
       xinit.tail(constraints->getNumConstraints()) = ES::VXd::Zero(constraints->getNumConstraints());
   }
 
-  int ret = solver.solve(xinit.data(), maxIter, eps, verbose);
+  SolverResult ret = solver.solve(xinit.data(), maxIter, eps, verbose);
 
   x = xinit.head(energy->getNumDOFs());
 

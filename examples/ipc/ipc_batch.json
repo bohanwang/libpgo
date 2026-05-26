@@ -1,12 +1,15 @@
 {
-  "build_dir": "build/base_no_mkl",
+  "build_dir": "build/base",
   "defaults": {
     "anim_config": "anim.json",
     "log": true
   },
   "cases": {
-    "shell": {
-      "sim_config": "examples/ipc/shell/shell-ipc.json"
+    "shell_hang": {
+      "sim_config": "examples/ipc/shell/shell-hang/shell-ipc.json"
+    },
+    "shell_drop": {
+      "sim_config": "examples/ipc/shell/shell-drop/shell-ipc.json"
     },
     "tet_box_hang": {
       "sim_config": "examples/ipc/tet/box-hang/box-ipc.json"
@@ -20,14 +23,35 @@
     "cubic_box_squash": {
       "sim_config": "examples/ipc/cubic/box-squash/box-ipc.json"
     },
-    "cubic_box_with_sphere": {
-      "sim_config": "examples/ipc/cubic/box-with-sphere/box-ipc.json"
+    "cubic_box_with_sphere_lite": {
+      "sim_config": "examples/ipc/cubic/box-with-sphere-lite/box-ipc.json"
+    },
+    "tet_box_drop": {
+      "sim_config": "examples/ipc/tet/box/box-ipc.json"
+    },
+    "cubic_box_drop": {
+      "sim_config": "examples/ipc/cubic/box/box-ipc.json"
+    },
+    "tet_bunny_lite_drop": {
+      "sim_config": "examples/ipc/tet/bunny-lite/bunny-ipc.json"
+    },
+    "tet_dragon_dyn_lite_drop": {
+      "sim_config": "examples/ipc/tet/dragon-dyn-lite/dragon-ipc.json"
+    },
+    "tet_box_with_sphere_lite": {
+      "sim_config": "examples/ipc/tet/box-with-sphere-lite/box-ipc.json"
+    },
+    "cubic_bunny_lite_drop": {
+      "sim_config": "examples/ipc/cubic/bunny-lite/bunny-ipc.json"
+    },
+    "cubic_dragon_dyn_lite_drop": {
+      "sim_config": "examples/ipc/cubic/dragon-dyn-lite/dragon-ipc.json"
     }
   },
   "jobs": [
     {
       "name": "shell",
-      "cases": ["shell"]
+      "cases": ["shell_hang", "shell_drop"]
     },
     {
       "name": "hanging_boxes",
@@ -39,16 +63,27 @@
     },
     {
       "name": "cubic_cases",
-      "cases": ["cubic_box_hang", "cubic_box_squash", "cubic_box_with_sphere"]
+      "cases": ["cubic_box_hang", "cubic_box_squash", "cubic_box_with_sphere_lite", "tet_box_with_sphere_lite"]
+    },
+    {
+      "name": "drop",
+      "cases": ["shell_drop", "tet_box_drop", "cubic_box_drop", "tet_bunny_lite_drop", "tet_dragon_dyn_lite_drop", "cubic_bunny_lite_drop", "cubic_dragon_dyn_lite_drop"]
     },
     {
       "name": "volume_cases",
       "cases": [
         "tet_box_hang",
         "tet_box_squash",
+        "tet_box_drop",
         "cubic_box_hang",
         "cubic_box_squash",
-        "cubic_box_with_sphere"
+        "cubic_box_with_sphere_lite",
+        "cubic_box_drop",
+        "tet_bunny_lite_drop",
+        "tet_dragon_dyn_lite_drop",
+        "tet_box_with_sphere_lite",
+        "cubic_bunny_lite_drop",
+        "cubic_dragon_dyn_lite_drop"
       ]
     },
     {

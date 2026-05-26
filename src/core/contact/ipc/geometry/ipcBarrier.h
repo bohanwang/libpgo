@@ -8,7 +8,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 namespace barrier
@@ -20,6 +20,6 @@ double d2bds2(double s, double shat);
 
 }  // namespace barrier
 
-}  // namespace CIPC
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

@@ -38,6 +38,7 @@ _skbuild
 .DS_Store
 .vscode/*
 .clang-format
+CMakeUserPresets.json
 
 *.pyd
 *.pyc
@@ -72,3 +73,6 @@ paper/*
 *_output
 
 *.avi
+
+
+dist/

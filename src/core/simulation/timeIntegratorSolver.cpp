@@ -34,7 +34,7 @@ public:
 #endif
 
   std::shared_ptr<NewtonSolver> newtonSolver;
-  SolveDiagnostics lastSolveDiagnostics;
+  SolverResult lastSolveResult;
   std::vector<int> fixedDOFs;
   ES::VXd fixedValues;
 };
@@ -48,10 +48,15 @@ TimeIntegratorSolver::TimeIntegratorSolver()
 
 const SolveDiagnostics &TimeIntegratorSolver::getLastSolveDiagnostics() const
 {
-  return da->lastSolveDiagnostics;
+  return da->lastSolveResult.diagnostics;
 }
 
-int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
+const SolverResult &TimeIntegratorSolver::getLastSolveResult() const
+{
+  return da->lastSolveResult;
+}
+
+SolverResult TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
   [[maybe_unused]] ES::VXd &g, [[maybe_unused]] ES::VXd &lambda,
   const ES::VXd &xlow, const ES::VXd &xhi,
   [[maybe_unused]] const ES::VXd &clow, [[maybe_unused]] const ES::VXd &chi,
@@ -105,8 +110,8 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
       }
     }
 
-    int solverRet = da->opt->solve();
-    da->lastSolveDiagnostics.reset();
+    const int solverRet = da->opt->solve();
+    da->lastSolveResult = makeKnitroSolverResult(solverRet);
 
     /*if (verbose == 0)
     da->opt->printInfo();*/
@@ -158,7 +163,7 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
     //  exit(1);
     //}
 
-    return solverRet;
+    return da->lastSolveResult;
 #else
     throw std::invalid_argument("No available selected solver");
     /*
@@ -209,8 +214,9 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
 #endif
   }
   else if (op == TimeIntegratorSolverOption::SO_IPOPT) {
-#if defined(USE_IPOPT)
-    return solveDirect(x, g, lambda, xlow, xhi, clow, chi, energy, constraints, nIter, eps, verbose, nullptr, op);
+#if defined(PGO_HAS_IPOPT)
+    da->lastSolveResult = solveDirect(x, g, lambda, xlow, xhi, clow, chi, energy, constraints, nIter, eps, verbose, nullptr, op);
+    return da->lastSolveResult;
 #else
     throw std::invalid_argument("No IPOPT solver");
 #endif
@@ -241,10 +247,8 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
         da->newtonSolver->setFixedDOFs(da->fixedDOFs, da->fixedValues.data());
       }
 
-      int ret = da->newtonSolver->solve(x.data(), nIter, eps, verbose);
-      da->lastSolveDiagnostics = da->newtonSolver->getSolveDiagnostics();
-
-      return ret;
+      da->lastSolveResult = da->newtonSolver->solve(x.data(), nIter, eps, verbose);
+      return da->lastSolveResult;
     }
   }
   else {
@@ -252,41 +256,42 @@ int TimeIntegratorSolver::solve(bool needRenew, ES::VXd &x,
   }
 }
 
-int TimeIntegratorSolver::solveDirect(ES::VXd &x, ES::VXd &g, ES::VXd &lambda,
+SolverResult TimeIntegratorSolver::solveDirect(ES::VXd &x, ES::VXd &g, ES::VXd &lambda,
   const ES::VXd &xlow, const ES::VXd &xhi, const ES::VXd &clow, const ES::VXd &chi,
   std::shared_ptr<const PotentialEnergy> energy,
   std::shared_ptr<const ConstraintFunctions> constraints,
   int nIter, double eps, int verbose, const char *solverConfigFilename,
   TimeIntegratorSolverOption solverOption)
 {
-  int solverRet = 0;
+  SolverResult result = makeSolverResult(SolveStatus::UnsupportedBackend,
+    static_cast<int>(SolveStatus::UnsupportedBackend));
 
   if (constraints) {
     if (solverOption == TimeIntegratorSolverOption::SO_IPOPT)
-      solverRet = EnergyOptimizer::minimize(x, energy, xlow, xhi,
+      result = EnergyOptimizer::minimize(x, energy, xlow, xhi,
         lambda, g, constraints, clow, chi,
         EnergyOptimizer::SolverType::ST_IPOPT, nIter, eps, verbose);
     else if (solverOption == TimeIntegratorSolverOption::SO_NEWTON)
-      solverRet = EnergyOptimizer::minimize(x, energy, xlow, xhi,
+      result = EnergyOptimizer::minimize(x, energy, xlow, xhi,
         lambda, g, constraints, clow, chi,
         EnergyOptimizer::SolverType::ST_NEWTON, nIter, eps, verbose);
     else if (solverOption == TimeIntegratorSolverOption::SO_KNITRO)
-      solverRet = EnergyOptimizer::minimizeUsingKnitro(x, energy, xlow, xhi,
+      result = EnergyOptimizer::minimizeUsingKnitro(x, energy, xlow, xhi,
         lambda, g, constraints, clow, chi,
         nIter, eps, verbose, solverConfigFilename);
   }
   else {
     if (solverOption == TimeIntegratorSolverOption::SO_IPOPT)
-      solverRet = EnergyOptimizer::minimize(x, energy, xlow, xhi,
+      result = EnergyOptimizer::minimize(x, energy, xlow, xhi,
         EnergyOptimizer::SolverType::ST_IPOPT, nIter, eps, verbose);
     else if (solverOption == TimeIntegratorSolverOption::SO_NEWTON)
-      solverRet = EnergyOptimizer::minimize(x, energy, xlow, xhi,
+      result = EnergyOptimizer::minimize(x, energy, xlow, xhi,
         EnergyOptimizer::SolverType::ST_NEWTON, nIter, eps, verbose);
     else if (solverOption == TimeIntegratorSolverOption::SO_KNITRO)
-      solverRet = EnergyOptimizer::minimizeUsingKnitro(x, energy, xlow, xhi,
+      result = EnergyOptimizer::minimizeUsingKnitro(x, energy, xlow, xhi,
         lambda, g, nullptr, ES::VXd(), ES::VXd(), nIter, eps, verbose,
         solverConfigFilename);
   }
 
-  return solverRet;
+  return result;
 }

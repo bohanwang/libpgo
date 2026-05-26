@@ -6,8 +6,8 @@ import pytest
 import pypgo
 
 
-EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples" / "legacy" / "tet"
-TORUS_VEG = EXAMPLES_DIR / "torus.veg"
+FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "legacy" / "tet"
+TORUS_VEG = FIXTURES_DIR / "torus.veg"
 
 
 def _load_torus_mesh():

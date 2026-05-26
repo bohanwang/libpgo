@@ -6,6 +6,7 @@ on:
       - main
       - master
       - original/*
+      - codex/**
   pull_request:
   workflow_dispatch:
 
@@ -31,7 +32,7 @@ jobs:
         with:
           miniforge-variant: Miniforge3
           miniforge-version: latest
-          activate-environment: libpgo-ci
+          activate-environment: libpgo
           auto-activate-base: false
           use-mamba: true
           python-version: "3.12"
@@ -42,28 +43,23 @@ jobs:
         run: |
           mamba install -y \
             "cmake>=3.29" \
+            libboost-devel \
             ninja \
             numpy \
             pip \
+            pytest \
             setuptools \
+            tbb-devel \
             wheel
 
       - name: Install Homebrew prerequisites
         run: brew install gmp mpfr imath
 
-      - name: Configure build environment
-        run: |
-          echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
-
       - name: Build and install Python package
-        run: |
-          export CMAKE_ARGS="-DCMAKE_PREFIX_PATH=${CONDA_PREFIX};${HOMEBREW_PREFIX}"
-          python -m pip install --upgrade pip
-          python -m pip install ".[test]"
+        run: python -m pip install -e . --no-build-isolation
 
       - name: Run Python API pytest suite
-        run: pytest -q tests/pypgo
+        run: python -m pytest -q tests/pypgo
 
   cmake-build:
     name: CMake Preset Build and Test
@@ -86,7 +82,7 @@ jobs:
         with:
           miniforge-variant: Miniforge3
           miniforge-version: latest
-          activate-environment: libpgo-ci
+          activate-environment: libpgo
           auto-activate-base: false
           use-mamba: true
           python-version: "3.12"
@@ -97,24 +93,21 @@ jobs:
         run: |
           mamba install -y \
             "cmake>=3.29" \
-            ninja
+            gmsh \
+            libboost-devel \
+            ninja \
+            openvdb \
+            tbb-devel \
+            zlib
 
       - name: Install Homebrew prerequisites
         run: brew install gmp mpfr imath
 
-      - name: Configure build environment
-        run: |
-          echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
-          echo "CMAKE_PREFIX_PATH=$(brew --prefix)" >> "$GITHUB_ENV"
-          echo "CPATH=$(brew --prefix)/include" >> "$GITHUB_ENV"
-          echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
+      - name: Configure with preset base
+        run: cmake --preset base
 
-      - name: Configure with preset base_no_mkl and tests enabled
-        run: cmake --preset base_no_mkl -DBUILD_TESTING=ON
-
-      - name: Build with preset base_no_mkl_release
-        run: cmake --build --preset base_no_mkl_release
+      - name: Build with preset base
+        run: cmake --build --preset base
 
       - name: Run CTest
-        run: ctest --test-dir build/base_no_mkl --output-on-failure
+        run: ctest --test-dir build/base --output-on-failure

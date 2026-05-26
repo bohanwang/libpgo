@@ -58,6 +58,7 @@ class DeformationModelManagerImpl
 public:
   ~DeformationModelManagerImpl();
 
+  std::unique_ptr<SimulationMesh> ownedMesh;  // owns the mesh; simulationMesh borrows it
   const SimulationMesh *simulationMesh;
 
   std::vector<DeformationModel *> elementFEMs;
@@ -306,9 +307,31 @@ std::map<DeformationModelPlasticMaterial, int> numPlasticDOFs{
 
 using namespace pgo::SolidDeformationModel;
 
-DeformationModelManager::DeformationModelManager()
+DeformationModelManager::DeformationModelManager(std::unique_ptr<SimulationMesh> simulationMesh,
+  DeformationModelPlasticMaterial plasticModelType, DeformationModelElasticMaterial elasticMaterialType,
+  int enforceSPD, const double *elementFiberDirections, const double *vertexFiberDirections)
 {
   data = new DeformationModelManagerImpl;
+
+  data->ownedMesh = std::move(simulationMesh);
+  data->simulationMesh = data->ownedMesh.get();
+  data->nele = data->simulationMesh->getNumElements();
+  data->nvtx = data->simulationMesh->getNumVertices();
+
+  if (elementFiberDirections)
+    data->fiberDirections = Eigen::Map<const ES::VXd>(elementFiberDirections, data->nele * 3);
+  else
+    data->fiberDirections.setZero(0);
+
+  if (vertexFiberDirections)
+    data->vertexFiberDirections = Eigen::Map<const ES::VXd>(vertexFiberDirections, data->nvtx * 3);
+  else
+    data->vertexFiberDirections.setZero(0);
+
+  initImpl(plasticModelType, elasticMaterialType);
+
+  if (enforceSPD)
+    setEnforceSPD(enforceSPD);
 }
 
 DeformationModelManager::~DeformationModelManager()
@@ -316,28 +339,11 @@ DeformationModelManager::~DeformationModelManager()
   delete data;
 }
 
-void DeformationModelManager::setMesh(const SimulationMesh *simulationMesh, const double *elementFiberDirections, const double *vertexFiberDirections)
-{
-  data->simulationMesh = simulationMesh;
-  data->nele = data->simulationMesh->getNumElements();
-  data->nvtx = data->simulationMesh->getNumVertices();
 
-  if (elementFiberDirections) {
-    data->fiberDirections = Eigen::Map<const ES::VXd>(elementFiberDirections, data->nele * 3);
-  }
-  else {
-    data->fiberDirections.setZero(0);
-  }
 
-  if (vertexFiberDirections) {
-    data->vertexFiberDirections = Eigen::Map<const ES::VXd>(vertexFiberDirections, data->nvtx * 3);
-  }
-  else {
-    data->vertexFiberDirections.setZero(0);
-  }
-}
 
-void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelType, DeformationModelElasticMaterial elasticMaterialType)
+
+void DeformationModelManager::initImpl(DeformationModelPlasticMaterial plasticModelType, DeformationModelElasticMaterial elasticMaterialType)
 {
   SPDLOG_LOGGER_INFO(pgo::Logging::lgr(), "Computing the type of each element...");
 
@@ -707,7 +713,6 @@ void DeformationModelManager::init(DeformationModelPlasticMaterial plasticModelT
     },
     tbb::static_partitioner());
 }
-
 const DeformationModel *DeformationModelManager::getDeformationModel(int eleID) const
 {
   return data->elementFEMs[eleID];

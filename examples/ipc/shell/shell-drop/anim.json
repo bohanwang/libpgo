@@ -1,0 +1,14 @@
+{
+  "meshes": [
+    {
+      "name": "shell-drop-ipc",
+      "driving-mesh": "shell.obj",
+      "sequence": "ret-shell-drop-ipc/surface/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        999
+      ]
+    }
+  ]
+}

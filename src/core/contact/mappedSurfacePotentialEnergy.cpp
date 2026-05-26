@@ -14,7 +14,7 @@ namespace pgo
 {
 namespace Contact
 {
-namespace CIPC
+namespace IPC
 {
 
 MappedSurfacePotentialEnergy::MappedSurfacePotentialEnergy(
@@ -82,6 +82,99 @@ void MappedSurfacePotentialEnergy::gradient(
   }
 }
 
+void MappedSurfacePotentialEnergy::computeSurfaceFuncGrad(
+  EigenSupport::ConstRefVecXd surfacePositions,
+  double &surfaceEnergy,
+  EigenSupport::RefVecXd surfaceGradient) const
+{
+  surfaceEnergy = computeSurfaceEnergy(surfacePositions);
+  computeSurfaceGradient(surfacePositions, surfaceGradient);
+}
+
+void MappedSurfacePotentialEnergy::computeSurfaceAll(
+  EigenSupport::ConstRefVecXd surfacePositions,
+  double &surfaceEnergy,
+  EigenSupport::RefVecXd surfaceGradient,
+  EigenSupport::SpMatD &surfaceHessian) const
+{
+  surfaceEnergy = computeSurfaceEnergy(surfacePositions);
+  computeSurfaceGradient(surfacePositions, surfaceGradient);
+  computeSurfaceHessian(surfacePositions, surfaceHessian);
+}
+
+void MappedSurfacePotentialEnergy::computeSurfaceGradHessian(
+  EigenSupport::ConstRefVecXd surfacePositions,
+  EigenSupport::RefVecXd surfaceGradient,
+  EigenSupport::SpMatD &surfaceHessian) const
+{
+  computeSurfaceGradient(surfacePositions, surfaceGradient);
+  computeSurfaceHessian(surfacePositions, surfaceHessian);
+}
+
+double MappedSurfacePotentialEnergy::func_grad(
+  EigenSupport::ConstRefVecXd simulationDisplacements,
+  EigenSupport::RefVecXd simulationGradient) const
+{
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kAdapterGradient);
+  const VXd surfacePositions = computeSurfacePositionsFromSimulationDisplacements(simulationDisplacements);
+
+  double surfaceEnergy = 0.0;
+  VXd surfaceGradient = VXd::Zero(surfaceRestPositions_.size());
+  computeSurfaceFuncGrad(surfacePositions, surfaceEnergy, surfaceGradient);
+
+  {
+    Profiling::ScopedProfileSection pullbackProfile(SurfaceIPCProfileSections::kAdapterPullbackGradient);
+    simulationGradient = surfaceFromSimulationDispMap_.transpose() * surfaceGradient;
+  }
+  return surfaceEnergy;
+}
+
+double MappedSurfacePotentialEnergy::func_grad_hessian(
+  EigenSupport::ConstRefVecXd simulationDisplacements,
+  EigenSupport::RefVecXd simulationGradient,
+  EigenSupport::SpMatD &simulationHessian) const
+{
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kAdapterHessianDirect);
+  const VXd surfacePositions = computeSurfacePositionsFromSimulationDisplacements(simulationDisplacements);
+
+  double surfaceEnergy = 0.0;
+  VXd surfaceGradient = VXd::Zero(surfaceRestPositions_.size());
+  SpMatD surfaceHessian(surfaceRestPositions_.size(), surfaceRestPositions_.size());
+  computeSurfaceAll(surfacePositions, surfaceEnergy, surfaceGradient, surfaceHessian);
+
+  {
+    Profiling::ScopedProfileSection pullbackProfile(SurfaceIPCProfileSections::kAdapterPullbackGradient);
+    simulationGradient = surfaceFromSimulationDispMap_.transpose() * surfaceGradient;
+  }
+  {
+    Profiling::ScopedProfileSection pullbackProfile(SurfaceIPCProfileSections::kAdapterPullbackHessian);
+    simulationHessian = surfaceFromSimulationDispMap_.transpose() * surfaceHessian * surfaceFromSimulationDispMap_;
+  }
+  return surfaceEnergy;
+}
+
+void MappedSurfacePotentialEnergy::gradient_hessian(
+  EigenSupport::ConstRefVecXd simulationDisplacements,
+  EigenSupport::RefVecXd simulationGradient,
+  EigenSupport::SpMatD &simulationHessian) const
+{
+  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kAdapterHessianDirect);
+  const VXd surfacePositions = computeSurfacePositionsFromSimulationDisplacements(simulationDisplacements);
+
+  VXd surfaceGradient = VXd::Zero(surfaceRestPositions_.size());
+  SpMatD surfaceHessian(surfaceRestPositions_.size(), surfaceRestPositions_.size());
+  computeSurfaceGradHessian(surfacePositions, surfaceGradient, surfaceHessian);
+
+  {
+    Profiling::ScopedProfileSection pullbackProfile(SurfaceIPCProfileSections::kAdapterPullbackGradient);
+    simulationGradient = surfaceFromSimulationDispMap_.transpose() * surfaceGradient;
+  }
+  {
+    Profiling::ScopedProfileSection pullbackProfile(SurfaceIPCProfileSections::kAdapterPullbackHessian);
+    simulationHessian = surfaceFromSimulationDispMap_.transpose() * surfaceHessian * surfaceFromSimulationDispMap_;
+  }
+}
+
 void MappedSurfacePotentialEnergy::hessian(EigenSupport::ConstRefVecXd, EigenSupport::SpMatD &) const
 {
   throw std::runtime_error("MappedSurfacePotentialEnergy::hessian() should not be called directly. Use hessianDirect() instead.");
@@ -118,6 +211,20 @@ NonlinearOptimization::MaxStepResult MappedSurfacePotentialEnergy::computeMaxSte
   return computeSurfaceMaxStepLimit(surfacePositions, trialSurfaceDisplacements);
 }
 
+void MappedSurfacePotentialEnergy::beginLineSearch(
+  EigenSupport::ConstRefVecXd simulationDisplacements,
+  EigenSupport::ConstRefVecXd trialSimulationDisplacements) const
+{
+  const VXd surfacePositions = computeSurfacePositionsFromSimulationDisplacements(simulationDisplacements);
+  const VXd trialSurfaceDisplacements = computeSurfaceDisplacementsFromSimulationDisplacements(trialSimulationDisplacements);
+  beginSurfaceLineSearch(surfacePositions, trialSurfaceDisplacements);
+}
+
+void MappedSurfacePotentialEnergy::endLineSearch() const
+{
+  endSurfaceLineSearch();
+}
+
 NonlinearOptimization::MaxStepResult MappedSurfacePotentialEnergy::computeSurfaceMaxStepLimit(
   EigenSupport::ConstRefVecXd,
   EigenSupport::ConstRefVecXd) const
@@ -125,6 +232,16 @@ NonlinearOptimization::MaxStepResult MappedSurfacePotentialEnergy::computeSurfac
   return NonlinearOptimization::MaxStepResult::unconstrained();
 }
 
-}  // namespace CIPC
+void MappedSurfacePotentialEnergy::beginSurfaceLineSearch(
+  EigenSupport::ConstRefVecXd,
+  EigenSupport::ConstRefVecXd) const
+{
+}
+
+void MappedSurfacePotentialEnergy::endSurfaceLineSearch() const
+{
+}
+
+}  // namespace IPC
 }  // namespace Contact
 }  // namespace pgo

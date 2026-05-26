@@ -11,6 +11,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(PGO_USE_MKL "Use MKL" OFF)
 option(PGO_ENABLE_PYTHON "Build python module" OFF)
+option(PGO_BUILD_C_API "Build C API library (pgo_c)" OFF)
 option(PGO_ENABLE_FULL "Enable all functionalities" OFF)
 option(PGO_ENABLE_CUDA "Enable CUDA" OFF)
 option(PGO_BUILD_SUBPROJECTS "Include subprojects" OFF)
@@ -28,12 +29,47 @@ option(PGO_MKL_LINK_DYNAMIC "MKL Link" ON)
 option(PGO_ENABLE_ALEMBIC "Enable Alembic support" OFF)
 option(PGO_ENABLE_OPENVDB "Enable OpenVDB support" OFF)
 option(PGO_ENABLE_GMSH "Enable GMSH support" OFF)
-option(PGO_TET_MESHER_USE_TET_WILD "Enable fTetWild backend for tetMesher" ON)
+option(PGO_TET_MESHER_USE_TET_WILD "Enable fTetWild backend for tetMesher" OFF)
+option(PGO_BUILD_TESTING "Build libpgo tests" OFF)
 
 project(libpgo LANGUAGES CXX C)
 
+if(APPLE)
+  if(PGO_USE_MKL)
+    message(WARNING "MKL is not supported on macOS; forcing PGO_USE_MKL=OFF.")
+    set(PGO_USE_MKL OFF CACHE BOOL "Use MKL" FORCE)
+  endif()
+
+  if(PGO_ENABLE_CUDA)
+    message(WARNING "CUDA is not supported on macOS; forcing PGO_ENABLE_CUDA=OFF.")
+    set(PGO_ENABLE_CUDA OFF CACHE BOOL "Enable CUDA" FORCE)
+  endif()
+
+  # Homebrew installs GMP/MPFR (required by CGAL, ftetwild, ...) under a prefix that
+  # is not on the default compiler/linker search path on Apple Silicon. Expose it
+  # globally -- before any third-party (FetchContent) dependency is configured -- so
+  # every target finds gmp.h/mpfr.h without the caller exporting CPATH/LIBRARY_PATH.
+  set(PGO_HOMEBREW_PREFIX "" CACHE PATH "Homebrew installation prefix")
+  if(NOT PGO_HOMEBREW_PREFIX)
+    find_program(PGO_BREW_EXECUTABLE brew)
+    if(PGO_BREW_EXECUTABLE)
+      execute_process(
+        COMMAND ${PGO_BREW_EXECUTABLE} --prefix
+        OUTPUT_VARIABLE PGO_HOMEBREW_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+      set(PGO_HOMEBREW_PREFIX "${PGO_HOMEBREW_PREFIX}" CACHE PATH "Homebrew installation prefix" FORCE)
+    endif()
+  endif()
+
+  if(PGO_HOMEBREW_PREFIX AND EXISTS "${PGO_HOMEBREW_PREFIX}/include")
+    message(STATUS "Adding Homebrew prefix to global search paths: ${PGO_HOMEBREW_PREFIX}")
+    include_directories(SYSTEM "${PGO_HOMEBREW_PREFIX}/include")
+    link_directories("${PGO_HOMEBREW_PREFIX}/lib")
+    list(APPEND CMAKE_PREFIX_PATH "${PGO_HOMEBREW_PREFIX}")
+  endif()
+endif()
+
 include(CTest)
-set(PGO_BUILD_TESTING ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "Disable third-party tests during dependency configuration" FORCE)
 
 set(PGO_CLANGD_BUILD_DIR "${CMAKE_SOURCE_DIR}/build")
@@ -68,12 +104,12 @@ list(APPEND CMAKE_MODULE_PATH "${PGO_CMAKE_MODULES}")
 message(STATUS "CMake Module Path: ${CMAKE_MODULE_PATH}")
 
 include(CompilationUtils)
+include(PgoDependencyHelpers)
 
 find_package(OpenMP)
 
 if(OPENMP_FOUND)
   set(OPENMP_FLAG "${OpenMP_CXX_FLAGS}")
-  add_compile_definitions(USE_OPENMP)
 endif()
 
 # openmp may cause mkl pardiso error
@@ -99,10 +135,12 @@ add_flag(compilation_flag_for_debug Clang All INTERFACE -fsanitize=leak)
 add_library(compilation_flag INTERFACE)
 add_library(cuda_compilation_flag INTERFACE)
 
+if(OPENMP_FOUND)
+  target_compile_definitions(compilation_flag INTERFACE USE_OPENMP)
+endif()
+
 message(STATUS "PGO compiler: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "OS: ${CMAKE_SYSTEM_NAME}")
-
-
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "^(Apple)?Clang$")
   message(STATUS "CMake build type: ${CMAKE_BUILD_TYPE}")
@@ -267,26 +305,34 @@ if(PGO_TET_MESHER_USE_TET_WILD)
 endif()
 
 if(PGO_ENABLE_PYTHON)
-  include(CMakeModules/third-party/pybind11.cmake)
+  include(CMakeModules/third-party/nanobind.cmake)
 endif()
 
 if(TARGET MKL::MKL)
-  add_compile_definitions(PGO_HAS_MKL)
+  target_compile_definitions(compilation_flag INTERFACE PGO_HAS_MKL)
 endif()
 
 if(TARGET CGAL::CGAL)
-  add_compile_definitions(PGO_HAS_CGAL)
+  target_compile_definitions(compilation_flag INTERFACE PGO_HAS_CGAL)
 endif()
 
 if(TARGET Ceres::ceres)
-  add_compile_definitions(PGO_HAS_CERES)
+  target_compile_definitions(compilation_flag INTERFACE PGO_HAS_CERES)
+endif()
+
+if(PGO_OPT_USE_IPOPT)
+  find_package(Ipopt)
+
+  if(TARGET Ipopt::Core)
+    target_compile_definitions(compilation_flag INTERFACE PGO_HAS_IPOPT)
+  endif()
 endif()
 
 if(PGO_OPT_USE_KNITRO)
   include(CMakeModules/third-party/knitro.cmake)
 
   if(TARGET Knitro::Knitro)
-    add_compile_definitions(PGO_HAS_KNITRO)
+    target_compile_definitions(compilation_flag INTERFACE PGO_HAS_KNITRO)
   endif()
 endif()
 
@@ -294,7 +340,7 @@ if(PGO_HAS_ORIG_PARDISO)
   include(CMakeModules/third-party/pardiso.cmake)
 
   if(TARGET Pardiso::Pardiso)
-    add_compile_definitions(PGO_HAS_ORIG_PARDISO)
+    target_compile_definitions(compilation_flag INTERFACE PGO_HAS_ORIG_PARDISO)
   endif()
 endif()
 
@@ -419,19 +465,13 @@ endfunction()
 
 add_subdirectory(src)
 
-set(BUILD_TESTING ${PGO_BUILD_TESTING} CACHE BOOL "Enable testing" FORCE)
-
-if(BUILD_TESTING)
+if(PGO_BUILD_TESTING)
   message(STATUS "Testing enabled.")
   add_subdirectory(tests)
 endif()
 
 if(PGO_BUILD_SUBPROJECTS)
   add_subdirectory(projects)
-endif()
-
-if(PGO_ENABLE_PYTHON)
-  include(CMakeModules/python_list.cmake)
 endif()
 
 # generate config file to be used in common build tree

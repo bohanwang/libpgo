@@ -2,9 +2,10 @@ if(TARGET Eigen3::Eigen)
 else()
   message(STATUS "Loading eigen...")
 
-  set(BUILD_TESTING OFF CACHE BOOL "eigen build test" FORCE)
-  set(BUILD_EXAMPLES OFF CACHE BOOL "eigen build examples" FORCE)
-  set(EIGEN_BUILD_CMAKE_PACKAGE ON CACHE BOOL "eigen build cmake package" FORCE)
+  pgo_dep_option(BUILD_TESTING BOOL OFF "eigen build test")
+  pgo_dep_option(BUILD_EXAMPLES BOOL OFF "eigen build examples")
+  pgo_dep_option(EIGEN_BUILD_DOC BOOL OFF "eigen build doc")
+  pgo_dep_option(EIGEN_BUILD_CMAKE_PACKAGE BOOL ON "eigen build cmake package")
 
   include(FetchContent)
   FetchContent_Declare(
@@ -14,10 +15,9 @@ else()
     # GIT_TAG fb2fca90be39783f76ba05b521360afeeda265f2
     EXCLUDE_FROM_ALL
     DOWNLOAD_EXTRACT_TIMESTAMP ON
-    FIND_PACKAGE_ARGS NAMES Eigen3
   )
 
-  FetchContent_MakeAvailable(Eigen3)
+  pgo_fetch_make_available(Eigen3)
 
   message(STATUS "Done.")
 endif()
