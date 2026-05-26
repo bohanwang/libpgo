@@ -19,7 +19,10 @@ function(pgo_gtest_discover_tests target)
       "${CMAKE_COMMAND};-E;env;--modify;PATH=path_list_prepend:$<TARGET_FILE_DIR:pgo_c>")
   endif()
 
-  gtest_discover_tests(${target} ${ARGN})
+  gtest_discover_tests(${target}
+    DISCOVERY_MODE PRE_TEST
+    DISCOVERY_TIMEOUT 30
+    ${ARGN})
 endfunction()
 
 add_executable(pgo_c_gtest pgo_c_gtest.cpp)

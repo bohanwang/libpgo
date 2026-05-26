@@ -190,6 +190,86 @@ Machine-specific SDK paths belong in untracked `CMakeUserPresets.json`, not in
 the shared presets. Use it for local `KNITRO_LIBRARY_HINT`,
 `PARDISO_LIBRARY_HINT`, `cudss_DIR`, or similar paths.
 
+Example `CMakeUserPresets.json` (local, optional):
+
+<details>
+<summary>Click to expand example</summary>
+
+```json
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "local-base",
+            "displayName": "Local base",
+            "description": "Local IDE profile inheriting the shared base preset.",
+            "inherits": "base",
+            "environment": {
+                "CONDA_PREFIX": "/Users/jinceyang/miniconda3/envs/libpgo"
+            }
+        },
+        {
+            "name": "local-base-debug",
+            "displayName": "Local base debug",
+            "description": "Local IDE profile inheriting the shared base_debug preset.",
+            "inherits": "base_debug",
+            "environment": {
+                "CONDA_PREFIX": "/Users/jinceyang/miniconda3/envs/libpgo"
+            }
+        },
+        {
+            "name": "local-all",
+            "displayName": "Local all",
+            "description": "Local IDE profile inheriting all with local Knitro/Pardiso hints.",
+            "inherits": "all",
+            "environment": {
+                "CONDA_PREFIX": "/Users/jinceyang/miniconda3/envs/libpgo"
+            },
+            "cacheVariables": {
+                "KNITRO_LIBRARY_HINT": "/opt/artelys/knitro-15.0.1-Linux64",
+                "PARDISO_LIBRARY_HINT": "/opt/panua-pardiso-20240229-linux"
+            }
+        },
+        {
+            "name": "local-base-cuda",
+            "displayName": "Local base CUDA",
+            "description": "Local IDE profile inheriting base_cuda with local cuDSS hint.",
+            "inherits": "base_cuda",
+            "environment": {
+                "CONDA_PREFIX": "/Users/jinceyang/miniconda3/envs/libpgo"
+            },
+            "cacheVariables": {
+                "cudss_DIR": "C:/Program Files/NVIDIA cuDSS/v0.7/lib/13/cmake/cudss"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "local-base",
+            "configurePreset": "local-base",
+            "jobs": 32
+        },
+        {
+            "name": "local-base-debug",
+            "configurePreset": "local-base-debug",
+            "jobs": 32
+        },
+        {
+            "name": "local-all",
+            "configurePreset": "local-all",
+            "jobs": 32
+        },
+        {
+            "name": "local-base-cuda",
+            "configurePreset": "local-base-cuda",
+            "jobs": 32
+        }
+    ]
+}
+```
+
+</details>
+
 ### Dependency Ownership
 
 - Conda supplies CMake, Ninja, Python packages, and most native runtime/build
