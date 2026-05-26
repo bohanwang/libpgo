@@ -123,7 +123,7 @@ preset:
 
 ```bash
 cmake --list-presets
-cmake --preset base -DBUILD_TESTING=ON
+cmake --preset base
 cmake --build --preset base
 ctest --test-dir build/base --output-on-failure
 ```
@@ -137,7 +137,7 @@ mamba create -n libpgo -c conda-forge python=3.12
 conda activate libpgo
 mamba install -y "cmake>=3.29" gmsh libboost-devel mkl-devel ninja openvdb tbb-devel zlib
 
-cmake --preset base -DBUILD_TESTING=ON
+cmake --preset base
 cmake --build --preset base --parallel 3
 ctest --test-dir build/base --output-on-failure
 ```
@@ -149,7 +149,7 @@ mamba create -n libpgo -c conda-forge python=3.12
 conda activate libpgo
 mamba install -y "cmake>=3.29" gmsh libboost-devel ninja openvdb tbb-devel zlib
 
-cmake --preset base -DBUILD_TESTING=ON
+cmake --preset base
 cmake --build --preset base
 ctest --test-dir build/base --output-on-failure
 ```
@@ -161,8 +161,7 @@ mamba create -n libpgo -c conda-forge python=3.12
 conda activate libpgo
 mamba install -y "cmake>=3.29" gmsh imath libboost-devel mkl-devel ninja openvdb tbb-devel zlib
 
-cmake --preset base -G Ninja -DBUILD_TESTING=ON `
-  -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST
+cmake --preset base -G Ninja
 cmake --build --preset base
 
 ctest --test-dir build/base --output-on-failure

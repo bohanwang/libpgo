@@ -139,10 +139,8 @@ jobs:
             pkg-config \
             zlib1g-dev
 
-      - name: Configure with preset base and tests enabled
-        run: |
-          cmake --preset base \
-            -DBUILD_TESTING=ON
+      - name: Configure with preset base
+        run: cmake --preset base
 
       - name: Build with preset base
         run: cmake --build --preset base --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"

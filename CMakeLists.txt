@@ -11,7 +11,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(PGO_USE_MKL "Use MKL" OFF)
 option(PGO_ENABLE_PYTHON "Build python module" OFF)
-option(PGO_BUILD_C_API "Build C API library (pgo_c)" ON)
+option(PGO_BUILD_C_API "Build C API library (pgo_c)" OFF)
 option(PGO_ENABLE_FULL "Enable all functionalities" OFF)
 option(PGO_ENABLE_CUDA "Enable CUDA" OFF)
 option(PGO_BUILD_SUBPROJECTS "Include subprojects" OFF)
@@ -30,6 +30,7 @@ option(PGO_ENABLE_ALEMBIC "Enable Alembic support" OFF)
 option(PGO_ENABLE_OPENVDB "Enable OpenVDB support" OFF)
 option(PGO_ENABLE_GMSH "Enable GMSH support" OFF)
 option(PGO_TET_MESHER_USE_TET_WILD "Enable fTetWild backend for tetMesher" OFF)
+option(PGO_BUILD_TESTING "Build libpgo tests" OFF)
 
 project(libpgo LANGUAGES CXX C)
 
@@ -69,7 +70,6 @@ if(APPLE)
 endif()
 
 include(CTest)
-set(PGO_BUILD_TESTING ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "Disable third-party tests during dependency configuration" FORCE)
 
 set(PGO_CLANGD_BUILD_DIR "${CMAKE_SOURCE_DIR}/build")
@@ -141,8 +141,6 @@ endif()
 
 message(STATUS "PGO compiler: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "OS: ${CMAKE_SYSTEM_NAME}")
-
-
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "^(Apple)?Clang$")
   message(STATUS "CMake build type: ${CMAKE_BUILD_TYPE}")
@@ -467,9 +465,7 @@ endfunction()
 
 add_subdirectory(src)
 
-set(BUILD_TESTING ${PGO_BUILD_TESTING} CACHE BOOL "Enable testing" FORCE)
-
-if(BUILD_TESTING)
+if(PGO_BUILD_TESTING)
   message(STATUS "Testing enabled.")
   add_subdirectory(tests)
 endif()

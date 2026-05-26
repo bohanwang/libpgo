@@ -22,7 +22,8 @@
                 "PGO_ENABLE_ALEMBIC": "ON",
                 "PGO_ENABLE_GMSH": "ON",
                 "PGO_TET_MESHER_USE_TET_WILD": "ON",
-                "PGO_ENABLE_OPENVDB": "ON"
+                "PGO_ENABLE_OPENVDB": "ON",
+                "PGO_BUILD_TESTING": "ON"
             }
         },
         {
