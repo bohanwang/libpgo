@@ -4,8 +4,6 @@ copyright to Bohan Wang
 
 #include "surfaceIPCSelfBroadPhase.h"
 
-#include "scopedProfileSection.h"
-#include "ipc/profiling/surfaceIPCProfiling.h"
 #include "../geometry/ipcDistancePrimitives.h"
 #include "ipc/broadPhase/spatialHashGrid.h"
 
@@ -29,8 +27,6 @@ void SurfaceIPCSelfBroadPhase::buildPairs(
   std::vector<PTPair> &ptPairs,
   std::vector<EEPair> &eePairs) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildStatic);
-
   ptPairs.clear();
   eePairs.clear();
 

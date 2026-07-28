@@ -34,7 +34,7 @@ set_property(TARGET surfaceIPCBarrierAssembler_gtest PROPERTY FOLDER "tests/gtes
 gtest_discover_tests(surfaceIPCBarrierAssembler_gtest)
 
 add_executable(embeddedSurfaceIPCPotentialEnergy_gtest embeddedSurfaceIPCPotentialEnergy_gtest.cpp)
-target_link_libraries(embeddedSurfaceIPCPotentialEnergy_gtest PRIVATE GTest::gtest_main contact profiling)
+target_link_libraries(embeddedSurfaceIPCPotentialEnergy_gtest PRIVATE GTest::gtest_main contact)
 set_property(TARGET embeddedSurfaceIPCPotentialEnergy_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(embeddedSurfaceIPCPotentialEnergy_gtest)
 

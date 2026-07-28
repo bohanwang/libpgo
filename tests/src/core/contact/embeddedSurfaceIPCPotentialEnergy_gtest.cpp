@@ -1,14 +1,10 @@
 #include <gtest/gtest.h>
 
 #include "embeddedSurfaceIPCPotentialEnergy.h"
-#include "scopedProfileSection.h"
 #include "ipc/core/surfaceIPCCore.h"
-#include "ipc/profiling/surfaceIPCProfiling.h"
 #include "testCIPCHelpers.h"
 
-#include <algorithm>
 #include <stdexcept>
-#include <string_view>
 #include <vector>
 
 namespace
@@ -20,15 +16,6 @@ using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
 using pgo::Contact::CIPCTest::relativeError;
 using pgo::Contact::CIPCTest::sparseToDense;
-using pgo::Profiling::ProfileStat;
-
-const ProfileStat *findStat(const std::vector<ProfileStat> &stats, std::string_view name)
-{
-  const auto it = std::find_if(stats.begin(), stats.end(),
-    [name](const ProfileStat &stat) { return stat.name == name; });
-  return it == stats.end() ? nullptr : &(*it);
-}
-
 SurfaceIPCCore::Parameters makeParams()
 {
   SurfaceIPCCore::Parameters params;
@@ -145,37 +132,6 @@ TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, SparseEmbeddingPullsBackGradientAnd
   EXPECT_LT(relativeError(sparseToDense(simulationHessian), sparseToDense(W.transpose() * surfaceHessian * W)), 1e-12);
 }
 
-TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, ProfilingRecordsAdapterSections)
-{
-  const auto [V, F] = makeTwoTriangleMesh();
-  const ES::VXd rest = flattenPositions(V);
-  ES::VXd u = ES::VXd::Zero(rest.size());
-  for (int vi = 3; vi < 6; ++vi)
-    u[3 * vi + 2] = 0.01;
-
-  EmbeddedSurfaceIPCPotentialEnergy adapter(V, F, makeIdentityEmbedding(rest.size()), makeParams());
-
-  pgo::Profiling::setProfilingEnabled(true);
-  pgo::Profiling::resetProfileStatistics();
-
-  ES::VXd gradient(rest.size());
-  adapter.gradient(u, gradient);
-  ES::SpMatD hessian;
-  adapter.hessianDirect(u, hessian);
-  (void)adapter.func(u);
-
-  const auto stats = pgo::Profiling::snapshotProfileStatistics();
-  EXPECT_NE(findStat(stats, "contact.adapter.func"), nullptr);
-  EXPECT_NE(findStat(stats, "contact.adapter.gradient"), nullptr);
-  EXPECT_NE(findStat(stats, "contact.adapter.hessian_direct"), nullptr);
-  EXPECT_NE(findStat(stats, "contact.adapter.map_to_surface"), nullptr);
-  EXPECT_NE(findStat(stats, "contact.adapter.pullback_gradient"), nullptr);
-  EXPECT_NE(findStat(stats, "contact.adapter.pullback_hessian"), nullptr);
-
-  pgo::Profiling::setProfilingEnabled(false);
-  pgo::Profiling::resetProfileStatistics();
-}
-
 TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, ReusesPreparedPairsAcrossEnergyGradientHessianForSameState)
 {
   const auto [V, F] = makeTwoTriangleMesh();
@@ -185,9 +141,6 @@ TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, ReusesPreparedPairsAcrossEnergyGrad
     u[3 * vi + 2] = 0.01;
 
   EmbeddedSurfaceIPCPotentialEnergy adapter(V, F, makeIdentityEmbedding(rest.size()), makeParams());
-
-  pgo::Profiling::setProfilingEnabled(true);
-  pgo::Profiling::resetProfileStatistics();
 
   const double energy0 = adapter.func(u);
   ES::VXd gradient0 = ES::VXd::Zero(adapter.getNumDOFs());
@@ -201,14 +154,6 @@ TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, ReusesPreparedPairsAcrossEnergyGrad
   ES::SpMatD hessian1;
   adapter.hessianDirect(u, hessian1);
 
-  const auto stats = pgo::Profiling::snapshotProfileStatistics();
-  const ProfileStat *pairBuild = findStat(stats, pgo::Contact::SurfaceIPCProfileSections::kPairBuildStatic);
-
-  pgo::Profiling::setProfilingEnabled(false);
-  pgo::Profiling::resetProfileStatistics();
-
-  ASSERT_NE(pairBuild, nullptr);
-  EXPECT_EQ(pairBuild->callCount, 1u);
   EXPECT_NEAR(energy1, energy0, 1e-12);
   EXPECT_LT(relativeError(gradient1, gradient0), 1e-12);
   EXPECT_LT(relativeError(sparseToDense(hessian1), sparseToDense(hessian0)), 1e-12);

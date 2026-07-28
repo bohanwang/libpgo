@@ -505,43 +505,143 @@ Tests:
 
 ## 6. Implementation phase 2 — unified runner, C API, Python API, and config
 
-### P2.1 Extract reusable runner functions
+### P2.1 Build one shared simulation-runner layer
 
-Current problem:
+#### Why the current layout must change
 
-- `/Users/jinceyang/Desktop/codebase/merge/libpgo/src/tools/runSim/runSim.cpp` owns sampled-runner program flow.
-- `/Users/jinceyang/Desktop/codebase/merge/libpgo/src/tools/runSim/runIPCSim.cpp` owns IPC-runner program flow.
-- `/Users/jinceyang/Desktop/codebase/merge/libpgo/src/tools/runSim/runIPCSim.cpp` currently rejects every `sim-type` except `dynamic`, so static IPC requires an explicit integration path rather than an executable rename.
-- `/Users/jinceyang/Desktop/codebase/merge/libpgo/src/c/pgo_c.cpp` contains a third, older tet/sample-only simulation implementation.
+- `/Users/jinceyang/Desktop/codebase/merge/libpgo/src/tools/runSim/runSim.cpp`,
+  `/Users/jinceyang/Desktop/codebase/merge/libpgo/src/tools/runSim/runIPCSim.cpp`, and
+  `/Users/jinceyang/Desktop/codebase/merge/libpgo/src/tools/runSim/runShellSim.cpp` are executables that each own CLI parsing, config access, setup, simulation, and output mutation.
+- `/Users/jinceyang/Desktop/codebase/merge/libpgo/src/c/pgo_c.cpp` contains a fourth, older tet + sampled implementation.
+- The executable split is currently by contact/domain, while the 0.0.4 public split is by simulation mode. Adding two more large `main()` functions would multiply implementations instead of unifying them.
+- A reusable library placed under `tools` would create an avoidable CMake ordering problem because `/Users/jinceyang/Desktop/codebase/merge/libpgo/src/CMakeLists.txt` adds `c` before `tools`.
 
-Plan:
+#### Target ownership
 
-- [ ] Create one reusable runner library target; do not link `pgo_c` against either runner executable.
-- [ ] Keep `argparse` and `main()` code outside the reusable library.
-- [ ] Add the `runDynamicSim` and `runStaticSim` executable targets and remove the mixed public CLI contract.
-- [ ] Parse `--resume` only in `runDynamicSim` and pass a typed runner option into the shared implementation; `runStaticSim` must reject the flag.
-- [ ] Make the reusable runner target depend only on the required libpgo core libraries.
-- [ ] Ensure that target is defined before `/Users/jinceyang/Desktop/codebase/merge/libpgo/src/c/CMakeLists.txt` links `pgo_c` and `pgo_c_static`; the current `/Users/jinceyang/Desktop/codebase/merge/libpgo/src/CMakeLists.txt` adds `c` before `tools`, so target ordering must be handled explicitly.
-- [ ] Link `pgo_c`, `pgo_c_static`, `runDynamicSim`, and `runStaticSim` to that same reusable target.
-- [ ] Verify the new target graph has no `pgo_c` ↔ runner dependency cycle.
-- [ ] Extract the sampled program body into a reusable function returning an integer result.
-- [ ] Extract the IPC program body into a reusable function returning an integer result.
-- [ ] Migrate the existing dynamic `runIPCSim` flow into the shared IPC backend; do not leave a second IPC runner implementation.
-- [ ] Add static IPC execution by composing the existing IPC energy/gradient/Hessian, CCD/max-step, constraints, and Newton solver infrastructure without the dynamic time integrator.
-- [ ] Make static IPC support tet, cubic, and shell domains, preserve the 0.0.4 IPC limitation on arbitrary `external-objects`, and retain the explicit supported floor/self-contact configuration.
-- [ ] Add focused static IPC finite-output, convergence, no-NaN, maximum-step, and result-file tests before counting the six static matrix cells as supported.
-- [ ] Extract shell IPC execution into the same reusable runner library rather than leaving a separate shell-only implementation path; do not migrate sampled-shell execution into the public dispatcher.
-- [ ] Add a dispatcher `runSimulationFromConfig(const std::filesystem::path &)` for the frozen C/Python new-run entry point.
-- [ ] Add an internal typed form such as `runSimulationFromConfig(path, RunSimulationOptions{ .mode = Dynamic, .resume = true })` used by both CLIs.
-- [ ] Read enough config in the dispatcher to validate `sim-type`, select tet/cubic/shell, and select sampled/IPC before detailed setup.
-- [ ] Reject a mode mismatch before creating output: `runDynamicSim` requires dynamic config and `runStaticSim` requires static config.
-- [ ] Keep detailed setup inside the existing sampled and IPC setup code.
-- [ ] Make both new executables call the unified dispatcher; do not retain `runSim`, `runIPCSim`, or `runShellSim` as public compatibility entry points for 0.0.4.
-- [ ] Remove the Release-build `std::cin.get()` pauses from the old volume and shell runner flows so the new CLIs are always noninteractive unless a future explicit interactive flag is designed.
+Create a non-installed application-layer library named `simulationRunner` outside the
+CLI directory:
+
+```text
+src/simulationRunner/
+  CMakeLists.txt
+  simulationRunner.h/.cpp          # typed entry point and top-level pipeline
+  simulationConfig.h/.cpp          # parse once, normalize, validate, classify
+  sampledSimulationBackend.h/.cpp  # sampled setup and execution
+  ipcSimulationBackend.h/.cpp      # IPC volume/shell setup and execution
+  simulationOutput.h/.cpp          # new-run/resume output transaction
+
+src/tools/runSim/
+  CMakeLists.txt
+  runDynamicSim.cpp                # argparse + result reporting only
+  runStaticSim.cpp                 # argparse + result reporting only
+```
+
+The exact private filenames may be adjusted while implementing, but these ownership
+boundaries are required:
+
+- [ ] `src/tools/runSim` owns only CLI syntax, optional CLI-only logging setup, human-readable result reporting, and process exit codes.
+- [ ] `simulationRunner` owns config loading, typed validation, route selection, setup, execution, output safety, and conversion of internal exceptions to a runner result.
+- [ ] Sampled and IPC backend code owns solver/contact-specific setup and stepping, but does not parse CLI arguments, select another backend, clear output, or implement public API wrappers.
+- [ ] `simulationOutput` implements the filesystem and resume contract in P2.5; backends receive an acquired output session and cannot bypass it with recursive deletion or direct overwrite.
+- [ ] C and Python wrappers own ABI/language-boundary conversion only; they contain no mesh/contact/solver implementation.
+
+#### One typed entry point and result
+
+Use this internal contract:
+
+```cpp
+enum class SimulationMode { Dynamic, Static };
+enum class RunDisposition { NewRun, Resume };
+
+struct RunSimulationOptions
+{
+  std::optional<SimulationMode> expectedMode; // unset for C/Python
+  RunDisposition disposition = RunDisposition::NewRun;
+};
+
+struct RunSimulationResult
+{
+  int code;
+  std::string message;
+};
+
+RunSimulationResult runSimulationFromConfig(
+  const std::filesystem::path &configPath,
+  const RunSimulationOptions &options = {});
+```
+
+This is an internal C++ API, not a new installed public ABI. `RunSimulationResult`
+centralizes an actionable failure message and integer status; callers must not need
+to catch backend exceptions.
+
+- [ ] `runDynamicSim <config>` passes `expectedMode = Dynamic` and `NewRun`.
+- [ ] `runDynamicSim <config> --resume` passes `expectedMode = Dynamic` and `Resume`.
+- [ ] `runStaticSim <config>` passes `expectedMode = Static` and `NewRun`; its argument parser rejects `--resume`.
+- [ ] C and Python call the same function with no `expectedMode` and `NewRun`, so `sim-type` in the config selects static or dynamic while both language APIs remain new-run-only.
+- [ ] Reject a CLI/config mode mismatch before creating or modifying output.
+- [ ] Return `code == 0` only for a completed run; config, setup, solver, and output failures return nonzero with one actionable `message`.
+- [ ] CLI callers print the result message and return its code; the C wrapper logs the message and returns its code; Python preserves its existing integer result contract through the C wrapper.
+
+#### Parse once, then dispatch
+
+The shared path must be visibly linear:
+
+```text
+CLI / C / Python
+        |
+        v
+runSimulationFromConfig
+  -> parse and validate one typed SimulationRequest
+  -> validate expected mode and new-run/resume combination
+  -> select backend from contact model
+  -> prepare the selected domain without output mutation
+  -> acquire the output transaction
+  -> execute dynamic or static mode
+  -> commit output and return RunSimulationResult
+```
+
+The typed request records at least the normalized config path, mode, domain
+(`tet`, `cubic`, or `shell`), contact model (`sampled` or `ipc`), output path, and
+validated common/backend settings. It is the only routing source after parsing.
+
+- [ ] Parse the JSON once; do not reopen it independently in the dispatcher and backend.
+- [ ] Classify mode, domain, and contact before expensive setup or output mutation.
+- [ ] Reject zero/multiple domains, unsupported shell + sampled, unknown contact, and unsupported IPC external objects during typed validation.
+- [ ] Select sampled versus IPC exactly once in the dispatcher.
+- [ ] Within the selected backend, use the typed domain to choose volume or shell setup and the typed mode to choose dynamic or static execution.
+- [ ] Keep the existing detailed FEM, sampled-contact, IPC, and shell setup logic where practical, but make it consume the typed request instead of reaching back into CLI state.
+- [ ] Do not create ten independent functions for the five domain/contact cases in two modes; share preparation and mode execution wherever the underlying implementation is common.
+
+#### Migrate, do not duplicate
+
+- [ ] Extract the sampled flow from `runSim.cpp` into the sampled backend.
+- [ ] Migrate the dynamic IPC flow from `runIPCSim.cpp` into the IPC backend; leave no second IPC implementation.
+- [ ] Migrate shell IPC setup/execution from `runShellSim.cpp` into the same IPC backend; do not add sampled-shell execution.
+- [ ] Add static IPC by composing the existing IPC energy/gradient/Hessian, CCD/maximum-step, constraints, and Newton solver infrastructure without the dynamic time integrator.
+- [ ] Make static IPC support tet, cubic, and shell while preserving the 0.0.4 limitation on arbitrary `external-objects` and the supported self-contact/floor configuration.
+- [ ] Add focused static IPC finite-output, convergence, no-NaN, maximum-step, and result-file tests before counting the five static matrix cells as supported.
 - [ ] Delete the duplicated simulation body from `/Users/jinceyang/Desktop/codebase/merge/libpgo/src/c/pgo_c.cpp`.
-- [ ] Ensure C, Python, and both CLIs execute the same domain/contact implementations.
+- [ ] Remove Release-build `std::cin.get()` pauses so every new entry point is noninteractive.
+- [ ] Remove the `runSim`, `runIPCSim`, and `runShellSim` public targets after their implementations have been migrated; executable-name compatibility is not required for 0.0.4.
 
-This is the only runner-level structural adjustment planned for 0.0.4.
+#### CMake target graph
+
+- [ ] Add `src/simulationRunner` after all required core libraries and before `c`, `python`, and `tools` in `/Users/jinceyang/Desktop/codebase/merge/libpgo/src/CMakeLists.txt`.
+- [ ] Link `simulationRunner` only to the specific core targets it uses; do not add it to `PGO_GLOBAL_LIBRARY_TARGETS` and thereby link it into unrelated tools/tests.
+- [ ] Link `pgo_c`, `pgo_c_static`, `runDynamicSim`, and `runStaticSim` explicitly to `simulationRunner`.
+- [ ] Keep `argparse` linked only to the two executable targets.
+- [ ] Verify the graph is one-way: core libraries → `simulationRunner` → C/Python/CLI; no runner → `pgo_c` edge and no dependency cycle.
+
+#### Completion evidence
+
+- [ ] A routing unit test covers every supported and rejected `(mode, domain, contact, disposition)` combination without running a long simulation.
+- [ ] Mode mismatch, invalid config, and output-preflight tests prove failure occurs before output mutation.
+- [ ] Focused integration tests prove the CLI, C, and Python surfaces reach the same sampled/IPC backend implementations.
+- [ ] Source/CMake inspection confirms there is one config parser path, one dispatcher, one sampled backend, one IPC backend, and no simulation body in a public wrapper or `main()`.
+
+This application-layer extraction is the only runner-level structural adjustment
+planned for 0.0.4; it does not authorize a core solver, contact, mesh, or package
+redesign.
 
 ### P2.2 C API alignment
 

@@ -16,7 +16,6 @@ set(CONTACT_HEADERS
   ipc/geometry/ipcHessianProjection.h
   ipc/geometry/generated/CIPC_autogen.h
   ipc/geometry/generated/CIPC_autogen_ll.h
-  ipc/profiling/surfaceIPCProfiling.h
   ipc/topology/surfaceIPCTopology.h
   pointPenetrationEnergy.h
   pointTrianglePairCouplingEnergyWithCollision.h
@@ -48,7 +47,7 @@ set(CONTACT_SOURCES
   triangleMeshSelfContactHandler.cpp
 )
 
-set(CONTACT_DEPS mesh nonlinearOptimization profiling CCD::SafeCCD CCD::Exact)
+set(CONTACT_DEPS mesh nonlinearOptimization CCD::SafeCCD CCD::Exact)
 
 foreach(tgt ${CONTACT_DEPS})
   if(NOT TARGET ${tgt})

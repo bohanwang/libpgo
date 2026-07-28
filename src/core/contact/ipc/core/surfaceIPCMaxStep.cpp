@@ -6,8 +6,6 @@ copyright to Bohan Wang
 
 #include "../broadPhase/spatialHashGrid.h"
 #include "../geometry/ipcCCD.h"
-#include "scopedProfileSection.h"
-#include "ipc/profiling/surfaceIPCProfiling.h"
 
 #include <tbb/blocked_range.h>
 #include <tbb/enumerable_thread_specific.h>
@@ -48,8 +46,6 @@ double SurfaceIPCMaxStep::compute(
   double cellSize = 0.0;
 
   {
-    Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPairBuildSwept);
-
     // Build swept-volume AABBs (parallel)
     tbb::parallel_for(tbb::blocked_range<int>(0, topology.numVerts),
       [&](const tbb::blocked_range<int> &r) {
@@ -103,8 +99,6 @@ double SurfaceIPCMaxStep::compute(
 
   // --- PT CCD: insert triangles (serial), query with vertices (parallel reduce) ---
   {
-    Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kMaxStepPT);
-
     SpatialHashGrid triHash(nTri);
     triHash.setCellSize(cellSize);
     for (int fi = 0; fi < nTri; ++fi)
@@ -229,8 +223,6 @@ double SurfaceIPCMaxStep::compute(
 
   // --- EE CCD: insert edges (serial), query with edges (parallel reduce) ---
   {
-    Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kMaxStepEE);
-
     SpatialHashGrid edgeHash(nEdge);
     edgeHash.setCellSize(cellSize);
     for (int ei = 0; ei < nEdge; ++ei)

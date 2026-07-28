@@ -491,33 +491,6 @@ TEST(RunIPCSimCliGTest, LogFlagWritesCliOutputIntoOutputDirectory)
   EXPECT_EQ(contents.find("finalAlpha"), std::string::npos);
   EXPECT_EQ(contents.find("lastMaterialAlpha"), std::string::npos);
   EXPECT_EQ(contents.find("lastContactAlpha"), std::string::npos);
-  EXPECT_EQ(contents.find("runIPCSim profiling summary:"), std::string::npos);
-}
-
-TEST(RunIPCSimCliGTest, ProfilingConfigWritesSummaryToOutputLog)
-{
-  const fs::path binary = runIPCSimBinaryPath();
-  ASSERT_FALSE(binary.empty());
-  ASSERT_TRUE(fs::exists(binary));
-
-  ScopedTempDir tempDir;
-  const fs::path configPath = tempDir.path() / "shell-ipc-profile.json";
-  const fs::path logPath = tempDir.path() / "shell-output" / "runIPCSim.log";
-
-  writeTextFile(configPath, addBoolConfigField(makeShellIPCConfig(tempDir.path(), 1), "profiling", true));
-
-  std::ostringstream command;
-  command << shellExecutable(binary)
-          << " --log "
-          << quotePath(configPath);
-
-  ASSERT_EQ(runCommand(command.str()), 0);
-  ASSERT_TRUE(fs::exists(logPath));
-
-  const std::string contents = readTextFile(logPath);
-  EXPECT_NE(contents.find("runIPCSim profiling summary:"), std::string::npos);
-  EXPECT_NE(contents.find("profile name=contact.surface.pair_build.static"), std::string::npos);
-  EXPECT_NE(contents.find("callCount="), std::string::npos);
 }
 
 TEST(RunIPCSimCliGTest, DefaultRunClearsOutputAndDoesNotRestartFromDeformState)

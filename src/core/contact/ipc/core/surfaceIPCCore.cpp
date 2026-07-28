@@ -6,11 +6,9 @@ copyright to Bohan Wang
 // =============================================================================
 
 #include "ipc/core/surfaceIPCCore.h"
-#include "scopedProfileSection.h"
 #include "ipc/broadPhase/surfaceIPCSelfBroadPhase.h"
 #include "ipc/core/surfaceIPCBarrierAssembler.h"
 #include "ipc/core/surfaceIPCMaxStep.h"
-#include "ipc/profiling/surfaceIPCProfiling.h"
 
 #include "pgoLogging.h"
 
@@ -130,7 +128,6 @@ bool SurfaceIPCCore::isPreparedFor(EigenSupport::ConstRefVecXd x_surf) const
 
 void SurfaceIPCCore::prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_surf) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPrepareActivePairs);
   preparedPositions_ = x_surf;
   findCollisionPairs(preparedPositions_);
   hasPreparedState_ = true;
@@ -175,14 +172,12 @@ double SurfaceIPCCore::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSu
 // =========================================================================
 double SurfaceIPCCore::computeEnergy(EigenSupport::ConstRefVecXd pos) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kEnergy);
   prepareForSurfacePositions(pos);
   return computeEnergyWithPreparedPairs();
 }
 
 double SurfaceIPCCore::computeEnergyWithPreparedPairs() const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedEnergy);
   requirePreparedState();
   return SurfaceIPCBarrierAssembler().computeEnergy(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee);
 }
@@ -192,14 +187,12 @@ double SurfaceIPCCore::computeEnergyWithPreparedPairs() const
 // =========================================================================
 void SurfaceIPCCore::computeGradient(EigenSupport::ConstRefVecXd pos, EigenSupport::RefVecXd grad) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kGradient);
   prepareForSurfacePositions(pos);
   computeGradientWithPreparedPairs(grad);
 }
 
 void SurfaceIPCCore::computeGradientWithPreparedPairs(EigenSupport::RefVecXd grad) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedGradient);
   requirePreparedState();
   SurfaceIPCBarrierAssembler().computeGradient(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, grad);
 }
@@ -209,14 +202,12 @@ void SurfaceIPCCore::computeGradientWithPreparedPairs(EigenSupport::RefVecXd gra
 // =========================================================================
 void SurfaceIPCCore::computeHessian(EigenSupport::ConstRefVecXd pos, SpMatD &hess) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kHessian);
   prepareForSurfacePositions(pos);
   computeHessianWithPreparedPairs(hess);
 }
 
 void SurfaceIPCCore::computeHessianWithPreparedPairs(SpMatD &hess) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kPreparedHessian);
   requirePreparedState();
   SurfaceIPCBarrierAssembler().computeHessian(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, hess);
 }
@@ -227,7 +218,6 @@ void SurfaceIPCCore::computeHessianWithPreparedPairs(SpMatD &hess) const
 void SurfaceIPCCore::computeAll(EigenSupport::ConstRefVecXd x,
   double &energy, VXd &grad, SpMatD &hess) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kCombined);
   prepareForSurfacePositions(x);
   computeAllWithPreparedPairs(energy, grad, hess);
 }
