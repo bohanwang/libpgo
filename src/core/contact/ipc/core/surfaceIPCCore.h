@@ -39,6 +39,9 @@ public:
     double kappa = 0.1;
     double eps_ee = 0.0;
     double slackness = 1.0;
+    // Newton solves use a blockwise PSD approximation by default. Disable
+    // this only when the unprojected, energy-consistent barrier Hessian is required.
+    bool projectHessianToPSD = true;
   };
 
   SurfaceIPCCore() = default;
@@ -73,6 +76,8 @@ public:
 private:
   void findCollisionPairs(const VXd &positions) const;
   void requirePreparedState() const;
+  void validateSurfaceState(EigenSupport::ConstRefVecXd x_surf, const char *argumentName) const;
+  void validateSurfaceGradient(EigenSupport::RefVecXd g_surf) const;
 
   static V3d vtx(const VXd &x, int i)
   {
@@ -83,6 +88,8 @@ private:
   double kappa = 0.1;
   double eps_ee = 0.0;
   double slackness = 1.0;
+  bool projectHessianToPSD = true;
+  bool hasMesh_ = false;
   SurfaceIPCTopology topology_;
   mutable std::vector<PTPair> ptPairs_;
   mutable std::vector<EEPair> eePairs_;

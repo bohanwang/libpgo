@@ -4,7 +4,7 @@ copyright to Bohan Wang
 
 #include "mappedSurfacePotentialEnergy.h"
 
-
+#include <cmath>
 #include <numeric>
 #include <stdexcept>
 
@@ -24,10 +24,16 @@ MappedSurfacePotentialEnergy::MappedSurfacePotentialEnergy(
     throw std::invalid_argument("surfaceRestVertices must be an N x 3 matrix.");
   if (surfaceRestVertices.rows() <= 0)
     throw std::invalid_argument("surfaceRestVertices must contain at least one vertex.");
+  if (!surfaceRestVertices.allFinite())
+    throw std::invalid_argument("surfaceRestVertices must be finite.");
   if (surfaceFromSimulationDispMap_.rows() != surfaceRestVertices.rows() * 3)
     throw std::invalid_argument("surfaceFromSimulationDispMap row count must equal 3 * numSurfaceVertices.");
   if (surfaceFromSimulationDispMap_.cols() <= 0)
     throw std::invalid_argument("surfaceFromSimulationDispMap must contain at least one simulation DOF.");
+  for (Eigen::Index i = 0; i < surfaceFromSimulationDispMap_.nonZeros(); ++i) {
+    if (!std::isfinite(surfaceFromSimulationDispMap_.valuePtr()[i]))
+      throw std::invalid_argument("surfaceFromSimulationDispMap must contain only finite coefficients.");
+  }
 
   surfaceRestPositions_.resize(surfaceRestVertices.rows() * 3);
   for (int vi = 0; vi < surfaceRestVertices.rows(); ++vi)

@@ -159,6 +159,16 @@ TEST(EmbeddedSurfaceFloorPotentialEnergyGTest, NonFiniteParametersThrow)
   missingKappa.floorHeight = 0.0;
   missingKappa.floorKappa = std::numeric_limits<double>::quiet_NaN();
   EXPECT_THROW(EmbeddedSurfaceFloorPotentialEnergy(V, W, missingKappa), std::invalid_argument);
+
+  FloorPenaltyParameters infiniteHeight;
+  infiniteHeight.floorHeight = std::numeric_limits<double>::infinity();
+  infiniteHeight.floorKappa = 1.0;
+  EXPECT_THROW(EmbeddedSurfaceFloorPotentialEnergy(V, W, infiniteHeight), std::invalid_argument);
+
+  FloorPenaltyParameters infiniteKappa;
+  infiniteKappa.floorHeight = 0.0;
+  infiniteKappa.floorKappa = -std::numeric_limits<double>::infinity();
+  EXPECT_THROW(EmbeddedSurfaceFloorPotentialEnergy(V, W, infiniteKappa), std::invalid_argument);
 }
 
 TEST(EmbeddedSurfaceFloorPotentialEnergyGTest, InvalidAxisThrows)

@@ -4,8 +4,6 @@ copyright to Bohan Wang
 
 #include "embeddedSurfaceIPCPotentialEnergy.h"
 
-#include <stdexcept>
-
 namespace pgo
 {
 namespace Contact
@@ -21,14 +19,6 @@ EmbeddedSurfaceIPCPotentialEnergy::EmbeddedSurfaceIPCPotentialEnergy(
   MappedSurfacePotentialEnergy(surfaceRestVertices, surfaceFromSimulationDispMap),
   surfaceIPCCore_(ipcParams)
 {
-  if (surfaceTriangles.cols() != 3)
-    throw std::invalid_argument("surfaceTriangles must be an M x 3 triangle index matrix.");
-  if (surfaceTriangles.size() > 0) {
-    if (surfaceTriangles.minCoeff() < 0 || surfaceTriangles.maxCoeff() >= surfaceRestVertices.rows()) {
-      throw std::invalid_argument("surfaceTriangles contains an out-of-range vertex index.");
-    }
-  }
-
   surfaceIPCCore_.setMesh(surfaceRestVertices, surfaceTriangles);
 }
 

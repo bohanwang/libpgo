@@ -11,7 +11,9 @@ copyright to Bohan Wang
 #include "ipc/core/surfaceIPCMaxStep.h"
 
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
+#include <string>
 
 namespace pgo {
 namespace Contact {
@@ -21,6 +23,8 @@ SurfaceIPCCore::SurfaceIPCCore(const SurfaceIPCCore &other):
   kappa(other.kappa),
   eps_ee(other.eps_ee),
   slackness(other.slackness),
+  projectHessianToPSD(other.projectHessianToPSD),
+  hasMesh_(other.hasMesh_),
   topology_(other.topology_),
   ptPairs_(other.ptPairs_),
   eePairs_(other.eePairs_),
@@ -38,6 +42,8 @@ SurfaceIPCCore &SurfaceIPCCore::operator=(const SurfaceIPCCore &other)
   kappa = other.kappa;
   eps_ee = other.eps_ee;
   slackness = other.slackness;
+  projectHessianToPSD = other.projectHessianToPSD;
+  hasMesh_ = other.hasMesh_;
   topology_ = other.topology_;
   ptPairs_ = other.ptPairs_;
   eePairs_ = other.eePairs_;
@@ -48,10 +54,20 @@ SurfaceIPCCore &SurfaceIPCCore::operator=(const SurfaceIPCCore &other)
 
 void SurfaceIPCCore::setParameters(const Parameters &params)
 {
+  if (!std::isfinite(params.dhat) || params.dhat <= 0.0)
+    throw std::invalid_argument("SurfaceIPCCore::Parameters::dhat must be finite and positive.");
+  if (!std::isfinite(params.kappa) || params.kappa <= 0.0)
+    throw std::invalid_argument("SurfaceIPCCore::Parameters::kappa must be finite and positive.");
+  if (!std::isfinite(params.eps_ee) || params.eps_ee < 0.0)
+    throw std::invalid_argument("SurfaceIPCCore::Parameters::eps_ee must be finite and non-negative.");
+  if (!std::isfinite(params.slackness) || params.slackness <= 0.0 || params.slackness > 1.0)
+    throw std::invalid_argument("SurfaceIPCCore::Parameters::slackness must be finite and in (0, 1].");
+
   dhat = params.dhat;
   kappa = params.kappa;
   eps_ee = params.eps_ee;
   slackness = params.slackness;
+  projectHessianToPSD = params.projectHessianToPSD;
   invalidatePreparedState();
 }
 
@@ -62,6 +78,7 @@ SurfaceIPCCore::Parameters SurfaceIPCCore::getParameters() const
   params.kappa = kappa;
   params.eps_ee = eps_ee;
   params.slackness = slackness;
+  params.projectHessianToPSD = projectHessianToPSD;
   return params;
 }
 
@@ -71,7 +88,21 @@ SurfaceIPCCore::Parameters SurfaceIPCCore::getParameters() const
 
 void SurfaceIPCCore::setMesh(const MXd &V, const MXi &F)
 {
+  if (V.cols() != 3 || V.rows() <= 0)
+    throw std::invalid_argument("SurfaceIPCCore mesh vertices must be a non-empty N x 3 matrix.");
+  if (!V.allFinite())
+    throw std::invalid_argument("SurfaceIPCCore mesh vertices must be finite.");
+  if (F.cols() != 3)
+    throw std::invalid_argument("SurfaceIPCCore mesh triangles must be an M x 3 index matrix.");
+  if (F.size() > 0 && (F.minCoeff() < 0 || F.maxCoeff() >= V.rows()))
+    throw std::invalid_argument("SurfaceIPCCore mesh triangles contain an out-of-range vertex index.");
+  for (Eigen::Index fi = 0; fi < F.rows(); ++fi) {
+    if (F(fi, 0) == F(fi, 1) || F(fi, 1) == F(fi, 2) || F(fi, 2) == F(fi, 0))
+      throw std::invalid_argument("SurfaceIPCCore mesh triangles must reference three distinct vertices.");
+  }
+
   topology_.setMesh(V, F);
+  hasMesh_ = true;
   invalidatePreparedState();
 }
 
@@ -105,9 +136,26 @@ bool SurfaceIPCCore::isPreparedFor(EigenSupport::ConstRefVecXd x_surf) const
 
 void SurfaceIPCCore::prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_surf) const
 {
+  validateSurfaceState(x_surf, "surface positions");
   preparedPositions_ = x_surf;
   findCollisionPairs(preparedPositions_);
   hasPreparedState_ = true;
+}
+
+void SurfaceIPCCore::validateSurfaceState(EigenSupport::ConstRefVecXd x_surf, const char *argumentName) const
+{
+  if (!hasMesh_)
+    throw std::logic_error("SurfaceIPCCore requires setMesh() before evaluation.");
+  if (x_surf.size() != topology_.numSurfaceDOFs())
+    throw std::invalid_argument(std::string("SurfaceIPCCore ") + argumentName + " size must equal 3 * numSurfaceVertices.");
+  if (!x_surf.allFinite())
+    throw std::invalid_argument(std::string("SurfaceIPCCore ") + argumentName + " must be finite.");
+}
+
+void SurfaceIPCCore::validateSurfaceGradient(EigenSupport::RefVecXd g_surf) const
+{
+  if (g_surf.size() != topology_.numSurfaceDOFs())
+    throw std::invalid_argument("SurfaceIPCCore gradient size must equal 3 * numSurfaceVertices.");
 }
 
 void SurfaceIPCCore::requirePreparedState() const
@@ -121,6 +169,8 @@ void SurfaceIPCCore::requirePreparedState() const
 // =========================================================================
 double SurfaceIPCCore::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
 {
+  validateSurfaceState(x, "surface positions");
+  validateSurfaceState(dx, "surface displacement");
   const double alpha = SurfaceIPCMaxStep().compute(topology_, x, dx, dhat, slackness);
   return std::max(alpha, 1e-12);
 }
@@ -145,6 +195,7 @@ double SurfaceIPCCore::computeEnergyWithPreparedPairs() const
 // =========================================================================
 void SurfaceIPCCore::computeGradient(EigenSupport::ConstRefVecXd pos, EigenSupport::RefVecXd grad) const
 {
+  validateSurfaceGradient(grad);
   prepareForSurfacePositions(pos);
   computeGradientWithPreparedPairs(grad);
 }
@@ -152,6 +203,7 @@ void SurfaceIPCCore::computeGradient(EigenSupport::ConstRefVecXd pos, EigenSuppo
 void SurfaceIPCCore::computeGradientWithPreparedPairs(EigenSupport::RefVecXd grad) const
 {
   requirePreparedState();
+  validateSurfaceGradient(grad);
   SurfaceIPCBarrierAssembler().computeGradient(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, grad);
 }
 
@@ -167,7 +219,8 @@ void SurfaceIPCCore::computeHessian(EigenSupport::ConstRefVecXd pos, SpMatD &hes
 void SurfaceIPCCore::computeHessianWithPreparedPairs(SpMatD &hess) const
 {
   requirePreparedState();
-  SurfaceIPCBarrierAssembler().computeHessian(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, hess);
+  SurfaceIPCBarrierAssembler().computeHessian(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts,
+    dhat, kappa, eps_ee, projectHessianToPSD, hess);
 }
 
 // =========================================================================
@@ -183,7 +236,8 @@ void SurfaceIPCCore::computeAll(EigenSupport::ConstRefVecXd x,
 void SurfaceIPCCore::computeAllWithPreparedPairs(double &energy, VXd &grad, SpMatD &hess) const
 {
   requirePreparedState();
-  SurfaceIPCBarrierAssembler().computeAll(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, energy, grad, hess);
+  SurfaceIPCBarrierAssembler().computeAll(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts,
+    dhat, kappa, eps_ee, projectHessianToPSD, energy, grad, hess);
 }
 
 }  // namespace CIPC
