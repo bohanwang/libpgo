@@ -138,11 +138,11 @@ TBB resolve from `libpgo-dev`, except that the current cache still resolves
 `fmt_DIR` from `/opt/homebrew/lib/cmake/fmt`. This is acceptable only as a
 recorded baseline defect; Phase 4 release configuration must reject it.
 
-The build cache also contains the stale, unrecognized entry
+The `build/p0-baseline-conda-tbb` cache also contains the stale, unrecognized entry
 `PGO_BUILD_P0_STATIC_IPC_SPIKE=ON` from the temporary investigation. There is no
-corresponding source option or retained spike target. A new implementation
-session should reconfigure a new build directory instead of treating this cache
-as a clean Phase 1 configuration.
+corresponding source option or retained spike target. Phase 1 may continue in the
+existing preset-owned `build/base_no_mkl` tree; do not use the Phase 0 evidence
+tree as the Phase 1 build.
 
 ### Network setup used for FetchContent
 
@@ -588,9 +588,12 @@ performed.
 
 1. Read this report, the implementation plan, and the checklist before editing.
 2. Keep implementation on `release/0.0.4`.
-3. Preserve the current dirty worktree and create a fresh Phase 1 build directory
-   so the stale spike cache and Homebrew fmt discovery do not become implicit
-   evidence.
+3. Preserve the current dirty worktree and use the existing
+   `build/base_no_mkl` tree through the `base_no_mkl` configure preset and
+   `base_no_mkl_release` build preset. Its current cache has
+   `PGO_CHECK_CONDA=OFF`, so the first Phase 1 configure must explicitly set
+   `PGO_CHECK_CONDA=ON`, the `libpgo-dev` prefix, and the macOS no-OpenMP
+   baseline options.
 4. Implement P1.1 through P1.10 in the plan's order unless a focused dependency
    requires a smaller reorder.
 5. For P1.3/P1.4, add regression tests before declaring static IPC unblocked:
@@ -600,13 +603,22 @@ performed.
    result is the gate for the Phase 2 five-case static runner/API matrix.
 7. Keep the macOS wheel spike classified as failed audit evidence. Packaging
    fixes belong to Phase 4 and must include Conda-only fmt/GMP/MPFR discovery.
-8. Continue to run:
+8. Configure, build, and test with:
 
    ```bash
    conda run --no-capture-output -n libpgo-dev \
-     ctest --test-dir <phase1-build> --output-on-failure -j4
+     cmake --preset base_no_mkl \
+     -DPGO_CHECK_CONDA=ON \
+     -DCMAKE_PREFIX_PATH=/Users/jinceyang/miniconda3/envs/libpgo-dev \
+     -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE
 
-   PYTHONPATH=<phase1-build>/src/python/pypgo \
+   conda run --no-capture-output -n libpgo-dev \
+     cmake --build --preset base_no_mkl_release
+
+   conda run --no-capture-output -n libpgo-dev \
+     ctest --test-dir build/base_no_mkl --output-on-failure -j4
+
+   PYTHONPATH=/Users/jinceyang/Desktop/codebase/merge/libpgo/build/base_no_mkl/src/python/pypgo \
      conda run --no-capture-output -n libpgo-dev \
      python -m pytest -q tests/pypgo
    ```

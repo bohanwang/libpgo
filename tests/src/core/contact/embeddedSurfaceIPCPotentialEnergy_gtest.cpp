@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 
-#include "CIPC.h"
 #include "embeddedSurfaceIPCPotentialEnergy.h"
 #include "scopedProfileSection.h"
 #include "ipc/core/surfaceIPCCore.h"
@@ -15,7 +14,6 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
-using pgo::Contact::CIPC::CIPCPotentialEnergy;
 using pgo::Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy;
 using pgo::Contact::CIPC::SurfaceIPCCore;
 using pgo::Contact::CIPCTest::flattenPositions;
@@ -54,7 +52,7 @@ ES::SpMatD makeIdentityEmbedding(int n3)
 }
 }  // namespace
 
-TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, IdentityEmbeddingMatchesDisplacementWrapper)
+TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, IdentityEmbeddingMatchesSurfaceIPCCore)
 {
   const auto [V, F] = makeTwoTriangleMesh();
   const ES::VXd rest = flattenPositions(V);
@@ -68,26 +66,26 @@ TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, IdentityEmbeddingMatchesDisplacemen
   du[17] = -0.006;
 
   const auto params = makeParams();
-  CIPCPotentialEnergy wrapper(params.dhat, params.kappa, true, params.eps_ee);
-  wrapper.slackness = params.slackness;
-  wrapper.setMesh(V, F);
-
   EmbeddedSurfaceIPCPotentialEnergy adapter(V, F, makeIdentityEmbedding(rest.size()), params);
 
-  ES::VXd wrapperGradient(rest.size());
-  wrapper.gradient(u, wrapperGradient);
-  ES::SpMatD wrapperHessian;
-  wrapper.hessianDirect(u, wrapperHessian);
+  SurfaceIPCCore core(params);
+  core.setMesh(V, F);
+  const ES::VXd surfacePositions = rest + u;
+
+  ES::VXd coreGradient(rest.size());
+  core.computeGradient(surfacePositions, coreGradient);
+  ES::SpMatD coreHessian;
+  core.computeHessian(surfacePositions, coreHessian);
 
   ES::VXd adapterGradient(adapter.getNumDOFs());
   adapter.gradient(u, adapterGradient);
   ES::SpMatD adapterHessian;
   adapter.hessianDirect(u, adapterHessian);
 
-  EXPECT_NEAR(adapter.func(u), wrapper.func(u), 1e-10);
-  EXPECT_LT(relativeError(adapterGradient, wrapperGradient), 1e-9);
-  EXPECT_LT(relativeError(sparseToDense(adapterHessian), sparseToDense(wrapperHessian)), 1e-8);
-  EXPECT_NEAR(adapter.computeMaxStepSize(u, du), wrapper.computeMaxStepSize(u, du), 1e-10);
+  EXPECT_NEAR(adapter.func(u), core.computeEnergy(surfacePositions), 1e-10);
+  EXPECT_LT(relativeError(adapterGradient, coreGradient), 1e-9);
+  EXPECT_LT(relativeError(sparseToDense(adapterHessian), sparseToDense(coreHessian)), 1e-8);
+  EXPECT_NEAR(adapter.computeMaxStepSize(u, du), core.computeMaxStepSize(surfacePositions, du), 1e-10);
 }
 
 TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, SparseEmbeddingPullsBackGradientAndHessian)

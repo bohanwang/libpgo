@@ -2,7 +2,6 @@
 #include "implicitBackwardEulerTimeIntegrator.h"
 #include "deformationModelEnergy.h"
 #include "embeddedSurfaceIPCPotentialEnergy.h"
-#include "CIPC.h"
 
 #include <tbb/parallel_for.h>
 
@@ -184,8 +183,7 @@ double ImplicitBackwardEulerEnergy::computeMaxStepSize(ES::ConstRefVecXd x, ES::
       if (s < materialAlpha)
         materialAlpha = s;
     }
-    else if (std::dynamic_pointer_cast<const Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(model) ||
-      std::dynamic_pointer_cast<const Contact::CIPC::CIPCPotentialEnergy>(model)) {
+    else if (std::dynamic_pointer_cast<const Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(model)) {
       if (s < contactAlpha)
         contactAlpha = s;
     }

@@ -19,7 +19,7 @@
 #include "NewtonSolver.h"
 #include "createTriMesh.h"
 #include "libiglInterface.h"
-#include "CIPC.h"
+#include "embeddedSurfaceIPCPotentialEnergy.h"
 #include "runSimCliLogging.h"
 #include "triangleMeshExternalContactHandler.h"
 #include "pointPenetrationEnergy.h"
@@ -235,12 +235,18 @@ int main(int argc, char *argv[])
   }
 
   if (simType == "dynamic") {
-    std::shared_ptr<Contact::CIPC::CIPCPotentialEnergy> collisionHandler =
-      std::make_shared<Contact::CIPC::CIPCPotentialEnergy>(surfaceBox.sides().norm() * 1e-3, E * h, true);
     ES::MXd V;
     ES::MXi F;
     Mesh::triMeshGeoToMatrices(surfaceMesh, V, F);
-    collisionHandler->setMesh(V, F);
+
+    Contact::CIPC::SurfaceIPCCore::Parameters ipcParams;
+    ipcParams.dhat = surfaceBox.sides().norm() * 1e-3;
+    ipcParams.kappa = E * h;
+
+    ES::SpMatD surfaceFromSimulationDispMap(surfn3, n3);
+    surfaceFromSimulationDispMap.setIdentity();
+    std::shared_ptr<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy> collisionHandler =
+      std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(V, F, surfaceFromSimulationDispMap, ipcParams);
 
     // initialize contact
     std::vector<Mesh::TriMeshGeo> kinematicObjects;
