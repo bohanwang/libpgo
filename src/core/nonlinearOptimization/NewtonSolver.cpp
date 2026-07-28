@@ -266,10 +266,6 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     deltaxSmall.noalias() = solver->solve(rhs);
 #endif
 
-    if (energy->isHessianTopologyFixed()) {
-      solver.reset();  // free symbolic factorization memory since we won't reuse it anymore
-    }
-
     if (verbose >= 3 && iter % printGap == 0)
       std::cout << (A11 * deltaxSmall - rhs).norm() << ' ' << rhs.norm() << std::endl;
 

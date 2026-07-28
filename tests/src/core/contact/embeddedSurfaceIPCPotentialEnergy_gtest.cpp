@@ -2,8 +2,12 @@
 
 #include "embeddedSurfaceIPCPotentialEnergy.h"
 #include "ipc/core/surfaceIPCCore.h"
+#include "potentialEnergies.h"
 #include "testCIPCHelpers.h"
 
+#include <cmath>
+#include <memory>
+#include <numeric>
 #include <stdexcept>
 #include <vector>
 
@@ -16,6 +20,80 @@ using pgo::Contact::CIPCTest::flattenPositions;
 using pgo::Contact::CIPCTest::makeTwoTriangleMesh;
 using pgo::Contact::CIPCTest::relativeError;
 using pgo::Contact::CIPCTest::sparseToDense;
+using pgo::NonlinearOptimization::PotentialEnergies;
+
+class FixedDiagonalEnergy final : public pgo::NonlinearOptimization::PotentialEnergy
+{
+public:
+  FixedDiagonalEnergy(int numDOFs, double diagonal):
+    numDOFs_(numDOFs), diagonal_(diagonal), dofs_(numDOFs)
+  {
+    std::iota(dofs_.begin(), dofs_.end(), 0);
+  }
+
+  double func(ES::ConstRefVecXd) const override { return 0.0; }
+  void gradient(ES::ConstRefVecXd, ES::RefVecXd gradient) const override { gradient.setZero(); }
+  void hessian(ES::ConstRefVecXd, ES::SpMatD &hessian) const override
+  {
+    for (int i = 0; i < numDOFs_; ++i)
+      hessian.coeffRef(i, i) = diagonal_;
+  }
+  void createHessian(ES::SpMatD &hessian) const override
+  {
+    hessian.resize(numDOFs_, numDOFs_);
+    hessian.reserve(numDOFs_);
+    for (int i = 0; i < numDOFs_; ++i)
+      hessian.insert(i, i) = 0.0;
+    hessian.makeCompressed();
+  }
+  void getDOFs(std::vector<int> &dofs) const override { dofs = dofs_; }
+  int getNumDOFs() const override { return numDOFs_; }
+  double computeMaxStepSize(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return 1.0; }
+
+private:
+  int numDOFs_;
+  double diagonal_;
+  std::vector<int> dofs_;
+};
+
+class DynamicDiagonalEnergy final : public pgo::NonlinearOptimization::PotentialEnergy
+{
+public:
+  explicit DynamicDiagonalEnergy(int numDOFs):
+    numDOFs_(numDOFs), dofs_(numDOFs)
+  {
+    std::iota(dofs_.begin(), dofs_.end(), 0);
+  }
+
+  double func(ES::ConstRefVecXd) const override { return 0.0; }
+  void gradient(ES::ConstRefVecXd, ES::RefVecXd gradient) const override { gradient.setZero(); }
+  void hessian(ES::ConstRefVecXd, ES::SpMatD &) const override
+  {
+    throw std::runtime_error("DynamicDiagonalEnergy::hessian() must not be called.");
+  }
+  void createHessian(ES::SpMatD &) const override
+  {
+    throw std::runtime_error("DynamicDiagonalEnergy::createHessian() must not be called.");
+  }
+  void hessianDirect(ES::ConstRefVecXd x, ES::SpMatD &hessian) const override
+  {
+    ++hessianDirectCalls_;
+    hessian.resize(numDOFs_, numDOFs_);
+    hessian.insert(x[0] < 0.0 ? 0 : numDOFs_ - 1, x[0] < 0.0 ? 0 : numDOFs_ - 1) = 7.0;
+    hessian.makeCompressed();
+  }
+  void getDOFs(std::vector<int> &dofs) const override { dofs = dofs_; }
+  int getNumDOFs() const override { return numDOFs_; }
+  int isHessianTopologyFixed() const override { return 0; }
+  double computeMaxStepSize(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return 1.0; }
+
+  int hessianDirectCalls() const { return hessianDirectCalls_; }
+
+private:
+  int numDOFs_;
+  std::vector<int> dofs_;
+  mutable int hessianDirectCalls_ = 0;
+};
 SurfaceIPCCore::Parameters makeParams()
 {
   SurfaceIPCCore::Parameters params;
@@ -157,6 +235,78 @@ TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, ReusesPreparedPairsAcrossEnergyGrad
   EXPECT_NEAR(energy1, energy0, 1e-12);
   EXPECT_LT(relativeError(gradient1, gradient0), 1e-12);
   EXPECT_LT(relativeError(sparseToDense(hessian1), sparseToDense(hessian0)), 1e-12);
+}
+
+TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, DynamicHessianCreateRemainsInvalidButAggregateUsesDirectPath)
+{
+  const auto [V, F] = makeTwoTriangleMesh();
+  const ES::VXd rest = flattenPositions(V);
+  ES::VXd u = ES::VXd::Zero(rest.size());
+  for (int vi = 3; vi < 6; ++vi)
+    u[3 * vi + 2] = 0.01;
+
+  auto adapter = std::make_shared<EmbeddedSurfaceIPCPotentialEnergy>(V, F, makeIdentityEmbedding(rest.size()), makeParams());
+  ES::SpMatD unusedPattern;
+  EXPECT_THROW(adapter->createHessian(unusedPattern), std::runtime_error);
+
+  PotentialEnergies aggregate(adapter->getNumDOFs());
+  aggregate.addPotentialEnergy(adapter);
+  EXPECT_NO_THROW(aggregate.init());
+
+  ES::SpMatD aggregateHessian;
+  EXPECT_NO_THROW(aggregate.hessianDirect(u, aggregateHessian));
+
+  ES::SpMatD adapterHessian;
+  adapter->hessianDirect(u, adapterHessian);
+  EXPECT_LT(relativeError(sparseToDense(aggregateHessian), sparseToDense(adapterHessian)), 1e-12);
+}
+
+TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, AggregateAddsFixedAndDynamicHessiansOnce)
+{
+  auto fixed = std::make_shared<FixedDiagonalEnergy>(2, 4.0);
+  auto dynamic = std::make_shared<DynamicDiagonalEnergy>(2);
+
+  PotentialEnergies aggregate(2);
+  aggregate.addPotentialEnergy(fixed, 2.0);
+  aggregate.addPotentialEnergy(dynamic, 3.0);
+  EXPECT_NO_THROW(aggregate.init());
+
+  ES::VXd x(2);
+  x << -1.0, 0.0;
+  ES::SpMatD hessian;
+  aggregate.hessianDirect(x, hessian);
+  EXPECT_EQ(dynamic->hessianDirectCalls(), 1);
+  EXPECT_EQ(hessian.rows(), 2);
+  EXPECT_EQ(hessian.cols(), 2);
+  EXPECT_TRUE(sparseToDense(hessian).isApprox(sparseToDense(hessian).transpose(), 1e-12));
+  EXPECT_TRUE(sparseToDense(hessian).allFinite());
+  EXPECT_NEAR(hessian.coeff(0, 0), 29.0, 1e-12);
+  EXPECT_NEAR(hessian.coeff(1, 1), 8.0, 1e-12);
+
+  x[0] = 1.0;
+  aggregate.hessianDirect(x, hessian);
+  EXPECT_EQ(dynamic->hessianDirectCalls(), 2);
+  EXPECT_NEAR(hessian.coeff(0, 0), 8.0, 1e-12);
+  EXPECT_NEAR(hessian.coeff(1, 1), 29.0, 1e-12);
+}
+
+TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, ZeroCoefficientSkipsDynamicHessianEvaluation)
+{
+  auto fixed = std::make_shared<FixedDiagonalEnergy>(2, 4.0);
+  auto dynamic = std::make_shared<DynamicDiagonalEnergy>(2);
+
+  PotentialEnergies aggregate(2);
+  aggregate.addPotentialEnergy(fixed);
+  aggregate.addPotentialEnergy(dynamic, 0.0);
+  EXPECT_NO_THROW(aggregate.init());
+
+  const ES::VXd x = ES::VXd::Zero(2);
+  ES::SpMatD hessian;
+  aggregate.hessianDirect(x, hessian);
+
+  EXPECT_EQ(dynamic->hessianDirectCalls(), 0);
+  EXPECT_NEAR(hessian.coeff(0, 0), 4.0, 1e-12);
+  EXPECT_NEAR(hessian.coeff(1, 1), 4.0, 1e-12);
 }
 
 TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, InvalidEmbeddingRowsThrow)

@@ -7,6 +7,11 @@ target_compile_definitions(configFileJSON_gtest PRIVATE
 set_property(TARGET configFileJSON_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(configFileJSON_gtest)
 
+add_executable(newtonSolver_gtest newtonSolver_gtest.cpp)
+target_link_libraries(newtonSolver_gtest PRIVATE GTest::gtest_main nonlinearOptimization solidDeformationModel contact)
+set_property(TARGET newtonSolver_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(newtonSolver_gtest)
+
 if (TARGET animationIO)
   add_executable(animationLoader_gtest animationLoader_gtest.cpp)
   target_link_libraries(animationLoader_gtest PRIVATE GTest::gtest_main animationIO)
