@@ -271,6 +271,9 @@ double PotentialEnergies::computeMaxStepSize(EigenSupport::ConstRefVecXd x, Eige
 {
   double maxStepSize = 1.0;
   for (size_t i = 0; i < potentialEnergies.size(); i++) {
+    if (energyCoeffs[i] == 0)
+      continue;
+
     mapx(x, energyDOFs[i], buffer->xlocals[i]);
     mapx(dx, energyDOFs[i], buffer->vecs[i]);
     double s = potentialEnergies[i]->computeMaxStepSize(buffer->xlocals[i], buffer->vecs[i]);

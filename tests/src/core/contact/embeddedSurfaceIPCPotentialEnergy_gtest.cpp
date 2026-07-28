@@ -48,7 +48,6 @@ public:
   }
   void getDOFs(std::vector<int> &dofs) const override { dofs = dofs_; }
   int getNumDOFs() const override { return numDOFs_; }
-  double computeMaxStepSize(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return 1.0; }
 
 private:
   int numDOFs_;
@@ -85,7 +84,6 @@ public:
   void getDOFs(std::vector<int> &dofs) const override { dofs = dofs_; }
   int getNumDOFs() const override { return numDOFs_; }
   int isHessianTopologyFixed() const override { return 0; }
-  double computeMaxStepSize(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return 1.0; }
 
   int hessianDirectCalls() const { return hessianDirectCalls_; }
 
@@ -93,6 +91,26 @@ private:
   int numDOFs_;
   std::vector<int> dofs_;
   mutable int hessianDirectCalls_ = 0;
+};
+
+class StepLimitedEnergy final : public pgo::NonlinearOptimization::PotentialEnergy
+{
+public:
+  explicit StepLimitedEnergy(double maxStep):
+    maxStep_(maxStep)
+  {
+  }
+
+  double func(ES::ConstRefVecXd) const override { return 0.0; }
+  void gradient(ES::ConstRefVecXd, ES::RefVecXd gradient) const override { gradient.setZero(); }
+  void hessian(ES::ConstRefVecXd, ES::SpMatD &) const override {}
+  void createHessian(ES::SpMatD &hessian) const override { hessian = ES::SpMatD(1, 1); }
+  void getDOFs(std::vector<int> &dofs) const override { dofs = { 0 }; }
+  int getNumDOFs() const override { return 1; }
+  double computeMaxStepSize(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return maxStep_; }
+
+private:
+  double maxStep_;
 };
 SurfaceIPCCore::Parameters makeParams()
 {
@@ -307,6 +325,25 @@ TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, ZeroCoefficientSkipsDynamicHessianE
   EXPECT_EQ(dynamic->hessianDirectCalls(), 0);
   EXPECT_NEAR(hessian.coeff(0, 0), 4.0, 1e-12);
   EXPECT_NEAR(hessian.coeff(1, 1), 4.0, 1e-12);
+}
+
+TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, AggregateMaxStepUsesMinimumAndSkipsZeroCoefficient)
+{
+  auto unlimited = std::make_shared<FixedDiagonalEnergy>(1, 1.0);
+  auto limited = std::make_shared<StepLimitedEnergy>(0.25);
+  PotentialEnergies aggregate(1);
+  aggregate.addPotentialEnergy(unlimited);
+  aggregate.addPotentialEnergy(limited);
+  aggregate.init();
+
+  ES::VXd x(1);
+  ES::VXd dx(1);
+  x << 0.0;
+  dx << 1.0;
+  EXPECT_DOUBLE_EQ(aggregate.computeMaxStepSize(x, dx), 0.25);
+
+  aggregate.setEnergyCoeffs(1, 0.0);
+  EXPECT_DOUBLE_EQ(aggregate.computeMaxStepSize(x, dx), 1.0);
 }
 
 TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, InvalidEmbeddingRowsThrow)

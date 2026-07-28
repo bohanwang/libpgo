@@ -1,7 +1,5 @@
 #include "TRBDF2TimeIntegratorHelper.h"
 #include "TRBDF2TimeIntegrator.h"
-#include "deformationModelEnergy.h"
-#include "embeddedSurfaceIPCPotentialEnergy.h"
 
 #include <tbb/parallel_for.h>
 #include <tbb/partitioner.h>
@@ -12,16 +10,6 @@ using namespace pgo;
 using namespace pgo::Simulation;
 
 namespace ES = pgo::EigenSupport;
-
-namespace
-{
-void updateMinAtomic(std::atomic<double> &target, double value)
-{
-  double current = target.load(std::memory_order_relaxed);
-  while (value < current && !target.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
-  }
-}
-}
 
 TRBDF2TimeIntegratorEnergy::TRBDF2TimeIntegratorEnergy(TRBDF2TimeIntegrator *integrator_, const ES::SpMatD &A_, const ES::VXd &b_):
   intg(integrator_), A(A_), b(b_)
@@ -177,52 +165,11 @@ void TRBDF2TimeIntegratorEnergy::hessianDirect(ES::ConstRefVecXd x, ES::SpMatD &
 double TRBDF2TimeIntegratorEnergy::computeMaxStepSize(ES::ConstRefVecXd x, ES::ConstRefVecXd dx) const
 {
   double maxStepSize = 1.0;
-  double materialAlpha = 1.0;
-  double contactAlpha = 1.0;
   for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
     const auto &model = intg->implicitModelsAll[i];
     double s = model->computeMaxStepSize(x, dx);
     if (s < maxStepSize)
       maxStepSize = s;
-
-    if (std::dynamic_pointer_cast<const SolidDeformationModel::DeformationModelEnergy>(model)) {
-      if (s < materialAlpha)
-        materialAlpha = s;
-    }
-    else if (std::dynamic_pointer_cast<const Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(model)) {
-      if (s < contactAlpha)
-        contactAlpha = s;
-    }
   }
-  currentMaterialFeasibleAlpha_.store(materialAlpha, std::memory_order_relaxed);
-  currentContactFeasibleAlpha_.store(contactAlpha, std::memory_order_relaxed);
-  updateMinAtomic(minFeasibleAlphaThisSolve_, maxStepSize);
   return maxStepSize;
-}
-
-void TRBDF2TimeIntegratorEnergy::resetSolveMaxStepStats() const
-{
-  currentMaterialFeasibleAlpha_.store(1.0, std::memory_order_relaxed);
-  currentContactFeasibleAlpha_.store(1.0, std::memory_order_relaxed);
-  minFeasibleAlphaThisSolve_.store(1.0, std::memory_order_relaxed);
-  minLineSearchAlphaThisSolve_.store(1.0, std::memory_order_relaxed);
-  minEffectiveAlphaThisSolve_.store(1.0, std::memory_order_relaxed);
-}
-
-void TRBDF2TimeIntegratorEnergy::recordLineSearchStepDiagnostics(
-  double feasibleAlpha,
-  double lineSearchAlpha,
-  double effectiveAlpha) const
-{
-  updateMinAtomic(minFeasibleAlphaThisSolve_, feasibleAlpha);
-  updateMinAtomic(minLineSearchAlphaThisSolve_, lineSearchAlpha);
-  updateMinAtomic(minEffectiveAlphaThisSolve_, effectiveAlpha);
-}
-
-void TRBDF2TimeIntegratorEnergy::getFeasibleAlphaClampBreakdown(
-  double &materialAlpha,
-  double &contactAlpha) const
-{
-  materialAlpha = currentMaterialFeasibleAlpha_.load(std::memory_order_relaxed);
-  contactAlpha = currentContactFeasibleAlpha_.load(std::memory_order_relaxed);
 }

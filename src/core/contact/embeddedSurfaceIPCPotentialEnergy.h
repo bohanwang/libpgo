@@ -27,10 +27,6 @@ public:
     const EigenSupport::SpMatD &surfaceFromSimulationDispMap,
     const SurfaceIPCCore::Parameters &ipcParams = {});
 
-  std::int64_t getContactClampCount() const { return surfaceIPCCore_.getContactClampCount(); }
-  double getMinContactFeasibleAlphaThisSolve() const { return surfaceIPCCore_.getMinContactFeasibleAlphaThisSolve(); }
-  void resetContactMaxStepStats() const { surfaceIPCCore_.resetContactMaxStepStats(); }
-
 private:
   virtual double computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const override;
   virtual void computeSurfaceGradient(

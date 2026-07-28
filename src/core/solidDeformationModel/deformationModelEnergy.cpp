@@ -7,8 +7,6 @@ copyright to USC,MIT,NUS
 
 #include "deformationModelAssembler.h"
 #include "simulationMesh.h"
-#include "pgoLogging.h"
-
 #include <numeric>
 
 using namespace pgo;
@@ -18,13 +16,6 @@ namespace ES = pgo::EigenSupport;
 
 namespace
 {
-void updateMinAtomic(std::atomic<double> &target, double value)
-{
-  double current = target.load(std::memory_order_relaxed);
-  while (value < current && !target.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
-  }
-}
-
 ES::VXd assembleAbsolutePositions(ES::ConstRefVecXd x, const ES::VXd &restPosition, int offset, int numDOFs)
 {
   if (restPosition.size())
@@ -38,24 +29,6 @@ ES::VXd assembleDirectionSlice(ES::ConstRefVecXd dx, int offset, int numDOFs)
   return ES::VXd(Eigen::Map<const ES::VXd>(dx.data() + offset, numDOFs));
 }
 
-const char *meshTypeName(pgo::SolidDeformationModel::SimulationMeshType meshType)
-{
-  using pgo::SolidDeformationModel::SimulationMeshType;
-  switch (meshType) {
-  case SimulationMeshType::TET:
-    return "TET";
-  case SimulationMeshType::CUBIC:
-    return "CUBIC";
-  case SimulationMeshType::TRIANGLE:
-    return "TRIANGLE";
-  case SimulationMeshType::EDGE_QUAD:
-    return "EDGE_QUAD";
-  case SimulationMeshType::SHELL:
-    return "SHELL";
-  default:
-    return "UNKNOWN";
-  }
-}
 }  // namespace
 
 DeformationModelEnergy::DeformationModelEnergy(std::shared_ptr<DeformationModelAssembler> fma, const ES::VXd *restp, int offset):
@@ -110,12 +83,6 @@ void DeformationModelEnergy::createHessian(EigenSupport::SpMatD &hess) const
   hess = forceModelAssembler->getHessianTemplate();
 }
 
-void DeformationModelEnergy::resetMaterialMaxStepStats() const
-{
-  materialClampCount_.store(0, std::memory_order_relaxed);
-  minMaterialFeasibleAlphaThisSolve_.store(1.0, std::memory_order_relaxed);
-}
-
 double DeformationModelEnergy::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const
 {
   if (!enableMaterialMaxStep_) {
@@ -131,40 +98,5 @@ double DeformationModelEnergy::computeMaxStepSize(EigenSupport::ConstRefVecXd x,
   }
 
   const ES::VXd absolutePositions = assembleAbsolutePositions(x, restPosition, offset, numDOFs);
-  const auto observation = forceModelAssembler->computeMaxStepObservation(absolutePositions.data(), dxLocal.data());
-  const double maxStepSize = observation.alpha;
-  updateMinAtomic(minMaterialFeasibleAlphaThisSolve_, maxStepSize);
-
-  if (maxStepSize < 1.0) {
-    const std::int64_t clampCount = materialClampCount_.fetch_add(1, std::memory_order_relaxed) + 1;
-    const auto meshType = forceModelAssembler->getDeformationModelManager()->getMesh()->getElementType();
-
-    if (!observation.hasIllegalInitialState && maxStepSize > 0.0 && maxStepSize < 0.01) {
-      if (observation.limitingLocationId >= 0) {
-        SPDLOG_LOGGER_WARN(Logging::lgr(),
-          "Phase 1.5 material max step produced small materialFeasibleAlpha={} on meshType={} element={} location={} (materialClampCount={}).",
-          maxStepSize, meshTypeName(meshType), observation.limitingElementId, observation.limitingLocationId, clampCount);
-      }
-      else {
-        SPDLOG_LOGGER_WARN(Logging::lgr(),
-          "Phase 1.5 material max step produced small materialFeasibleAlpha={} on meshType={} element={} (materialClampCount={}).",
-          maxStepSize, meshTypeName(meshType), observation.limitingElementId, clampCount);
-      }
-    }
-
-    if (auto logger = Logging::lgr(); logger && logger->should_log(spdlog::level::trace)) {
-      if (observation.limitingLocationId >= 0) {
-        SPDLOG_LOGGER_TRACE(logger,
-          "Phase 1.5 material clamp: materialFeasibleAlpha={} materialClampCount={} meshType={} element={} location={}.",
-          maxStepSize, clampCount, meshTypeName(meshType), observation.limitingElementId, observation.limitingLocationId);
-      }
-      else {
-        SPDLOG_LOGGER_TRACE(logger,
-          "Phase 1.5 material clamp: materialFeasibleAlpha={} materialClampCount={} meshType={} element={}.",
-          maxStepSize, clampCount, meshTypeName(meshType), observation.limitingElementId);
-      }
-    }
-  }
-
-  return maxStepSize;
+  return forceModelAssembler->computeMaxStepObservation(absolutePositions.data(), dxLocal.data()).alpha;
 }

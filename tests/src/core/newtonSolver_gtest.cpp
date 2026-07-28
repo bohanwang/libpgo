@@ -49,7 +49,6 @@ public:
 
   void getDOFs(std::vector<int> &dofs) const override { dofs = { 0 }; }
   int getNumDOFs() const override { return 1; }
-  double computeMaxStepSize(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return 1.0; }
 };
 
 class InspectableNewtonSolver final : public NO::NewtonSolver
@@ -135,6 +134,16 @@ TEST(NewtonSolverGTest, FixedTopologyKeepsSymbolicFactorizationAcrossIterations)
   for (const void *address : solverAddresses)
     EXPECT_EQ(address, initialSolver);
   EXPECT_NEAR(x, 3.0 * std::pow(2.0 / 3.0, 3.0), 1e-12);
+}
+
+TEST(NewtonSolverGTest, PotentialEnergyDefaultMaxStepSizeIsOne)
+{
+  FixedQuarticEnergy energy;
+  ES::VXd x(1);
+  ES::VXd dx(1);
+  x << 0.0;
+  dx << 1.0;
+  EXPECT_DOUBLE_EQ(energy.computeMaxStepSize(x, dx), 1.0);
 }
 
 TEST(NewtonSolverGTest, DynamicTopologyRebuildsChangingHessianPatterns)
