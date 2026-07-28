@@ -1,5 +1,6 @@
 #include "runSimVolumeMeshIO.h"
 
+// Shared volume-mesh parsing and loading for simulation runners.
 #include "configFileJSON.h"
 #include "cubicMesh.h"
 #include "tetMesh.h"

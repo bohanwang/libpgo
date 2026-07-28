@@ -1,5 +1,6 @@
 #include "runSimFEMSetup.h"
 
+// Shared FEM setup used by the sampled and IPC runners.
 #include "cubicMesh.h"
 #include "deformationModel.h"
 #include "deformationModelAssembler.h"

@@ -1,5 +1,6 @@
 #include "runSimCliLogging.h"
 
+// Optional process-level logging used by the simulation CLI wrappers.
 #include "configFileJSON.h"
 
 #include <cstdio>

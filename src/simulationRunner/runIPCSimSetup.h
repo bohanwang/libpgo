@@ -1,5 +1,6 @@
 #pragma once
 
+// Reusable IPC simulation setup extracted from the command-line tool.
 #include "EigenSupport.h"
 #include "triMeshGeo.h"
 

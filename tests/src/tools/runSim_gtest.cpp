@@ -13,6 +13,7 @@
 #include "runSimCliLogging.h"
 #include "runSimFEMSetup.h"
 #include "runSimVolumeMeshIO.h"
+#include "simulationRunner.h"
 #include "simulationMesh.h"
 #include "tetMesh.h"
 #include "triangleMeshExternalContactHandler.h"
@@ -560,6 +561,25 @@ TEST(RunSimVolumeMeshIOGTest, BuildsCommonPreprocessingForTetAndCubic)
 {
   expectCommonPreprocessingWorks(tetConfigPath(), "tet-mesh", "box.veg", "box.obj", VolumetricMesh::TET);
   expectCommonPreprocessingWorks(cubicConfigPath(), "cubic-mesh", "box.veg", "box.obj", VolumetricMesh::CUBIC);
+}
+
+TEST(SimulationRunnerDispatchGTest, MissingConfigFails)
+{
+  pgo::Logging::init();
+  ScopedTempDir tempDir;
+
+  EXPECT_NE(
+    pgo::SimulationRunner::runSimulationFromConfig(tempDir.path() / "missing.json"), 0);
+}
+
+TEST(SimulationRunnerDispatchGTest, UnknownContactModelFailsBeforeSimulation)
+{
+  pgo::Logging::init();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "unknown-contact.json";
+  writeTextFile(configPath, R"({"contact-model":"unknown"})");
+
+  EXPECT_NE(pgo::SimulationRunner::runSimulationFromConfig(configPath), 0);
 }
 
 TEST(RunSimVolumeMeshIOGTest, InitializesCubicRuntimeMainPath)

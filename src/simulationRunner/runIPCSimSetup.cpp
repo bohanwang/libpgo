@@ -1,5 +1,6 @@
 #include "runIPCSimSetup.h"
 
+// IPC-specific construction remains separate from sampled contact.
 #include "EigenSupport.h"
 #include "basicIO.h"
 #include "barycentricCoordinates.h"

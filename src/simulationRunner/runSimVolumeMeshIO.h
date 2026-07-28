@@ -1,5 +1,6 @@
 #pragma once
 
+// Shared volume-mesh input declarations for simulation runners.
 #include <memory>
 #include <string>
 #include <vector>

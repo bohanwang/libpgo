@@ -18,19 +18,12 @@ if(TARGET convertAnimation)
 endif()
 
 add_executable(runSim_gtest
-  runSim_gtest.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimCliLogging.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimVolumeMeshIO.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimFEMSetup.cpp)
+  runSim_gtest.cpp)
 target_link_libraries(runSim_gtest PRIVATE
   GTest::gtest_main
-  configFileJSON
-  contact
-  interpolationCoordinates
-  solidDeformationModel
-  volumetricMesh
-  mesh)
+  simulationRunner)
 target_include_directories(runSim_gtest PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/simulationRunner
   ${CMAKE_SOURCE_DIR}/src/tools/runSim
   ${CMAKE_SOURCE_DIR}/src/core/solidDeformationModel)
 target_compile_definitions(runSim_gtest PRIVATE
@@ -45,22 +38,12 @@ set_property(TARGET runSim_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(runSim_gtest)
 
 add_executable(runIPCSim_gtest
-  runIPCSim_gtest.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimCliLogging.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimVolumeMeshIO.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runSimFEMSetup.cpp
-  ${CMAKE_SOURCE_DIR}/src/tools/runSim/runIPCSimSetup.cpp)
+  runIPCSim_gtest.cpp)
 target_link_libraries(runIPCSim_gtest PRIVATE
   GTest::gtest_main
-  configFileJSON
-  contact
-  constraintPotentialEnergies
-  interpolationCoordinates
-  libiglInterface
-  solidDeformationModel
-  volumetricMesh
-  mesh)
+  simulationRunner)
 target_include_directories(runIPCSim_gtest PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/simulationRunner
   ${CMAKE_SOURCE_DIR}/src/tools/runSim
   ${CMAKE_SOURCE_DIR}/src/core/basicIO
   ${CMAKE_SOURCE_DIR}/src/core/contact

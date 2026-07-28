@@ -1,5 +1,6 @@
 #pragma once
 
+// Shared volumetric FEM setup for simulation runners.
 #include "deformationModelManager.h"
 #include "EigenSupport.h"
 

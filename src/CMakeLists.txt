@@ -31,6 +31,8 @@ foreach(lib ${PGO_GLOBAL_LIBRARY_TARGETS})
   add_subdirectory(core/${lib})
 endforeach()
 
+add_subdirectory(simulationRunner)
+
 if(PGO_UI)
   add_subdirectory(render)
 endif()
