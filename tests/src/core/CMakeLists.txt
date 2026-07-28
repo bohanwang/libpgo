@@ -8,7 +8,7 @@ set_property(TARGET configFileJSON_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(configFileJSON_gtest)
 
 add_executable(newtonSolver_gtest newtonSolver_gtest.cpp)
-target_link_libraries(newtonSolver_gtest PRIVATE GTest::gtest_main nonlinearOptimization solidDeformationModel contact)
+target_link_libraries(newtonSolver_gtest PRIVATE GTest::gtest_main nonlinearOptimization genericPotentialEnergies solidDeformationModel contact)
 set_property(TARGET newtonSolver_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(newtonSolver_gtest)
 

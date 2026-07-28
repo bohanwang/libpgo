@@ -42,3 +42,8 @@ add_executable(embeddedSurfaceFloorPotentialEnergy_gtest embeddedSurfaceFloorPot
 target_link_libraries(embeddedSurfaceFloorPotentialEnergy_gtest PRIVATE GTest::gtest_main contact)
 set_property(TARGET embeddedSurfaceFloorPotentialEnergy_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(embeddedSurfaceFloorPotentialEnergy_gtest)
+
+add_executable(sampledStaticContact_gtest sampledStaticContact_gtest.cpp)
+target_link_libraries(sampledStaticContact_gtest PRIVATE GTest::gtest_main contact)
+set_property(TARGET sampledStaticContact_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(sampledStaticContact_gtest)
