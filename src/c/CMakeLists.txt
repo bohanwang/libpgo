@@ -1,5 +1,6 @@
 set(LIBPGO_C_HEADERS
   pgo_c.h
+  pgo_c_def.h
 )
 
 set(LIBPGO_C_SOURCES
@@ -9,10 +10,10 @@ set(LIBPGO_C_SOURCES
 add_library(pgo_c SHARED ${LIBPGO_C_SOURCES} ${LIBPGO_C_HEADERS})
 
 set_target_properties(pgo_c PROPERTIES
-  VERSION 0.0.2
+  VERSION ${PROJECT_VERSION}
   OUTPUT_NAME pgo_c
   SOVERSION 0
-  PUBLIC_HEADER "pgo_c.h"
+  PUBLIC_HEADER "${LIBPGO_C_HEADERS}"
 )
 
 target_include_directories(pgo_c PUBLIC
@@ -31,6 +32,9 @@ foreach(lib ${PGO_GLOBAL_LIBRARY_TARGETS})
   endif()
 endforeach()
 target_link_libraries(pgo_c PRIVATE simulationRunner)
+if(APPLE AND NOT PGO_USE_MKL)
+  target_link_libraries(pgo_c PRIVATE "-lblas")
+endif()
 
 add_flag_poxis(pgo_c PRIVATE -fvisibility=hidden)
 add_link_flag(pgo_c GNU All -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pgo_c.version)
@@ -67,4 +71,7 @@ if(PGO_ENABLE_PYTHON)
     endif()
   endforeach()
   target_link_libraries(pgo_c_static PUBLIC simulationRunner)
+  if(APPLE AND NOT PGO_USE_MKL)
+    target_link_libraries(pgo_c_static PUBLIC "-lblas")
+  endif()
 endif()

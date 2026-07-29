@@ -17,6 +17,7 @@ include(FetchContent)
 FetchContent_Declare(
   arpackng
   GIT_REPOSITORY https://github.com/opencollab/arpack-ng.git
+  GIT_TAG 8a4ede774e68d6950e7a680a3d94dca8603be80c
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
   FIND_PACKAGE_ARGS NAMES arpackng
@@ -32,6 +33,5 @@ else()
 endif()
 
 message(STATUS "Done.")
-
 
 

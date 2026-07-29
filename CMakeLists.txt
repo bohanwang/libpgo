@@ -27,12 +27,23 @@ option(PGO_OPT_USE_KNITRO "Use KNITRO" OFF)
 option(PGO_MKL_LINK_DYNAMIC "MKL Link" ON)
 option(PGO_ENABLE_ALEMBIC "Enable Alembic support" OFF)
 option(PGO_ENABLE_GMSH "Enable GMSH support" OFF)
+option(PGO_PORTABLE_BUILD "Disable host-specific code generation and release debug info" OFF)
 
-project(libpgo LANGUAGES CXX C)
+if(APPLE AND PGO_ENABLE_PYTHON AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING
+    "Minimum macOS version for Python extension builds")
+endif()
+
+project(libpgo VERSION 0.0.4 LANGUAGES CXX C)
 
 include(CTest)
 set(PGO_BUILD_TESTING ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "Disable third-party tests during dependency configuration" FORCE)
+
+if(APPLE AND NOT PGO_USE_MKL)
+  set(BLA_VENDOR Apple CACHE STRING "BLAS/LAPACK provider" FORCE)
+  set(BLA_SIZEOF_INTEGER 4 CACHE STRING "LP64 BLAS/LAPACK integer size" FORCE)
+endif()
 
 set(PGO_CLANGD_BUILD_DIR "${CMAKE_SOURCE_DIR}/build")
 set(PGO_CLANGD_COMPILE_COMMANDS "${PGO_CLANGD_BUILD_DIR}/compile_commands.json")
@@ -133,12 +144,14 @@ add_flag_poxis(compilation_flag INTERFACE -Wall)
 add_flag_poxis(compilation_flag INTERFACE -Wextra)
 add_flag_poxis(compilation_flag INTERFACE -frounding-math)
 add_flag_poxis(compilation_flag INTERFACE -fvisibility=hidden)
-add_flag_poxis(compilation_flag INTERFACE -march=native)
-add_flag_poxis(compilation_flag INTERFACE -mtune=native)
 add_flag(compilation_flag GNU All INTERFACE -Wno-template-body)
 
-add_link_flag_poxis(compilation_flag -march=native)
-add_link_flag_poxis(compilation_flag -mtune=native)
+if(NOT PGO_PORTABLE_BUILD)
+  add_flag_poxis(compilation_flag INTERFACE -march=native)
+  add_flag_poxis(compilation_flag INTERFACE -mtune=native)
+  add_link_flag_poxis(compilation_flag -march=native)
+  add_link_flag_poxis(compilation_flag -mtune=native)
+endif()
 
 # static gcc
 add_flag(compilation_flag GNU All INTERFACE -static-libstdc++)
@@ -196,8 +209,10 @@ else()
   message(STATUS "Release Mode..")
 
   add_flag_poxis(compilation_flag INTERFACE -O3)
-  add_flag_poxis(compilation_flag INTERFACE -ggdb3)
-  add_link_flag_poxis(compilation_flag -ggdb3)
+  if(NOT PGO_PORTABLE_BUILD)
+    add_flag_poxis(compilation_flag INTERFACE -ggdb3)
+    add_link_flag_poxis(compilation_flag -ggdb3)
+  endif()
 endif()
 
 # ================== third party ==========================
@@ -243,9 +258,6 @@ endif()
 
 if(PGO_ENABLE_FULL OR PGO_ENABLE_PYTHON)
   include(CMakeModules/third-party/libigl.cmake)
-
-  igl_include(copyleft core)
-  igl_include(copyleft cgal)
   
   if(PGO_ENABLE_ALEMBIC)
     include(CMakeModules/third-party/alembic.cmake)
@@ -431,7 +443,14 @@ configure_package_config_file(
   INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/pgo/"
 )
 
+write_basic_package_version_file(
+  ${CMAKE_CURRENT_BINARY_DIR}/pgoConfigVersion.cmake
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY SameMajorVersion
+)
+
 install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/pgoConfig.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/pgoConfigVersion.cmake
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/pgo/"
 )

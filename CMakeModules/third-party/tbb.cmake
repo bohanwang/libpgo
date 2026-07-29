@@ -41,6 +41,7 @@ if(NOT TBB_DIR)
   FetchContent_Declare(
     tbb
     URL https://github.com/oneapi-src/oneTBB/archive/refs/tags/v2021.12.0.tar.gz
+    URL_HASH SHA256=2c2a3b7eaa31e7e6ac5b810965bce6253e953c95b37e3c3a598cc22488e6badb
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
   )
   FetchContent_GetProperties(tbb)

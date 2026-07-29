@@ -22,6 +22,7 @@ include(FetchContent)
 FetchContent_Declare(
   NLopt
   URL https://github.com/stevengj/nlopt/archive/refs/tags/v2.10.0.zip
+  URL_HASH SHA256=7bae1edca94c104a72b8d1126770c95963cfaf4530ad880295aae2ecdaa928e1
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
   FIND_PACKAGE_ARGS NAMES NLopt

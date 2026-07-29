@@ -7,6 +7,40 @@
     },
     "configurePresets": [
         {
+            "name": "_pypgo-wheel-common",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "PGO_ENABLE_PYTHON": "ON",
+                "PGO_BUILD_SUBPROJECTS": "ON",
+                "PGO_ENABLE_ALEMBIC": "ON",
+                "PGO_CHECK_CONDA": "ON",
+                "PGO_ENABLE_CUDA": "OFF",
+                "PGO_HAS_ORIG_PARDISO": "OFF",
+                "PGO_PORTABLE_BUILD": "ON"
+            }
+        },
+        {
+            "name": "pypgo-wheel-no-mkl",
+            "inherits": [
+                "_pypgo-wheel-common"
+            ],
+            "binaryDir": "${sourceDir}/build/pypgo-wheel-no-mkl",
+            "cacheVariables": {
+                "PGO_USE_MKL": "OFF"
+            }
+        },
+        {
+            "name": "pypgo-wheel-mkl",
+            "inherits": [
+                "_pypgo-wheel-common"
+            ],
+            "binaryDir": "${sourceDir}/build/pypgo-wheel-mkl",
+            "cacheVariables": {
+                "PGO_USE_MKL": "ON"
+            }
+        },
+        {
             "name": "base_no_mkl",
             "hidden": false,
             "binaryDir": "${sourceDir}/build/base_no_mkl",

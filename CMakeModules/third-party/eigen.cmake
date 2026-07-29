@@ -10,6 +10,7 @@ else()
   FetchContent_Declare(
     Eigen3
     URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz
+    URL_HASH SHA256=8586084f71f9bde545ee7fa6d00288b264a2b7ac3607b974e54d13e7162c1c72
     # GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
     # GIT_TAG fb2fca90be39783f76ba05b521360afeeda265f2
     EXCLUDE_FROM_ALL

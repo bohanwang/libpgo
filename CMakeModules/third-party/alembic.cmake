@@ -22,6 +22,7 @@ include(FetchContent)
 FetchContent_Declare(
   alembic
   URL https://github.com/alembic/alembic/archive/refs/tags/1.8.9.zip
+  URL_HASH SHA256=8835cc0cd2324510252e9e5b7412dca70305b05a43212b1416a7dfeb85219565
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
   FIND_PACKAGE_ARGS NAMES alembic
@@ -30,7 +31,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(alembic)
 
 message(STATUS "Done.")
-
 
 
 

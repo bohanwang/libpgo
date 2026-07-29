@@ -18,7 +18,8 @@ set(LAPACK OFF CACHE BOOL "Use LAPACK" FORCE)
 include(FetchContent)
 FetchContent_Declare(
   ceres
-  URL http://ceres-solver.org/ceres-solver-2.2.0.tar.gz
+  URL https://ceres-solver.org/ceres-solver-2.2.0.tar.gz
+  URL_HASH SHA256=48b2302a7986ece172898477c3bcd6deb8fb5cf19b3327bc49969aad4cede82d
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
   FIND_PACKAGE_ARGS NAMES Ceres

@@ -130,6 +130,11 @@ fs::path shellExampleDir()
   return fs::path(kShellJsonPath).parent_path();
 }
 
+fs::path shellAssetDir()
+{
+  return (shellExampleDir() / "../../assets/shell").lexically_normal();
+}
+
 fs::path runShellSimBinaryPath()
 {
   if (std::string(PGO_TEST_RUN_SHELL_SIM_BIN).empty())
@@ -483,8 +488,8 @@ TEST(RunShellSimCliLoggingGTest, LogFlagWritesCliOutputNextToConfig)
   const fs::path configPath = tempDir.path() / "shell-log-test.json";
   const fs::path logPath = tempDir.path() / "shell-log-test.log";
   const fs::path outputDir = tempDir.path() / "shell-output";
-  const fs::path surfaceMeshPath = shellExampleDir() / "shell.obj";
-  const fs::path fixedVerticesPath = shellExampleDir() / "shell-fixed.txt";
+  const fs::path surfaceMeshPath = shellAssetDir() / "shell.obj";
+  const fs::path fixedVerticesPath = shellAssetDir() / "shell-fixed.txt";
 
   writeTextFile(configPath, makeShellSimConfig(surfaceMeshPath, fixedVerticesPath, outputDir, 0, 1));
 
@@ -540,8 +545,8 @@ TEST(RunShellSimCliLoggingGTest, DeformStateIsWrittenEveryTimestep)
   ScopedTempDir tempDir;
   const fs::path configPath = tempDir.path() / "shell-deform-every-step.json";
   const fs::path outputDir = tempDir.path() / "shell-output";
-  const fs::path surfaceMeshPath = shellExampleDir() / "shell.obj";
-  const fs::path fixedVerticesPath = shellExampleDir() / "shell-fixed.txt";
+  const fs::path surfaceMeshPath = shellAssetDir() / "shell.obj";
+  const fs::path fixedVerticesPath = shellAssetDir() / "shell-fixed.txt";
 
   writeTextFile(configPath, makeShellSimConfig(surfaceMeshPath, fixedVerticesPath, outputDir, 2, 10));
 

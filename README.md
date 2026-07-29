@@ -5,89 +5,84 @@ The source code extends [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) an
 
 ---
 
-## Prebuilt (Experimental)
-The wheel package of following platform have been provided for ease of use. They are in `./dist` folder:
-- Ubuntu 24.04: `ubuntu24.04/pypgo-0.0.3-cp312-cp312-linux_x86_64.whl`. Note that you still need to install `gmp` and `mpfr` as suggested in the prerequisites. You may `apt install` them if needed.
-- Ubuntu 22.04: `ubuntu22.04/pypgo-0.0.2-cp311-cp311-linux_x86_64.whl`. Note that you still need to install `gmp` and `mpfr` as suggested in the prerequisites. You may `apt install` them if needed. This version depends on a lower version of the libc, so it should be more compatible.
-- Windows: `win11/pypgo-0.0.3-cp312-cp312-win_amd64.whl`. The package is built under Windows 11, Visual Studio 2022. In theory, it supports other windows platforms.
-- MacOS Arm: `pypgo-0.0.3-cp312-cp312-macosx_26_0_arm64.whl`. The package is built under Tahoe 26.0.1 on Apple M3.
+## Python wheels
 
-Do `pip install ./dist/your-chosen.whl` to install the package. Note that the packages are experimental.
+The 0.0.4 release supports CPython 3.12 on these targets:
 
----
+- Linux x86-64 (`linux_x86_64`)
+- macOS arm64
+- Windows x86-64 (`win_amd64`)
 
-## Prerequisites
+Release wheels are downloaded from the recorded
+[GitHub Actions artifacts](https://github.com/annajcy/libpgo/actions) and
+installed from the local wheel file. They are designed for the documented
+Conda/Miniforge runtime and are not generic wheels for an otherwise empty
+virtual environment.
 
-1. CMake >= **3.28**\
-    We use several functionalities that are only supported by 3.28+. 
-    > In most cases, both system's CMake and Conda Environment's CMake have a lower version of CMake unfortunately. In this sitation, please install a new CMake into your system. The latest CMake, either pre-built binaries or source files, can be obtained directly from the [official](https://cmake.org/download/) website. Once installed, hook `cmake` to the newly installed one, either by adding the `your-new-cmake/bin` to the front of the `PATH` or by replacing the existing `cmake` executable with the new one.
+Version 0.0.4 is distributed as wheel artifacts only. It is not published on
+PyPI, no source distribution is produced, and release wheels are not committed
+to this repository.
 
-2. Compilers
-    1. GCC **11, 12, 13** for Ubuntu\
-        We use C++20, so only GCC 11, 12, and 13 are supported. You can get new gcc using `apt` or compile a new one from its source code.
-
-    2. Apple Clang (We tested on 15.0.0, Mac OS 14.5)\
-        Earlier versions might work if it supports C++20.
-
-    3. Visual Studio 2022 (We tested on 17.9.5, Windows)\
-        Earlier Visual Studio 2022 versions might work.
-
-3. GMP and MPFR for **Ubuntu** and **Mac OS**\
-    This can be installed on Ubuntu by
-
-    ```bash
-        sudo apt install libgmp-dev libmpfr-dev
-    ```
-
-    Or it can be installed on Mac OS by
-
-    ```bash
-        brew install gmp mpfr imath
-    ```
-
-4. (Optional) Ninja\
-    It can be installed by
-
-    ```bash
-        pip install ninja
-    ```
-
-    for better compilation performance
-
-5. (Optional) numpy\
-    This is used for running tests.
-
-## Compilation
-
-Going forward, it is assumed that all specified prerequisites are installed and that a Conda environment is used for python.
-
-Install prerequisites:
+Pip cannot install Conda packages. Before installing a wheel, create a runtime
+environment containing NumPy, GMP, MPFR, Imath, fmt, and TBB:
 
 ```bash
-    conda install tbb tbb-devel mkl mkl-devel
-    conda install conda-forge::imath
+conda create -n pypgo-004 -c conda-forge \
+  python=3.12 "numpy>=1.26" gmp mpfr imath fmt tbb tbb-devel
+conda activate pypgo-004
+conda config --env --set channel_priority strict
 ```
 
-### Windows & Ubuntu
-
-Install libpgo:
+On Linux and Windows, add the MKL runtime:
 
 ```bash
-    cd libpgo
-    pip install .
+conda install -c conda-forge mkl mkl-devel \
+  "libblas=*=*mkl" "liblapack=*=*mkl"
 ```
 
-If `ninja` has been installed, it will compile source files in parallel. If it is not installed,
-set `CMAKE_BUILD_PARALLEL_LEVEL` to `n`, where `n` is the number of threads for compilation, to control the parallel compilation.
-
-### Mac OS
-
-Install libpgo
+On macOS, libpgo links the system Accelerate framework. Select the matching
+Accelerate family for NumPy:
 
 ```bash
-    cd libpgo
-    pip install .
+conda install -c conda-forge \
+  "libblas=*=*newaccelerate" "liblapack=*=*newaccelerate"
 ```
+
+Then install the downloaded artifact:
+
+```bash
+python -m pip install /path/to/pypgo-0.0.4-<python>-<abi>-<platform>.whl
+```
+
+GMP, MPFR, Imath, fmt, MKL, and TBB remain external runtime libraries and are
+not bundled into the wheel.
+
+## Building from source
+
+Source builds require CMake 3.28 or newer, a C++20 compiler, Python 3.12,
+NumPy, and the native dependencies listed above. GCC 11–13, Apple Clang, and
+Visual Studio 2022 are the currently supported compiler families.
+
+Install CMake and Ninja in the active Conda environment, then build with the
+existing setup entry point:
+
+```bash
+conda install -c conda-forge cmake ninja
+python -m pip install .
+```
+
+The default build behavior remains platform-compatible with 0.0.3. Release
+automation can explicitly select `pypgo-wheel-no-mkl` or `pypgo-wheel-mkl`
+through `PYPGO_CMAKE_PRESET`. Set `CMAKE_BUILD_PARALLEL_LEVEL` to control
+parallel compilation.
+
+Release automation runs `scripts/release_wheel_provenance.py preflight` after
+native and Python tests pass. The command rejects a dirty checkout and records
+the exact commit before `python -m build --wheel --no-isolation` runs. Its
+`record` command then requires exactly one wheel, rejects source archives, and
+records the wheel checksum together with the CMake, dependency, test, and
+runner evidence. Evidence and wheel output directories must be outside the
+source checkout.
 
 ## Usage & Test
 

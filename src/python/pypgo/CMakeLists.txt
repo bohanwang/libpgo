@@ -18,3 +18,18 @@ endif()
 
 set_target_properties(pypgo PROPERTIES CXX_VISIBILITY_PRESET "hidden"
     CUDA_VISIBILITY_PRESET "hidden")
+
+if(PGO_PORTABLE_BUILD)
+    if(APPLE)
+        set(PGO_PYTHON_RUNTIME_PATH "@loader_path/../..")
+    elseif(UNIX)
+        set(PGO_PYTHON_RUNTIME_PATH "$ORIGIN/../..")
+    endif()
+
+    if(DEFINED PGO_PYTHON_RUNTIME_PATH)
+        set_target_properties(pypgo PROPERTIES
+            BUILD_RPATH "${PGO_PYTHON_RUNTIME_PATH}"
+            BUILD_WITH_INSTALL_RPATH TRUE
+            INSTALL_RPATH "${PGO_PYTHON_RUNTIME_PATH}")
+    endif()
+endif()

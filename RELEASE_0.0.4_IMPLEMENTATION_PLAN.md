@@ -654,33 +654,29 @@ pypgo-wheel-mkl
 
 Checklist:
 
-- [ ] Factor common Python options into a hidden preset.
-- [ ] Enable `PGO_ENABLE_PYTHON`.
-- [ ] Enable only the subprojects required to build `pypgo`.
-- [ ] Keep the target name `pypgo`.
-- [ ] Make MKL choice explicit in the two presets.
-- [ ] Set `PGO_USE_MKL=ON`, `PGO_HAS_ORIG_PARDISO=OFF`, and dynamic MKL linkage in `pypgo-wheel-mkl`.
-- [ ] Set `PGO_CHECK_CONDA=ON` in release CI presets and resolve MKL/TBB from the active Conda prefix rather than from an undeclared machine installation.
-- [ ] Resolve GMP/GMPXX, MPFR, Imath, fmt, and TBB from the active `$CONDA_PREFIX` on every release platform. Do not resolve any of these non-system dependencies from `/opt/homebrew`, `/usr/local`, a system package manager, a developer cache, or another undeclared host prefix.
-- [ ] Before compilation, record each of GMP/GMPXX, MPFR, Imath, fmt, and TBB's resolved include path, library path, and CMake package directory. Release configuration fails unless every non-system dependency path is under the active Conda prefix.
-- [ ] Treat fmt as an explicit Conda build and runtime dependency unless it is changed to a fully static, non-exported dependency; record and audit the chosen policy in every wheel job.
-- [ ] Release wheel configuration must not inherit a developer's `CMAKE_PREFIX_PATH`, `*_DIR`, compiler/linker flags, or cached dependency locations. CI supplies approved Conda paths and CMake options explicitly.
-- [ ] Preserve and surface the existing `MKL_THREADING=tbb_thread` selection from `CMakeModules/third-party/mkl.cmake`; fail configuration if the selected MKL target does not use the TBB threading layer.
-- [ ] Set `PGO_USE_MKL=OFF` in `pypgo-wheel-no-mkl`.
-- [ ] Extend the Conda TBB discovery path to macOS (`$CONDA_PREFIX/lib/cmake/TBB`) or pass an explicit equivalent such as `TBB_DIR`; do not silently fetch a second oneTBB when the CI environment already provides TBB.
-- [ ] Add an explicit macOS BLAS policy before SuiteSparse is configured: force `BLA_VENDOR=Apple`, use the LP64 interface, and make configuration fail if BLAS/LAPACK do not resolve to the system Accelerate framework.
-- [ ] Replace the unconditional `set(BLA_VENDOR "" ... FORCE)` in `CMakeModules/third-party/suitesparse.cmake` with a platform-aware setting. On macOS it must preserve `Apple`; on Linux/Windows MKL builds it must preserve the approved MKL vendor/interface instead of resetting the caller's choice.
-- [ ] Ensure SuiteSparse and downstream targets consume the same resolved `BLAS::BLAS` and `LAPACK::LAPACK` targets; do not allow a nested SuiteSparse configure to discover a different provider.
-- [ ] Keep CUDA and native Pardiso off in wheel presets.
-- [ ] Let `setup.py` read `PYPGO_CMAKE_PRESET`.
+- Scope rule: these presets are aliases for the existing `setup.py` build
+  options. P4.1 does not replace dependency discovery, enforce a new BLAS
+  provider, remove the existing Windows DLL handling, or otherwise change the
+  native build architecture. Dependency and linkage auditing belongs in the
+  platform CI phases.
+- [x] Factor common Python options into a hidden preset.
+- [x] Enable `PGO_ENABLE_PYTHON`.
+- [x] Preserve the existing `PGO_BUILD_SUBPROJECTS=ON`,
+  `PGO_ENABLE_ALEMBIC=ON`, and `PGO_CHECK_CONDA=ON` behavior.
+- [x] Keep the target name `pypgo`.
+- [x] Make MKL choice explicit in the two presets.
+- [x] Set `PGO_USE_MKL=ON` in `pypgo-wheel-mkl`.
+- [x] Set `PGO_USE_MKL=OFF` in `pypgo-wheel-no-mkl`.
+- [x] Let `setup.py` read `PYPGO_CMAKE_PRESET`.
 - [ ] Make CI set `PYPGO_CMAKE_PRESET` explicitly.
-- [ ] Preserve a sensible local default compatible with the old platform behavior: no MKL on macOS, MKL on supported Linux/Windows environments.
-- [ ] Configure into the setuptools-provided temporary build directory rather than a shared, stale source-tree cache.
-- [ ] Continue supporting `CMAKE_ARGS`, parsed safely with `shlex.split`.
-- [ ] Preserve macOS `ARCHFLAGS`.
-- [ ] Preserve MSVC architecture/config handling.
-- [ ] Preserve `CMAKE_BUILD_PARALLEL_LEVEL`.
-- [ ] Do not depend on a developer’s existing `build/` cache.
+- [x] When `PYPGO_CMAKE_PRESET` is unset, preserve the original platform
+  behavior and direct CMake invocation unchanged.
+- [x] Continue configuring into the existing setuptools temporary build directory.
+- [x] Continue supporting `CMAKE_ARGS` with its existing parsing behavior.
+- [x] Preserve macOS `ARCHFLAGS`.
+- [x] Preserve MSVC architecture/config handling.
+- [x] Preserve `CMAKE_BUILD_PARALLEL_LEVEL`.
+- [x] Preserve the existing MKLROOT setup and Windows GMP/MPFR DLL copy behavior.
 
 ### P4.2 Version and package metadata
 
@@ -695,45 +691,51 @@ Files requiring audit:
 
 Checklist:
 
-- [ ] Change Python distribution version from `0.0.3` to `0.0.4`.
-- [ ] Change the C shared-library `VERSION` from `0.0.2` to `0.0.4`.
-- [ ] Keep C `SOVERSION 0` unless an actual binary-incompatible change is introduced.
-- [ ] Install both public headers, `pgo_c.h` and the included `pgo_c_def.h`.
-- [ ] Generate and install `pgoConfigVersion.cmake` with compatibility appropriate for the retained `SOVERSION`.
-- [ ] Ensure the compiled Python module receives `PYPGO_VERSION_INFO=0.0.4`.
-- [ ] Ensure installed `pypgo.__version__` is exactly `0.0.4`.
-- [ ] Ensure wheel filenames contain `0.0.4`.
-- [ ] Add/verify package description, README content type, license file, project URL, and supported Python metadata.
-- [ ] Audit and declare actual Python runtime dependencies; in particular, verify whether NumPy is required at import time or API-call time instead of leaving `install_requires=[]` without evidence.
-- [ ] Define the supported runtime as a documented Conda/Miniforge environment followed by installation of the downloaded CI wheel: all platforms install GMP, MPFR, Imath, fmt, and TBB from `conda-forge`; Linux/Windows additionally install MKL-selected BLAS/LAPACK; on macOS libpgo links system Accelerate while the environment installs `_newaccelerate` BLAS/LAPACK packages so Python/NumPy use the same backend family.
-- [ ] Remove release installation instructions that use `apt install libgmp-dev libmpfr-dev` or `brew install gmp mpfr imath`; provide one platform-adjusted Conda environment recipe instead.
-- [ ] State explicitly that pip cannot install Conda packages, so these wheels are not claimed to work in an otherwise empty `venv`.
-- [ ] Keep Conda-provided GMP, MPFR, Imath, fmt, MKL, and TBB external to the wheels, reject accidental vendoring during package audit, and document the exact Conda packages/channels required before installing the wheel.
-- [ ] Define the release wheel guarantee explicitly: CPython 3.12 wheels tagged `linux_x86_64`, macOS arm64, and `win_amd64`.
-- [ ] Keep `python_requires >= 3.9` only if source-build CI verifies the claimed range; otherwise narrow the metadata to the range actually tested.
+- [x] Change Python distribution version from `0.0.3` to `0.0.4`.
+- [x] Change the C shared-library `VERSION` from `0.0.2` to `0.0.4`.
+- [x] Keep C `SOVERSION 0` unless an actual binary-incompatible change is introduced.
+- [x] Install both public headers, `pgo_c.h` and the included `pgo_c_def.h`.
+- [x] Generate and install `pgoConfigVersion.cmake` with compatibility appropriate for the retained `SOVERSION`.
+- [x] Ensure the compiled Python module receives `PYPGO_VERSION_INFO=0.0.4`.
+- [x] Ensure installed `pypgo.__version__` is exactly `0.0.4`.
+- [x] Ensure wheel filenames contain `0.0.4`.
+- [x] Add/verify package description, README content type, license file, project URL, and supported Python metadata.
+- [x] Audit and declare actual Python runtime dependencies; in particular, verify whether NumPy is required at import time or API-call time instead of leaving `install_requires=[]` without evidence.
+- [x] Define the supported runtime as a documented Conda/Miniforge environment followed by installation of the downloaded CI wheel: all platforms install GMP, MPFR, Imath, fmt, and TBB from `conda-forge`; Linux/Windows additionally install MKL-selected BLAS/LAPACK; on macOS libpgo links system Accelerate while the environment installs `_newaccelerate` BLAS/LAPACK packages so Python/NumPy use the same backend family.
+- [x] Remove release installation instructions that use `apt install libgmp-dev libmpfr-dev` or `brew install gmp mpfr imath`; provide one platform-adjusted Conda environment recipe instead.
+- [x] State explicitly that pip cannot install Conda packages, so these wheels are not claimed to work in an otherwise empty `venv`.
+- [x] Keep Conda-provided GMP, MPFR, Imath, fmt, MKL, and TBB external to the wheels, reject accidental vendoring during package audit, and document the exact Conda packages/channels required before installing the wheel.
+- [x] Define the release wheel guarantee explicitly: CPython 3.12 wheels tagged `linux_x86_64`, macOS arm64, and `win_amd64`.
+- [x] Keep `python_requires >= 3.9` only if source-build CI verifies the claimed range; otherwise narrow the metadata to the range actually tested.
 
 ### P4.3 Wheel-only source provenance
 
-- [ ] Do not build, upload, or document an sdist for 0.0.4.
-- [ ] Build each wheel directly from the exact checked-out commit after that platform's native and Python tests pass.
-- [ ] Record `git rev-parse HEAD`, workflow run ID, runner image, CMake cache, dependency evidence, and wheel SHA-256 beside each artifact.
-- [ ] Require a clean tracked worktree before packaging so uncommitted source changes cannot enter a wheel.
+- Scope rule: `scripts/release_wheel_provenance.py` defines and enforces the
+  wheel-only source/evidence contract without changing the existing setuptools
+  build. P4.6 invokes it after each platform's tests and supplies the
+  platform-specific dependency and test evidence.
+- [x] Do not build, upload, or document an sdist for 0.0.4.
+- [x] Build each wheel directly from the exact checked-out commit after that platform's native and Python tests pass.
+- [x] Record `git rev-parse HEAD`, workflow run ID, runner image, CMake cache, dependency evidence, and wheel SHA-256 beside each artifact.
+- [x] Require a clean tracked worktree before packaging so uncommitted source changes cannot enter a wheel.
 
 ### P4.4 Pin third-party dependencies
 
 Mandatory floating-reference fixes in `/Users/jinceyang/Desktop/codebase/merge/libpgo/CMakeModules/third-party/`:
 
-- [ ] `backward.cmake`: replace `master`.
-- [ ] `libigl.cmake`: replace `main`.
-- [ ] `cuCollections.cmake`: replace `dev`.
+- [x] `backward.cmake`: replace `master`.
+- [x] `libigl.cmake`: replace `main`.
+- [x] `cuCollections.cmake`: replace `dev`.
 Additional audit:
 
-- [ ] Verify every other FetchContent URL is a fixed release URL or exact commit.
-- [ ] Do not upgrade dependency versions without a release need.
-- [ ] Record the final dependency table in docs.
-- [ ] Audit dependency licenses and retain required notices for source and vendored wheel contents.
-- [ ] Add archive hashes where practical.
-- [ ] Ensure optional dependencies are fetched only when their feature is enabled.
+- [x] Verify every other FetchContent URL is a fixed release URL or exact commit.
+- [x] Do not upgrade dependency versions without a release need.
+- [x] Record the final dependency table in docs.
+- [x] Audit dependency licenses and retain required notices for source and vendored wheel contents.
+- [x] Remove the unnecessary `igl_copyleft::cgal` link from the default wheel path.
+- [ ] Resolve the remaining CGAL/SuiteSparse binary-distribution obligations and approve the final wheel license/source-offer package before release.
+- [x] Add archive hashes where practical.
+- [x] Ensure optional dependencies are fetched only when their feature is enabled.
 - [ ] Pin the Miniforge installer version, GitHub Actions revisions, Python version, build tools, and critical Conda dependency versions sufficiently to avoid `latest` changing the release build unexpectedly.
 - [ ] Use `conda-forge` with strict channel priority and remove/disable default channels in release CI.
 - [ ] Retain `conda list --explicit`, `conda list`, channel configuration, and relevant CMake cache entries as release-build evidence.
@@ -750,13 +752,13 @@ Current tracked artifacts are under:
 
 Checklist:
 
-- [ ] Remove all tracked 0.0.2 and 0.0.3 wheel files.
-- [ ] Ignore `dist/`.
-- [ ] Ignore `wheelhouse/`.
-- [ ] Ignore standard package build output.
-- [ ] Replace the per-wheel `.gitignore` entries with directory rules.
-- [ ] Update README installation instructions to download the appropriate wheel from the recorded GitHub Actions artifact and install it in the documented Conda environment.
-- [ ] Keep release wheels and evidence in GitHub Actions artifacts, not in git; do not claim PyPI or sdist availability.
+- [x] Remove all tracked 0.0.2 and 0.0.3 wheel files.
+- [x] Ignore `dist/`.
+- [x] Ignore `wheelhouse/`.
+- [x] Ignore standard package build output.
+- [x] Replace the per-wheel `.gitignore` entries with directory rules.
+- [x] Update README installation instructions to download the appropriate wheel from the recorded GitHub Actions artifact and install it in the documented Conda environment.
+- [x] Keep release wheels and evidence in GitHub Actions artifacts, not in git; do not claim PyPI or sdist availability.
 
 ### P4.6 Platform CI
 

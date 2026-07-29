@@ -13,10 +13,7 @@ import shutil
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
-# if "Win" not in platform.platform():
-#     install_requires=["tbb", "mkl"]
-# else:
-install_requires=[]
+README = Path(__file__).with_name("README.md").read_text(encoding="utf-8")
 
 # Convert distutils Windows platform specifiers to CMake -A arguments
 PLAT_TO_CMAKE = {
@@ -47,6 +44,7 @@ class CMakeBuild(build_ext):
 
         debug = int(os.environ.get("DEBUG", 0)) if self.debug is None else self.debug
         cfg = "Debug" if debug else "Release"
+        cmake_preset = os.environ.get("PYPGO_CMAKE_PRESET")
 
         # CMake lets you override the generator - we need to check this.
         # Can be set with Conda-Build, for example.
@@ -61,16 +59,22 @@ class CMakeBuild(build_ext):
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
         ]
 
-        cmake_args += [f"-DPGO_ENABLE_PYTHON=1", f"-DPGO_BUILD_SUBPROJECTS=1", "-DPGO_ENABLE_ALEMBIC=1", "-DPGO_CHECK_CONDA=1"]
+        if not cmake_preset:
+            cmake_args += [
+                f"-DPGO_ENABLE_PYTHON=1",
+                f"-DPGO_BUILD_SUBPROJECTS=1",
+                "-DPGO_ENABLE_ALEMBIC=1",
+                "-DPGO_CHECK_CONDA=1",
+            ]
 
-        if "macOS" in platform.platform():
-            cmake_args += [
-                f"-DPGO_USE_MKL=0",
-            ]
-        else:
-            cmake_args += [
-                f"-DPGO_USE_MKL=1",
-            ]
+            if "macOS" in platform.platform():
+                cmake_args += [
+                    f"-DPGO_USE_MKL=0",
+                ]
+            else:
+                cmake_args += [
+                    f"-DPGO_USE_MKL=1",
+                ]
 
         # enable mkl
         if "CONDA_PREFIX" in os.environ:
@@ -145,7 +149,7 @@ class CMakeBuild(build_ext):
 
         # e.g., copy a known DLL into the same folder as the built .pyd/.so
         # for the extension named mypackage._example
-        if "Windows" in platform.platform():
+        if "Windows" in platform.platform() and not cmake_preset:
             ext_build_path = self.get_ext_fullpath(ext.name)
             ext_dir = os.path.dirname(os.path.abspath(ext_build_path))
             if not os.path.exists(ext_dir):
@@ -161,7 +165,23 @@ class CMakeBuild(build_ext):
                         print(f"copying {full_filename} to {dest_dll}")
                         shutil.copyfile(full_filename, dest_dll)
 
-        subprocess.run(["cmake", ext.sourcedir, *cmake_args], cwd=build_temp, check=True)
+        if cmake_preset:
+            subprocess.run(
+                [
+                    "cmake",
+                    "--preset",
+                    cmake_preset,
+                    "-S",
+                    ext.sourcedir,
+                    "-B",
+                    str(build_temp),
+                    *cmake_args,
+                ],
+                cwd=ext.sourcedir,
+                check=True,
+            )
+        else:
+            subprocess.run(["cmake", ext.sourcedir, *cmake_args], cwd=build_temp, check=True)
         subprocess.run(["cmake", "--build", ".", "--target", "pypgo", *build_args], cwd=build_temp, check=True)
         # subprocess.run(["cmake", "--build", ".", "--target", "pgo_c", *build_args], cwd=build_temp, check=True)
 
@@ -178,17 +198,33 @@ class CMakeBuild(build_ext):
 # logic and declaration, and simpler if you include description/version in a file.
 setup(
     name="pypgo",
-    version="0.0.3",
+    version="0.0.4",
     author="Bohan Wang",
     author_email="wangbh11@gmail.com",
-    description="build pypgo",
-    long_description="",
+    description="Python bindings for libpgo physical simulation and geometry processing",
+    long_description=README,
+    long_description_content_type="text/markdown",
+    license="MIT",
+    license_files=("LICENSE", "THIRD_PARTY_NOTICES.md"),
+    url="https://github.com/annajcy/libpgo",
+    project_urls={
+        "Source": "https://github.com/annajcy/libpgo",
+        "Issues": "https://github.com/annajcy/libpgo/issues",
+    },
     ext_modules=[CMakeExtension("pypgo")],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
-    install_requires=install_requires,
+    install_requires=["numpy>=1.26"],
     extras_require={"test": ["pytest>=6.0"]},
-    python_requires=">=3.9",
+    python_requires=">=3.12,<3.13",
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Science/Research",
+        "Programming Language :: C++",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.12",
+        "Topic :: Scientific/Engineering",
+    ],
     # Tell setuptools to include extra non-Python files in the wheel
     # include_package_data=include_package_data,  # needs a MANIFEST.in or package_data below
     # package_dir=package_dir,

@@ -31,9 +31,12 @@
 *.out
 *.app
 
-*.egg-info
-build
+/*.egg-info/
+/.eggs/
+/build/
 _skbuild
+/dist/
+/wheelhouse/
 
 .DS_Store
 .vscode/*

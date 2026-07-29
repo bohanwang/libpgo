@@ -1,4 +1,4 @@
-name: macOS CI
+name: Linux CI
 
 on:
   push:
@@ -14,16 +14,16 @@ permissions:
   contents: read
 
 env:
-  ARCHFLAGS: "-arch arm64"
-  CMAKE_ARGS: "-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -DBLA_VENDOR=Apple -DBLA_SIZEOF_INTEGER=4"
   CMAKE_BUILD_PARALLEL_LEVEL: "3"
-  MACOSX_DEPLOYMENT_TARGET: "14.0"
-  PYPGO_CMAKE_PRESET: pypgo-wheel-no-mkl
+  MKL_THREADING_LAYER: TBB
+  MKL_DYNAMIC: "FALSE"
+  MKL_NUM_THREADS: "2"
+  PYPGO_CMAKE_PRESET: pypgo-wheel-mkl
 
 jobs:
   build-test-package:
-    name: macOS arm64 build, test, and wheel
-    runs-on: macos-15
+    name: Linux x86-64 build, test, and wheel
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     defaults:
       run:
@@ -32,9 +32,6 @@ jobs:
     steps:
       - name: Checkout exact source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      - name: Assert arm64 runner
-        run: test "$(uname -m)" = "arm64"
 
       - name: Set up pinned Miniforge
         uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3
@@ -57,9 +54,9 @@ jobs:
             "python-build=1.3" "pytest=9.0" \
             "gmp=6.3" "mpfr=4.2" "imath=3.2" "fmt=12" \
             "tbb=2023.0" "tbb-devel=2023.0" \
-            "libblas=*=*_newaccelerate" "libcblas=*=*_newaccelerate" \
-            "liblapack=*=*_newaccelerate" "liblapacke=*=*_newaccelerate" \
-            delocate
+            "mkl-devel=2025.3" "libblas=*=*mkl" "liblapack=*=*mkl" \
+            auditwheel patchelf
+          echo "MKLROOT=${CONDA_PREFIX}" >> "${GITHUB_ENV}"
           echo "NATIVE_BUILD=${RUNNER_TEMP}/libpgo-native" >> "${GITHUB_ENV}"
           echo "INSTALL_PREFIX=${RUNNER_TEMP}/libpgo-install" >> "${GITHUB_ENV}"
           echo "WHEEL_DIR=${RUNNER_TEMP}/wheelhouse" >> "${GITHUB_ENV}"
@@ -76,34 +73,24 @@ jobs:
             cmake --version
             ninja --version
             c++ --version
-            sw_vers
-            uname -m
-            echo "MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET}"
+            echo "MKLROOT=${MKLROOT}"
+            echo "MKL_THREADING_LAYER=${MKL_THREADING_LAYER}"
           } | tee "${EVIDENCE_DIR}/toolchain.txt"
-          if conda list | grep -qi '^mkl '; then
-            echo "MKL must not be installed on macOS" >&2
-            exit 1
-          fi
 
       - name: Configure and build native tree
         run: |
-          cmake --preset pypgo-wheel-no-mkl \
+          cmake --preset pypgo-wheel-mkl \
             -B "${NATIVE_BUILD}" \
             -G Ninja \
             -DBUILD_TESTING=ON \
-            -DPYPGO_VERSION_INFO=0.0.4 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
-            -DBLA_VENDOR=Apple \
-            -DBLA_SIZEOF_INTEGER=4
+            -DPYPGO_VERSION_INFO=0.0.4
           cmake --build "${NATIVE_BUILD}" -j 3
 
-      - name: Run native and Accelerate smoke tests
+      - name: Run native and CLI smoke tests
         run: |
           set -o pipefail
           ctest --test-dir "${NATIVE_BUILD}" --output-on-failure \
             | tee "${EVIDENCE_DIR}/ctest.txt"
-          ctest --test-dir "${NATIVE_BUILD}" -R '^accelerateRuntimeSmoke$' \
-            --output-on-failure
 
       - name: Verify installed C package
         run: |
@@ -111,7 +98,7 @@ jobs:
           cmake -S src/tests/testPgo_c -B "${RUNNER_TEMP}/pgo-c-consumer" -G Ninja \
             -DCMAKE_PREFIX_PATH="${INSTALL_PREFIX};${CONDA_PREFIX}"
           cmake --build "${RUNNER_TEMP}/pgo-c-consumer"
-          DYLD_FALLBACK_LIBRARY_PATH="${INSTALL_PREFIX}/lib:${CONDA_PREFIX}/lib" \
+          LD_LIBRARY_PATH="${INSTALL_PREFIX}/lib:${CONDA_PREFIX}/lib" \
             "${RUNNER_TEMP}/pgo-c-consumer/pgo_c_test" \
             "${GITHUB_WORKSPACE}/examples/assets/common/torus-tet.veg" \
             | tee "${EVIDENCE_DIR}/c-consumer.txt"
@@ -127,18 +114,13 @@ jobs:
           python -m build --wheel --no-isolation --outdir "${WHEEL_DIR}"
           test "$(find "${WHEEL_DIR}" -maxdepth 1 -name '*.whl' | wc -l)" -eq 1
           test -z "$(find "${WHEEL_DIR}" -maxdepth 1 -name '*.tar.gz' -print -quit)"
-          wheel="$(find "${WHEEL_DIR}" -maxdepth 1 -name '*.whl' -print -quit)"
-          case "$(basename "${wheel}")" in
-            *-cp312-cp312-macosx_14_0_arm64.whl) ;;
-            *) echo "unexpected wheel tag: ${wheel}" >&2; exit 1 ;;
-          esac
 
       - name: Audit final wheel without repair
         run: |
           wheel="$(find "${WHEEL_DIR}" -maxdepth 1 -name '*.whl' -print -quit)"
-          delocate-listdeps --all "${wheel}" | tee "${EVIDENCE_DIR}/delocate-listdeps.txt"
+          python -m auditwheel show "${wheel}" | tee "${EVIDENCE_DIR}/auditwheel.txt"
           python scripts/audit_release_wheel.py \
-            --platform macos \
+            --platform linux \
             --wheel "${wheel}" \
             --source-dir "${GITHUB_WORKSPACE}" \
             | tee "${EVIDENCE_DIR}/wheel-linkage.txt"
@@ -148,17 +130,18 @@ jobs:
           runtime="${RUNNER_TEMP}/libpgo-runtime"
           conda create -y -p "${runtime}" -c conda-forge --strict-channel-priority \
             "python=3.12" "pip=26.1" "numpy=2.5" "pytest=9.0" \
-            "gmp=6.3" "mpfr=4.2" "imath=3.2" "fmt=12" "tbb=2023.0" \
-            "libblas=*=*_newaccelerate" "libcblas=*=*_newaccelerate" \
-            "liblapack=*=*_newaccelerate" "liblapacke=*=*_newaccelerate"
+            "gmp=6.3" "mpfr=4.2" "imath=3.2" "fmt=12" \
+            "tbb=2023.0" \
+            "libblas=*=*mkl" "liblapack=*=*mkl"
           wheel="$(find "${WHEEL_DIR}" -maxdepth 1 -name '*.whl' -print -quit)"
           conda run -p "${runtime}" python -m pip install --no-deps "${wheel}"
           conda run -p "${runtime}" python -m pip check
           workdir="$(mktemp -d)"
           cd "${workdir}"
-          conda run -p "${runtime}" python \
-            "${GITHUB_WORKSPACE}/scripts/installed_wheel_smoke.py" \
-              --platform macos --source-dir "${GITHUB_WORKSPACE}" \
+          conda run -p "${runtime}" env \
+            MKL_THREADING_LAYER=TBB MKL_DYNAMIC=FALSE MKL_NUM_THREADS=2 \
+            python "${GITHUB_WORKSPACE}/scripts/installed_wheel_smoke.py" \
+              --platform linux --source-dir "${GITHUB_WORKSPACE}" \
             | tee "${EVIDENCE_DIR}/installed-smoke.txt"
           conda run -p "${runtime}" python -m pytest -q \
             "${GITHUB_WORKSPACE}/tests/pypgo/test_pgo_smoke.py" \
@@ -179,7 +162,7 @@ jobs:
       - name: Upload wheel and evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: pypgo-0.0.4-macos-arm64
+          name: pypgo-0.0.4-linux-x86_64
           path: |
             ${{ env.WHEEL_DIR }}/*.whl
             ${{ env.EVIDENCE_DIR }}
