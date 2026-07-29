@@ -140,7 +140,8 @@ We provide three python scripts to test the installation.
 2. `pgo_run_sim.py`. It reads input config file and run simulation. You can try `box`, `box-with-sphere`, `dragon`, and `dragon-dyn` to test different simulation results. Take the box example for illustration. You can run the box example using the following commands.
    
     ```bash
-        python src/python/pypgo/pgo_run_sim.py examples/box/box.json
+        python src/python/pypgo/pgo_run_sim.py \
+            examples/configs/volume/box/box-tet-sampled.json
     ```
 
     The expected result will look like the first image. The time integrator is hard-coded as implicit backward Euler (BE). You are free to change it to implicit Newmark (NW) or TR-BDF2 integrator (not support friction).
@@ -150,37 +151,39 @@ We provide three python scripts to test the installation.
             <th style="width: 50%;text-align:center; border-top: 1px solid #ddd;">Box with Sphere (NM)</th>
         </tr>
         <tr>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box/box.gif" alt="box"></td>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box-with-sphere/box-with-sphere.gif" alt="box with sphere"></td>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/box.gif" alt="box"></td>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/box-with-sphere.gif" alt="box with sphere"></td>
         </tr>
         <tr>
             <th style="width: 50%;text-align:center;">Dragon (BE)</th>
             <th style="width: 50%;text-align:center;">Bunny (BE)</th>
         </tr>
         <tr>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/dragon-dyn/dragon-dyn.gif" alt="dragon"></td>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/bunny/bunny.gif" alt="bunny"></td>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/dragon-dynamic.gif" alt="dragon"></td>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/bunny.gif" alt="bunny"></td>
         </tr>
         <tr>
             <th style="width: 50%;text-align:center;">Rest Dragon</th>
             <th style="width: 50%;text-align:center;">Deformed Dragon</th>           
         </tr>
         <tr>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/dragon/dragon-rest.png" alt="dragon rest shape"></td>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/dragon/dragon-deformed.png" alt="dragon deformed shape"></td>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/dragon-rest.png" alt="dragon rest shape"></td>
+            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/dragon-deformed.png" alt="dragon deformed shape"></td>
         </tr>
     </table>
 
 3. `pgo_dump_abc.py`. It creates the abc file that can be used for blender/maya from config file `anim.json`. Essentially, it takes the simulation output `.obj` sequences and output a `.abc` file.
 
     ```bash
-        python src/python/pypgo/pgo_dump_abc.py examples/box/anim.json examples/box/
+        python src/python/pypgo/pgo_dump_abc.py \
+            examples/configs/volume/box/box-tet-sampled-animation.json
     ```
 
     The `convertAnimation` tool provides the same conversion on the CLI:
 
     ```bash
-        convertAnimation examples/box/anim.json
+        convertAnimation \
+            examples/configs/volume/box/box-tet-sampled-animation.json
     ```
 
     If the optional second argument is omitted, the tool writes `.abc` files into the folder containing `anim.json`, and each output filename uses the mesh `name` field from the config.
@@ -198,17 +201,12 @@ Build the tool:
     cmake --build build/base_no_mkl --target cubicMesher
 ```
 
-Basic usage:
+Generate the documented presets with the checked-in helper:
 
 ```bash
-    build/base_no_mkl/bin/cubicMesher \
-        --input-mesh examples/cubic/box/box.obj \
-        --resolution 4 \
-        --output-mesh examples/cubic/box/box.veg \
-        --output-surface examples/cubic/box/box-surface.obj \
-        --E 10000000 \
-        --nu 0.45 \
-        --density 1000
+    python3 examples/scripts/generate_cubic_veg.py \
+        --build-dir build/base_no_mkl \
+        --scene box
 ```
 
 Main arguments:
@@ -219,7 +217,10 @@ Main arguments:
 - `--output-surface`: optional extracted surface `.obj`
 - `--E`, `--nu`, `--density`: isotropic material parameters written into the output mesh
 
-Generated sample cubic assets are stored under `examples/cubic/`. See [`examples/cubic/README.md`](./examples/cubic/README.md) for the exact commands and parameters used for `box`, `box-hang`, `bunny`, `dragon-dyn`, and `box-with-sphere`.
+Generated cubic meshes are written under the gitignored
+`examples/generated/cubic/` directory. See
+[`examples/README.md`](./examples/README.md) for presets, custom input options,
+runner commands, and the old-to-new path table.
 
 ### Shell Simulation
 
@@ -233,13 +234,15 @@ Build the shell simulation CLI:
 Run the bundled shell example:
 
 ```bash
-    build/base_no_mkl/bin/runShellSim examples/shell/shell.json
+    build/base_no_mkl/bin/runShellSim \
+        examples/configs/shell/shell-dynamic-sampled.json
 ```
 
-To also write the command-line output to `examples/shell/shell.log`, add `--log`:
+To also write command-line output to a log next to the config, add `--log`:
 
 ```bash
-    build/base_no_mkl/bin/runShellSim examples/shell/shell.json --log
+    build/base_no_mkl/bin/runShellSim \
+        examples/configs/shell/shell-dynamic-sampled.json --log
 ```
 
 ---

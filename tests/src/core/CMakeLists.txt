@@ -1,9 +1,9 @@
 add_executable(configFileJSON_gtest configFileJSON_gtest.cpp)
 target_link_libraries(configFileJSON_gtest PRIVATE GTest::gtest_main configFileJSON)
 target_compile_definitions(configFileJSON_gtest PRIVATE
-  LIBPGO_TEST_BOX_JSON="${CMAKE_SOURCE_DIR}/examples/box/box.json"
-  LIBPGO_TEST_CUBIC_BOX_JSON="${CMAKE_SOURCE_DIR}/examples/cubic/box/box.json"
-  LIBPGO_TEST_SHELL_JSON="${CMAKE_SOURCE_DIR}/examples/shell/shell.json")
+  LIBPGO_TEST_BOX_JSON="${LIBPGO_TEST_TET_BOX_JSON}"
+  LIBPGO_TEST_CUBIC_BOX_JSON="${LIBPGO_TEST_CUBIC_BOX_JSON}"
+  LIBPGO_TEST_SHELL_JSON="${CMAKE_SOURCE_DIR}/examples/configs/shell/shell-dynamic-sampled.json")
 set_property(TARGET configFileJSON_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(configFileJSON_gtest)
 

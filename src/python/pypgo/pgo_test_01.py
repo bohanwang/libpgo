@@ -1,7 +1,7 @@
 import pypgo
 import numpy as np
 
-tetmesh = pypgo.create_tetmeshgeo_from_file("torus.veg")
+tetmesh = pypgo.create_tetmeshgeo_from_file("examples/assets/common/torus-tet.veg")
 v_load = pypgo.tetmeshgeo_get_vertices(tetmesh)
 t_load = pypgo.tetmeshgeo_get_tets(tetmesh)
 pypgo.destroy_tetmeshgeo(tetmesh)

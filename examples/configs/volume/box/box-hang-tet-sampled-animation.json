@@ -1,0 +1,14 @@
+{
+  "meshes": [
+    {
+      "name": "box-hang",
+      "driving-mesh": "../../../assets/volume/box/box.obj",
+      "sequence": "../../../generated/output/box-hang-tet-sampled/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        200
+      ]
+    }
+  ]
+}

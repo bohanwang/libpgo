@@ -7,7 +7,7 @@ import pypgo
 
 
 EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"
-TORUS_VEG = EXAMPLES_DIR / "torus.veg"
+TORUS_VEG = EXAMPLES_DIR / "assets" / "common" / "torus-tet.veg"
 
 
 def _load_torus_mesh():

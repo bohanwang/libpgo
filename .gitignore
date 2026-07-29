@@ -63,6 +63,7 @@ docs/*
 
 fv.obj
 ret*
+examples/generated/
 
 paper/*
 *.pdf

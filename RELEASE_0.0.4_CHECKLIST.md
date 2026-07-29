@@ -22,7 +22,7 @@ Release decisions:
 
 - [ ] Do not merge the experimental code branch wholesale.
 - [ ] Do not restore or enable ARPACK for 0.0.4.
-- [ ] Retain shell only through the shell + IPC path, and migrate its assets and IPC configs into the new separated layout; sampled shell is not a 0.0.4 requirement.
+- [ ] Retain the established sampled and IPC shell paths and migrate their assets/configs into the new separated layout.
 - [ ] Do not preserve legacy example paths or compatibility config copies; 0.0.4 switches directly to the new `examples/assets/` and `examples/configs/` paths.
 - [ ] Generate cubic `.veg` files with a checked-in Python script into a gitignored output directory; do not commit generated cubic `.veg` files.
 - [ ] Linux `linux_x86_64` and Windows `win_amd64` wheels use MKL Pardiso with the TBB threading layer.
@@ -31,9 +31,7 @@ Release decisions:
 - [ ] MKL and TBB are external Conda runtime dependencies and are not duplicated inside the wheels.
 - [ ] Do not publish an sdist or upload this release to PyPI; each platform CI workflow uploads its tested wheel and evidence as GitHub Actions artifacts.
 - [ ] Hosted CI consists of exactly three independent workflow files: `linux-ci.yml`, `macos-ci.yml`, and `windows-ci.yml`; there is no orchestration, reusable-workflow, or hosted Linux-server-matrix workflow.
-- [ ] Replace the mixed runner with `runDynamicSim` and `runStaticSim`; both use the same config parser and sampled/IPC/domain dispatcher.
-- [ ] A new dynamic run may create only a new output directory; a static run may create only a new output file. If the requested output path already exists, fail without deleting or modifying it.
-- [ ] Resuming an existing dynamic run requires `runDynamicSim --resume`; static runs cannot resume, and no runner deletes or clears output.
+- [ ] Preserve `runSim`, `runIPCSim`, and `runShellSim`; extract sampled/IPC implementations into `simulationRunner` for C/Python reuse.
 - [ ] Work is merged into `upstream-0.0.4` and all final gates run against its exact merge commit.
 - [ ] Opening or merging an `upstream-0.0.4` to `main` PR is an owner decision after review.
 
@@ -42,14 +40,14 @@ Release decisions:
 - [ ] Cubic volumetric mesh, cubic FEM, and cubic mesher are retained.
 - [ ] Sampled contact is retained.
 - [ ] IPC core, barrier energy, CCD maximum-step, self-contact, floor contact, and the existing shell IPC path are retained.
-- [ ] `runDynamicSim`, `runStaticSim`, C, and Python support the required five-case domain/contact matrix:
+- [ ] The existing tools plus the C/Python dispatcher retain:
   - [ ] tet + sampled
   - [ ] tet + IPC
   - [ ] cubic + sampled
   - [ ] cubic + IPC
   - [ ] shell + IPC
-- [ ] Dynamic and static modes each cover all five cases; the mode is selected by the CLI/config contract, while the same shared IPC backend replaces the old standalone `runIPCSim` implementation.
-- [ ] Because baseline `runIPCSim` is dynamic-only, static IPC explicitly integrates the existing IPC energy/derivative/CCD/max-step components with the static Newton solve and passes focused convergence/numerical tests.
+  - [ ] shell + sampled through `runShellSim`
+- [ ] No new static IPC matrix, resume workflow, or output transaction layer is included.
 - [ ] Missing `contact-model` selects sampled contact for 0.0.3 compatibility.
 - [ ] IPC external-object contact is not claimed as supported.
 - [ ] No generalized Neo-Hookean, tricubic Hermite, benchmark, experiment, package-architecture, abi3, or ARPACK work is included.
@@ -61,7 +59,7 @@ Release decisions:
 - [ ] Fixed-topology symbolic-factorization reuse and dynamic-topology safety tests pass.
 - [ ] Tet, cubic, and IPC maximum-step tests pass.
 - [ ] Cubic rest-state and IPC public-input validation tests pass.
-- [ ] `runDynamicSim`, `runStaticSim`, C, and Python entry points use the same config parser and domain/contact dispatch infrastructure.
+- [ ] `runSim` and `runIPCSim` are thin wrappers over the same implementations used by the C/Python dispatcher.
 - [ ] CLI and C return `0` only on success and nonzero on every config/setup/simulation failure.
 - [ ] No C++ exception crosses the C ABI boundary.
 - [ ] Python failure behavior is documented and tested consistently.
@@ -71,24 +69,15 @@ Release decisions:
 - [ ] The 0.0.3 tet + sampled compatibility case matches recorded numerical observables within tolerance.
 - [ ] Exported C symbols are compared against 0.0.3; no unapproved symbol is removed or incompatibly changed.
 
-## 4. Output and asset safety gate
+## 4. Runner and asset gate
 
-- [ ] A new dynamic run rejects an existing output directory or other existing path; a static run rejects an existing output file or other existing path.
-- [ ] The runner never recursively deletes a user-configured output path.
-- [ ] `runDynamicSim` without `--resume` and every `runStaticSim` invocation reject an existing output path unchanged.
-- [ ] With `runDynamicSim --resume`, the output path must be an existing valid dynamic libpgo run directory whose recorded config/input identity matches the requested run.
-- [ ] Resume continues after the latest valid checkpoint without overwriting existing frames or checkpoints.
-- [ ] Checkpoint and frame writes use temporary files plus validation and atomic rename; the manifest is updated atomically only after the durable checkpoint/frame exists.
-- [ ] `runStaticSim --resume` is rejected as an invalid CLI combination.
-- [ ] The legacy config key `restart-from-u` is rejected with guidance to use the CLI `--resume` flag.
-- [ ] The existing C and Python config-runner APIs remain new-run-only for 0.0.4; resume is a CLI operation.
-- [ ] Dynamic-directory and static-file tests cover existing directories, existing files, repository root, config directory, home, filesystem root, and path-normalization/symlink edge cases.
-- [ ] Tests cover valid resume, missing resume directory, invalid/non-libpgo directory, config mismatch, missing/corrupt checkpoint, and output-name collision.
-- [ ] Failed setup leaves pre-existing paths untouched.
+- [ ] Tool wrappers contain CLI handling only; simulation setup/execution lives in `simulationRunner`.
+- [ ] C and Python contain no duplicate simulation body.
+- [ ] Missing `contact-model` selects sampled; explicit `ipc` reaches the IPC implementation; unknown values fail.
 - [ ] Every checked-in static asset has one canonical copy under `examples/assets/`.
 - [ ] A content-hash audit finds no unintended duplicate checked-in assets.
 - [ ] Every checked-in example config lives under `examples/configs/` and references canonical shared assets.
-- [ ] The shell IPC configs reference the one canonical `examples/assets/shell/` tree; no sampled-shell config is required.
+- [ ] The shell sampled and IPC configs reference the one canonical `examples/assets/shell/` tree.
 - [ ] The retained shell configs live under `examples/configs/shell/`.
 - [ ] No compatibility copies remain at old paths such as `examples/box/box.json`, `examples/shell/shell.json`, or `examples/ipc/shell/shell-ipc.json`.
 - [ ] Shell regression tests use the new separated paths.
@@ -162,10 +151,9 @@ This matrix is run and confirmed manually by the owner. It is not a GitHub Actio
 - [ ] The exact `upstream-0.0.4` merge commit is recorded and the worktree is clean.
 - [ ] The build uses MKL Pardiso, not original Pardiso or the Eigen fallback.
 - [ ] The build and runtime use the TBB MKL threading layer.
-- [ ] The short C API matrix passes all five required cases in both dynamic and static modes.
-- [ ] The short Python API matrix passes all five required cases in both dynamic and static modes.
-- [ ] `runDynamicSim` passes all five short cases and selected `--resume` cases.
-- [ ] `runStaticSim` passes all five short cases and rejects `--resume`.
+- [ ] The short C API matrix passes the selected sampled/IPC cases.
+- [ ] The short Python API matrix passes the same selected sampled/IPC cases.
+- [ ] Sampled cases pass through `runSim`, IPC cases through `runIPCSim`, and sampled shell through `runShellSim`.
 - [ ] The representative longer tet/cubic sampled/IPC plus shell IPC matrix passes.
 - [ ] Reports include commit, configs, generated-mesh manifest, CMake cache, toolchain/dependency versions, environment, commands, logs, return codes, convergence, and numerical checks.
 - [ ] Any affected result is rerun after code, config, generator, dependency, or test-input changes.

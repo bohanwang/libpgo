@@ -1,16 +1,18 @@
 add_executable(simulationMesh_gtest simulationMesh_gtest.cpp)
 target_link_libraries(simulationMesh_gtest PRIVATE GTest::gtest_main solidDeformationModel volumetricMesh)
 target_compile_definitions(simulationMesh_gtest PRIVATE
-  LIBPGO_TEST_CUBIC_BOX_VEG="${CMAKE_SOURCE_DIR}/examples/cubic/box/box.veg")
+  LIBPGO_TEST_CUBIC_BOX_VEG="${LIBPGO_TEST_CUBIC_BOX_VEG}")
+add_dependencies(simulationMesh_gtest libpgo_test_cubic_assets)
 set_property(TARGET simulationMesh_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(simulationMesh_gtest)
 
 add_executable(deformationModelAssembler_gtest deformationModelAssembler_gtest.cpp)
 target_link_libraries(deformationModelAssembler_gtest PRIVATE GTest::gtest_main solidDeformationModel volumetricMesh mesh)
 target_compile_definitions(deformationModelAssembler_gtest PRIVATE
-  LIBPGO_TEST_TORUS_VEG="${CMAKE_SOURCE_DIR}/examples/torus.veg"
-  LIBPGO_TEST_SHELL_OBJ="${CMAKE_SOURCE_DIR}/examples/shell/shell.obj"
-  LIBPGO_TEST_CUBIC_BOX_VEG="${CMAKE_SOURCE_DIR}/examples/cubic/box/box.veg")
+  LIBPGO_TEST_TORUS_VEG="${CMAKE_SOURCE_DIR}/examples/assets/common/torus-tet.veg"
+  LIBPGO_TEST_SHELL_OBJ="${CMAKE_SOURCE_DIR}/examples/assets/shell/shell.obj"
+  LIBPGO_TEST_CUBIC_BOX_VEG="${LIBPGO_TEST_CUBIC_BOX_VEG}")
+add_dependencies(deformationModelAssembler_gtest libpgo_test_cubic_assets)
 set_property(TARGET deformationModelAssembler_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(deformationModelAssembler_gtest)
 
@@ -27,6 +29,6 @@ gtest_discover_tests(tetMeshDeformationModel_gtest)
 add_executable(deformationModelEnergyMaxStep_gtest deformationModelEnergyMaxStep_gtest.cpp)
 target_link_libraries(deformationModelEnergyMaxStep_gtest PRIVATE GTest::gtest_main solidDeformationModel simulation mesh)
 target_compile_definitions(deformationModelEnergyMaxStep_gtest PRIVATE
-  LIBPGO_TEST_SHELL_OBJ="${CMAKE_SOURCE_DIR}/examples/shell/shell.obj")
+  LIBPGO_TEST_SHELL_OBJ="${CMAKE_SOURCE_DIR}/examples/assets/shell/shell.obj")
 set_property(TARGET deformationModelEnergyMaxStep_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(deformationModelEnergyMaxStep_gtest)

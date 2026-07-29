@@ -1,0 +1,48 @@
+{
+  "cubic-mesh": "../../../generated/cubic/box-with-sphere-cubic.veg",
+  "surface-mesh": "../../../assets/volume/box-with-sphere/box-with-sphere.obj",
+  "fixed-vertices": [],
+  "external-objects": [
+    {
+      "filename": "../../../assets/common/bottom-large.obj",
+      "movement": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "g": [
+    0,
+    -9.81,
+    0
+  ],
+  "init-vel": [
+    0,
+    0,
+    0
+  ],
+  "init-disp": [
+    0,
+    0,
+    0
+  ],
+  "scale": 1.0,
+  "timestep": 0.001,
+  "num-timestep": 2000,
+  "damping-params": [
+    0,
+    0
+  ],
+  "sim-type": "dynamic",
+  "contact-stiffness": 1000,
+  "contact-sample": 6,
+  "contact-friction-coeff": 0.3,
+  "contact-vel-eps": 0.00001,
+  "solver-eps": 0.001,
+  "solver-max-iter": 400,
+  "elastic-material": "stable-neo",
+  "dump-interval": 10,
+  "output": "../../../generated/output/box-with-sphere-cubic-sampled",
+  "contact-model": "sampled"
+}

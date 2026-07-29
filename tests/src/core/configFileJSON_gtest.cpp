@@ -57,7 +57,8 @@ TEST(ConfigFileJSONGTest, ResolvesExamplePathsAgainstConfigDirectory)
   EXPECT_EQ(fs::path(config.getConfigDirectory()), configDir);
   EXPECT_EQ(fs::path(config.getResolvedPath("tet-mesh", 1)), (configDir / "box.veg").lexically_normal());
   EXPECT_EQ(fs::path(config.getResolvedPath("surface-mesh", 1)), (configDir / "box.obj").lexically_normal());
-  EXPECT_EQ(fs::path(config.getResolvedPath("output", 1)), (configDir / "ret-box").lexically_normal());
+  EXPECT_EQ(fs::path(config.getResolvedPath("output", 1)),
+    (configDir / config.getString("output", 1)).lexically_normal());
 }
 
 TEST(ConfigFileJSONGTest, ResolvesCubicExampleSurfaceToOriginalObj)
@@ -68,7 +69,8 @@ TEST(ConfigFileJSONGTest, ResolvesCubicExampleSurfaceToOriginalObj)
   const fs::path configDir = fs::path(kCubicBoxJsonPath).lexically_normal().parent_path();
   EXPECT_EQ(fs::path(config.getResolvedPath("cubic-mesh", 1)), (configDir / "box.veg").lexically_normal());
   EXPECT_EQ(fs::path(config.getResolvedPath("surface-mesh", 1)), (configDir / "box.obj").lexically_normal());
-  EXPECT_EQ(fs::path(config.getResolvedPath("output", 1)), (configDir / "ret-cubic-box").lexically_normal());
+  EXPECT_EQ(fs::path(config.getResolvedPath("output", 1)),
+    (configDir / config.getString("output", 1)).lexically_normal());
 }
 
 TEST(ConfigFileJSONGTest, ResolvesShellNestedPathsAgainstConfigDirectory)
