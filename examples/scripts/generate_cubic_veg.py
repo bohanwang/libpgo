@@ -35,6 +35,11 @@ SCENES = {
         50,
         1.0e6,
     ),
+    "box-with-sphere-lite": Scene(
+        REPO_ROOT / "examples/assets/volume/box-with-sphere/box-with-sphere.obj",
+        5,
+        1.0e6,
+    ),
     "bunny": Scene(REPO_ROOT / "examples/assets/volume/bunny/bunny.obj", 20, 1.0e5),
     "dragon": Scene(REPO_ROOT / "examples/assets/volume/dragon/dragon.obj", 20, 1.0e6),
 }

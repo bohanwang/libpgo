@@ -606,6 +606,7 @@ of storing identical files in a second asset directory.
 
 - [x] Accept either a `cubicMesher` executable or a build directory.
 - [x] Support selected presets and a custom input surface/resolution/material invocation.
+- [x] Keep separate full sampled and lightweight IPC presets for `box-with-sphere`.
 - [x] Generate `<scene>-cubic.veg` into a caller-selected fresh directory.
 - [x] Default to `examples/generated/cubic/`.
 - [x] Refuse to overwrite an existing output directory.
@@ -621,6 +622,7 @@ of storing identical files in a second asset directory.
 - [x] Make every cubic-consuming native test depend on that generated fixture.
 - [x] Materialize test-only configs in the build tree; tests do not write generated meshes into the source tree.
 - [x] Keep tet and shell tests on canonical checked-in assets.
+- [x] Provide a bounded all-config smoke driver backed by tetMesher/cubicMesher-generated lightweight tet and cubic assets; execute setup, assembly, solve, finite-output validation, and animation conversion for every retained config.
 - [x] Add `examples/README.md` with generation, runner, and migration commands.
 - [x] Add an old-to-new path table and state that old paths are intentionally unsupported.
 - [x] Update the root README to the separated layout.
