@@ -67,27 +67,33 @@ set(PGO_BUILD_TESTING ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "Disable third-party tests during dependency configuration" FORCE)
 
 # Python packages such as mkl-devel install their CMake package files below the
-# active Python prefix. Discover that prefix internally so uv/pip builds and
-# direct CMake builds do not require dependency-location arguments.
-if(PYTHON_EXECUTABLE)
+# active Python prefix. Prefer the active virtual environment because `uv run`
+# can launch CMake without placing the venv's Python first on PATH on Windows.
+# This keeps uv/pip and direct CMake builds free of dependency-location flags.
+if(DEFINED ENV{VIRTUAL_ENV} AND IS_DIRECTORY "$ENV{VIRTUAL_ENV}")
+  set(_pgo_python_prefix "$ENV{VIRTUAL_ENV}")
+elseif(PYTHON_EXECUTABLE)
   set(_pgo_python_executable "${PYTHON_EXECUTABLE}")
 else()
   find_program(_pgo_python_executable NAMES python3 python)
 endif()
-if(_pgo_python_executable)
+if(NOT _pgo_python_prefix AND _pgo_python_executable)
   execute_process(
     COMMAND "${_pgo_python_executable}" -c "import sys; print(sys.prefix)"
     OUTPUT_VARIABLE _pgo_python_prefix
     OUTPUT_STRIP_TRAILING_WHITESPACE
     RESULT_VARIABLE _pgo_python_prefix_result
   )
-  if(_pgo_python_prefix_result EQUAL 0 AND IS_DIRECTORY "${_pgo_python_prefix}")
-    list(PREPEND CMAKE_PREFIX_PATH "${_pgo_python_prefix}")
-    if(WIN32 AND IS_DIRECTORY "${_pgo_python_prefix}/Library")
-      list(PREPEND CMAKE_PREFIX_PATH "${_pgo_python_prefix}/Library")
-    endif()
-    message(STATUS "Using Python dependency prefix: ${_pgo_python_prefix}")
+  if(NOT _pgo_python_prefix_result EQUAL 0)
+    unset(_pgo_python_prefix)
   endif()
+endif()
+if(_pgo_python_prefix AND IS_DIRECTORY "${_pgo_python_prefix}")
+  list(PREPEND CMAKE_PREFIX_PATH "${_pgo_python_prefix}")
+  if(WIN32 AND IS_DIRECTORY "${_pgo_python_prefix}/Library")
+    list(PREPEND CMAKE_PREFIX_PATH "${_pgo_python_prefix}/Library")
+  endif()
+  message(STATUS "Using Python dependency prefix: ${_pgo_python_prefix}")
 endif()
 unset(_pgo_python_executable)
 unset(_pgo_python_prefix)

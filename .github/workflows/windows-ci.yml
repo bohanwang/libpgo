@@ -39,6 +39,12 @@ jobs:
           $uvVersion = python scripts/uv_version.py
           python -m pip install "uv==$uvVersion"
           uv sync --locked --python python
+          $venv = (Resolve-Path .venv).Path
+          @(
+            "$venv\Library\bin"
+            "$env:GITHUB_WORKSPACE\third-party\gmp-msvc\release"
+            "$env:GITHUB_WORKSPACE\third-party\mpfr-msvc\release"
+          ) | Out-File $env:GITHUB_PATH -Append
           "EVIDENCE_DIR=$env:RUNNER_TEMP\native-evidence" | Out-File $env:GITHUB_ENV -Append
           "PYPGO_VERSION=$(.\.venv\Scripts\python.exe scripts/project_version.py)" | Out-File $env:GITHUB_ENV -Append
 
@@ -59,10 +65,9 @@ jobs:
       - name: Build and test from the build tree
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           uv run cmake --preset pypgo-wheel
           uv run cmake --build build\pypgo
-          $venv = (Resolve-Path .venv).Path
-          $env:PATH = "$venv\Library\bin;$env:GITHUB_WORKSPACE\third-party\gmp-msvc\release;$env:GITHUB_WORKSPACE\third-party\mpfr-msvc\release;$env:PATH"
           uv run ctest --test-dir build\pypgo --output-on-failure `
             | Tee-Object "$env:EVIDENCE_DIR\ctest.txt"
           if ($LASTEXITCODE -ne 0) { throw "CTest failed" }

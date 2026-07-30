@@ -77,6 +77,9 @@ jobs:
     needs: build-test
     runs-on: macos-26
     timeout-minutes: 150
+    env:
+      ARCHFLAGS: -arch arm64
+      MACOSX_DEPLOYMENT_TARGET: "26.0"
 
     steps:
       - name: Checkout exact source

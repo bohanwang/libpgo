@@ -6,8 +6,11 @@
 #include "embeddedSurfaceIPCPotentialEnergy.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
 #include "initPredicates.h"
+#include "linearPotentialEnergy.h"
 #include "multiVertexPullingSoftConstraints.h"
+#include "NewtonSolver.h"
 #include "pgoLogging.h"
+#include "potentialEnergies.h"
 #include "runIPCSimSetup.h"
 #include "runSimCliLogging.h"
 #include <fmt/format.h>
@@ -22,6 +25,21 @@
 namespace
 {
 namespace ES = pgo::EigenSupport;
+
+void saveSurface(const pgo::RunIPCSim::IpcSimulationContext &context,
+  ES::ConstRefVecXd displacement, double scale, const std::filesystem::path &filename)
+{
+  ES::VXd surfaceDisplacement(context.surfaceRestPositions.size());
+  ES::mv(context.surfaceFromSimulationDispMap, displacement, surfaceDisplacement);
+  const ES::VXd surfacePositions = context.surfaceRestPositions + surfaceDisplacement;
+
+  pgo::Mesh::TriMeshGeo mesh = context.surfaceMesh;
+  for (int vi = 0; vi < mesh.numVertices(); ++vi)
+    mesh.pos(vi) = surfacePositions.segment<3>(vi * 3) / scale;
+
+  if (!mesh.save(filename.string()))
+    throw std::runtime_error("Failed to save IPC surface output: " + filename.string());
+}
 
 void clearOutputDirectory(const std::filesystem::path &outputFolder)
 {
@@ -49,17 +67,12 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
       return 1;
 
     const ES::V3d extAcc = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("g", 1).data());
-    const ES::V3d initialVel = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("init-vel", 1).data());
-    const double timestep = jconfig.getDouble("timestep", 1);
     const double scale = jconfig.getDouble("scale", 1);
     const double solverEps = jconfig.getDouble("solver-eps", 1);
     const int solverMaxIter = jconfig.getInt("solver-max-iter", 1);
-    const std::array<double, 2> dampingParams = jconfig.getValue<std::array<double, 2>>("damping-params", 1);
-    const int numSimSteps = jconfig.getInt("num-timestep", 1);
-    const int frameGap = jconfig.getInt("dump-interval", 1);
     const std::string simType = jconfig.getString("sim-type");
-    if (simType != "dynamic")
-      throw std::invalid_argument("runIPCSim phase1D only supports `sim-type = dynamic`.");
+    if (simType != "dynamic" && simType != "static")
+      throw std::invalid_argument("runIPCSim supports `sim-type` values `dynamic` and `static`.");
     const std::filesystem::path outputFolder = jconfig.getResolvedPath("output", 1);
     const bool restartFromU = jconfig.exist("restart-from-u") ? jconfig.getValue<bool>("restart-from-u", 1) : false;
 
@@ -91,7 +104,6 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
       : RunIPCSim::buildShellIpcSimulation(jconfig);
 
     const int n3 = static_cast<int>(context.simulationRestPosition.size());
-    const int surfn3 = static_cast<int>(context.surfaceRestPositions.size());
     const int n = n3 / 3;
 
     ES::VXd g(n3);
@@ -100,6 +112,54 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
 
     ES::VXd fext(n3);
     ES::mv(context.M, g, fext);
+
+    if (simType == "static") {
+      ES::VXd u = ES::VXd::Zero(n3);
+      const std::filesystem::path statePath = outputFolder / "deform0000.u";
+      if (restartFromU && std::filesystem::exists(statePath)) {
+        ES::MXd state;
+        if (ES::readMatrix(statePath.string().c_str(), state) != 0 ||
+          state.rows() != n3 || state.cols() < 1) {
+          throw std::runtime_error("Invalid static IPC restart state: " + statePath.string());
+        }
+        u = state.col(0);
+        std::cout << "Restarting static IPC from " << statePath << "." << std::endl;
+      }
+
+      auto externalForcesEnergy =
+        std::make_shared<PredefinedPotentialEnergies::LinearPotentialEnergy>(fext);
+      auto energyAll =
+        std::make_shared<NonlinearOptimization::PotentialEnergies>(n3);
+      energyAll->addPotentialEnergy(context.elasticEnergy);
+      for (const auto &pullingEnergy : context.pullingEnergies)
+        energyAll->addPotentialEnergy(pullingEnergy);
+      energyAll->addPotentialEnergy(externalForcesEnergy, -1.0);
+      energyAll->addPotentialEnergy(context.collisionHandler);
+      for (const auto &energy : context.extraGeneralImplicitForceModels)
+        energyAll->addPotentialEnergy(energy);
+      energyAll->init();
+
+      NonlinearOptimization::NewtonSolver::SolverParam solverParam;
+      NonlinearOptimization::NewtonSolver solver(
+        u.data(), solverParam, energyAll, std::vector<int>(), nullptr);
+      if (solver.solve(u.data(), solverMaxIter, solverEps, 2) != 0)
+        return 1;
+      if (!u.allFinite())
+        throw std::runtime_error("Static IPC solve produced non-finite displacement.");
+
+      ES::MXd state = ES::MXd::Zero(n3, 3);
+      state.col(0) = u;
+      if (ES::writeMatrix(statePath.string().c_str(), state) != 0)
+        throw std::runtime_error("Failed to save static IPC state: " + statePath.string());
+      saveSurface(context, u, scale, outputFolder / "ret0000.obj");
+      return 0;
+    }
+
+    const ES::V3d initialVel = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("init-vel", 1).data());
+    const double timestep = jconfig.getDouble("timestep", 1);
+    const std::array<double, 2> dampingParams = jconfig.getValue<std::array<double, 2>>("damping-params", 1);
+    const int numSimSteps = jconfig.getInt("num-timestep", 1);
+    const int frameGap = jconfig.getInt("dump-interval", 1);
 
     std::shared_ptr<Simulation::ImplicitBackwardEulerTimeIntegrator> intg =
       std::make_shared<Simulation::ImplicitBackwardEulerTimeIntegrator>(context.M, context.elasticEnergy,
@@ -113,7 +173,6 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
     ES::VXd u = ES::VXd::Zero(n3);
     ES::VXd uvel = ES::VXd::Zero(n3);
     ES::VXd uacc = ES::VXd::Zero(n3);
-    ES::VXd usurf = ES::VXd::Zero(surfn3);
 
     for (int i = 0; i < n; ++i)
       uvel.segment<3>(i * 3) = initialVel;
@@ -169,14 +228,9 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
       uMat.col(2) = uacc;
       ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder.string(), framei).c_str(), uMat);
 
-      if (framei % frameGap == 0) {
-        Mesh::TriMeshGeo mesh = context.surfaceMesh;
-        ES::mv(context.surfaceFromSimulationDispMap, u, usurf);
-        const ES::VXd psurf = context.surfaceRestPositions + usurf;
-        for (int vi = 0; vi < mesh.numVertices(); ++vi)
-          mesh.pos(vi) = psurf.segment<3>(vi * 3) / scale;
-        mesh.save(fmt::format("{}/ret{:04d}.obj", outputFolder.string(), framei / frameGap));
-      }
+      if (framei % frameGap == 0)
+        saveSurface(context, u, scale,
+          outputFolder / fmt::format("ret{:04d}.obj", framei / frameGap));
     }
 
   }

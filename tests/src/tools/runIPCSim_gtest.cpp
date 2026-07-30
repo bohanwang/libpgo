@@ -9,6 +9,7 @@
 #include "runIPCSimSetup.h"
 #include "runSimCliLogging.h"
 #include "runSimVolumeMeshIO.h"
+#include "simulationRunner.h"
 #include "triMeshGeo.h"
 #include "volumetricMesh.h"
 
@@ -104,6 +105,46 @@ std::string addBoolConfigField(std::string json, const std::string &name, bool v
 
   json.insert(pos, ",\n  \"" + name + "\": " + (value ? "true" : "false"));
   return json;
+}
+
+std::string makeStaticConfig(std::string json)
+{
+  const std::string dynamicField = "\"sim-type\": \"dynamic\"";
+  const std::size_t pos = json.find(dynamicField);
+  if (pos == std::string::npos)
+    throw std::runtime_error("Failed to find dynamic sim-type in test JSON.");
+
+  json.replace(pos, dynamicField.size(), "\"sim-type\": \"static\"");
+  return json;
+}
+
+std::string replaceTextOnce(std::string text, const std::string &from, const std::string &to)
+{
+  const std::size_t pos = text.find(from);
+  if (pos == std::string::npos)
+    throw std::runtime_error("Failed to find text in test configuration: " + from);
+
+  text.replace(pos, from.size(), to);
+  return text;
+}
+
+void expectFiniteStaticOutput(const fs::path &outputDir)
+{
+  const fs::path statePath = outputDir / "deform0000.u";
+  const fs::path surfacePath = outputDir / "ret0000.obj";
+  ASSERT_TRUE(fs::exists(statePath));
+  ASSERT_TRUE(fs::exists(surfacePath));
+
+  ES::MXd state;
+  ASSERT_EQ(ES::readMatrix(statePath.string().c_str(), state), 0);
+  ASSERT_EQ(state.cols(), 3);
+  EXPECT_TRUE(state.allFinite());
+  EXPECT_GT(state.col(0).norm(), 1e-12);
+
+  pgo::Mesh::TriMeshGeo surface;
+  ASSERT_TRUE(surface.load(surfacePath.string()));
+  for (int vi = 0; vi < surface.numVertices(); ++vi)
+    EXPECT_TRUE(surface.pos(vi).allFinite());
 }
 
 void writeZeroShellRestartState(const fs::path &outputDir, int frame)
@@ -207,6 +248,7 @@ std::string makeShellIPCConfig(const fs::path &tempDir, int numTimesteps,
        << "  \"num-timestep\": " << numTimesteps << ",\n"
        << "  \"damping-params\": [0, 0],\n"
        << "  \"sim-type\": \"dynamic\",\n"
+       << "  \"contact-model\": \"ipc\",\n"
        << "  \"solver-eps\": 1e-4,\n"
        << "  \"solver-max-iter\": 5,\n"
        << "  \"elastic-material\": \"koiter-stvk\",\n"
@@ -257,6 +299,7 @@ std::string makeShellIPCConfigWithIgnoredLegacyContactFields(const fs::path &tem
        << "  \"num-timestep\": " << numTimesteps << ",\n"
        << "  \"damping-params\": [0, 0],\n"
        << "  \"sim-type\": \"dynamic\",\n"
+       << "  \"contact-model\": \"ipc\",\n"
        << "  \"solver-eps\": 1e-4,\n"
        << "  \"solver-max-iter\": 5,\n"
        << "  \"elastic-material\": \"koiter-stvk\",\n"
@@ -300,6 +343,7 @@ std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey,
        << "  \"num-timestep\": " << numTimesteps << ",\n"
        << "  \"damping-params\": [0, 0],\n"
        << "  \"sim-type\": \"dynamic\",\n"
+       << "  \"contact-model\": \"ipc\",\n"
        << "  \"solver-eps\": 1e-4,\n"
        << "  \"solver-max-iter\": 5,\n"
        << "  \"elastic-material\": \"" << material << "\",\n"
@@ -803,6 +847,70 @@ TEST(RunIPCSimCliGTest, CubicOneTimestepFloorSmokeWritesDeformAndRet)
   ASSERT_EQ(runCommand(command.str()), 0);
   EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "deform0000.u"));
   EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "ret0000.obj"));
+}
+
+TEST(RunIPCSimCliGTest, TetStaticIPCSmokeWritesFiniteStateAndSurface)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-ipc-static.json";
+  const fs::path fixedVerticesPath = tempDir.path() / "tet-static-fixed.txt";
+  writeTextFile(fixedVerticesPath, "0\n4\n20\n");
+  std::string config = makeStaticConfig(makeTetIPCConfig(tempDir.path(), 1));
+  config = replaceTextOnce(
+    std::move(config),
+    quotePath(tetIPCExampleDir() / "box-fixed.txt"),
+    quotePath(fixedVerticesPath));
+  writeTextFile(configPath, config);
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  expectFiniteStaticOutput(tempDir.path() / "tet-output");
+}
+
+TEST(RunIPCSimCliGTest, CubicStaticIPCSharedDispatcherWritesFiniteStateAndSurface)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "cubic-ipc-static.json";
+  const fs::path fixedVerticesPath = tempDir.path() / "cubic-static-fixed.txt";
+  writeTextFile(fixedVerticesPath, "0\n4\n20\n");
+  std::string config = makeStaticConfig(makeCubicIPCConfig(tempDir.path(), 1));
+  config = replaceTextOnce(
+    std::move(config),
+    quotePath(cubicIPCExampleDir() / "box-fixed.txt"),
+    quotePath(fixedVerticesPath));
+  writeTextFile(configPath, config);
+
+  ASSERT_EQ(pgo::SimulationRunner::runSimulationFromConfig(configPath), 0);
+  expectFiniteStaticOutput(tempDir.path() / "cubic-output");
+}
+
+TEST(RunIPCSimCliGTest, ShellStaticIPCSmokeWritesFiniteStateAndSurface)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-ipc-static.json";
+  writeTextFile(configPath, makeStaticConfig(makeShellIPCConfig(tempDir.path(), 1)));
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  expectFiniteStaticOutput(tempDir.path() / "shell-output");
 }
 
 TEST(RunIPCSimCliGTest, TetRejectsIPCHeuristic)

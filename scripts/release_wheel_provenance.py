@@ -28,7 +28,7 @@ class ProvenanceError(RuntimeError):
 
 def run_git(source_dir: Path, *args: str) -> str:
     result = subprocess.run(
-        ["git", *args],
+        ["git", "-c", f"safe.directory={source_dir}", *args],
         cwd=source_dir,
         check=True,
         capture_output=True,

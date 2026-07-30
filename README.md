@@ -3,6 +3,11 @@
 The library is designed to primarily focus on physically based simulations, geometric shape modeling, and optimization.
 The source code extends [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) and is designed for academic research purposes.
 
+Release information:
+
+- [Release notes](release-notes.txt)
+- [Detailed 0.0.4 release notes](docs/release/0.0.4.md)
+
 ---
 
 ## Install a prebuilt wheel
@@ -266,15 +271,15 @@ We provide three python scripts to test the installation.
 Build the tool:
 
 ```bash
-    cmake --preset base
-    cmake --build build/base --target cubicMesher
+    uv run cmake --preset pypgo-wheel
+    uv run cmake --build build/pypgo --target cubicMesher
 ```
 
 Generate the documented presets with the checked-in helper:
 
 ```bash
     python3 examples/scripts/generate_cubic_veg.py \
-        --build-dir build/base \
+        --build-dir build/pypgo \
         --scene box
 ```
 
@@ -296,21 +301,21 @@ runner commands, and the old-to-new path table.
 Build the shell simulation CLI:
 
 ```bash
-    cmake --preset base
-    cmake --build build/base --target runShellSim
+    uv run cmake --preset pypgo-wheel
+    uv run cmake --build build/pypgo --target runShellSim
 ```
 
 Run the bundled shell example:
 
 ```bash
-    build/base/bin/runShellSim \
+    build/pypgo/bin/runShellSim \
         examples/configs/shell/shell-dynamic-sampled.json
 ```
 
 To also write command-line output to a log next to the config, add `--log`:
 
 ```bash
-    build/base/bin/runShellSim \
+    build/pypgo/bin/runShellSim \
         examples/configs/shell/shell-dynamic-sampled.json --log
 ```
 

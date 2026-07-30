@@ -49,6 +49,7 @@ struct IpcSimulationContext
   std::shared_ptr<SolidDeformationModel::DeformationModelManager> deformationModelManagerOwner;
   std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> deformationModelAssemblerOwner;
   std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy;
+  std::shared_ptr<EigenSupport::SpMatD> pullingHessianBaseOwner;
   std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> pullingEnergies;
   std::vector<EigenSupport::VXd> pullingTargets;
   std::vector<EigenSupport::VXd> pullingTargetRests;

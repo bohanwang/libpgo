@@ -344,9 +344,9 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   elasticEnergy->setElasticParams(elasticParams);
 
   ES::VXd zero = ES::VXd::Zero(n3);
-  ES::SpMatD K;
-  elasticEnergy->createHessian(K);
-  elasticEnergy->hessian(zero, K);
+  auto pullingHessianBase = std::make_shared<ES::SpMatD>();
+  elasticEnergy->createHessian(*pullingHessianBase);
+  elasticEnergy->hessian(zero, *pullingHessianBase);
 
   std::vector<std::string> fixedVertexFilenames;
   for (const auto &fv : jconfig.handle()["fixed-vertices"])
@@ -355,7 +355,8 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> pullingEnergies;
   std::vector<ES::VXd> pullingTargets;
   std::vector<ES::VXd> pullingTargetRests;
-  buildPullingConstraints(jconfig, fixedVertexFilenames, simulationRestPosition, K, pullingEnergies, pullingTargets, pullingTargetRests);
+  buildPullingConstraints(jconfig, fixedVertexFilenames, simulationRestPosition,
+    *pullingHessianBase, pullingEnergies, pullingTargets, pullingTargetRests);
 
   ES::SpMatD M;
   libiglInterface::computeMassMatrix(surfaceMesh, M, 1, 1);
@@ -375,6 +376,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   context.deformationModelManagerOwner = dmm;
   context.deformationModelAssemblerOwner = assembler;
   context.elasticEnergy = elasticEnergy;
+  context.pullingHessianBaseOwner = std::move(pullingHessianBase);
   context.pullingEnergies = std::move(pullingEnergies);
   context.pullingTargets = std::move(pullingTargets);
   context.pullingTargetRests = std::move(pullingTargetRests);
@@ -447,14 +449,15 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
     throwConfigError("runIPCSim phase1D volume setup produced an embedding matrix incompatible with simulation DOFs.");
 
   ES::VXd zero = ES::VXd::Zero(initialized.restPosition.size());
-  ES::SpMatD K;
-  initialized.elasticEnergy->createHessian(K);
-  initialized.elasticEnergy->hessian(zero, K);
+  auto pullingHessianBase = std::make_shared<ES::SpMatD>();
+  initialized.elasticEnergy->createHessian(*pullingHessianBase);
+  initialized.elasticEnergy->hessian(zero, *pullingHessianBase);
 
   std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> pullingEnergies;
   std::vector<ES::VXd> pullingTargets;
   std::vector<ES::VXd> pullingTargetRests;
-  buildPullingConstraints(jconfig, resolvedPaths.fixedVertexFilenames, initialized.restPosition, K,
+  buildPullingConstraints(jconfig, resolvedPaths.fixedVertexFilenames, initialized.restPosition,
+    *pullingHessianBase,
     pullingEnergies, pullingTargets, pullingTargetRests);
 
   ES::MXd V;
@@ -470,6 +473,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   context.deformationModelManagerOwner = initialized.dmm;
   context.deformationModelAssemblerOwner = initialized.assembler;
   context.elasticEnergy = initialized.elasticEnergy;
+  context.pullingHessianBaseOwner = std::move(pullingHessianBase);
   context.pullingEnergies = std::move(pullingEnergies);
   context.pullingTargets = std::move(pullingTargets);
   context.pullingTargetRests = std::move(pullingTargetRests);

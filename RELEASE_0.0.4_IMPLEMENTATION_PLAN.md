@@ -5,7 +5,7 @@ The short operational gate list and evidence record live in
 
 | Field | Value |
 | --- | --- |
-| Status | Phases 1–4 implemented; Phase 5 validation is next |
+| Status | Phases 1–4 implemented; Phase 5 validation is next; Phase 6 content is in progress |
 | Target version | `0.0.4` |
 | Target repository | `/Users/jinceyang/Desktop/codebase/merge/libpgo` |
 | Target baseline branch | `upstream-temp-0.0.4` |
@@ -26,7 +26,7 @@ and must not be used as implementation guidance.
 | Phase 3 — examples/assets | Complete | Configs/assets are separated and lightweight tet/cubic assets are generated for bounded smoke tests. |
 | Phase 4 — build/package | Implemented locally | No Conda; `uv` drives one locked environment; repaired standalone wheels are produced by three platform workflows. macOS local build, 154 native tests, build-tree Python smoke, wheel build, and docs build pass. |
 | Phase 5 — validation | **Next** | Run hosted Linux/macOS/Windows `build-test` and `package` jobs, close compatibility/sanitizer gaps, then run the owner-controlled Linux MKL Pardiso matrix. |
-| Phase 6 — docs/release notes | Pending Phase 5 evidence | Finalize changelog, limitations, dependency table, and pin the docs submodule commit. |
+| Phase 6 — docs/release notes | **In progress alongside Phase 5** | Handwritten 0.0.4 content, repository release notes, limitations, dependency table, migration guide, and repaired Pages workflow are drafted. Final CI/server evidence and the docs gitlink remain pending. |
 | Phase 7 — release candidate | Requires explicit authorization | Integrate, rerun exact-commit workflows, record artifacts/checksums, then stop for owner review before tag/delivery. |
 
 Current build and packaging rules:
@@ -72,7 +72,7 @@ Repository rules:
 - [ ] Never merge `/Users/jinceyang/Desktop/codebase/libpgo` wholesale into `/Users/jinceyang/Desktop/codebase/merge/libpgo`.
 - [ ] Never copy all CMake, Python package, benchmark, experiment, or asset changes from `/Users/jinceyang/Desktop/codebase/libpgo`.
 - [ ] Use `/Users/jinceyang/Desktop/codebase/main/libpgo` as the 0.0.3 compatibility and example-asset baseline.
-- [ ] Derive the documentation changelog from the code difference between the 0.0.3 compatibility baseline and final 0.0.4 code; the empty docs `main` branch is not a content reference.
+- [ ] Derive the documentation release notes from the code difference between the 0.0.3 compatibility baseline and final 0.0.4 code; the empty docs `main` branch is not a content reference.
 - [ ] Preserve unrelated user changes if any worktree becomes dirty.
 
 ### 1.1 How an implementation agent must execute this document
@@ -154,7 +154,9 @@ This file is an implementation brief and checklist, not a shell script.
 ### 2.3 Explicitly out of scope
 
 - [ ] No new simulation algorithms beyond what exists in the 0.0.4 baseline.
-- [ ] No new static IPC matrix, resume workflow, or output transaction layer.
+- [x] Support static IPC through the existing `runIPCSim`/shared dispatcher
+  without adding separate static/dynamic executables or a backend hierarchy.
+- [ ] No new resume workflow or output transaction layer.
 - [ ] No broad solver rewrite.
 - [ ] No contact-system redesign.
 - [ ] No mesh-system redesign.
@@ -249,7 +251,7 @@ A release candidate may be tagged only when every blocking gate is satisfied.
 ### Gate E — Documentation and release metadata
 
 - [ ] Main repository release notes are complete.
-- [ ] Detailed module changelogs are complete and build successfully from `annajcy/libpgo-doc` branch `v0.0.4`; deployment happens only after explicit authorization.
+- [ ] Detailed module release notes are complete and build successfully from `annajcy/libpgo-doc` branch `v0.0.4`; deployment happens only after explicit authorization.
 - [ ] The docs submodule is pinned to an exact docs commit.
 - [ ] Known IPC limitations are documented.
 - [ ] All version surfaces say `0.0.4`.
@@ -270,7 +272,7 @@ Acceptance:
 
 - Code work starts from `1670f6258d941d80cd9d718fc033fccc193d5e20`.
 - Docs work is performed inside `/Users/jinceyang/Desktop/codebase/merge/libpgo/docs`, on the canonical `annajcy/libpgo-doc` `v0.0.4` branch, even though its starting content currently matches the experimental docs commit.
-- 0.0.3 (main) code checkout is used as the changelog baseline in docs;
+- 0.0.3 (main) code checkout is used as the release-note baseline in docs;
 
 ### P0.2 Capture baselines before edits
 
@@ -611,7 +613,10 @@ existing runner, and unknown values fail.
 - [x] Test missing config, sampled default routing, explicit IPC routing, and unknown-contact failure.
 - [x] Run the existing sampled and IPC setup/integration suites after extraction.
 - [x] Confirm the tool wrappers no longer contain solver/setup bodies.
-- [x] Keep unrelated output-safety, resume, static-contact, and public CLI redesign work deferred beyond 0.0.4.
+- [x] Add focused tet/cubic/shell static IPC runner coverage using the existing
+  Newton, dynamic-Hessian, material max-step, and CCD contracts.
+- [x] Keep unrelated output-safety, resume, sampled-static contact redesign,
+  and public CLI redesign work deferred beyond 0.0.4.
 
 Acceptance: tools, C, and Python reach the same sampled/IPC implementations without
 changing the established runner split or introducing a new application architecture.
@@ -1265,83 +1270,85 @@ The name “MKL Pardiso” in this section means the `PGO_HAS_MKL && !PGO_HAS_OR
 
 Canonical docs repository and branch:
 
-- `https://github.com/annajcy/libpgo-doc.git`
+- `git@github.com:annajcy/libpgo-doc.git`
 - Branch `v0.0.4`
 - Frozen starting commit `ef0834c67a280d16836579942246129087c99e44`
 - Submodule checkout `/Users/jinceyang/Desktop/codebase/merge/libpgo/docs`
 
 Checklist:
 
-- [ ] Initialize/update the superproject's `docs` submodule, then check out the canonical `v0.0.4` branch from the frozen starting commit inside it; do not create a separate docs worktree or substitute a `release/0.0.4` docs branch.
-- [ ] Preserve the docs-site design, theme/layout, navigation machinery, and reusable site assets, but simplify and repair the build/deployment workflow where the current experimental assumptions do not match 0.0.4.
-- [ ] Treat the starting documentation content as experimental and nonauthoritative.
-- [ ] Derive the 0.0.4 content and changelog from the code difference between `/Users/jinceyang/Desktop/codebase/main/libpgo@ed9675d56403b73a0cf32084e5da9b0011f88e2c` and the final 0.0.4 code.
-- [ ] Do not use the empty docs `main` branch as a content or changelog reference.
-- [ ] Delete or rewrite pages, sections, examples, API descriptions, and navigation entries that do not exist in the actual 0.0.4 code.
-- [ ] Remove references to generalized Neo-Hookean, tricubic Hermite, experimental package architecture, ARPACK restoration, and other unreleased features.
-- [ ] Replace the workflow's checkout of the libpgo default branch with the exact authorized `v0.0.4` tag/commit.
-- [ ] Remove the workflow's dependency on experimental-only `libpgo-src/environment.yml` and the nonexistent `pypgo-ci` preset; use the actual 0.0.4 docs/source build path and only the dependencies needed to render the site.
+- [x] Initialize/update the superproject's `docs` submodule, then check out the canonical `v0.0.4` branch from the frozen starting commit inside it; do not create a separate docs worktree or substitute a `release/0.0.4` docs branch.
+- [x] Preserve the docs-site design, theme/layout, navigation machinery, and reusable site assets, but simplify and repair the build/deployment workflow where the current experimental assumptions do not match 0.0.4.
+- [x] Treat the starting documentation content as experimental and nonauthoritative.
+- [x] Derive the 0.0.4 content and release notes from the code difference between `/Users/jinceyang/Desktop/codebase/main/libpgo@ed9675d56403b73a0cf32084e5da9b0011f88e2c` and the final 0.0.4 code.
+- [x] Do not use the empty docs `main` branch as a content or release-note reference.
+- [x] Delete or rewrite pages, sections, examples, API descriptions, and navigation entries that do not exist in the actual 0.0.4 code.
+- [x] Remove references to generalized Neo-Hookean, tricubic Hermite, experimental package architecture, ARPACK restoration, and other unreleased features.
+- [x] Replace the workflow's checkout of the libpgo default branch with the exact authorized `v0.0.4` tag/commit.
+- [x] Remove the workflow's dependency on experimental-only `libpgo-src/environment.yml` and the nonexistent `pypgo-ci` preset; use the actual 0.0.4 docs/source build path and only the dependencies needed to render the site.
 - [ ] If GitHub requires the Pages workflow to exist on the default docs branch, keep only the minimal deployment workflow on docs `main` and make it check out the `v0.0.4` content branch explicitly; do not use empty `main` as a content source.
-- [ ] Keep Pages permissions only in the docs deployment workflow; the three libpgo platform CI workflows remain read-only.
-- [ ] Use a public HTTPS submodule URL in `/Users/jinceyang/Desktop/codebase/merge/libpgo/.gitmodules`.
+- [x] Keep Pages permissions only in the docs deployment workflow; the three libpgo platform CI workflows remain read-only.
+- [x] Keep the SSH submodule URL
+  `git@github.com:annajcy/libpgo-doc.git` in
+  `/Users/jinceyang/Desktop/codebase/merge/libpgo/.gitmodules`.
 - [ ] Optionally record `branch = v0.0.4`, but pin the code repository gitlink to the exact final docs commit.
 - [ ] Commit docs content changes in the docs submodule first; after that exact docs commit exists, update and commit the superproject gitlink.
 - [ ] Make CI checkout submodules recursively.
 - [ ] Build the exact `v0.0.4` docs content in CI and deploy only after the local/CI link and snippet checks pass.
-- [ ] Check internal links and code snippets.
+- [x] Check internal links and code snippets.
 
-### P6.2 Detailed changelog structure
+### P6.2 Detailed release-note structure
 
 Create detailed pages covering:
 
-- [ ] 0.0.4 overview.
-- [ ] Cubic mesh and cubic FEM.
-- [ ] Cubic mesher and the Python `.veg` generation script; state that generated cubic `.veg` files are not stored in git.
-- [ ] IPC core, barrier, self-contact, floor contact, and CCD.
-- [ ] Hessian topology contract.
-- [ ] Newton symbolic-factorization fix.
-- [ ] Material and contact maximum-step behavior.
-- [ ] Extracted sampled/IPC runners and the preserved `runSim`/`runIPCSim`/`runShellSim` split.
-- [ ] C API.
-- [ ] Python API.
-- [ ] Config routing: tet/cubic × sampled/IPC plus the retained shell runners.
-- [ ] Build presets.
-- [ ] Wheel installation from GitHub Actions artifacts; explicitly state that 0.0.4 has no sdist and is not on PyPI.
-- [ ] Linux/Windows MKL Pardiso wheel policy, TBB threading layer, macOS no-MKL policy, and Linux server validation environment/matrix summary.
-- [ ] Dependency versions and optional features.
-- [ ] Migration from 0.0.3.
-- [ ] Old-to-new example config and asset path map, explicitly stating that old paths are not supported.
-- [ ] Known limitations.
+- [x] 0.0.4 overview.
+- [x] Cubic mesh and cubic FEM.
+- [x] Cubic mesher and the Python `.veg` generation script; state that generated cubic `.veg` files are not stored in git.
+- [x] IPC core, barrier, self-contact, floor contact, and CCD.
+- [x] Hessian topology contract.
+- [x] Newton symbolic-factorization fix.
+- [x] Material and contact maximum-step behavior.
+- [x] Extracted sampled/IPC runners and the preserved `runSim`/`runIPCSim`/`runShellSim` split.
+- [x] C API.
+- [x] Python API.
+- [x] Config routing: tet/cubic × sampled/IPC plus the retained shell runners.
+- [x] Build presets.
+- [x] Wheel installation from GitHub Actions artifacts; explicitly state that 0.0.4 has no sdist and is not on PyPI.
+- [x] Linux/Windows MKL Pardiso wheel policy, TBB threading layer, macOS no-MKL policy, and Linux server validation environment/matrix summary.
+- [x] Dependency versions and optional features.
+- [x] Migration from 0.0.3.
+- [x] Old-to-new example config and asset path map, explicitly stating that old paths are not supported.
+- [x] Known limitations.
 
 Known limitations must say:
 
-- [ ] IPC external objects are not supported in 0.0.4 unless implementation and tests prove otherwise.
-- [ ] IPC supports the implemented self-contact and explicit floor path.
-- [ ] CUDA utilities are retained but not part of default wheels.
-- [ ] Native Pardiso is retained but not bundled.
-- [ ] Guaranteed wheel platforms/Python version are listed explicitly.
+- [x] IPC external objects are not supported in 0.0.4 unless implementation and tests prove otherwise.
+- [x] IPC supports the implemented self-contact and explicit floor path.
+- [x] CUDA utilities are retained but not part of default wheels.
+- [x] Native Pardiso is retained but not bundled.
+- [x] Guaranteed wheel platforms/Python version are listed explicitly.
 
 ### P6.3 Main repository release notes
 
 Files:
 
-- `/Users/jinceyang/Desktop/codebase/merge/libpgo/CHANGELOG.md`
+- `/Users/jinceyang/Desktop/codebase/merge/libpgo/release-notes.txt`
 - `/Users/jinceyang/Desktop/codebase/merge/libpgo/README.md`
 
 Checklist:
 
-- [ ] Add a concise `0.0.4` section.
-- [ ] Link to the detailed docs changelog.
-- [ ] List cubic FEM/mesh/mesher.
-- [ ] List IPC and CCD maximum-step.
-- [ ] List sampled/IPC config routing and the volume missing-`contact-model` default.
-- [ ] List the shared C/Python entry.
-- [ ] List the preserved `runSim`/`runIPCSim`/`runShellSim` split.
-- [ ] List correctness fixes.
-- [ ] List packaging changes.
-- [ ] List the config/asset-separated example layout and the intentional example-path migration.
-- [ ] List known limitations.
-- [ ] Remove instructions that point users to wheel files committed under `dist/`.
+- [x] Add a concise `0.0.4` section.
+- [x] Link to the detailed docs release notes.
+- [x] List cubic FEM/mesh/mesher.
+- [x] List IPC and CCD maximum-step.
+- [x] List sampled/IPC config routing and the volume missing-`contact-model` default.
+- [x] List the shared C/Python entry.
+- [x] List the preserved `runSim`/`runIPCSim`/`runShellSim` split.
+- [x] List correctness fixes.
+- [x] List packaging changes.
+- [x] List the config/asset-separated example layout and the intentional example-path migration.
+- [x] List known limitations.
+- [x] Remove instructions that point users to wheel files committed under `dist/`.
 
 ## 11. Implementation phase 7 — release-candidate, tag, and CI artifact flow
 
@@ -1431,7 +1438,7 @@ Use small, independently reviewable commits in this order:
 16. `build(pypgo): add unified uv and pypgo-wheel build path`
 17. `ci(release): split native validation from repaired wheel packaging`
 18. `docs(release): rewrite v0.0.4 docs content and repair deployment`
-19. `docs(release): finalize changelog and release notes`
+19. `docs(release): finalize release notes`
 
 After each correctness commit:
 
@@ -1449,7 +1456,8 @@ After each correctness commit:
 - Only explicitly selected reference work has been migrated from `/Users/jinceyang/Desktop/codebase/libpgo`.
 - Cubic FEM, cubic mesher, IPC, sampled contact, and maximum-step behavior are correct.
 - `runSim` and `runIPCSim` are thin wrappers over reusable implementations; C and Python dispatch to those same implementations.
-- Existing sampled/IPC behavior and executable boundaries are preserved without a new static IPC or resume architecture.
+- Existing executable boundaries are preserved; static IPC reuses
+  `runIPCSim` and the shared dispatcher without a new backend or resume architecture.
 - Existing shell assets plus sampled and IPC shell paths are retained and regression-tested.
 - Example configs and static assets are separated under `examples/configs/` and `examples/assets/`, with no legacy-path compatibility copies or unintended duplicate assets.
 - The obsolete CIPC wrapper and scoped profiling are gone.

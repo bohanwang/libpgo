@@ -47,7 +47,10 @@ Release decisions:
   - [ ] cubic + IPC
   - [ ] shell + IPC
   - [ ] shell + sampled through `runShellSim`
-- [ ] No new static IPC matrix, resume workflow, or output transaction layer is included.
+- [ ] Static IPC passes focused tet/cubic/shell runner tests through the
+  existing `runIPCSim` and shared dispatcher paths.
+- [ ] No separate static/dynamic runner architecture, resume workflow, or
+  output transaction layer is included.
 - [ ] Missing `contact-model` selects sampled contact for 0.0.3 compatibility.
 - [ ] IPC external-object contact is not claimed as supported.
 - [ ] No generalized Neo-Hookean, tricubic Hermite, benchmark, experiment, package-architecture, abi3, or ARPACK work is included.
@@ -164,10 +167,11 @@ This matrix is run and confirmed manually by the owner. It is not a GitHub Actio
 - [ ] Perform docs work inside this repository's `/Users/jinceyang/Desktop/codebase/merge/libpgo/docs` git submodule; do not use a separate docs worktree.
 - [ ] Preserve the documentation-site design and content tooling, but simplify and repair the deployment workflow as needed for 0.0.4.
 - [ ] Delete or rewrite content that describes features not present in the actual 0.0.4 code.
-- [ ] Derive the changelog from the code difference between `/Users/jinceyang/Desktop/codebase/main/libpgo@ed9675d56403b73a0cf32084e5da9b0011f88e2c` and the final 0.0.4 code; do not use the empty docs `main` branch as the content reference.
+- [ ] Derive the release notes from the code difference between `/Users/jinceyang/Desktop/codebase/main/libpgo@ed9675d56403b73a0cf32084e5da9b0011f88e2c` and the final 0.0.4 code; do not use the empty docs `main` branch as the content reference.
 - [ ] Document the new non-backward-compatible example paths, public matrix, shell support, IPC limitations, cubic mesh generation workflow, MKL/TBB wheel policy, installation, and migration notes.
 - [ ] Build docs and check internal links and code snippets.
-- [ ] Pin the code repository submodule to the exact final docs commit using a public HTTPS URL.
+- [ ] Pin the code repository submodule to the exact final docs commit and keep
+  its SSH URL `git@github.com:annajcy/libpgo-doc.git`.
 
 ## 9. Integration and owner handoff
 
