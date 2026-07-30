@@ -17,9 +17,9 @@ repository root.
 Build `cubicMesher`, then generate one or more presets:
 
 ```bash
-cmake --build build/base_no_mkl --target cubicMesher
+cmake --build build/base --target cubicMesher
 python3 examples/scripts/generate_cubic_veg.py \
-  --build-dir build/base_no_mkl \
+  --build-dir build/base \
   --scene box \
   --scene bunny
 ```
@@ -39,7 +39,7 @@ through every retained animation config:
 
 ```bash
 python3 examples/scripts/smoke_test_configs.py \
-  --build-dir build/base_no_mkl
+  --build-dir build/base
 ```
 
 The smoke driver invokes both `tetMesher` and `cubicMesher` through
@@ -56,7 +56,7 @@ To generate only the smoke assets in a fresh directory:
 
 ```bash
 python3 examples/scripts/generate_lite_tet_cubic_asset.py \
-  --build-dir build/base_no_mkl \
+  --build-dir build/base \
   --output-dir /tmp/libpgo-smoke-assets
 ```
 
@@ -70,23 +70,23 @@ Sampled and IPC volume simulations remain separate entry points:
 ```bash
 mkdir -p examples/generated/output
 
-build/base_no_mkl/bin/runSim \
+build/base/bin/runSim \
   examples/configs/volume/box/box-tet-sampled.json
 
-build/base_no_mkl/bin/runIPCSim \
+build/base/bin/runIPCSim \
   examples/configs/volume/box/box-hang-tet-ipc.json
 
-build/base_no_mkl/bin/runIPCSim \
+build/base/bin/runIPCSim \
   examples/configs/volume/box/box-hang-cubic-ipc.json
 ```
 
 Cubic configs require the matching generated mesh first. The shell examples are:
 
 ```bash
-build/base_no_mkl/bin/runShellSim \
+build/base/bin/runShellSim \
   examples/configs/shell/shell-dynamic-sampled.json
 
-build/base_no_mkl/bin/runIPCSim \
+build/base/bin/runIPCSim \
   examples/configs/shell/shell-dynamic-ipc.json
 ```
 

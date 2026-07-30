@@ -31,12 +31,22 @@
 *.out
 *.app
 
-/*.egg-info/
+*.egg-info/
 /.eggs/
+/.venv/
 /build/
 _skbuild
 /dist/
 /wheelhouse/
+
+# In-source CMake artifacts
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+DartConfiguration.tcl
+Testing/
+compile_commands.json
 
 .DS_Store
 .vscode/*

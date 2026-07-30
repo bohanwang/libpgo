@@ -633,6 +633,38 @@ in migration documentation and release checks.
 
 ## 8. Implementation phase 4 — build system, dependencies, and wheels
 
+> **Current `add-no-conda` decision (2026-07-29):** release wheels are
+> standalone pip-installable artifacts. Conda is not part of configure,
+> packaging, CI, or runtime. The older Conda-based Phase 4 text retained below
+> is historical design context only and must not be used as implementation
+> guidance.
+
+The active dependency contract is:
+
+- CMake keeps the existing public `PGO_*` feature flags, except
+  `PGO_CHECK_CONDA`, which is removed and rejected with a migration error.
+- TBB is supplied by the platform packaging environment. Linux and Windows use
+  the TBB runtime selected by Intel's pinned `mkl-devel` package; macOS uses
+  Homebrew TBB because Intel does not publish a macOS arm64 package.
+- Linux and Windows use pinned Intel PyPI MKL with the TBB threading layer.
+  macOS uses the system Accelerate framework and does not link MKL.
+- GMP and MPFR come from the manylinux system packages or Homebrew and are
+  bundled by `auditwheel`/`delocate`. Windows keeps the repository's approved
+  prebuilt GMP/MPFR DLLs and bundles them with `delvewheel`.
+- Imath is built statically from its pinned upstream source archive. Other
+  ordinary source dependencies continue to use pinned FetchContent inputs.
+- CI repairs each raw wheel, audits its native dependency closure, installs it
+  in a fresh ordinary `venv`, and runs import/API smoke without inherited
+  library search paths.
+- Release artifacts are produced only by the three platform workflows and are
+  not tracked in git.
+
+Acceptance: a user can install the repaired wheel plus its declared Python
+requirements into a fresh CPython 3.12 virtual environment without Conda or
+separately installed native runtime libraries.
+
+### Historical Phase 4 plan (superseded)
+
 ### P4.1 Dedicated pypgo configure presets
 
 Reference implementation:

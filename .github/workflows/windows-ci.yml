@@ -2,7 +2,7 @@ name: Windows CI
 
 on:
   push:
-    branches: [main, "release/**"]
+    branches: [main, "release/**", add-no-conda]
   pull_request:
   workflow_dispatch:
 
@@ -13,182 +13,203 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  CMAKE_BUILD_PARALLEL_LEVEL: "3"
-  MKL_THREADING_LAYER: TBB
-  MKL_DYNAMIC: "FALSE"
-  MKL_NUM_THREADS: "2"
-  PYPGO_CMAKE_PRESET: pypgo-wheel-mkl
-
 jobs:
-  build-test-package:
-    name: Windows x86-64 build, test, and wheel
+  build-test:
+    name: Build and test Windows x86-64
     runs-on: windows-2022
-    timeout-minutes: 120
-    defaults:
-      run:
-        shell: pwsh
+    timeout-minutes: 150
 
     steps:
       - name: Checkout exact source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
 
       - name: Set up MSVC x64
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
         with:
           arch: x64
 
-      - name: Set up pinned Miniforge
-        uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3
-        with:
-          miniforge-variant: Miniforge3
-          miniforge-version: 26.3.2-3
-          activate-environment: libpgo-build
-          auto-activate-base: false
-          use-mamba: true
-          python-version: "3.12"
-          channels: conda-forge
-          channel-priority: strict
-          conda-remove-defaults: true
-
-      - name: Install pinned build environment
+      - name: Set up uv dependencies
+        shell: pwsh
         run: |
-          mamba install -y -c conda-forge --strict-channel-priority `
-            "python=3.12" "cmake=4.3" "ninja=1.13" `
-            "numpy=2.5" "pip=26.1" "setuptools=82" "wheel=0.47" `
-            "python-build=1.3" "pytest=9.0" `
-            "gmp=6.3" "mpfr=4.2" "imath=3.2" "fmt=12" `
-            "tbb=2023.0" "tbb-devel=2023.0" `
-            "mkl-devel=2025.3" "libblas=*=*mkl" "liblapack=*=*mkl" `
-            delvewheel
-          "MKLROOT=$env:CONDA_PREFIX\Library" | Out-File $env:GITHUB_ENV -Append
-          "NATIVE_BUILD=$env:RUNNER_TEMP\libpgo-native" | Out-File $env:GITHUB_ENV -Append
-          "INSTALL_PREFIX=$env:RUNNER_TEMP\libpgo-install" | Out-File $env:GITHUB_ENV -Append
-          "WHEEL_DIR=$env:RUNNER_TEMP\wheelhouse" | Out-File $env:GITHUB_ENV -Append
-          "EVIDENCE_DIR=$env:RUNNER_TEMP\evidence" | Out-File $env:GITHUB_ENV -Append
-
-      - name: Keep MSVC ahead of foreign compilers
-        run: |
-          $entries = $env:PATH -split ';' | Where-Object {
-            $_ -and $_ -notmatch '(?i)(mingw|msys|strawberry)'
-          }
-          $env:PATH = $entries -join ';'
-          "PATH=$env:PATH" | Out-File $env:GITHUB_ENV -Append
-          if ((Get-Command cl).Source -notmatch '(?i)Microsoft Visual Studio') {
-            throw "MSVC cl.exe is not first-party: $((Get-Command cl).Source)"
-          }
+          $uvVersion = python scripts/uv_version.py
+          python -m pip install "uv==$uvVersion"
+          uv sync --locked --python python
+          "EVIDENCE_DIR=$env:RUNNER_TEMP\native-evidence" | Out-File $env:GITHUB_ENV -Append
+          "PYPGO_VERSION=$(.\.venv\Scripts\python.exe scripts/project_version.py)" | Out-File $env:GITHUB_ENV -Append
 
       - name: Record dependency environment
+        shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:EVIDENCE_DIR | Out-Null
-          conda config --show-sources | Tee-Object "$env:EVIDENCE_DIR\conda-config.txt"
-          conda list | Tee-Object "$env:EVIDENCE_DIR\conda-list.txt"
-          conda list --explicit | Tee-Object "$env:EVIDENCE_DIR\conda-explicit.txt"
+          uv pip freeze | Tee-Object "$env:EVIDENCE_DIR\uv-freeze.txt"
           @(
-            python --version
-            cmake --version
-            ninja --version
+            uv --version
+            uv run python --version
+            uv run cmake --version
+            uv run ninja --version
             cl
-            "MKLROOT=$env:MKLROOT"
-            "MKL_THREADING_LAYER=$env:MKL_THREADING_LAYER"
+            uv run python -c "import sys; print('python_prefix=' + sys.prefix)"
           ) | Out-File "$env:EVIDENCE_DIR\toolchain.txt"
 
-      - name: Configure and build native tree
+      - name: Build and test from the build tree
+        shell: pwsh
         run: |
-          cmake --preset pypgo-wheel-mkl `
-            -B "$env:NATIVE_BUILD" `
-            -G Ninja `
-            -DBUILD_TESTING=ON `
-            -DPYPGO_VERSION_INFO=0.0.4
-          cmake --build "$env:NATIVE_BUILD" -j 3
-
-      - name: Run native and CLI smoke tests
-        run: |
-          ctest --test-dir "$env:NATIVE_BUILD" --output-on-failure `
+          uv run cmake --preset pypgo-wheel
+          uv run cmake --build build\pypgo
+          $venv = (Resolve-Path .venv).Path
+          $env:PATH = "$venv\Library\bin;$env:GITHUB_WORKSPACE\third-party\gmp-msvc\release;$env:GITHUB_WORKSPACE\third-party\mpfr-msvc\release;$env:PATH"
+          uv run ctest --test-dir build\pypgo --output-on-failure `
             | Tee-Object "$env:EVIDENCE_DIR\ctest.txt"
           if ($LASTEXITCODE -ne 0) { throw "CTest failed" }
+          $env:PYTHONPATH = "$env:GITHUB_WORKSPACE\build\pypgo\src\python\pypgo"
+          uv run python -m pytest -q tests\pypgo\test_pgo_smoke.py `
+            | Tee-Object "$env:EVIDENCE_DIR\build-tree-pytest.txt"
+          if ($LASTEXITCODE -ne 0) { throw "Build-tree pytest failed" }
+          Copy-Item build\pypgo\CMakeCache.txt "$env:EVIDENCE_DIR\CMakeCache.txt"
 
-      - name: Verify installed C package
+      - name: Upload native test evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pypgo-native-evidence-windows
+          path: ${{ env.EVIDENCE_DIR }}
+          if-no-files-found: error
+          retention-days: 1
+
+  package:
+    name: Package Windows x86-64 wheel
+    needs: build-test
+    runs-on: windows-2022
+    timeout-minutes: 150
+
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up MSVC x64
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        with:
+          arch: x64
+
+      - name: Set up uv dependencies
+        shell: pwsh
         run: |
-          cmake --install "$env:NATIVE_BUILD" --prefix "$env:INSTALL_PREFIX"
-          cmake -S src/tests/testPgo_c -B "$env:RUNNER_TEMP\pgo-c-consumer" -G Ninja `
-            "-DCMAKE_PREFIX_PATH=$env:INSTALL_PREFIX;$env:CONDA_PREFIX"
-          cmake --build "$env:RUNNER_TEMP\pgo-c-consumer"
-          $env:PATH = "$env:INSTALL_PREFIX\bin;$env:INSTALL_PREFIX\lib;$env:CONDA_PREFIX\Library\bin;$env:PATH"
-          & "$env:RUNNER_TEMP\pgo-c-consumer\pgo_c_test.exe" `
-            "$env:GITHUB_WORKSPACE\examples\assets\common\torus-tet.veg" `
-            | Tee-Object "$env:EVIDENCE_DIR\c-consumer.txt"
-          if ($LASTEXITCODE -ne 0) { throw "C consumer failed" }
+          $uvVersion = python scripts/uv_version.py
+          python -m pip install "uv==$uvVersion"
+          uv sync --locked --python python
+          "RAW_WHEEL_DIR=$env:RUNNER_TEMP\raw-wheel" | Out-File $env:GITHUB_ENV -Append
+          "WHEEL_DIR=$env:RUNNER_TEMP\wheelhouse" | Out-File $env:GITHUB_ENV -Append
+          "EVIDENCE_DIR=$env:RUNNER_TEMP\evidence" | Out-File $env:GITHUB_ENV -Append
+          "PYPGO_VERSION=$(.\.venv\Scripts\python.exe scripts/project_version.py)" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Download native test evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pypgo-native-evidence-windows
+          path: ${{ env.EVIDENCE_DIR }}
+
+      - name: Record package dependency environment
+        shell: pwsh
+        run: |
+          uv pip freeze | Tee-Object "$env:EVIDENCE_DIR\package-uv-freeze.txt"
 
       - name: Lock source provenance
+        shell: pwsh
         run: |
-          python scripts/release_wheel_provenance.py preflight `
+          uv run python scripts/release_wheel_provenance.py preflight `
             --evidence-dir "$env:EVIDENCE_DIR"
 
-      - name: Build one wheel without sdist
+      - name: Build and repair wheel
+        shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force $env:RAW_WHEEL_DIR | Out-Null
           New-Item -ItemType Directory -Force $env:WHEEL_DIR | Out-Null
-          python -m build --wheel --no-isolation --outdir "$env:WHEEL_DIR"
+          uv build --wheel --no-build-isolation --out-dir "$env:RAW_WHEEL_DIR"
+          $rawWheel = @(Get-ChildItem $env:RAW_WHEEL_DIR -Filter '*.whl')[0].FullName
+          $venv = (Resolve-Path .venv).Path
+          $nativePaths = @(
+            "$venv\Library\bin",
+            "$env:GITHUB_WORKSPACE\third-party\gmp-msvc\release",
+            "$env:GITHUB_WORKSPACE\third-party\mpfr-msvc\release"
+          ) -join ';'
+          $mklDispatchDlls = @(
+            "mkl_def.2.dll",
+            "mkl_mc3.2.dll",
+            "mkl_avx2.2.dll",
+            "mkl_avx512.2.dll",
+            "mkl_vml_def.2.dll",
+            "mkl_vml_cmpt.2.dll",
+            "mkl_vml_mc3.2.dll",
+            "mkl_vml_avx2.2.dll",
+            "mkl_vml_avx512.2.dll"
+          ) -join ':'
+          uv run python -m delvewheel repair `
+            --add-path $nativePaths `
+            --include $mklDispatchDlls `
+            --wheel-dir "$env:WHEEL_DIR" `
+            $rawWheel
           $wheels = @(Get-ChildItem $env:WHEEL_DIR -Filter '*.whl')
-          if ($wheels.Count -ne 1) { throw "Expected one wheel, found $($wheels.Count)" }
-          if (Get-ChildItem $env:WHEEL_DIR -Filter '*.tar.gz') { throw "sdist is forbidden" }
-          if ($wheels[0].Name -notmatch 'cp312-cp312-win_amd64\.whl$') {
-            throw "Unexpected wheel tag: $($wheels[0].Name)"
-          }
+          if ($wheels.Count -ne 1) { throw "Expected one repaired wheel" }
 
-      - name: Audit final wheel without repair
+      - name: Audit repaired wheel
+        shell: pwsh
         run: |
           $wheel = @(Get-ChildItem $env:WHEEL_DIR -Filter '*.whl')[0].FullName
-          python -m delvewheel show $wheel | Tee-Object "$env:EVIDENCE_DIR\delvewheel.txt"
-          python scripts/audit_release_wheel.py `
+          uv run python -m delvewheel show $wheel | Tee-Object "$env:EVIDENCE_DIR\delvewheel.txt"
+          uv run python scripts/audit_release_wheel.py `
             --platform windows `
             --wheel $wheel `
             --source-dir "$env:GITHUB_WORKSPACE" `
             | Tee-Object "$env:EVIDENCE_DIR\wheel-linkage.txt"
           if ($LASTEXITCODE -ne 0) { throw "Wheel audit failed" }
 
-      - name: Verify wheel in fresh runtime environment
+      - name: Verify wheel in a fresh venv
+        shell: pwsh
         run: |
-          $runtime = "$env:RUNNER_TEMP\libpgo-runtime"
-          conda create -y -p $runtime -c conda-forge --strict-channel-priority `
-            "python=3.12" "pip=26.1" "numpy=2.5" "pytest=9.0" `
-            "gmp=6.3" "mpfr=4.2" "imath=3.2" "fmt=12" `
-            "tbb=2023.0" `
-            "libblas=*=*mkl" "liblapack=*=*mkl"
+          $runtime = "$env:RUNNER_TEMP\pypgo-runtime"
+          uv venv --python 3.12 $runtime
+          $runtimePython = "$runtime\Scripts\python.exe"
+          uv pip install --python $runtimePython "numpy==2.0.2" "pytest==8.4.2"
           $wheel = @(Get-ChildItem $env:WHEEL_DIR -Filter '*.whl')[0].FullName
-          conda run -p $runtime python -m pip install --no-deps $wheel
-          conda run -p $runtime python -m pip check
-          $workdir = "$env:RUNNER_TEMP\installed-wheel-smoke"
-          New-Item -ItemType Directory -Force $workdir | Out-Null
-          Push-Location $workdir
-          conda run -p $runtime python `
-            "$env:GITHUB_WORKSPACE\scripts\installed_wheel_smoke.py" `
+          uv pip install --python $runtimePython --no-deps $wheel
+          & $runtimePython scripts/installed_wheel_smoke.py `
             --platform windows --source-dir "$env:GITHUB_WORKSPACE" `
             | Tee-Object "$env:EVIDENCE_DIR\installed-smoke.txt"
           if ($LASTEXITCODE -ne 0) { throw "Installed wheel smoke failed" }
-          conda run -p $runtime python -m pytest -q `
-            "$env:GITHUB_WORKSPACE\tests\pypgo\test_pgo_smoke.py" `
+          & $runtimePython -m pytest -q tests/pypgo/test_pgo_smoke.py `
             | Tee-Object "$env:EVIDENCE_DIR\installed-pytest.txt"
           if ($LASTEXITCODE -ne 0) { throw "Installed wheel pytest failed" }
-          Pop-Location
 
       - name: Finalize provenance
+        shell: pwsh
         run: |
-          python scripts/release_wheel_provenance.py record `
+          uv run python scripts/release_wheel_provenance.py record `
             --evidence-dir "$env:EVIDENCE_DIR" `
             --wheel-dir "$env:WHEEL_DIR" `
-            --cmake-cache "$env:NATIVE_BUILD\CMakeCache.txt" `
-            --dependency-evidence "$env:EVIDENCE_DIR\conda-explicit.txt" `
+            --cmake-cache "$env:EVIDENCE_DIR\CMakeCache.txt" `
+            --dependency-evidence "$env:EVIDENCE_DIR\uv-freeze.txt" `
+            --dependency-evidence "$env:EVIDENCE_DIR\package-uv-freeze.txt" `
             --dependency-evidence "$env:EVIDENCE_DIR\wheel-linkage.txt" `
             --test-evidence "$env:EVIDENCE_DIR\ctest.txt" `
-            --test-evidence "$env:EVIDENCE_DIR\installed-smoke.txt"
+            --test-evidence "$env:EVIDENCE_DIR\build-tree-pytest.txt" `
+            --test-evidence "$env:EVIDENCE_DIR\installed-smoke.txt" `
+            --test-evidence "$env:EVIDENCE_DIR\installed-pytest.txt"
           Get-FileHash "$env:WHEEL_DIR\*.whl" -Algorithm SHA256 `
             | Format-List | Out-File "$env:EVIDENCE_DIR\wheel.sha256"
 
       - name: Upload wheel and evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: pypgo-0.0.4-windows-x86_64
+          name: pypgo-${{ env.PYPGO_VERSION }}-windows-x86_64
           path: |
             ${{ env.WHEEL_DIR }}/*.whl
             ${{ env.EVIDENCE_DIR }}

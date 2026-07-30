@@ -39,7 +39,6 @@ FetchContent_Declare(
   URL_HASH SHA256=d4600765554133fb3c0a830ace87ff89225a01ffe02f4012ecfdcf7c778dbcc0
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
-  FIND_PACKAGE_ARGS NAMES SuiteSparse COMPONENTS SuiteSparse_config cholmod spqr umfpack
 )
 
 FetchContent_MakeAvailable(suitesparse)

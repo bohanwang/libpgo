@@ -15,10 +15,8 @@ FetchContent_Declare(
   URL_HASH SHA256=3e5a59ab7688dcd1f918bc92051a10564113d4f36c3bbed3ef596c25e519a062
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
-  FIND_PACKAGE_ARGS NAMES argparse
 )
 
 FetchContent_MakeAvailable(argparse)
 
 message(STATUS "Done.")
-

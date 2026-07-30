@@ -14,8 +14,8 @@ from datetime import datetime, timezone
 from email.parser import BytesParser
 from pathlib import Path
 
+from project_version import read_project_version
 
-RELEASE_VERSION = "0.0.4"
 RELEASE_DISTRIBUTION = "pypgo"
 SOURCE_RECORD = "source-provenance.json"
 FINAL_RECORD = "wheel-provenance.json"
@@ -91,6 +91,7 @@ def write_json(path: Path, payload: dict[str, object]) -> None:
 
 def command_preflight(args: argparse.Namespace) -> None:
     source_dir = args.source_dir.resolve()
+    release_version = read_project_version(source_dir)
     evidence_dir = args.evidence_dir.resolve()
     ensure_outside_source(evidence_dir, source_dir, "evidence directory")
     checkout = require_clean_checkout(source_dir)
@@ -98,7 +99,7 @@ def command_preflight(args: argparse.Namespace) -> None:
     evidence_dir.mkdir(parents=True, exist_ok=True)
     record = {
         "schema_version": 1,
-        "release_version": RELEASE_VERSION,
+        "release_version": release_version,
         "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
         "source": checkout,
     }
@@ -107,7 +108,7 @@ def command_preflight(args: argparse.Namespace) -> None:
     print(output)
 
 
-def wheel_metadata(wheel: Path) -> dict[str, object]:
+def wheel_metadata(wheel: Path, release_version: str) -> dict[str, object]:
     with zipfile.ZipFile(wheel) as archive:
         names = archive.namelist()
         metadata_names = [
@@ -127,9 +128,9 @@ def wheel_metadata(wheel: Path) -> dict[str, object]:
                 f"expected {RELEASE_DISTRIBUTION!r}"
             )
         version = metadata.get("Version")
-        if version != RELEASE_VERSION:
+        if version != release_version:
             raise ProvenanceError(
-                f"{wheel.name} contains version {version!r}, expected {RELEASE_VERSION}"
+                f"{wheel.name} contains version {version!r}, expected {release_version}"
             )
 
         wheel_text = archive.read(wheel_names[0]).decode("utf-8")
@@ -156,6 +157,7 @@ def evidence_entry(path: Path) -> dict[str, object]:
 
 def command_record(args: argparse.Namespace) -> None:
     source_dir = args.source_dir.resolve()
+    release_version = read_project_version(source_dir)
     evidence_dir = args.evidence_dir.resolve()
     wheel_dir = args.wheel_dir.resolve()
     ensure_outside_source(evidence_dir, source_dir, "evidence directory")
@@ -198,19 +200,19 @@ def command_record(args: argparse.Namespace) -> None:
         raise ProvenanceError("missing evidence files: " + ", ".join(missing))
 
     wheel = wheels[0]
-    expected_prefix = f"{RELEASE_DISTRIBUTION}-{RELEASE_VERSION}-"
+    expected_prefix = f"{RELEASE_DISTRIBUTION}-{release_version}-"
     if not wheel.name.startswith(expected_prefix):
         raise ProvenanceError(
             f"wheel filename must start with {expected_prefix!r}: {wheel.name}"
         )
     payload = {
         "schema_version": 1,
-        "release_version": RELEASE_VERSION,
+        "release_version": release_version,
         "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
         "source": checkout,
         "wheel": {
             **evidence_entry(wheel),
-            **wheel_metadata(wheel),
+            **wheel_metadata(wheel, release_version),
         },
         "cmake_cache": evidence_entry(cmake_cache),
         "dependency_evidence": [

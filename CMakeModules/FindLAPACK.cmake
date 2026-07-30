@@ -105,6 +105,18 @@ section on :ref:`Intel MKL` for details.
 # The approach follows that of the ``autoconf`` macro file, ``acx_lapack.m4``
 # (distributed at http://ac-archive.sourceforge.net/ac-archive/acx_lapack.html).
 
+if(TARGET MKL::MKL)
+  set(LAPACK_FOUND TRUE)
+  set(LAPACK_LIBRARIES MKL::MKL)
+  if(NOT TARGET LAPACK::LAPACK)
+    add_library(LAPACK::LAPACK INTERFACE IMPORTED)
+    set_target_properties(LAPACK::LAPACK PROPERTIES
+      INTERFACE_LINK_LIBRARIES MKL::MKL)
+  endif()
+  message(STATUS "Using the configured MKL::MKL target as LAPACK")
+  return()
+endif()
+
 if(CMAKE_Fortran_COMPILER_LOADED)
   include(${CMAKE_ROOT}/Modules/CheckFortranFunctionExists.cmake)
 else()

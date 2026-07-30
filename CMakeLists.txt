@@ -1,5 +1,23 @@
 cmake_minimum_required(VERSION 3.28.0 FATAL_ERROR)
 
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml"
+  _pgo_project_version_lines
+  REGEX "^version[ \t]*=[ \t]*\"[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?\"[ \t]*$")
+list(LENGTH _pgo_project_version_lines _pgo_project_version_count)
+if(NOT _pgo_project_version_count EQUAL 1)
+  message(FATAL_ERROR
+    "Expected exactly one CMake-compatible [project].version in pyproject.toml")
+endif()
+list(GET _pgo_project_version_lines 0 _pgo_project_version_line)
+string(REGEX REPLACE
+  "^version[ \t]*=[ \t]*\"([0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?)\"[ \t]*$"
+  "\\1"
+  PGO_PROJECT_VERSION
+  "${_pgo_project_version_line}")
+unset(_pgo_project_version_lines)
+unset(_pgo_project_version_count)
+unset(_pgo_project_version_line)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL "Export compile_commands.json for clangd" FORCE)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -9,12 +27,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-option(PGO_USE_MKL "Use MKL" OFF)
+option(PGO_USE_MKL "Use MKL" ON)
 option(PGO_ENABLE_PYTHON "Build python module" OFF)
 option(PGO_ENABLE_FULL "Enable all functionalities" OFF)
 option(PGO_ENABLE_CUDA "Enable CUDA" OFF)
 option(PGO_BUILD_SUBPROJECTS "Include subprojects" OFF)
-option(PGO_CHECK_CONDA "Check conda" OFF)
 
 option(PGO_UI "Build pgo ui" OFF)
 option(PGO_RENDER_USE_ASSIMP "Use Assimp" OFF)
@@ -30,17 +47,53 @@ option(PGO_ENABLE_GMSH "Enable GMSH support" OFF)
 option(PGO_PORTABLE_BUILD "Disable host-specific code generation and release debug info" OFF)
 
 if(APPLE AND PGO_ENABLE_PYTHON AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
-  set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "26.0" CACHE STRING
     "Minimum macOS version for Python extension builds")
 endif()
 
-project(libpgo VERSION 0.0.4 LANGUAGES CXX C)
+project(libpgo VERSION "${PGO_PROJECT_VERSION}" LANGUAGES CXX C)
+
+if(NOT DEFINED PYPGO_VERSION_INFO)
+  set(PYPGO_VERSION_INFO "${PROJECT_VERSION}")
+endif()
+
+if(APPLE)
+  set(PGO_USE_MKL OFF CACHE BOOL "Use MKL" FORCE)
+  message(STATUS "PGO_USE_MKL is forced OFF on macOS; using Accelerate")
+endif()
 
 include(CTest)
 set(PGO_BUILD_TESTING ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "Disable third-party tests during dependency configuration" FORCE)
 
-if(APPLE AND NOT PGO_USE_MKL)
+# Python packages such as mkl-devel install their CMake package files below the
+# active Python prefix. Discover that prefix internally so uv/pip builds and
+# direct CMake builds do not require dependency-location arguments.
+if(PYTHON_EXECUTABLE)
+  set(_pgo_python_executable "${PYTHON_EXECUTABLE}")
+else()
+  find_program(_pgo_python_executable NAMES python3 python)
+endif()
+if(_pgo_python_executable)
+  execute_process(
+    COMMAND "${_pgo_python_executable}" -c "import sys; print(sys.prefix)"
+    OUTPUT_VARIABLE _pgo_python_prefix
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE _pgo_python_prefix_result
+  )
+  if(_pgo_python_prefix_result EQUAL 0 AND IS_DIRECTORY "${_pgo_python_prefix}")
+    list(PREPEND CMAKE_PREFIX_PATH "${_pgo_python_prefix}")
+    if(WIN32 AND IS_DIRECTORY "${_pgo_python_prefix}/Library")
+      list(PREPEND CMAKE_PREFIX_PATH "${_pgo_python_prefix}/Library")
+    endif()
+    message(STATUS "Using Python dependency prefix: ${_pgo_python_prefix}")
+  endif()
+endif()
+unset(_pgo_python_executable)
+unset(_pgo_python_prefix)
+unset(_pgo_python_prefix_result)
+
+if(APPLE)
   set(BLA_VENDOR Apple CACHE STRING "BLAS/LAPACK provider" FORCE)
   set(BLA_SIZEOF_INTEGER 4 CACHE STRING "LP64 BLAS/LAPACK integer size" FORCE)
 endif()
@@ -260,6 +313,7 @@ if(PGO_ENABLE_FULL OR PGO_ENABLE_PYTHON)
   include(CMakeModules/third-party/libigl.cmake)
   
   if(PGO_ENABLE_ALEMBIC)
+    include(CMakeModules/third-party/imath.cmake)
     include(CMakeModules/third-party/alembic.cmake)
   endif()
   

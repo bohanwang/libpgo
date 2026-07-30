@@ -13,9 +13,9 @@ else()
     URL_HASH SHA256=8586084f71f9bde545ee7fa6d00288b264a2b7ac3607b974e54d13e7162c1c72
     # GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
     # GIT_TAG fb2fca90be39783f76ba05b521360afeeda265f2
+    OVERRIDE_FIND_PACKAGE
     EXCLUDE_FROM_ALL
     DOWNLOAD_EXTRACT_TIMESTAMP ON
-    FIND_PACKAGE_ARGS NAMES Eigen3
   )
 
   FetchContent_MakeAvailable(Eigen3)

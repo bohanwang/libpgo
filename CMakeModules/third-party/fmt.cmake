@@ -11,7 +11,6 @@ FetchContent_Declare(
   URL_HASH SHA256=7e85cbf6125a76daa0f83cd9240eff863d988aca68cd5f66c01ff7b59fa886b6
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
-  FIND_PACKAGE_ARGS NAMES fmt
 )
 
 FetchContent_MakeAvailable(fmt)

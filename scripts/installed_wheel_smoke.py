@@ -12,6 +12,8 @@ from pathlib import Path
 
 import numpy as np
 
+from project_version import read_project_version
+
 
 def windows_modules() -> str:
     process = ctypes.windll.kernel32.GetCurrentProcess()
@@ -56,7 +58,8 @@ def main() -> int:
     source_dir = args.source_dir.resolve()
     if source_dir == module_path or source_dir in module_path.parents:
         raise RuntimeError(f"pypgo was imported from the source checkout: {module_path}")
-    if pypgo.__version__ != "0.0.4":
+    expected_version = read_project_version(source_dir)
+    if pypgo.__version__ != expected_version:
         raise RuntimeError(f"unexpected pypgo version: {pypgo.__version__}")
 
     matrix = np.arange(256 * 256, dtype=np.float64).reshape(256, 256)

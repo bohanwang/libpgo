@@ -5,84 +5,158 @@ The source code extends [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) an
 
 ---
 
-## Python wheels
+## Install a prebuilt wheel
 
-The 0.0.4 release supports CPython 3.12 on these targets:
+Release 0.0.4 is distributed as standalone CPython 3.12 wheels through the
+recorded [GitHub Actions artifacts](https://github.com/annajcy/libpgo/actions).
+It is not published to PyPI, no source distribution is produced, and wheels
+are not committed to this repository.
 
-- Linux x86-64 (`linux_x86_64`)
-- macOS arm64
-- Windows x86-64 (`win_amd64`)
+| Platform | Supported target | Artifact name |
+| --- | --- | --- |
+| Linux | `manylinux_2_28`, x86-64 | `pypgo-0.0.4-manylinux_2_28-x86_64` |
+| macOS | macOS 26+, arm64 | `pypgo-0.0.4-macos-arm64` |
+| Windows | Windows x86-64 | `pypgo-0.0.4-windows-x86_64` |
 
-Release wheels are downloaded from the recorded
-[GitHub Actions artifacts](https://github.com/annajcy/libpgo/actions) and
-installed from the local wheel file. They are designed for the documented
-Conda/Miniforge runtime and are not generic wheels for an otherwise empty
-virtual environment.
+Download the artifact for the release commit. A prebuilt wheel does not
+require Conda or a system installation of MKL, TBB, GMP, or MPFR.
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) first;
+`uv venv` downloads Python 3.12 when it is not already available.
 
-Version 0.0.4 is distributed as wheel artifacts only. It is not published on
-PyPI, no source distribution is produced, and release wheels are not committed
-to this repository.
-
-Pip cannot install Conda packages. Before installing a wheel, create a runtime
-environment containing NumPy, GMP, MPFR, Imath, fmt, and TBB:
-
-```bash
-conda create -n pypgo-004 -c conda-forge \
-  python=3.12 "numpy>=1.26" gmp mpfr imath fmt tbb tbb-devel
-conda activate pypgo-004
-conda config --env --set channel_priority strict
-```
-
-On Linux and Windows, add the MKL runtime:
+Linux:
 
 ```bash
-conda install -c conda-forge mkl mkl-devel \
-  "libblas=*=*mkl" "liblapack=*=*mkl"
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python "numpy==2.0.2"
+uv pip install --python .venv/bin/python --no-deps \
+  /path/to/pypgo-0.0.4-cp312-cp312-manylinux_2_28_x86_64.whl
+.venv/bin/python -c "import pypgo; print(pypgo)"
 ```
 
-On macOS, libpgo links the system Accelerate framework. Select the matching
-Accelerate family for NumPy:
+macOS 26 arm64:
 
 ```bash
-conda install -c conda-forge \
-  "libblas=*=*newaccelerate" "liblapack=*=*newaccelerate"
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python "numpy==2.0.2"
+uv pip install --python .venv/bin/python --no-deps \
+  /path/to/pypgo-0.0.4-cp312-cp312-macosx_26_0_arm64.whl
+.venv/bin/python -c "import pypgo; print(pypgo)"
 ```
 
-Then install the downloaded artifact:
+Windows PowerShell:
+
+```powershell
+uv venv --python 3.12 .venv
+uv pip install --python .venv\Scripts\python.exe "numpy==2.0.2"
+uv pip install --python .venv\Scripts\python.exe --no-deps `
+  C:\path\to\pypgo-0.0.4-cp312-cp312-win_amd64.whl
+.\.venv\Scripts\python.exe -c "import pypgo; print(pypgo)"
+```
+
+Linux and Windows wheels bundle oneMKL, the matching oneTBB runtime, GMP, and
+MPFR. The macOS wheel bundles oneTBB, GMP, and MPFR and links the system
+Accelerate framework. See the
+[prebuilt-wheel guide](docs/guide/build/build-from-wheel.md) for artifact
+download and checksum commands.
+
+## Build from source
+
+Source builds require CMake 3.29 or newer, a C++20 compiler, Python 3.12, and
+network access for pinned FetchContent archives. Unlike a repaired release
+wheel, a source installation may depend on native libraries installed on the
+build machine.
+
+The repository tracks `.python-version` and a cross-platform `uv.lock`.
+`uv sync --locked` installs the common build/test tools plus the current
+platform's wheel-repair tool; Linux and Windows additionally receive the
+matching Intel MKL/TBB packages through environment markers. It prepares the
+environment but intentionally does not compile or install pypgo. The default
+developer workflow builds the extension in `build/pypgo` and imports it
+directly through `PYTHONPATH`, so an incremental C++ rebuild does not require
+another `pip install`.
+
+### Linux x86-64
+
+Ubuntu or Debian:
 
 ```bash
-python -m pip install /path/to/pypgo-0.0.4-<python>-<abi>-<platform>.whl
+sudo apt update
+sudo apt install -y build-essential git libgmp-dev libmpfr-dev
+
+uv sync --locked
+
+uv run cmake --preset pypgo-wheel
+uv run cmake --build build/pypgo
+uv run ctest --test-dir build/pypgo --output-on-failure
+
+export PYTHONPATH="$PWD/build/pypgo/src/python/pypgo"
+export LD_LIBRARY_PATH="$PWD/.venv/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+uv run python -c "import pypgo; print(pypgo)"
+uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py
 ```
 
-GMP, MPFR, Imath, fmt, MKL, and TBB remain external runtime libraries and are
-not bundled into the wheel.
+Use `gmp-devel` and `mpfr-devel` instead of `libgmp-dev` and `libmpfr-dev` on
+Fedora/RHEL. Intel's `mkl-devel` package installs its matching `tbb-devel`
+dependency into the same virtual environment. CMake discovers native
+dependencies from the active Python environment and standard platform paths.
 
-## Building from source
-
-Source builds require CMake 3.28 or newer, a C++20 compiler, Python 3.12,
-NumPy, and the native dependencies listed above. GCC 11–13, Apple Clang, and
-Visual Studio 2022 are the currently supported compiler families.
-
-Install CMake and Ninja in the active Conda environment, then build with the
-existing setup entry point:
+### macOS 26 arm64
 
 ```bash
-conda install -c conda-forge cmake ninja
-python -m pip install .
+xcode-select --install
+brew install gmp mpfr tbb
+
+uv sync --locked
+
+uv run cmake --preset pypgo-wheel
+uv run cmake --build build/pypgo
+uv run ctest --test-dir build/pypgo --output-on-failure
+
+export PYTHONPATH="$PWD/build/pypgo/src/python/pypgo"
+uv run python -c "import pypgo; print(pypgo)"
+uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py
 ```
 
-The default build behavior remains platform-compatible with 0.0.3. Release
-automation can explicitly select `pypgo-wheel-no-mkl` or `pypgo-wheel-mkl`
-through `PYPGO_CMAKE_PRESET`. Set `CMAKE_BUILD_PARALLEL_LEVEL` to control
-parallel compilation.
+This source-built extension links the Homebrew TBB/GMP/MPFR libraries
+directly. Keep those packages installed while using the environment.
 
-Release automation runs `scripts/release_wheel_provenance.py preflight` after
-native and Python tests pass. The command rejects a dirty checkout and records
-the exact commit before `python -m build --wheel --no-isolation` runs. Its
-`record` command then requires exactly one wheel, rejects source archives, and
-records the wheel checksum together with the CMake, dependency, test, and
-runner evidence. Evidence and wheel output directories must be outside the
-source checkout.
+### Windows x86-64
+
+Install Python 3.12 and the Visual Studio 2022 **Desktop development with C++**
+workload. Run the following from an x64 Native Tools PowerShell:
+
+```powershell
+uv sync --locked
+
+$venv = (Resolve-Path .venv).Path
+$env:PATH = "$venv\Library\bin;$PWD\third-party\gmp-msvc\release;$PWD\third-party\mpfr-msvc\release;$env:PATH"
+
+uv run cmake --preset pypgo-wheel
+uv run cmake --build build\pypgo
+uv run ctest --test-dir build\pypgo --output-on-failure
+
+$env:PYTHONPATH = "$PWD\build\pypgo\src\python\pypgo"
+uv run python -c "import pypgo; print(pypgo)"
+uv run python -m pytest -q tests\pypgo\test_pgo_smoke.py
+```
+
+Windows source builds use the approved GMP/MPFR files under `third-party`.
+Keep the displayed `PATH` entries when running the source-built module.
+After the first configure, ordinary C++ edits only require
+`uv run cmake --build build/pypgo` (or `--target pypgo` when only the Python
+module is needed). Detailed commands and the separate release-wheel workflow
+are in the
+[source-build guide](docs/guide/build/build-from-source.md).
+
+CI separates these concerns into a source `build-test` job and a fresh
+`package` job. Release automation runs
+`scripts/release_wheel_provenance.py preflight` after downloading the native
+test evidence. The command rejects a dirty checkout and records the exact
+commit before `uv build --wheel --no-build-isolation` runs. After the repaired
+wheel passes its installed smoke test and Python tests, the `record` command
+requires exactly one wheel, rejects source archives, and records the wheel
+checksum together with the CMake, dependency, test, and runner evidence.
+Evidence and wheel output directories must be outside the source checkout.
 
 ## Usage & Test
 
@@ -192,15 +266,15 @@ We provide three python scripts to test the installation.
 Build the tool:
 
 ```bash
-    cmake --preset base_no_mkl
-    cmake --build build/base_no_mkl --target cubicMesher
+    cmake --preset base
+    cmake --build build/base --target cubicMesher
 ```
 
 Generate the documented presets with the checked-in helper:
 
 ```bash
     python3 examples/scripts/generate_cubic_veg.py \
-        --build-dir build/base_no_mkl \
+        --build-dir build/base \
         --scene box
 ```
 
@@ -222,67 +296,60 @@ runner commands, and the old-to-new path table.
 Build the shell simulation CLI:
 
 ```bash
-    cmake --preset base_no_mkl
-    cmake --build build/base_no_mkl --target runShellSim
+    cmake --preset base
+    cmake --build build/base --target runShellSim
 ```
 
 Run the bundled shell example:
 
 ```bash
-    build/base_no_mkl/bin/runShellSim \
+    build/base/bin/runShellSim \
         examples/configs/shell/shell-dynamic-sampled.json
 ```
 
 To also write command-line output to a log next to the config, add `--log`:
 
 ```bash
-    build/base_no_mkl/bin/runShellSim \
+    build/base/bin/runShellSim \
         examples/configs/shell/shell-dynamic-sampled.json --log
 ```
 
 ---
 
-## Setup without Python (Optional)
+## Build the C++ library without Python (optional)
 
-If you want to use the library with your C++ code or modify the source code, you may build it without python.
+After installing the platform dependencies from the source-build section,
+configure a native tree instead of running `pip`.
 
-### Windows & Ubuntu
-
-To compile the lib with a basic functionality,
-
-```bash
-    cd libpgo
-    mkdir build
-    cd build
-    cmake ..
-```
-
-To enable all functionalities, Install [MKL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html). Then,
+Linux:
 
 ```bash
-    cd libpgo
-    mkdir build
-    cd build
-    cmake .. -DPGO_USE_MKL=1 -DPGO_ENABLE_FULL=1
+uv run cmake -S . -B build/native -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DPGO_ENABLE_FULL=ON
+uv run cmake --build build/native
+uv run ctest --test-dir build/native --output-on-failure
 ```
 
-> On Windows, a few extra steps are need before running the above commands. First, the library should be configured in "x64 Native Tools Command Prompt for VS 2022". In addition, before running the commands above, run `c:\Program Files (x86)\Intel\oneAPI\setvars.bat` to setup the environments for MKL, where `c:\Program Files (x86)\Intel\oneAPI` is the path to the oneAPI installation. Once setup, run above commands.
-
-> On Ubuntu, a similar procedure is needed. Before configuring the library, run `bash /opt/intel/oneapi/setvars.sh` to setup the MKL environments for the subsequent cmake configuration.
-
-### Mac OS
-
-To have a basic functionality, use CMake to compile it like on Windows & Ubuntu.
-
-To enable all functionalities,
+macOS 26 arm64:
 
 ```bash
-    cd libpgo
-    mkdir build
-    cd build
-    cmake .. -DPGO_ENABLE_FULL=1 -DDPGO_ENABLE_ALEMBIC=1 -DPGO_ENABLE_GMSH=1
+uv run cmake -S . -B build/native -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DPGO_ENABLE_FULL=ON
+uv run cmake --build build/native
+uv run ctest --test-dir build/native --output-on-failure
 ```
-The last two flags work only if you have imath and gmesh libs.
+
+Windows x64 Native Tools PowerShell:
+
+```powershell
+uv run cmake -S . -B build\native -G Ninja `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DPGO_ENABLE_FULL=ON
+uv run cmake --build build\native
+uv run ctest --test-dir build\native --output-on-failure
+```
 
 ---
 
