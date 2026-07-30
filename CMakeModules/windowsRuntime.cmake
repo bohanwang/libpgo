@@ -25,7 +25,6 @@ if(NOT IS_DIRECTORY "${_pgo_windows_python_bin}")
 endif()
 
 file(GLOB _pgo_tbb_runtime_dlls
-  CONFIGURE_DEPENDS
   LIST_DIRECTORIES FALSE
   "${_pgo_windows_python_bin}/tbb*.dll")
 if(NOT _pgo_tbb_runtime_dlls)
@@ -37,7 +36,6 @@ set(_pgo_windows_runtime_dlls ${_pgo_tbb_runtime_dlls})
 
 if(PGO_USE_MKL)
   file(GLOB _pgo_mkl_runtime_dlls
-    CONFIGURE_DEPENDS
     LIST_DIRECTORIES FALSE
     "${_pgo_windows_python_bin}/mkl_*.dll")
   if(NOT _pgo_mkl_runtime_dlls)
