@@ -19,8 +19,17 @@ endif()
 set_target_properties(pypgo PROPERTIES CXX_VISIBILITY_PRESET "hidden"
     CUDA_VISIBILITY_PRESET "hidden")
 
-if(COMMAND pgo_stage_windows_runtime_for_module)
-    pgo_stage_windows_runtime_for_module(pypgo)
+if(TARGET pgo_windows_runtime)
+    add_dependencies(pypgo pgo_windows_runtime)
+    add_custom_command(
+        TARGET pypgo
+        POST_BUILD
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_directory_if_different
+            "${PGO_WINDOWS_RUNTIME_OUTPUT_DIRECTORY}"
+            "$<TARGET_FILE_DIR:pypgo>"
+        COMMENT "Staging Windows runtime DLLs beside $<TARGET_FILE_NAME:pypgo>"
+        VERBATIM)
 endif()
 
 if(PGO_PORTABLE_BUILD)

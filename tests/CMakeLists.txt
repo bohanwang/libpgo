@@ -14,6 +14,13 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(googletest)
 
+if(TARGET pgo_windows_runtime)
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY
+    "${PGO_WINDOWS_RUNTIME_OUTPUT_DIRECTORY}")
+  set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
+  add_dependencies(gtest_main pgo_windows_runtime)
+endif()
+
 set(LIBPGO_TEST_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
 set(LIBPGO_TEST_TET_BOX_DIR "${LIBPGO_TEST_FIXTURE_DIR}/tet-box")
 set(LIBPGO_TEST_CUBIC_BOX_DIR "${LIBPGO_TEST_FIXTURE_DIR}/cubic-box")

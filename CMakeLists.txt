@@ -425,6 +425,10 @@ function(add_libpgo_tools tgt sources deps)
 
   add_executable(${tgt} ${sources})
 
+  if(TARGET pgo_windows_runtime)
+    add_dependencies(${tgt} pgo_windows_runtime)
+  endif()
+
   foreach(d ${deps})
     target_link_libraries(${tgt} PRIVATE ${d})
   endforeach()
@@ -485,10 +489,6 @@ endif()
 
 if(PGO_ENABLE_PYTHON)
   include(CMakeModules/python_list.cmake)
-endif()
-
-if(COMMAND pgo_finalize_windows_runtime_targets)
-  pgo_finalize_windows_runtime_targets()
 endif()
 
 # generate config file to be used in common build tree
