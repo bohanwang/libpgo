@@ -108,6 +108,7 @@ endif()
 
 set(_pgo_windows_runtime_dlls
   "${_pgo_windows_python_bin}/tbb12.dll"
+  "${_pgo_windows_python_bin}/tbbmalloc.dll"
   "${CMAKE_SOURCE_DIR}/third-party/gmp-msvc/release/gmp-10.dll"
   "${CMAKE_SOURCE_DIR}/third-party/gmp-msvc/release/gmpxx-4.dll"
   "${CMAKE_SOURCE_DIR}/third-party/mpfr-msvc/release/mpfr-6.dll"
@@ -116,6 +117,7 @@ set(_pgo_windows_runtime_dlls
 if(PGO_USE_MKL)
   foreach(_pgo_mkl_runtime_name
       core
+      intel_lp64
       tbb_thread
       def
       mc3

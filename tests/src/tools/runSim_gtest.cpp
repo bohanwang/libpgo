@@ -50,7 +50,9 @@ constexpr const char *kShellJsonPath = LIBPGO_TEST_SHELL_JSON;
 
 std::string quotePath(const fs::path &path)
 {
-  return "\"" + path.string() + "\"";
+  // Forward slashes are accepted by Windows command-line tools and do not
+  // become accidental escape sequences when this helper is used in JSON.
+  return "\"" + path.generic_string() + "\"";
 }
 
 std::string shellExecutable(const fs::path &path)
@@ -345,7 +347,7 @@ TEST(RunSimVolumeMeshIOGTest, AcceptsLegacyTetMeshKey)
 {
   const VolumeMeshInputConfig config = parseConfig("tet-mesh", "box.veg", tetConfigPath());
   EXPECT_EQ(config.configKey, "tet-mesh");
-  EXPECT_EQ(config.meshFilename, kTetBoxVegPath);
+  EXPECT_EQ(fs::path(config.meshFilename), fs::path(kTetBoxVegPath));
   EXPECT_EQ(config.expectedElementType, VolumetricMesh::TET);
 
   pgo::VolumetricMeshes::TetMesh referenceMesh(kTetBoxVegPath);
@@ -359,7 +361,7 @@ TEST(RunSimVolumeMeshIOGTest, AcceptsCubicMeshKey)
 {
   const VolumeMeshInputConfig config = parseConfig("cubic-mesh", "box.veg", cubicConfigPath());
   EXPECT_EQ(config.configKey, "cubic-mesh");
-  EXPECT_EQ(config.meshFilename, kCubicBoxVegPath);
+  EXPECT_EQ(fs::path(config.meshFilename), fs::path(kCubicBoxVegPath));
   EXPECT_EQ(config.expectedElementType, VolumetricMesh::CUBIC);
 
   pgo::VolumetricMeshes::CubicMesh referenceMesh(kCubicBoxVegPath);
@@ -419,12 +421,12 @@ TEST(RunSimVolumeMeshIOGTest, ResolvesCubicExamplePathsAgainstConfigDirectory)
   config.handle()["external-objects"] = nlohmann::json::array({ { { "filename", "../bottom.obj" }, { "movement", { 0.0, 0.0, 0.0 } } } });
 
   const ResolvedRunSimPaths paths = resolvePaths(config, cubicConfigPath());
-  EXPECT_EQ(paths.surfaceMeshFilename, kCubicBoxObjPath);
-  EXPECT_EQ(paths.outputPath, (cubicExampleDir() / "ret-cubic-box").string());
+  EXPECT_EQ(fs::path(paths.surfaceMeshFilename), fs::path(kCubicBoxObjPath));
+  EXPECT_EQ(fs::path(paths.outputPath), cubicExampleDir() / "ret-cubic-box");
   ASSERT_EQ(paths.fixedVertexFilenames.size(), 1u);
-  EXPECT_EQ(paths.fixedVertexFilenames[0], (cubicExampleDir() / "fixed.txt").string());
+  EXPECT_EQ(fs::path(paths.fixedVertexFilenames[0]), cubicExampleDir() / "fixed.txt");
   ASSERT_EQ(paths.externalObjectFilenames.size(), 1u);
-  EXPECT_EQ(paths.externalObjectFilenames[0], (cubicExampleDir() / "../bottom.obj").lexically_normal().string());
+  EXPECT_EQ(fs::path(paths.externalObjectFilenames[0]), (cubicExampleDir() / "../bottom.obj").lexically_normal());
 }
 
 TEST(RunSimVolumeMeshIOGTest, ResolvesLegacyTetExamplePathsAgainstConfigDirectory)
@@ -437,10 +439,10 @@ TEST(RunSimVolumeMeshIOGTest, ResolvesLegacyTetExamplePathsAgainstConfigDirector
   config.handle()["external-objects"] = nlohmann::json::array({ { { "filename", "../bottom.obj" }, { "movement", { 0.0, 0.0, 0.0 } } } });
 
   const ResolvedRunSimPaths paths = resolvePaths(config, tetConfigPath());
-  EXPECT_EQ(paths.surfaceMeshFilename, kTetBoxObjPath);
-  EXPECT_EQ(paths.outputPath, (tetExampleDir() / "ret-box").string());
+  EXPECT_EQ(fs::path(paths.surfaceMeshFilename), fs::path(kTetBoxObjPath));
+  EXPECT_EQ(fs::path(paths.outputPath), tetExampleDir() / "ret-box");
   ASSERT_EQ(paths.externalObjectFilenames.size(), 1u);
-  EXPECT_EQ(paths.externalObjectFilenames[0], (tetExampleDir() / "../bottom.obj").lexically_normal().string());
+  EXPECT_EQ(fs::path(paths.externalObjectFilenames[0]), (tetExampleDir() / "../bottom.obj").lexically_normal());
 }
 
 TEST(RunSimCliLoggingGTest, DerivesDefaultLogPathFromConfigPath)

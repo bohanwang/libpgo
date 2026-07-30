@@ -34,7 +34,9 @@ constexpr const char *kCubicIPCExampleDir = LIBPGO_TEST_IPC_CUBIC_EXAMPLE_DIR;
 
 std::string quotePath(const fs::path &path)
 {
-  return "\"" + path.string() + "\"";
+  // Forward slashes are accepted by Windows command-line tools and do not
+  // become accidental escape sequences when this helper is used in JSON.
+  return "\"" + path.generic_string() + "\"";
 }
 
 std::string shellExecutable(const fs::path &path)
