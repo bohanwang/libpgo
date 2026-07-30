@@ -5,13 +5,52 @@ The short operational gate list and evidence record live in
 
 | Field | Value |
 | --- | --- |
-| Status | Scope frozen; implementation not started |
+| Status | Phases 1–4 implemented; Phase 5 validation is next |
 | Target version | `0.0.4` |
 | Target repository | `/Users/jinceyang/Desktop/codebase/merge/libpgo` |
 | Target baseline branch | `upstream-temp-0.0.4` |
 | Target baseline commit | `1670f6258d941d80cd9d718fc033fccc193d5e20` |
 
 This is an internal release document. The absolute paths are intentional: they identify the three local code snapshots used for the 0.0.4 audit and prevent “current branch”, “temp”, and “main” from being confused during implementation.
+
+## Current execution path
+
+This section is the authoritative operational summary. Any later section
+explicitly labelled historical is retained only to explain earlier decisions
+and must not be used as implementation guidance.
+
+| Phase | State | Current result / next gate |
+| --- | --- | --- |
+| Phase 1 — correctness | Complete | IPC, Hessian, Newton lifetime, maximum-step, cubic, and validation work is covered by the native suite. |
+| Phase 2 — reusable runners | Complete | CLI implementations live in `simulationRunner`; C and Python reuse the same sampled/IPC paths without a backend hierarchy. |
+| Phase 3 — examples/assets | Complete | Configs/assets are separated and lightweight tet/cubic assets are generated for bounded smoke tests. |
+| Phase 4 — build/package | Implemented locally | No Conda; `uv` drives one locked environment; repaired standalone wheels are produced by three platform workflows. macOS local build, 154 native tests, build-tree Python smoke, wheel build, and docs build pass. |
+| Phase 5 — validation | **Next** | Run hosted Linux/macOS/Windows `build-test` and `package` jobs, close compatibility/sanitizer gaps, then run the owner-controlled Linux MKL Pardiso matrix. |
+| Phase 6 — docs/release notes | Pending Phase 5 evidence | Finalize changelog, limitations, dependency table, and pin the docs submodule commit. |
+| Phase 7 — release candidate | Requires explicit authorization | Integrate, rerun exact-commit workflows, record artifacts/checksums, then stop for owner review before tag/delivery. |
+
+Current build and packaging rules:
+
+- `pyproject.toml` is the single project-version source and the single pinned
+  `uv` version source.
+- `uv sync --locked` prepares `.venv`; it does not install pypgo.
+- Developer builds use `uv run cmake --preset pypgo-wheel`, whose preset owns
+  Ninja, `build/pypgo`, tests, and portable-wheel defaults.
+- Developers import the extension directly from
+  `build/pypgo/src/python/pypgo` through `PYTHONPATH`; ordinary C++ changes
+  require only an incremental CMake build.
+- Wheel packaging is a separate path: `uv build --wheel
+  --no-build-isolation`, platform repair/audit, and installation into a fresh
+  ordinary virtual environment.
+- Linux and Windows default to MKL with its matching TBB runtime. macOS
+  forcibly disables MKL and uses Accelerate.
+- Linux/macOS acquire GMP and MPFR from the platform package manager for the
+  build and bundle them during wheel repair. Windows uses the approved
+  repository prebuilt GMP/MPFR files and bundles them with `delvewheel`.
+- Each platform workflow has two jobs: `build-test` uploads native evidence;
+  a fresh dependent `package` job downloads that evidence, builds and repairs
+  the wheel, performs clean-install tests, finalizes provenance, and uploads
+  exactly one wheel plus evidence.
 
 ## 1. Repository roles and immutable references
 
@@ -134,11 +173,20 @@ This file is an implementation brief and checklist, not a shell script.
 
 The implementation can proceed with the defaults below, but the owner must confirm the final values before the release-candidate gates:
 
-- Wheel matrix: CPython 3.12 with `linux_x86_64`, `macosx` arm64, and `win_amd64` platform tags.
+- Wheel matrix: CPython 3.12 with `manylinux_2_28_x86_64`,
+  `macosx_26_0_arm64`, and `win_amd64` platform tags.
 - Linux and Windows wheels use MKL via `PGO_USE_MKL=ON`, with `MKL_THREADING=tbb_thread`, `PGO_HAS_ORIG_PARDISO=OFF`, and runtime linkage verified to use TBB rather than Intel OpenMP.
-- macOS wheels use `PGO_USE_MKL=OFF`; libpgo/SuiteSparse selects the system Accelerate framework with `BLA_VENDOR=Apple`.
-- GMP, MPFR, Imath, fmt, TBB, and other non-system build/runtime dependencies come from the pinned Conda environment on all three platforms; do not install GMP/MPFR/Imath/fmt with `apt` or Homebrew.
-- Wheels depend on the documented Conda runtime and do not vendor MKL, TBB, GMP, MPFR, Imath, fmt, or their transitive Conda runtime libraries.
+- macOS wheels force `PGO_USE_MKL=OFF`; libpgo/SuiteSparse selects the system
+  Accelerate framework.
+- Ordinary source dependencies use pinned FetchContent archives. Imath is
+  built statically. TBB follows the pinned MKL dependency on Linux/Windows and
+  comes from Homebrew on macOS.
+- Linux and macOS build against system-package GMP/MPFR; Windows uses the
+  approved repository prebuilt files. Wheel repair bundles the required
+  non-system runtime closure.
+- Repaired wheels are standalone apart from declared Python requirements and
+  platform system libraries; users do not need Conda or separately installed
+  MKL, TBB, GMP, or MPFR.
 - 0.0.4 is wheel-only: do not build or publish an sdist and do not upload to TestPyPI or PyPI.
 - Linux server backend: MKL Pardiso via `PGO_USE_MKL=ON` and `PGO_HAS_ORIG_PARDISO=OFF`.
 - Linux server duration/timeout: parameterized in the server driver and selected by the owner when the matrix is run.
@@ -176,9 +224,13 @@ A release candidate may be tagged only when every blocking gate is satisfied.
 
 ### Gate C — Packaging
 
-- [ ] Linux `linux_x86_64` wheel builds, is audited without repair/vendoring, and installs in a fresh documented Conda GMP/MPFR/Imath/fmt/MKL/TBB runtime environment.
-- [ ] macOS arm64 wheel builds, is audited without vendoring Conda runtimes, and installs in a fresh documented Conda GMP/MPFR/Imath/fmt/TBB/non-MKL runtime environment.
-- [ ] Windows `win_amd64` wheel builds, is audited without vendoring Conda runtimes, and installs in a fresh documented Conda GMP/MPFR/Imath/fmt/MKL/TBB runtime environment.
+- [ ] Linux `manylinux_2_28_x86_64` wheel builds in the manylinux container,
+  is repaired/audited with `auditwheel`, and installs in a fresh ordinary
+  virtual environment with no inherited library path.
+- [ ] macOS 26 arm64 raw wheel builds locally; final hosted CI must repair/audit it
+  with `delocate` and install it in a fresh ordinary virtual environment.
+- [ ] Windows `win_amd64` wheel builds, is repaired/audited with `delvewheel`,
+  and installs in a fresh ordinary virtual environment.
 - [ ] Installed artifacts report `pypgo.__version__ == "0.0.4"`.
 - [ ] `python -m pip check` passes.
 - [ ] `python -m twine check` passes for all release artifacts.
@@ -234,7 +286,9 @@ Acceptance:
 Before broad refactoring:
 
 - [ ] Confirm a tiny tet + IPC dynamic smoke reaches the existing IPC energy/derivative/CCD/max-step path through the extracted runner.
-- [ ] On each platform, build one minimal wheel from the clean checkout and prove a fresh Conda environment containing GMP/MPFR/Imath/fmt plus the platform runtime can load it without vendored libraries, build-prefix paths, or undeclared host-package-manager paths.
+- [ ] On each platform, build and repair one wheel from the clean checkout and
+  prove a fresh ordinary virtual environment can load it without inherited
+  build-prefix, source-tree, or host-package-manager search paths.
 - [ ] Locally build the `v0.0.4` docs content after replacing the experimental `environment.yml`/`pypgo-ci` assumptions; prove the simplified workflow has a viable source checkout and Pages deployment route.
 - [ ] Record spike commands/results in the release evidence so later implementation does not silently change the accepted contracts.
 
@@ -663,9 +717,116 @@ Acceptance: a user can install the repaired wheel plus its declared Python
 requirements into a fresh CPython 3.12 virtual environment without Conda or
 separately installed native runtime libraries.
 
-### Historical Phase 4 plan (superseded)
+### Active P4.1 — one clear CMake development path
 
-### P4.1 Dedicated pypgo configure presets
+- [x] Keep one public `pypgo-wheel` configure preset.
+- [x] Make MKL default to ON and force it OFF on macOS.
+- [x] Put the Ninja generator and `build/pypgo` binary directory in the
+  preset; callers do not pass `-B` or `-G`.
+- [x] Enable `BUILD_TESTING`, Python, subprojects, Alembic, and portable build
+  behavior in the preset.
+- [x] Defer gtest discovery to CTest with `PRE_TEST`, avoiding false
+  post-link discovery timeouts during unrestricted parallel builds.
+- [x] Remove obsolete no-MKL and `base_no_mkl` presets.
+- [x] Preserve the existing public `PGO_*` feature flags other than the
+  intentionally removed Conda check.
+- [x] Keep `CMAKE_ARGS`, macOS `ARCHFLAGS`, and setuptools parallel-build
+  compatibility. The packaging backend may override only the binary directory
+  to use setuptools' isolated temporary tree.
+
+Developer acceptance:
+
+```bash
+uv sync --locked
+uv run cmake --preset pypgo-wheel
+uv run cmake --build build/pypgo
+uv run ctest --test-dir build/pypgo --output-on-failure
+PYTHONPATH="$PWD/build/pypgo/src/python/pypgo" \
+  uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py
+```
+
+### Active P4.2 — uv environment and single version sources
+
+- [x] Use `.python-version`, `pyproject.toml`, and one cross-platform
+  `uv.lock`; no Conda environment is part of the supported path.
+- [x] Pin the required `uv` version once in `pyproject.toml`; CI bootstraps
+  that version through `scripts/uv_version.py`.
+- [x] Keep the project version once in `pyproject.toml`; CMake and CI artifact
+  naming read it rather than duplicating `0.0.4`.
+- [x] Let CMake discover the active Python prefix and standard platform
+  package locations without requiring `MKL_DIR`, `TBB_DIR`, `MKLROOT`, or
+  `CMAKE_PREFIX_PATH` in normal commands.
+- [x] Do not install pypgo during ordinary development. Import the extension
+  from the build tree and rebuild incrementally after C++ edits.
+- [x] Keep wheel construction explicit and separate through
+  `uv build --wheel --no-build-isolation`.
+
+### Active P4.3 — dependency acquisition and pinning
+
+- [x] Remove `PGO_CHECK_CONDA` and all Conda discovery paths.
+- [x] Pin FetchContent archives/commits and hashes where practical.
+- [x] Build Imath statically from pinned source.
+- [x] Use Intel PyPI `mkl-devel` and its matching TBB packages on
+  Linux/Windows; do not independently build TBB there.
+- [x] Use Homebrew TBB/GMP/MPFR on macOS and system GMP/MPFR packages in the
+  manylinux container.
+- [x] Use approved repository prebuilt GMP/MPFR files on Windows.
+- [x] Retain third-party notices and dependency audit scripts.
+- [ ] Resolve the remaining CGAL/SuiteSparse binary-distribution obligations
+  and approve the final license/source-offer package before release.
+
+### Active P4.4 — wheel repair, audit, and provenance
+
+- [x] Keep 0.0.4 wheel-only; do not build an sdist or commit binary artifacts.
+- [x] Require a clean checkout and exact commit before packaging.
+- [x] Build raw wheels with `uv build`.
+- [x] Configure Linux to repair with `auditwheel`, macOS with `delocate`, and
+  Windows with `delvewheel`.
+- [x] Configure CI to audit the repaired native dependency closure and reject
+  source/build paths or undeclared external libraries.
+- [x] Configure CI to install the repaired wheel into a new CPython 3.12
+  virtual environment with no inherited native library search path.
+- [x] Configure provenance to record CMake cache, dependency/toolchain
+  evidence, native CTest,
+  build-tree pytest, installed smoke, installed pytest, source commit, wheel
+  metadata, and SHA-256.
+
+### Active P4.5 — platform CI structure
+
+- [x] Keep exactly three workflows: Linux, macOS, and Windows.
+- [x] Give each workflow a `build-test` job and a fresh dependent `package`
+  job.
+- [x] Build/test directly from `build/pypgo` without installing pypgo.
+- [x] Transfer native evidence between jobs through a short-lived artifact.
+- [x] Build, repair, audit, clean-install-test, and upload exactly one wheel
+  plus evidence in the package job.
+- [x] Keep Actions pinned, permissions read-only, concurrency cancellation,
+  explicit runner/container targets, and bounded timeouts.
+- [x] Do not impose `CMAKE_BUILD_PARALLEL_LEVEL`, MKL runtime tuning
+  environment variables, or redundant preset-selection variables.
+- [ ] Run all six hosted jobs on the exact candidate commit and attach their
+  run/artifact IDs to the release record.
+
+### Active P4.6 — completed local evidence and remaining gate
+
+Completed on macOS arm64:
+
+- [x] `uv lock --check` and `uv sync --locked --check`.
+- [x] Configure through only `cmake --preset pypgo-wheel`.
+- [x] Unrestricted-parallel full build.
+- [x] Native CTest: 154/154 passed.
+- [x] Build-tree Python smoke: 2/2 passed.
+- [x] Raw macOS 26 arm64 wheel build.
+- [x] VitePress documentation build and sidebar validation.
+- [x] Workflow YAML parsing and `git diff --check`.
+
+Phase 4 exit condition: the implementation is complete and local macOS
+evidence passes. Hosted Linux/macOS/Windows job results remain Phase 5/RC
+evidence and are not implied by local success.
+
+### Historical Phase 4 plan (superseded; non-operative)
+
+#### Historical P4.1 Dedicated pypgo configure presets
 
 Reference implementation:
 
@@ -710,7 +871,7 @@ Checklist:
 - [x] Preserve `CMAKE_BUILD_PARALLEL_LEVEL`.
 - [x] Preserve the existing MKLROOT setup and Windows GMP/MPFR DLL copy behavior.
 
-### P4.2 Version and package metadata
+#### Historical P4.2 Version and package metadata
 
 Files requiring audit:
 
@@ -740,7 +901,7 @@ Checklist:
 - [x] Define the release wheel guarantee explicitly: CPython 3.12 wheels tagged `linux_x86_64`, macOS arm64, and `win_amd64`.
 - [x] Keep `python_requires >= 3.9` only if source-build CI verifies the claimed range; otherwise narrow the metadata to the range actually tested.
 
-### P4.3 Wheel-only source provenance
+#### Historical P4.3 Wheel-only source provenance
 
 - Scope rule: `scripts/release_wheel_provenance.py` defines and enforces the
   wheel-only source/evidence contract without changing the existing setuptools
@@ -751,7 +912,7 @@ Checklist:
 - [x] Record `git rev-parse HEAD`, workflow run ID, runner image, CMake cache, dependency evidence, and wheel SHA-256 beside each artifact.
 - [x] Require a clean tracked worktree before packaging so uncommitted source changes cannot enter a wheel.
 
-### P4.4 Pin third-party dependencies
+#### Historical P4.4 Pin third-party dependencies
 
 Mandatory floating-reference fixes in `/Users/jinceyang/Desktop/codebase/merge/libpgo/CMakeModules/third-party/`:
 
@@ -773,7 +934,7 @@ Additional audit:
 - [ ] Retain `conda list --explicit`, `conda list`, channel configuration, and relevant CMake cache entries as release-build evidence.
 - [ ] Explicitly pass every important CMake option in CI.
 
-### P4.5 Remove tracked binary release artifacts
+#### Historical P4.5 Remove tracked binary release artifacts
 
 Current tracked artifacts are under:
 
@@ -792,7 +953,7 @@ Checklist:
 - [x] Update README installation instructions to download the appropriate wheel from the recorded GitHub Actions artifact and install it in the documented Conda environment.
 - [x] Keep release wheels and evidence in GitHub Actions artifacts, not in git; do not claim PyPI or sdist availability.
 
-### P4.6 Platform CI
+#### Historical P4.6 Platform CI
 
 Reference workflows:
 
@@ -945,6 +1106,24 @@ Also:
 - [ ] Keep the expensive full matrix out of hosted CI and document the owner-run Linux server command in the release checklist.
 
 ## 9. Implementation phase 5 — tests
+
+Phase 5 starts now. Execute it in this order:
+
+1. Commit the Phase 4 implementation so provenance can enforce a clean,
+   immutable source revision.
+2. Run all three hosted workflows and require both `build-test` and `package`
+   to pass on that exact revision.
+3. Classify every P5.1 item as already covered by the 154-test suite or add the
+   smallest missing regression; do not duplicate tests merely to rename them
+   as release tests.
+4. Complete the external C/CMake consumer and 0.0.3 compatibility checks.
+5. Run the Linux sanitizer/numerical gate.
+6. Prepare and execute the owner-controlled Linux MKL Pardiso Tier 1/Tier 2
+   matrix only after the candidate source and generated assets are stable.
+
+Local macOS results are a development baseline, not final cross-platform
+evidence. Unchecked items below remain unchecked until their result is tied to
+the exact candidate commit or explicitly audited as covered by such a result.
 
 ### P5.1 Native unit tests
 
@@ -1185,7 +1364,8 @@ Checklist:
 - [ ] The owner-confirmed Linux server Tier 2 numerical matrix passes with MKL Pardiso.
 - [ ] The Linux server report identifies the exact `upstream-0.0.4` integration commit and clean build configuration.
 - [ ] All three wheel-only workflows pass and upload one tested wheel each.
-- [ ] Wheels pass validation in separate clean supported Conda runtime environments without vendored Conda libraries.
+- [ ] Repaired wheels pass validation in separate fresh ordinary virtual
+  environments without inherited build-time native library paths.
 - [ ] Artifact contents are audited.
 - [ ] Dependency versions and build tool versions are captured.
 - [ ] Cubic generator manifest and generated-mesh validation report are attached.
@@ -1198,7 +1378,8 @@ Checklist:
 - [ ] If the main merge changes the commit, bind the tag and final provenance to the exact resulting main commit and rerun the affected final checks.
 - [ ] Run the three platform workflows on the exact final commit.
 - [ ] Download each wheel/evidence bundle by workflow run and artifact ID.
-- [ ] Verify every recorded SHA-256 and repeat clean-Conda version/import/API smoke tests against the downloaded wheel files.
+- [ ] Verify every recorded SHA-256 and repeat fresh-venv version/import/API
+  smoke tests against the downloaded wheel files.
 - [ ] Record the exact final workflow URLs, run IDs, artifact IDs, source commit, and checksums in the release record.
 
 ### Final tag and artifact delivery
@@ -1206,7 +1387,9 @@ Checklist:
 - [ ] Tag the exact tested commit as `v0.0.4`.
 - [ ] Verify the tag includes the exact docs submodule commit.
 - [ ] Ensure all three platform workflows have completed on the tagged commit and retained their wheel/evidence artifacts.
-- [ ] Document how to download each platform wheel from its recorded GitHub Actions artifact and install the local file in the supported Conda environment.
+- [ ] Document how to download each platform wheel from its recorded GitHub
+  Actions artifact and install the local file in a CPython 3.12 virtual
+  environment.
 - [ ] Do not build or publish an sdist and do not upload artifacts to TestPyPI or PyPI.
 - [ ] Verify docs deployment.
 - [ ] Announce the release only after the tag, all three workflow artifact bundles, checksums, installation verification, and docs are available.
@@ -1245,8 +1428,8 @@ Use small, independently reviewable commits in this order:
 13. `test(server): add reproducible Linux MKL Pardiso matrix driver`
 14. `build(deps): pin release dependency revisions`
 15. `chore(release): finalize version and wheel metadata`
-16. `build(pypgo): add explicit MKL/no-MKL wheel presets`
-17. `ci(release): build, audit, and isolate-test platform wheels`
+16. `build(pypgo): add unified uv and pypgo-wheel build path`
+17. `ci(release): split native validation from repaired wheel packaging`
 18. `docs(release): rewrite v0.0.4 docs content and repair deployment`
 19. `docs(release): finalize changelog and release notes`
 
@@ -1273,7 +1456,10 @@ After each correctness commit:
 - Dynamic Hessian and solver symbolic-analysis lifecycles are correct.
 - A checked-in Python script reproducibly generates validated cubic `.veg` files into an untracked output directory; generated cubic `.veg` files are not stored in git.
 - Optional backward/CUDA/native-Pardiso code remains, with release dependencies pinned and optional features off by default where required.
-- Linux and Windows wheels use MKL Pardiso with the TBB threading layer; the macOS wheel does not use MKL and links libpgo/SuiteSparse to the system Accelerate framework; all external GMP/MPFR/Imath/fmt/TBB/MKL runtimes come from the documented Conda environment.
+- Linux and Windows wheels use MKL Pardiso with the matching TBB threading
+  layer; the macOS wheel does not use MKL and links libpgo/SuiteSparse to the
+  system Accelerate framework. Required non-system runtime libraries are
+  bundled and audited by the platform wheel-repair tool.
 - Exactly one wheel per platform is built, audited, isolated-tested, checksummed, and uploaded with evidence as a GitHub Actions artifact; no sdist or PyPI release is produced.
 - The exact `upstream-0.0.4` integration commit passes the owner-confirmed Linux server matrix using MKL Pardiso with TBB.
 - The docs submodule is pinned to the exact final commit of `annajcy/libpgo-doc` branch `v0.0.4`.
