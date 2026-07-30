@@ -728,8 +728,9 @@ separately installed native runtime libraries.
 - [x] Make MKL default to ON and force it OFF on macOS.
 - [x] Put the Ninja generator and `build/pypgo` binary directory in the
   preset; callers do not pass `-B` or `-G`.
-- [x] Enable `BUILD_TESTING`, Python, subprojects, Alembic, and portable build
-  behavior in the preset.
+- [x] Enable `PGO_BUILD_TESTS`, Python, subprojects, Alembic, and portable
+  build behavior in the preset while keeping global `BUILD_TESTING=OFF` for
+  all third-party dependencies.
 - [x] Defer gtest discovery to CTest with `PRE_TEST`, avoiding false
   post-link discovery timeouts during unrestricted parallel builds.
 - [x] Remove obsolete no-MKL and `base_no_mkl` presets.

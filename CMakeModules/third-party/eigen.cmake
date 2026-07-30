@@ -4,6 +4,7 @@ else()
 
   set(BUILD_TESTING OFF CACHE BOOL "eigen build test" FORCE)
   set(BUILD_EXAMPLES OFF CACHE BOOL "eigen build examples" FORCE)
+  set(EIGEN_BUILD_DOC OFF CACHE BOOL "eigen build documentation" FORCE)
   set(EIGEN_BUILD_CMAKE_PACKAGE ON CACHE BOOL "eigen build cmake package" FORCE)
 
   include(FetchContent)
@@ -18,7 +19,22 @@ else()
     DOWNLOAD_EXTRACT_TIMESTAMP ON
   )
 
+  # Eigen 3.4 configures its optional BLAS target even when BUILD_TESTING is
+  # disabled. On Windows, CheckLanguage may pick up an unrelated MinGW
+  # gfortran from PATH and then try to combine it with the active MSVC
+  # toolchain. libpgo does not use Eigen's BLAS target, so prevent only that
+  # optional probe while preserving an explicitly configured Fortran compiler.
+  if(WIN32 AND NOT DEFINED CMAKE_Fortran_COMPILER)
+    set(CMAKE_Fortran_COMPILER NOTFOUND)
+    set(_pgo_suppressed_eigen_fortran_probe TRUE)
+  endif()
+
   FetchContent_MakeAvailable(Eigen3)
+
+  if(_pgo_suppressed_eigen_fortran_probe)
+    unset(CMAKE_Fortran_COMPILER)
+    unset(_pgo_suppressed_eigen_fortran_probe)
+  endif()
 
   message(STATUS "Done.")
 endif()

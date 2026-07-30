@@ -133,9 +133,6 @@ workload. Run the following from an x64 Native Tools PowerShell:
 ```powershell
 uv sync --locked
 
-$venv = (Resolve-Path .venv).Path
-$env:PATH = "$venv\Library\bin;$PWD\third-party\gmp-msvc\release;$PWD\third-party\mpfr-msvc\release;$env:PATH"
-
 uv run cmake --preset pypgo-wheel
 uv run cmake --build build\pypgo
 uv run ctest --test-dir build\pypgo --output-on-failure
@@ -146,7 +143,9 @@ uv run python -m pytest -q tests\pypgo\test_pgo_smoke.py
 ```
 
 Windows source builds use the approved GMP/MPFR files under `third-party`.
-Keep the displayed `PATH` entries when running the source-built module.
+CMake stages the required GMP/MPFR, oneTBB, and oneMKL runtime DLLs beside
+source-built executables and `pypgo.pyd`; no dependency-specific `PATH`
+configuration is required.
 After the first configure, ordinary C++ edits only require
 `uv run cmake --build build/pypgo` (or `--target pypgo` when only the Python
 module is needed). Detailed commands and the separate release-wheel workflow
@@ -165,13 +164,15 @@ Evidence and wheel output directories must be outside the source checkout.
 
 ## Usage & Test
 
-We provide three python scripts to test the installation.
+We provide three Python scripts to exercise the installation. From a source
+checkout, run them through the locked project environment created by
+`uv sync --locked`.
 
 1. `pgo_test_01.py`. It runs a few basic pgo APIs.
 
     ```bash
-        cd examples
-        python ../src/python/pypgo/pgo_test_01.py
+    cd examples
+    uv run python ../src/python/pypgo/pgo_test_01.py
     ```
 
     The expected result will look like
@@ -214,8 +215,8 @@ We provide three python scripts to test the installation.
 2. `pgo_run_sim.py`. It reads input config file and run simulation. You can try `box`, `box-with-sphere`, `dragon`, and `dragon-dyn` to test different simulation results. Take the box example for illustration. You can run the box example using the following commands.
    
     ```bash
-        python src/python/pypgo/pgo_run_sim.py \
-            examples/configs/volume/box/box-tet-sampled.json
+    uv run python src/python/pypgo/pgo_run_sim.py \
+        examples/configs/volume/box/box-tet-sampled.json
     ```
 
     The expected result will look like the first image. The time integrator is hard-coded as implicit backward Euler (BE). You are free to change it to implicit Newmark (NW) or TR-BDF2 integrator (not support friction).
@@ -249,8 +250,8 @@ We provide three python scripts to test the installation.
 3. `pgo_dump_abc.py`. It creates the abc file that can be used for blender/maya from config file `anim.json`. Essentially, it takes the simulation output `.obj` sequences and output a `.abc` file.
 
     ```bash
-        python src/python/pypgo/pgo_dump_abc.py \
-            examples/configs/volume/box/box-tet-sampled-animation.json
+    uv run python src/python/pypgo/pgo_dump_abc.py \
+        examples/configs/volume/box/box-tet-sampled-animation.json
     ```
 
     The `convertAnimation` tool provides the same conversion on the CLI:
@@ -278,9 +279,9 @@ Build the tool:
 Generate the documented presets with the checked-in helper:
 
 ```bash
-    python3 examples/scripts/generate_cubic_veg.py \
-        --build-dir build/pypgo \
-        --scene box
+uv run python examples/scripts/generate_cubic_veg.py \
+    --build-dir build/pypgo \
+    --scene box
 ```
 
 Main arguments:

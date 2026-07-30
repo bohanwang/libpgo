@@ -27,6 +27,10 @@ class CMakeBuild(build_ext):
             f"-DPYTHON_EXECUTABLE={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={cfg}",
         ]
+        if sys.platform == "win32":
+            # The release workflow lets delvewheel vendor the runtime DLLs.
+            # Direct CMake builds keep the default source-build staging enabled.
+            cmake_args += ["-DPGO_STAGE_WINDOWS_RUNTIME=OFF"]
 
         build_args = []
         if "CMAKE_ARGS" in os.environ:

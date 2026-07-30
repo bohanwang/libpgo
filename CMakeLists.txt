@@ -1,22 +1,9 @@
 cmake_minimum_required(VERSION 3.28.0 FATAL_ERROR)
 
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml"
-  _pgo_project_version_lines
-  REGEX "^version[ \t]*=[ \t]*\"[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?\"[ \t]*$")
-list(LENGTH _pgo_project_version_lines _pgo_project_version_count)
-if(NOT _pgo_project_version_count EQUAL 1)
-  message(FATAL_ERROR
-    "Expected exactly one CMake-compatible [project].version in pyproject.toml")
-endif()
-list(GET _pgo_project_version_lines 0 _pgo_project_version_line)
-string(REGEX REPLACE
-  "^version[ \t]*=[ \t]*\"([0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?)\"[ \t]*$"
-  "\\1"
-  PGO_PROJECT_VERSION
-  "${_pgo_project_version_line}")
-unset(_pgo_project_version_lines)
-unset(_pgo_project_version_count)
-unset(_pgo_project_version_line)
+include(CMakeModules/projectVersion.cmake)
+pgo_read_project_version(
+  "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml"
+  PGO_PROJECT_VERSION)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL "Export compile_commands.json for clangd" FORCE)
 
@@ -32,6 +19,7 @@ option(PGO_ENABLE_PYTHON "Build python module" OFF)
 option(PGO_ENABLE_FULL "Enable all functionalities" OFF)
 option(PGO_ENABLE_CUDA "Enable CUDA" OFF)
 option(PGO_BUILD_SUBPROJECTS "Include subprojects" OFF)
+option(PGO_BUILD_TESTS "Build libpgo tests" OFF)
 
 option(PGO_UI "Build pgo ui" OFF)
 option(PGO_RENDER_USE_ASSIMP "Use Assimp" OFF)
@@ -62,9 +50,10 @@ if(APPLE)
   message(STATUS "PGO_USE_MKL is forced OFF on macOS; using Accelerate")
 endif()
 
-include(CTest)
-set(PGO_BUILD_TESTING ${BUILD_TESTING})
-set(BUILD_TESTING OFF CACHE BOOL "Disable third-party tests during dependency configuration" FORCE)
+# Keep the conventional CMake switch disabled for the entire configure so
+# FetchContent dependencies cannot interpret it as permission to build their
+# own test suites. PGO_BUILD_TESTS controls only libpgo's tests below.
+set(BUILD_TESTING OFF CACHE BOOL "Third-party tests remain disabled" FORCE)
 
 # Python packages such as mkl-devel install their CMake package files below the
 # active Python prefix. Prefer the active virtual environment because `uv run`
@@ -93,6 +82,8 @@ if(_pgo_python_prefix AND IS_DIRECTORY "${_pgo_python_prefix}")
   if(WIN32 AND IS_DIRECTORY "${_pgo_python_prefix}/Library")
     list(PREPEND CMAKE_PREFIX_PATH "${_pgo_python_prefix}/Library")
   endif()
+  set(PGO_PYTHON_DEPENDENCY_PREFIX "${_pgo_python_prefix}" CACHE INTERNAL
+    "Python environment that provides native build dependencies" FORCE)
   message(STATUS "Using Python dependency prefix: ${_pgo_python_prefix}")
 endif()
 unset(_pgo_python_executable)
@@ -140,6 +131,7 @@ include(CompilationUtils)
 find_package(OpenMP)
 
 if(OPENMP_FOUND)
+  message(STATUS "OpenMP found: ${OpenMP_CXX_FLAGS}")
   set(OPENMP_FLAG "${OpenMP_CXX_FLAGS}")
   add_compile_definitions(USE_OPENMP)
 endif()
@@ -169,8 +161,6 @@ add_library(cuda_compilation_flag INTERFACE)
 
 message(STATUS "PGO compiler: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "OS: ${CMAKE_SYSTEM_NAME}")
-
-
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "^(Apple)?Clang$")
   message(STATUS "CMake build type: ${CMAKE_BUILD_TYPE}")
@@ -332,6 +322,8 @@ if(PGO_ENABLE_PYTHON)
   include(CMakeModules/third-party/pybind11.cmake)
 endif()
 
+include(CMakeModules/windowsRuntime.cmake)
+
 if(TARGET MKL::MKL)
   add_compile_definitions(PGO_HAS_MKL)
 endif()
@@ -481,10 +473,9 @@ endfunction()
 
 add_subdirectory(src)
 
-set(BUILD_TESTING ${PGO_BUILD_TESTING} CACHE BOOL "Enable testing" FORCE)
-
-if(BUILD_TESTING)
-  message(STATUS "Testing enabled.")
+if(PGO_BUILD_TESTS)
+  enable_testing()
+  message(STATUS "libpgo testing enabled.")
   add_subdirectory(tests)
 endif()
 
@@ -494,6 +485,10 @@ endif()
 
 if(PGO_ENABLE_PYTHON)
   include(CMakeModules/python_list.cmake)
+endif()
+
+if(COMMAND pgo_finalize_windows_runtime_targets)
+  pgo_finalize_windows_runtime_targets()
 endif()
 
 # generate config file to be used in common build tree

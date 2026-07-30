@@ -13,7 +13,8 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE": "PRE_TEST",
-                "BUILD_TESTING": "ON",
+                "BUILD_TESTING": "OFF",
+                "PGO_BUILD_TESTS": "ON",
                 "PGO_ENABLE_PYTHON": "ON",
                 "PGO_BUILD_SUBPROJECTS": "ON",
                 "PGO_ENABLE_ALEMBIC": "ON",
@@ -33,6 +34,7 @@
                 "CMAKE_BUILD_TYPE": "Release",
                 "PGO_USE_MKL": "ON",
                 "PGO_ENABLE_FULL": "ON",
+                "PGO_BUILD_TESTS": "ON",
                 "PGO_BUILD_SUBPROJECTS": "ON",
                 "PGO_ENABLE_ALEMBIC": "ON",
                 "PGO_ENABLE_GMSH": "ON"
@@ -46,6 +48,7 @@
                 "CMAKE_BUILD_TYPE": "Release",
                 "PGO_USE_MKL": "ON",
                 "PGO_ENABLE_FULL": "ON",
+                "PGO_BUILD_TESTS": "ON",
                 "PGO_BUILD_SUBPROJECTS": "ON",
                 "PGO_ENABLE_ALEMBIC": "OFF",
                 "PGO_ENABLE_GMSH": "OFF"

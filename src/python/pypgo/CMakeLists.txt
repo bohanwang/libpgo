@@ -19,6 +19,10 @@ endif()
 set_target_properties(pypgo PROPERTIES CXX_VISIBILITY_PRESET "hidden"
     CUDA_VISIBILITY_PRESET "hidden")
 
+if(COMMAND pgo_stage_windows_runtime_for_module)
+    pgo_stage_windows_runtime_for_module(pypgo)
+endif()
+
 if(PGO_PORTABLE_BUILD)
     if(APPLE)
         set(PGO_PYTHON_RUNTIME_PATH "@loader_path/../..")

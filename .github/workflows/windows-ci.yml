@@ -39,12 +39,6 @@ jobs:
           $uvVersion = python scripts/uv_version.py
           python -m pip install "uv==$uvVersion"
           uv sync --locked --python python
-          $venv = (Resolve-Path .venv).Path
-          @(
-            "$venv\Library\bin"
-            "$env:GITHUB_WORKSPACE\third-party\gmp-msvc\release"
-            "$env:GITHUB_WORKSPACE\third-party\mpfr-msvc\release"
-          ) | Out-File $env:GITHUB_PATH -Append
           "EVIDENCE_DIR=$env:RUNNER_TEMP\native-evidence" | Out-File $env:GITHUB_ENV -Append
           "PYPGO_VERSION=$(.\.venv\Scripts\python.exe scripts/project_version.py)" | Out-File $env:GITHUB_ENV -Append
 
