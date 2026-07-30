@@ -117,6 +117,12 @@ pgoTetMeshStructHandle pgo_create_tetmesh_from_file(const char *filename)
   }
 }
 
+void pgo_destroy_tetmesh(pgoTetMeshStructHandle m)
+{
+  pgo::VolumetricMeshes::TetMesh *mesh = reinterpret_cast<pgo::VolumetricMeshes::TetMesh *>(m);
+  delete mesh;
+}
+
 void pgo_save_tetmesh_to_file(pgoTetMeshStructHandle tetMeshHandle, const char *filename)
 {
   pgo::VolumetricMeshes::TetMesh *mesh = reinterpret_cast<pgo::VolumetricMeshes::TetMesh *>(tetMeshHandle);

@@ -80,6 +80,7 @@ jobs:
     env:
       ARCHFLAGS: -arch arm64
       MACOSX_DEPLOYMENT_TARGET: "26.0"
+      _PYTHON_HOST_PLATFORM: macosx-26.0-arm64
 
     steps:
       - name: Checkout exact source

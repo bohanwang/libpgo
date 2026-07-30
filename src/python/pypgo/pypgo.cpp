@@ -123,6 +123,10 @@ void pypgo_init(py::module &m)
     return TetMesh(tetmesh);
   });
 
+  m.def("destroy_tetmesh", [](TetMesh tetmesh) {
+    pgo_destroy_tetmesh(tetmesh.handle);
+  });
+
   m.def("save_tetmesh_to_file", [](const TetMesh &tetmesh, const std::string &tetmeshFilename) {
     pgo_save_tetmesh_to_file(tetmesh.handle, const_cast<char *>(tetmeshFilename.c_str()));
   });
@@ -155,8 +159,6 @@ void pypgo_init(py::module &m)
       std::cerr << "Wrong vertex type:" << vtxInfo.ndim << ',' << vtxInfo.format << std::endl;
       return tetmesh;
     }
-
-    vtxNew.resize({ vtxInfo.shape[0] * 3 });
 
     Eigen::VectorXd vtxNewDouble = Eigen::Map<const Eigen::VectorXf>((float *)vtxInfo.ptr, vtxInfo.shape[0] * 3).cast<double>();
     pgoTetMeshStructHandle tetmeshNewHandle = pgo_tetmesh_update_vertices(tetmesh.handle, vtxNewDouble.data());

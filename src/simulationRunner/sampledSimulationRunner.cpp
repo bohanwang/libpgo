@@ -491,6 +491,11 @@ int pgo::SimulationRunner::runSampledSimulationFromConfig(
 
   }
   else if (simType == "static") {
+    SPDLOG_LOGGER_WARN(Logging::lgr(),
+      "Static sampled contact is not enforced: the static sampled solver "
+      "currently includes elastic, attachment, and gravity energies only. "
+      "Use `contact-model: ipc` when static contact must be enforced.");
+
     std::shared_ptr<PredefinedPotentialEnergies::LinearPotentialEnergy> externalForcesEnergy = std::make_shared<PredefinedPotentialEnergies::LinearPotentialEnergy>(fext);
 
     std::shared_ptr<NonlinearOptimization::PotentialEnergies> energyAll = std::make_shared<NonlinearOptimization::PotentialEnergies>(n3);

@@ -33,6 +33,7 @@ LIBPGO_C_EXPORT void pgo_destroy_tetmeshgeo(pgoTetMeshGeoStructHandle tetmesh);
 
 LIBPGO_C_EXPORT pgoTetMeshStructHandle pgo_create_tetmesh_from_file(const char *filename);
 LIBPGO_C_EXPORT pgoTetMeshStructHandle pgo_create_tetmesh(int nv, double *vertices, int ntet, int *tets, double E, double nu, double density);
+LIBPGO_C_EXPORT void pgo_destroy_tetmesh(pgoTetMeshStructHandle tetmesh);
 LIBPGO_C_EXPORT void pgo_save_tetmesh_to_file(pgoTetMeshStructHandle tetMeshHandle, const char *filename);
 LIBPGO_C_EXPORT int pgo_tetmesh_get_num_vertices(pgoTetMeshStructHandle m);
 LIBPGO_C_EXPORT pgoTetMeshStructHandle pgo_tetmesh_update_vertices(pgoTetMeshStructHandle m, double *vertices);
