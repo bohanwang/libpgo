@@ -8,6 +8,8 @@
 #include <iostream>
 #include <chrono>
 #include <fstream>
+#include <stdexcept>
+#include <vector>
 
 namespace py = pybind11;
 
@@ -154,14 +156,27 @@ void pypgo_init(py::module &m)
   });
 
   m.def("update_tetmesh_vertices", [](TetMesh &tetmesh, pyArrayFloat vtxNew) -> TetMesh {
+    if (tetmesh.handle == nullptr)
+      throw py::value_error("Cannot update a null tetmesh handle");
+
     py::buffer_info vtxInfo = vtxNew.request();
     if (vtxInfo.ndim != (py::ssize_t)2 || vtxInfo.shape[1] != 3 || vtxInfo.format != py::format_descriptor<float>::format()) {
-      std::cerr << "Wrong vertex type:" << vtxInfo.ndim << ',' << vtxInfo.format << std::endl;
-      return tetmesh;
+      throw py::value_error("Expected a float32 vertex array with shape (num_vertices, 3)");
     }
 
-    Eigen::VectorXd vtxNewDouble = Eigen::Map<const Eigen::VectorXf>((float *)vtxInfo.ptr, vtxInfo.shape[0] * 3).cast<double>();
-    pgoTetMeshStructHandle tetmeshNewHandle = pgo_tetmesh_update_vertices(tetmesh.handle, vtxNewDouble.data());
+    const int numVertices = pgo_tetmesh_get_num_vertices(tetmesh.handle);
+    if (vtxInfo.shape[0] != numVertices)
+      throw py::value_error("Vertex array row count does not match the tetmesh");
+
+    const float *vertices = static_cast<const float *>(vtxInfo.ptr);
+    std::vector<double> verticesDouble(static_cast<size_t>(numVertices) * 3);
+    for (size_t i = 0; i < verticesDouble.size(); ++i)
+      verticesDouble[i] = static_cast<double>(vertices[i]);
+
+    pgoTetMeshStructHandle tetmeshNewHandle = pgo_tetmesh_update_vertices(tetmesh.handle, verticesDouble.data());
+    if (tetmeshNewHandle == nullptr)
+      throw std::runtime_error("Failed to update tetmesh vertices");
+
     TetMesh tetmeshNew = TetMesh(tetmeshNewHandle);
     return tetmeshNew;
   });

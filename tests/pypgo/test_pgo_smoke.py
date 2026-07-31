@@ -244,6 +244,21 @@ def test_tetmesh_update_and_file_round_trip(tmp_path: Path):
         pypgo.destroy_tetmesh(tetmesh)
 
 
+def test_tetmesh_update_rejects_wrong_vertex_count():
+    tetmesh = pypgo.create_tetmesh(
+        TET_VERTICES.ravel(),
+        TET_ELEMENTS.ravel(),
+        1.0e5,
+        0.45,
+        1000.0,
+    )
+    try:
+        with pytest.raises(ValueError, match="row count"):
+            pypgo.update_tetmesh_vertices(tetmesh, TET_VERTICES[:3])
+    finally:
+        pypgo.destroy_tetmesh(tetmesh)
+
+
 def test_trimeshgeo_memory_round_trip_and_closest_distance():
     trimesh = _create_unit_trimeshgeo()
     try:
