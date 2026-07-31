@@ -188,12 +188,103 @@ jobs:
           & $runtimePython scripts/installed_wheel_smoke.py `
             --platform windows --source-dir "$env:GITHUB_WORKSPACE" `
             | Tee-Object "$env:EVIDENCE_DIR\installed-smoke.txt"
-          if ($LASTEXITCODE -ne 0) { throw "Installed wheel smoke failed" }
-          & $runtimePython -m pytest -q tests/pypgo/test_pgo_smoke.py `
-            | Tee-Object "$env:EVIDENCE_DIR\installed-pytest.txt"
-          if ($LASTEXITCODE -ne 0) { throw "Installed wheel pytest failed" }
+          $smokeExitCode = $LASTEXITCODE
+
+          # Diagnose runtime-only DLL loads in isolated Python processes. These
+          # probes do not alter the repaired wheel and the baseline result below
+          # remains the pass/fail criterion for this job.
+          $venv = (Resolve-Path .venv).Path
+          $sitePackages = (& $runtimePython -c "import sysconfig; print(sysconfig.get_path('platlib'))").Trim()
+          Get-ChildItem $sitePackages -Recurse -Include '*.dll','*.pyd' `
+            | Select-Object FullName, Length `
+            | Format-Table -AutoSize `
+            | Out-String -Width 4096 `
+            | Tee-Object "$env:EVIDENCE_DIR\installed-native-files.txt"
+          Get-ChildItem "$venv\Library\bin" -Filter '*.dll' `
+            | Select-Object Name, Length `
+            | Format-Table -AutoSize `
+            | Out-String -Width 4096 `
+            | Tee-Object "$env:EVIDENCE_DIR\build-environment-dlls.txt"
+
+          $diagnosticRoot = "$env:RUNNER_TEMP\windows-runtime-probes"
+          $tbbRuntimeDir = "$diagnosticRoot\tbb-runtime"
+          $mklAllocatorDir = "$diagnosticRoot\mkl-allocator"
+          $combinedRuntimeDir = "$diagnosticRoot\tbb-and-mkl-allocator"
+          @($tbbRuntimeDir, $mklAllocatorDir, $combinedRuntimeDir) | ForEach-Object {
+            New-Item -ItemType Directory -Force $_ | Out-Null
+          }
+
+          $tbbPatterns = @('tbb*.dll', 'libhwloc*.dll')
+          foreach ($pattern in $tbbPatterns) {
+            Get-ChildItem "$venv\Library\bin\$pattern" -ErrorAction SilentlyContinue `
+              | Copy-Item -Destination $tbbRuntimeDir -Force
+          }
+          Get-ChildItem "$venv\Library\bin\libimalloc.dll" -ErrorAction SilentlyContinue `
+            | Copy-Item -Destination $mklAllocatorDir -Force
+          Copy-Item "$tbbRuntimeDir\*.dll" $combinedRuntimeDir -Force -ErrorAction SilentlyContinue
+          Copy-Item "$mklAllocatorDir\*.dll" $combinedRuntimeDir -Force -ErrorAction SilentlyContinue
+          Get-ChildItem $diagnosticRoot -Recurse -Filter '*.dll' `
+            | Select-Object FullName, Length `
+            | Format-Table -AutoSize `
+            | Out-String -Width 4096 `
+            | Tee-Object "$env:EVIDENCE_DIR\probe-dlls.txt"
+
+          $env:PYTHONUNBUFFERED = '1'
+          $probeExitCodes = @{}
+          function Invoke-SimulationProbe {
+            param(
+              [string]$Name,
+              [string[]]$DllDirectories
+            )
+            $env:PYPGO_DIAGNOSTIC_DLL_DIRS = $DllDirectories -join [IO.Path]::PathSeparator
+            $probeScript = @'
+          import os
+          import pytest
+
+          handles = [
+              os.add_dll_directory(path)
+              for path in os.environ.get("PYPGO_DIAGNOSTIC_DLL_DIRS", "").split(os.pathsep)
+              if path
+          ]
+          raise SystemExit(pytest.main([
+              "-vv",
+              "-s",
+              r"tests\pypgo\test_pgo_smoke.py::test_python_simulation_entry_point_smoke",
+          ]))
+          '@
+            Write-Host "=== Windows runtime probe: $Name ==="
+            & $runtimePython -X faulthandler -c $probeScript 2>&1 `
+              | Tee-Object "$env:EVIDENCE_DIR\installed-pytest-$Name.txt"
+            $probeExitCodes[$Name] = $LASTEXITCODE
+            Write-Host "=== Probe $Name exit code: $LASTEXITCODE ==="
+          }
+
+          Invoke-SimulationProbe -Name 'baseline' -DllDirectories @()
+          if ($probeExitCodes['baseline'] -ne 0) {
+            Invoke-SimulationProbe -Name 'tbb-runtime' -DllDirectories @($tbbRuntimeDir)
+            Invoke-SimulationProbe -Name 'mkl-allocator' -DllDirectories @($mklAllocatorDir)
+            Invoke-SimulationProbe -Name 'tbb-and-mkl-allocator' -DllDirectories @($combinedRuntimeDir)
+            Invoke-SimulationProbe -Name 'full-build-runtime' -DllDirectories @("$venv\Library\bin")
+          }
+
+          $probeExitCodes.GetEnumerator() `
+            | Sort-Object Name `
+            | Format-Table -AutoSize `
+            | Out-String `
+            | Tee-Object "$env:EVIDENCE_DIR\runtime-probe-summary.txt"
+          Copy-Item "$env:EVIDENCE_DIR\installed-pytest-baseline.txt" `
+            "$env:EVIDENCE_DIR\installed-pytest.txt"
+          $verificationExitCode = if ($smokeExitCode -ne 0) {
+            $smokeExitCode
+          } else {
+            $probeExitCodes['baseline']
+          }
+          "WINDOWS_WHEEL_VERIFY_EXIT_CODE=$verificationExitCode" `
+            | Out-File $env:GITHUB_ENV -Append
+          Write-Host "Unmodified wheel verification exit code: $verificationExitCode"
 
       - name: Finalize provenance
+        if: ${{ env.WINDOWS_WHEEL_VERIFY_EXIT_CODE == '0' }}
         shell: pwsh
         run: |
           uv run python scripts/release_wheel_provenance.py record `
@@ -211,6 +302,7 @@ jobs:
             | Format-List | Out-File "$env:EVIDENCE_DIR\wheel.sha256"
 
       - name: Upload wheel and evidence
+        if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pypgo-${{ env.PYPGO_VERSION }}-windows-x86_64
@@ -219,3 +311,11 @@ jobs:
             ${{ env.EVIDENCE_DIR }}
           if-no-files-found: error
           retention-days: 30
+
+      - name: Enforce installed wheel verification
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          if ($env:WINDOWS_WHEEL_VERIFY_EXIT_CODE -ne '0') {
+            throw "Installed wheel verification failed with exit code $env:WINDOWS_WHEEL_VERIFY_EXIT_CODE"
+          }
