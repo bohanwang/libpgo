@@ -16,6 +16,12 @@ set_target_properties(pgo_c PROPERTIES
   PUBLIC_HEADER "${LIBPGO_C_HEADERS}"
 )
 
+if(TARGET pgo_windows_runtime)
+  add_dependencies(pgo_c pgo_windows_runtime)
+  set_target_properties(pgo_c PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${PGO_WINDOWS_RUNTIME_OUTPUT_DIRECTORY}")
+endif()
+
 target_include_directories(pgo_c PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
