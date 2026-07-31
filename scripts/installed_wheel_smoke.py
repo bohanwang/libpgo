@@ -16,19 +16,45 @@ from project_version import read_project_version
 
 
 def windows_modules() -> str:
-    process = ctypes.windll.kernel32.GetCurrentProcess()
-    modules = (ctypes.c_void_p * 4096)()
-    needed = ctypes.c_ulong()
-    if not ctypes.windll.psapi.EnumProcessModules(
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+
+    get_current_process = kernel32.GetCurrentProcess
+    get_current_process.argtypes = ()
+    get_current_process.restype = wintypes.HANDLE
+
+    enum_process_modules = psapi.EnumProcessModules
+    enum_process_modules.argtypes = (
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.HMODULE),
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+    )
+    enum_process_modules.restype = wintypes.BOOL
+
+    get_module_file_name = psapi.GetModuleFileNameExW
+    get_module_file_name.argtypes = (
+        wintypes.HANDLE,
+        wintypes.HMODULE,
+        wintypes.LPWSTR,
+        wintypes.DWORD,
+    )
+    get_module_file_name.restype = wintypes.DWORD
+
+    process = get_current_process()
+    modules = (wintypes.HMODULE * 4096)()
+    needed = wintypes.DWORD()
+    if not enum_process_modules(
         process, modules, ctypes.sizeof(modules), ctypes.byref(needed)
     ):
-        raise RuntimeError("EnumProcessModules failed")
+        raise ctypes.WinError(ctypes.get_last_error())
     paths = []
-    for module in modules[: needed.value // ctypes.sizeof(ctypes.c_void_p)]:
+    module_count = min(needed.value // ctypes.sizeof(wintypes.HMODULE), len(modules))
+    for module in modules[:module_count]:
         buffer = ctypes.create_unicode_buffer(32768)
-        if ctypes.windll.psapi.GetModuleFileNameExW(
-            process, module, buffer, len(buffer)
-        ):
+        if get_module_file_name(process, module, buffer, len(buffer)):
             paths.append(buffer.value)
     return "\n".join(paths)
 
