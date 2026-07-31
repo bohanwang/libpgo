@@ -166,7 +166,8 @@ pgoTetMeshStructHandle pgo_tetmesh_update_vertices(pgoTetMeshStructHandle m, dou
   pgo::VolumetricMeshes::TetMesh *tetMeshNew = new pgo::VolumetricMeshes::TetMesh(*tetMesh);
 
   for (int vi = 0; vi < tetMeshNew->getNumVertices(); vi++) {
-    pgo::Vec3d p(vertices + vi * 3);
+    const double *vertex = vertices + vi * 3;
+    pgo::Vec3d p(vertex[0], vertex[1], vertex[2]);
     tetMeshNew->setVertex(vi, p);
   }
   return reinterpret_cast<pgoTetMeshStructHandle>(tetMeshNew);
@@ -536,7 +537,8 @@ void pgo_trimesh_closest_distances(pgoTriMeshGeoStructHandle trimesh, int n, dou
   bvTree.buildByInertiaPartition(*mesh);
 
   tbb::parallel_for(0, n, [&](int i) {
-    pgo::Vec3d pt(queryPos + i * 3);
+    const double *query = queryPos + i * 3;
+    pgo::Vec3d pt(query[0], query[1], query[2]);
     auto ret = bvTree.closestTriangleQuery(*mesh, pt);
     queryDistance[i] = ret.dist2;
 
@@ -555,7 +557,8 @@ void pgo_tetmesh_barycentric_weights(pgoTetMeshGeoStructHandle tetmesh, int n, d
   bvTree.buildByInertiaPartition(*mesh);
 
   tbb::parallel_for(0, n, [&](int i) {
-    pgo::Vec3d pt(queryPos + i * 3);
+    const double *query = queryPos + i * 3;
+    pgo::Vec3d pt(query[0], query[1], query[2]);
     int ele = bvTree.getClosestTet(*mesh, pt);
     queryEle[i] = ele;
     pgo::Mesh::getTetBarycentricWeights(pt, mesh->pos(ele, 0), mesh->pos(ele, 1), mesh->pos(ele, 2), mesh->pos(ele, 3), queryW + i * 4);
