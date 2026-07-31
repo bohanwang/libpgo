@@ -54,8 +54,13 @@ def ensure_outside_source(path: Path, source_dir: Path, label: str) -> None:
 
 
 def require_clean_checkout(source_dir: Path) -> dict[str, str]:
-    if run_git(source_dir, "rev-parse", "--show-toplevel") != str(source_dir):
-        raise ProvenanceError(f"source directory is not the Git root: {source_dir}")
+    source_dir = source_dir.resolve()
+    git_root = Path(run_git(source_dir, "rev-parse", "--show-toplevel")).resolve()
+    if not source_dir.samefile(git_root):
+        raise ProvenanceError(
+            f"source directory is not the Git root: {source_dir} "
+            f"(Git reported {git_root})"
+        )
 
     status = run_git(
         source_dir,
