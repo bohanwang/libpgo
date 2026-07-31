@@ -109,6 +109,23 @@ def audit(args: argparse.Namespace) -> None:
                 not missing_dispatch,
                 f"repaired wheel is missing MKL dispatch libraries: {missing_dispatch}",
             )
+            if args.platform == "windows":
+                native_filenames = {Path(member).name.lower() for member in native_members}
+                required_original_mkl_names = {
+                    "mkl_core.2.dll",
+                    "mkl_tbb_thread.2.dll",
+                }
+                required_original_mkl_names.update(
+                    f"{component}.2.dll" for component in dispatch_components
+                )
+                missing_original_mkl_names = sorted(
+                    required_original_mkl_names - native_filenames
+                )
+                require(
+                    not missing_original_mkl_names,
+                    "Windows wheel is missing original oneMKL runtime names: "
+                    f"{missing_original_mkl_names}",
+                )
         else:
             require("tbb" in lowered_members, "repaired macOS wheel does not bundle TBB")
 

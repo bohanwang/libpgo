@@ -140,7 +140,11 @@ jobs:
             "$env:GITHUB_WORKSPACE\third-party\gmp-msvc\release",
             "$env:GITHUB_WORKSPACE\third-party\mpfr-msvc\release"
           ) -join [IO.Path]::PathSeparator
-          $mklDispatchDlls = @(
+          # oneMKL dispatch DLLs delay-load the core by its original filename.
+          # Keep the complete oneMKL runtime set below unmangled.
+          $mklRuntimeDlls = @(
+            "mkl_core.2.dll",
+            "mkl_tbb_thread.2.dll",
             "mkl_def.2.dll",
             "mkl_mc3.2.dll",
             "mkl_avx2.2.dll",
@@ -153,7 +157,8 @@ jobs:
           ) -join [IO.Path]::PathSeparator
           uv run python -m delvewheel repair `
             --add-path $nativePaths `
-            --include $mklDispatchDlls `
+            --include $mklRuntimeDlls `
+            --no-mangle $mklRuntimeDlls `
             --wheel-dir "$env:WHEEL_DIR" `
             $rawWheel
           $wheels = @(Get-ChildItem $env:WHEEL_DIR -Filter '*.whl')
