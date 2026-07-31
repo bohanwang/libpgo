@@ -139,7 +139,7 @@ jobs:
             "$venv\Library\bin",
             "$env:GITHUB_WORKSPACE\third-party\gmp-msvc\release",
             "$env:GITHUB_WORKSPACE\third-party\mpfr-msvc\release"
-          ) -join ';'
+          ) -join [IO.Path]::PathSeparator
           $mklDispatchDlls = @(
             "mkl_def.2.dll",
             "mkl_mc3.2.dll",
@@ -150,7 +150,7 @@ jobs:
             "mkl_vml_mc3.2.dll",
             "mkl_vml_avx2.2.dll",
             "mkl_vml_avx512.2.dll"
-          ) -join ':'
+          ) -join [IO.Path]::PathSeparator
           uv run python -m delvewheel repair `
             --add-path $nativePaths `
             --include $mklDispatchDlls `
