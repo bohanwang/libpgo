@@ -41,19 +41,11 @@ void pypgo_init(py::module &m)
       py::buffer_info vtxInfo = vertices.request();
       py::buffer_info tetInfo = elements.request();
 
-      if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.format != py::format_descriptor<float>::format()) {
-        std::cerr << "Wrong vertex type:" << vtxInfo.ndim << ',' << vtxInfo.format << std::endl;
-        return TetMeshGeo();
-      }
+      if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.size % 3 != 0)
+        throw py::value_error("Expected a flat vertex array whose length is a multiple of 3");
 
-#if defined(_WIN32)
-      if (tetInfo.ndim != (py::ssize_t)1) {
-#else
-      if (tetInfo.ndim != (py::ssize_t)1 || (tetInfo.format != py::format_descriptor<int>::format())) {
-#endif
-        std::cerr << "Wrong tet type:" << tetInfo.ndim << ',' << tetInfo.format << ',' << py::format_descriptor<int64_t>::format() << std::endl;
-        return TetMeshGeo();
-      }
+      if (tetInfo.ndim != (py::ssize_t)1 || tetInfo.size % 4 != 0)
+        throw py::value_error("Expected a flat tet array whose length is a multiple of 4");
 
       Eigen::VectorXd vertexPosDouble = Eigen::Map<const Eigen::VectorXf>((float *)vtxInfo.ptr, vtxInfo.size).cast<double>();
       Eigen::VectorXi tets = Eigen::Map<const Eigen::VectorXi>((int *)tetInfo.ptr, tetInfo.size);
@@ -103,15 +95,11 @@ void pypgo_init(py::module &m)
     py::buffer_info vtxInfo = vertices.request();
     py::buffer_info tetInfo = elements.request();
 
-    if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.format != py::format_descriptor<float>::format()) {
-      std::cerr << "Wrong vertex type:" << vtxInfo.ndim << ',' << vtxInfo.format << std::endl;
-      return TetMesh();
-    }
+    if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.size % 3 != 0)
+      throw py::value_error("Expected a flat vertex array whose length is a multiple of 3");
 
-    if (tetInfo.ndim != (py::ssize_t)1 || (tetInfo.format != py::format_descriptor<int>::format())) {
-      std::cerr << "Wrong tet type:" << tetInfo.ndim << ',' << tetInfo.format << ',' << py::format_descriptor<int64_t>::format() << std::endl;
-      return TetMesh();
-    }
+    if (tetInfo.ndim != (py::ssize_t)1 || tetInfo.size % 4 != 0)
+      throw py::value_error("Expected a flat tet array whose length is a multiple of 4");
 
     Eigen::VectorXd vertexPosDouble = Eigen::Map<const Eigen::VectorXf>((float *)vtxInfo.ptr, vtxInfo.size).cast<double>();
     Eigen::VectorXi tets = Eigen::Map<const Eigen::VectorXi>((int *)tetInfo.ptr, tetInfo.size);
@@ -318,19 +306,11 @@ void pypgo_init(py::module &m)
       py::buffer_info vtxInfo = vertices.request();
       py::buffer_info triInfo = triangles.request();
 
-      if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.format != py::format_descriptor<float>::format()) {
-        std::cerr << "Wrong vertex type:" << vtxInfo.ndim << ',' << vtxInfo.format << std::endl;
-        return TriMeshGeo();
-      }
+      if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.size % 3 != 0)
+        throw py::value_error("Expected a flat vertex array whose length is a multiple of 3");
 
-#if defined(_WIN32)
-      if (triInfo.ndim != (py::ssize_t)1) {
-#else
-        if (triInfo.ndim != (py::ssize_t)1 || (triInfo.format != py::format_descriptor<int>::format())) {
-#endif
-        std::cerr << "Wrong tri type:" << triInfo.ndim << ',' << triInfo.format << ',' << py::format_descriptor<int64_t>::format() << std::endl;
-        return TriMeshGeo();
-      }
+      if (triInfo.ndim != (py::ssize_t)1 || triInfo.size % 3 != 0)
+        throw py::value_error("Expected a flat triangle array whose length is a multiple of 3");
 
       Eigen::VectorXd vertexPosDouble = Eigen::Map<const Eigen::VectorXf>((float *)vtxInfo.ptr, vtxInfo.size).cast<double>();
       Eigen::VectorXi tris = Eigen::Map<const Eigen::VectorXi>((int *)triInfo.ptr, triInfo.size);

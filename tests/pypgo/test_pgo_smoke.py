@@ -259,6 +259,46 @@ def test_tetmesh_update_rejects_wrong_vertex_count():
         pypgo.destroy_tetmesh(tetmesh)
 
 
+def test_tetmesh_creation_forcecasts_integer_elements():
+    tetmesh = pypgo.create_tetmesh(
+        TET_VERTICES.ravel(),
+        TET_ELEMENTS.astype(np.int64).ravel(),
+        1.0e5,
+        0.45,
+        1000.0,
+    )
+    try:
+        np.testing.assert_array_equal(
+            pypgo.get_tetmesh_element_indices(tetmesh),
+            TET_ELEMENTS,
+        )
+    finally:
+        pypgo.destroy_tetmesh(tetmesh)
+
+
+def test_mesh_creation_rejects_malformed_flat_arrays():
+    with pytest.raises(ValueError, match="multiple of 3"):
+        pypgo.create_tetmeshgeo(
+            TET_VERTICES.ravel()[:-1],
+            TET_ELEMENTS.ravel(),
+        )
+
+    with pytest.raises(ValueError, match="multiple of 4"):
+        pypgo.create_tetmesh(
+            TET_VERTICES.ravel(),
+            TET_ELEMENTS.ravel()[:-1],
+            1.0e5,
+            0.45,
+            1000.0,
+        )
+
+    with pytest.raises(ValueError, match="multiple of 3"):
+        pypgo.create_trimeshgeo(
+            TRI_VERTICES.ravel(),
+            TRI_ELEMENTS.ravel()[:-1],
+        )
+
+
 def test_trimeshgeo_memory_round_trip_and_closest_distance():
     trimesh = _create_unit_trimeshgeo()
     try:
