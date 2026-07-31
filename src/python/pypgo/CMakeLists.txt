@@ -25,10 +25,11 @@ if(TARGET pgo_windows_runtime)
         TARGET pypgo
         POST_BUILD
         COMMAND
-            ${CMAKE_COMMAND} -E copy_directory_if_different
-            "${PGO_WINDOWS_RUNTIME_OUTPUT_DIRECTORY}"
+            ${CMAKE_COMMAND} -E copy_if_different
+            ${PGO_WINDOWS_RUNTIME_DLLS}
             "$<TARGET_FILE_DIR:pypgo>"
         COMMENT "Staging Windows runtime DLLs beside $<TARGET_FILE_NAME:pypgo>"
+        COMMAND_EXPAND_LISTS
         VERBATIM)
 endif()
 

@@ -62,6 +62,14 @@ list(REMOVE_DUPLICATES _pgo_windows_runtime_dlls)
 list(SORT _pgo_windows_runtime_dlls)
 
 set(
+  PGO_WINDOWS_RUNTIME_DLLS
+  "${_pgo_windows_runtime_dlls}"
+  CACHE INTERNAL
+  "Windows source-build runtime DLLs"
+  FORCE
+)
+
+set(
   PGO_WINDOWS_RUNTIME_OUTPUT_DIRECTORY
   "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
   CACHE INTERNAL
