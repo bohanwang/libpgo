@@ -66,7 +66,7 @@ class CMakeBuild(build_ext):
         subprocess.run(["cmake", "--build", ".", "--target", "pypgo", *build_args], cwd=build_temp, check=True)
 
 setup(
-    ext_modules=[CMakeExtension("pypgo")],
+    ext_modules=[CMakeExtension("pypgo._pypgo")],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
 )

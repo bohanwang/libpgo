@@ -58,7 +58,7 @@ jobs:
             uv run ctest --test-dir build/pypgo --output-on-failure \
             | tee "${EVIDENCE_DIR}/ctest.txt"
           LD_LIBRARY_PATH="${python_prefix}/lib" \
-          PYTHONPATH="${GITHUB_WORKSPACE}/build/pypgo/src/python/pypgo" \
+          PYTHONPATH="${GITHUB_WORKSPACE}/build/pypgo/src/python" \
             uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py \
             | tee "${EVIDENCE_DIR}/build-tree-pytest.txt"
           cp build/pypgo/CMakeCache.txt "${EVIDENCE_DIR}/CMakeCache.txt"

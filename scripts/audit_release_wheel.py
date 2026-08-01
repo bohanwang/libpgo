@@ -70,11 +70,34 @@ def audit(args: argparse.Namespace) -> None:
         extension_members = [
             name
             for name in native_members
-            if Path(name).name.startswith("pypgo.")
+            if Path(name).parent.as_posix() == "pypgo"
+            and Path(name).name.startswith("_pypgo.")
         ]
         require(
             len(extension_members) == 1,
-            f"wheel must contain exactly one pypgo extension, found: {extension_members}",
+            "wheel must contain exactly one pypgo/_pypgo extension, "
+            f"found: {extension_members}",
+        )
+        require(
+            "pypgo/__init__.py" in members,
+            "wheel does not contain the pypgo package initializer",
+        )
+        if args.platform == "windows":
+            initializer = archive.read("pypgo/__init__.py").decode("utf-8")
+            require(
+                "delvewheel" in initializer and "add_dll_directory" in initializer,
+                "Windows wheel initializer does not register its bundled DLL directory",
+            )
+        unexpected_roots = {
+            Path(name).parts[0]
+            for name in members
+            if Path(name).parts
+            and Path(name).parts[0]
+            in {"c", "core", "python", "simulationRunner", "tests", "tools"}
+        }
+        require(
+            not unexpected_roots,
+            f"wheel contains unintended namespace package roots: {sorted(unexpected_roots)}",
         )
 
         lowered_members = "\n".join(native_members).lower()

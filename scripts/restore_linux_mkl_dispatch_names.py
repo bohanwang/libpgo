@@ -52,7 +52,7 @@ def restore(wheel: Path) -> None:
             raise RuntimeError(f"expected one unpacked wheel root, found {roots}")
         root = roots[0]
 
-        extensions = list(root.glob("pypgo*.so"))
+        extensions = list(root.glob("pypgo/_pypgo*.so"))
         if len(extensions) != 1:
             raise RuntimeError(f"expected one pypgo extension, found {extensions}")
         extension = extensions[0]

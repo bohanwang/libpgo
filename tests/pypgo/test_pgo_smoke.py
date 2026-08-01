@@ -1,3 +1,4 @@
+import importlib
 import json
 import math
 from pathlib import Path
@@ -130,6 +131,14 @@ def test_package_version_matches_project_metadata():
         project_version = tomllib.load(pyproject_file)["project"]["version"]
 
     assert pypgo.__version__ == project_version
+
+
+def test_public_package_wraps_private_native_extension():
+    native_module = importlib.import_module("pypgo._pypgo")
+
+    assert Path(pypgo.__file__).name == "__init__.py"
+    assert Path(native_module.__file__).parent == Path(pypgo.__file__).parent
+    assert pypgo.run_sim_from_config is native_module.run_sim_from_config
 
 
 @pytest.mark.parametrize("mesh_type", ["tet", "cubic"])

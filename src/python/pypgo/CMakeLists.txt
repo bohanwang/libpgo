@@ -16,8 +16,19 @@ if(NOT MSVC AND NOT ${CMAKE_BUILD_TYPE} MATCHES Debug|RelWithDebInfo)
     pybind11_strip(pypgo)
 endif()
 
-set_target_properties(pypgo PROPERTIES CXX_VISIBILITY_PRESET "hidden"
+set_target_properties(pypgo PROPERTIES OUTPUT_NAME "_pypgo"
+    CXX_VISIBILITY_PRESET "hidden"
     CUDA_VISIBILITY_PRESET "hidden")
+
+add_custom_command(
+    TARGET pypgo
+    POST_BUILD
+    COMMAND
+        ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/__init__.py"
+        "$<TARGET_FILE_DIR:pypgo>/__init__.py"
+    COMMENT "Staging the pypgo package initializer beside $<TARGET_FILE_NAME:pypgo>"
+    VERBATIM)
 
 if(TARGET pgo_windows_runtime)
     add_dependencies(pypgo pgo_windows_runtime)

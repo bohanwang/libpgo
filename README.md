@@ -94,7 +94,7 @@ uv run cmake --preset pypgo-wheel
 uv run cmake --build build/pypgo
 uv run ctest --test-dir build/pypgo --output-on-failure
 
-export PYTHONPATH="$PWD/build/pypgo/src/python/pypgo"
+export PYTHONPATH="$PWD/build/pypgo/src/python"
 export LD_LIBRARY_PATH="$PWD/.venv/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 uv run python -c "import pypgo; print(pypgo)"
 uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py
@@ -117,7 +117,7 @@ uv run cmake --preset pypgo-wheel
 uv run cmake --build build/pypgo
 uv run ctest --test-dir build/pypgo --output-on-failure
 
-export PYTHONPATH="$PWD/build/pypgo/src/python/pypgo"
+export PYTHONPATH="$PWD/build/pypgo/src/python"
 uv run python -c "import pypgo; print(pypgo)"
 uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py
 ```
@@ -137,14 +137,14 @@ uv run cmake --preset pypgo-wheel
 uv run cmake --build build\pypgo
 uv run ctest --test-dir build\pypgo --output-on-failure
 
-$env:PYTHONPATH = "$PWD\build\pypgo\src\python\pypgo"
+$env:PYTHONPATH = "$PWD\build\pypgo\src\python"
 uv run python -c "import pypgo; print(pypgo)"
 uv run python -m pytest -q tests\pypgo\test_pgo_smoke.py
 ```
 
 Windows source builds use the approved GMP/MPFR files under `third-party`.
 CMake stages the required GMP/MPFR, oneTBB, and oneMKL runtime DLLs beside
-source-built executables and `pypgo.pyd`; no dependency-specific `PATH`
+source-built executables and `pypgo/_pypgo.pyd`; no dependency-specific `PATH`
 configuration is required.
 After the first configure, ordinary C++ edits only require
 `uv run cmake --build build/pypgo` (or `--target pypgo` when only the Python

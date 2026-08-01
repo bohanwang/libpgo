@@ -36,8 +36,8 @@ Current build and packaging rules:
 - `uv sync --locked` prepares `.venv`; it does not install pypgo.
 - Developer builds use `uv run cmake --preset pypgo-wheel`, whose preset owns
   Ninja, `build/pypgo`, tests, and portable-wheel defaults.
-- Developers import the extension directly from
-  `build/pypgo/src/python/pypgo` through `PYTHONPATH`; ordinary C++ changes
+- Developers import the build-tree package from
+  `build/pypgo/src/python` through `PYTHONPATH`; ordinary C++ changes
   require only an incremental CMake build.
 - Wheel packaging is a separate path: `uv build --wheel
   --no-build-isolation`, platform repair/audit, and installation into a fresh
@@ -747,7 +747,7 @@ uv sync --locked
 uv run cmake --preset pypgo-wheel
 uv run cmake --build build/pypgo
 uv run ctest --test-dir build/pypgo --output-on-failure
-PYTHONPATH="$PWD/build/pypgo/src/python/pypgo" \
+PYTHONPATH="$PWD/build/pypgo/src/python" \
   uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py
 ```
 

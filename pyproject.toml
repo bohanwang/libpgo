@@ -41,6 +41,10 @@ Homepage = "https://github.com/annajcy/libpgo"
 Source = "https://github.com/annajcy/libpgo"
 Issues = "https://github.com/annajcy/libpgo/issues"
 
+[tool.setuptools]
+packages = ["pypgo"]
+package-dir = { "" = "src/python" }
+
 [dependency-groups]
 dev = [
     "cmake==4.3.1",

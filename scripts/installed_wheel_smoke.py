@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import importlib
 import os
 import subprocess
 import sys
@@ -80,10 +81,13 @@ def main() -> int:
 
     import pypgo
 
-    module_path = Path(pypgo.__file__).resolve()
+    package_path = Path(pypgo.__file__).resolve()
+    native_module = importlib.import_module("pypgo._pypgo")
+    module_path = Path(native_module.__file__).resolve()
     source_dir = args.source_dir.resolve()
-    if source_dir == module_path or source_dir in module_path.parents:
-        raise RuntimeError(f"pypgo was imported from the source checkout: {module_path}")
+    for loaded_path in (package_path, module_path):
+        if source_dir == loaded_path or source_dir in loaded_path.parents:
+            raise RuntimeError(f"pypgo was imported from the source checkout: {loaded_path}")
     expected_version = read_project_version(source_dir)
     if pypgo.__version__ != expected_version:
         raise RuntimeError(f"unexpected pypgo version: {pypgo.__version__}")
@@ -128,7 +132,7 @@ def main() -> int:
         if any(name in modules for name in ("mkl_intel_thread", "mkl_gnu_thread", "libiomp5")):
             raise RuntimeError("an unapproved MKL threading runtime is loaded")
 
-    print(f"pypgo {pypgo.__version__}: {module_path}")
+    print(f"pypgo {pypgo.__version__}: {package_path} ({module_path.name})")
     print(f"{args.platform} BLAS/LAPACK runtime smoke passed")
     return 0
 
