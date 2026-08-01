@@ -134,20 +134,21 @@ def audit(args: argparse.Namespace) -> None:
             )
             if args.platform == "windows":
                 native_filenames = {Path(member).name.lower() for member in native_members}
-                required_original_mkl_names = {
+                required_original_runtime_names = {
+                    "tbb12.dll",
                     "mkl_core.2.dll",
                     "mkl_tbb_thread.2.dll",
                 }
-                required_original_mkl_names.update(
+                required_original_runtime_names.update(
                     f"{component}.2.dll" for component in dispatch_components
                 )
-                missing_original_mkl_names = sorted(
-                    required_original_mkl_names - native_filenames
+                missing_original_runtime_names = sorted(
+                    required_original_runtime_names - native_filenames
                 )
                 require(
-                    not missing_original_mkl_names,
-                    "Windows wheel is missing original oneMKL runtime names: "
-                    f"{missing_original_mkl_names}",
+                    not missing_original_runtime_names,
+                    "Windows wheel is missing original oneMKL/oneTBB runtime names: "
+                    f"{missing_original_runtime_names}",
                 )
         else:
             require("tbb" in lowered_members, "repaired macOS wheel does not bundle TBB")
@@ -208,6 +209,10 @@ def audit(args: argparse.Namespace) -> None:
                 require("machine (x64)" in headers or "8664 machine" in headers, "extension is not x64")
                 require("mkl" in lowered, "MKL is not present in Windows linkage evidence")
                 require("tbb" in lowered, "TBB is not present in Windows linkage evidence")
+                require(
+                    "tbb12.dll" in lowered and "tbb12-" not in lowered,
+                    "Windows extension does not link the original tbb12.dll name",
+                )
                 require("mkl_tbb_thread" in lowered, "MKL TBB threading layer is not linked")
                 require("libiomp" not in lowered, "Intel OpenMP is linked")
 
