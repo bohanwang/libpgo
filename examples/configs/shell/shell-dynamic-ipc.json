@@ -2,7 +2,7 @@
   "surface-mesh": "../../assets/shell/shell.obj",
   "fixed-vertices": [
     {
-      "filename": "../../assets/shell/shell-ipc-fixed.txt",
+      "filename": "../../assets/shell/shell-half-fixed.txt",
       "movement": [
         0,
         0,

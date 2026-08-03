@@ -1,5 +1,5 @@
 {
-  "cubic-mesh": "../../../generated/cubic/box-with-sphere-lite-cubic.veg",
+  "tet-mesh": "../../../assets/volume/box-with-sphere/box-with-sphere-tet.veg",
   "surface-mesh": "../../../assets/volume/box-with-sphere/box-with-sphere.obj",
   "fixed-vertices": [],
   "use-floor": true,
@@ -33,7 +33,7 @@
   "solver-max-iter": 200,
   "elastic-material": "stable-neo",
   "dump-interval": 10,
-  "output": "../../../generated/output/box-with-sphere-lite-cubic-ipc",
+  "output": "../../../generated/output/box-with-sphere-tet-ipc",
   "ipc-dhat": 0.002,
   "ipc-kappa": 3000.0,
   "enable-material-max-step": true,

@@ -13,7 +13,7 @@
   "init-disp": [0.0, 0.0, 0.0],
   "scale": 1.0,
   "timestep": 0.001,
-  "num-timestep": 1,
+  "num-timestep": 2,
   "damping-params": [0.0, 0.0],
   "sim-type": "dynamic",
   "solver-eps": 0.0001,

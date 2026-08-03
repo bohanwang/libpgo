@@ -26,8 +26,10 @@ add_custom_command(
     COMMAND
         ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/__init__.py"
-        "$<TARGET_FILE_DIR:pypgo>/__init__.py"
-    COMMENT "Staging the pypgo package initializer beside $<TARGET_FILE_NAME:pypgo>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/pgo_run_sim.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/pgo_dump_abc.py"
+        "$<TARGET_FILE_DIR:pypgo>"
+    COMMENT "Staging the pypgo Python package beside $<TARGET_FILE_NAME:pypgo>"
     VERBATIM)
 
 if(TARGET pgo_windows_runtime)

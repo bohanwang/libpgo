@@ -77,10 +77,10 @@ libpgo_materialize_box_config(
   "${CMAKE_SOURCE_DIR}/examples/configs/volume/box/box-cubic-sampled.json"
   "${LIBPGO_TEST_CUBIC_BOX_JSON}")
 libpgo_materialize_box_config(
-  "${CMAKE_SOURCE_DIR}/examples/configs/volume/box/box-hang-tet-ipc.json"
+  "${CMAKE_SOURCE_DIR}/examples/configs/volume/box-with-sphere/box-with-sphere-tet-ipc.json"
   "${LIBPGO_TEST_TET_BOX_DIR}/box-ipc.json")
 libpgo_materialize_box_config(
-  "${CMAKE_SOURCE_DIR}/examples/configs/volume/box/box-hang-cubic-ipc.json"
+  "${CMAKE_SOURCE_DIR}/examples/configs/volume/box-with-sphere/box-with-sphere-cubic-ipc.json"
   "${LIBPGO_TEST_CUBIC_BOX_DIR}/box-ipc.json")
 
 add_custom_command(

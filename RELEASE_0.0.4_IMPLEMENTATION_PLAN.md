@@ -41,8 +41,6 @@ smallest missing regression.
 - [ ] Cubic energy, gradient, and Hessian finite differences.
 - [ ] Cubic invalid rest-element validation.
 - [ ] Cubic mesher deterministic topology and basic geometry.
-- [ ] Lightweight cubic generator arguments, no-overwrite behavior, manifest,
-      and repeatability.
 - [ ] Tet and cubic material maximum-step behavior.
 - [ ] IPC CCD maximum-step behavior.
 - [ ] IPC barrier energy, gradient, and Hessian finite differences.
