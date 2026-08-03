@@ -163,9 +163,9 @@ wheel passes its installed smoke test and Python tests, the `record` command
 requires exactly one wheel, rejects source archives, and records the wheel
 checksum together with the CMake, dependency, test, and runner evidence.
 Evidence and wheel output directories must be outside the source checkout.
-The platform workflows under [`.github/workflows`](.github/workflows) contain
-the authoritative packaging, repair, audit, and clean-install verification
-commands.
+The [self-contained wheel packaging guide](docs/guide/build/package-pypgo-wheels.md)
+documents the local platform entry points. The workflows under
+`.github/workflows` add provenance and clean-job release verification.
 
 ## Usage & Test
 
@@ -215,7 +215,7 @@ installed by a wheel.
 
 ### Use an installed wheel
 
-Installing the `pypgo` wheel provides two console commands. When the wheel is
+Installing the `pypgo` wheel provides three console commands. When the wheel is
 installed in the current uv environment, run a simulation with:
 
 ```bash

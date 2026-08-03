@@ -11,7 +11,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import release_wheel_provenance as provenance  # noqa: E402
-from release_wheel_contract import get_platform_contract  # noqa: E402
+from pypgo_wheel.contracts import get_platform_contract  # noqa: E402
 
 
 def write_wheel(

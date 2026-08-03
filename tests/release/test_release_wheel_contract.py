@@ -8,17 +8,27 @@ import pytest
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from release_wheel_contract import (  # noqa: E402
-    ABI_TAG,
-    EVIDENCE_CATEGORIES,
-    MKL_DISPATCH_COMPONENTS,
-    MKL_DISPATCH_LIBRARY_COMPONENTS,
+from pypgo_wheel.contracts import (  # noqa: E402
     PLATFORM_CONTRACTS,
+    SUPPORTED_PLATFORMS,
+    get_platform_contract,
+)
+from pypgo_wheel.contracts.common import (  # noqa: E402
+    ABI_TAG,
+    COMMON_NATIVE_COMPONENTS,
     PYTHON_TAG,
     RELEASE_DISTRIBUTION,
-    SUPPORTED_PLATFORMS,
+)
+from pypgo_wheel.contracts.linux import LINUX_CONTRACT  # noqa: E402
+from pypgo_wheel.contracts.macos import MACOS_CONTRACT  # noqa: E402
+from pypgo_wheel.contracts.mkl import (  # noqa: E402
+    MKL_DISPATCH_COMPONENTS,
+    MKL_DISPATCH_LIBRARY_COMPONENTS,
+)
+from pypgo_wheel.contracts.windows import (  # noqa: E402
+    WINDOWS_CONTRACT,
+    WINDOWS_FORCED_INCLUDE_DLLS,
     WINDOWS_UNMANGLED_RUNTIME_DLLS,
-    get_platform_contract,
 )
 
 
@@ -26,7 +36,6 @@ def test_shared_release_identity() -> None:
     assert RELEASE_DISTRIBUTION == "pypgo"
     assert PYTHON_TAG == "cp312"
     assert ABI_TAG == "cp312"
-    assert EVIDENCE_CATEGORIES == ("environment", "audit", "test")
 
 
 @pytest.mark.parametrize(
@@ -60,6 +69,18 @@ def test_supported_platforms_match_contract_keys() -> None:
     assert set(SUPPORTED_PLATFORMS) == set(PLATFORM_CONTRACTS)
 
 
+def test_registry_uses_platform_module_contracts() -> None:
+    assert PLATFORM_CONTRACTS == {
+        "linux": LINUX_CONTRACT,
+        "macos": MACOS_CONTRACT,
+        "windows": WINDOWS_CONTRACT,
+    }
+    assert all(
+        COMMON_NATIVE_COMPONENTS == contract.required_native_components[:4]
+        for contract in PLATFORM_CONTRACTS.values()
+    )
+
+
 def test_mkl_dispatch_names_are_derived_once() -> None:
     assert MKL_DISPATCH_LIBRARY_COMPONENTS == tuple(
         f"mkl_{component}" for component in MKL_DISPATCH_COMPONENTS
@@ -78,6 +99,14 @@ def test_windows_original_runtime_names_are_part_of_its_contract() -> None:
     assert windows.required_original_runtime_names == WINDOWS_UNMANGLED_RUNTIME_DLLS
     assert not get_platform_contract("linux").required_original_runtime_names
     assert not get_platform_contract("macos").required_original_runtime_names
+
+
+def test_windows_forced_includes_cover_indirect_and_unmangled_runtimes() -> None:
+    assert WINDOWS_FORCED_INCLUDE_DLLS == (
+        "gmpxx-4.dll",
+        "mpfr-6.dll",
+        *WINDOWS_UNMANGLED_RUNTIME_DLLS,
+    )
 
 
 def test_platform_contract_is_immutable() -> None:

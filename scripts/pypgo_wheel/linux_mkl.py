@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Restore oneMKL dispatch filenames after auditwheel repair.
 
 oneMKL opens its CPU-specific kernels by their original filenames at runtime.
@@ -9,7 +8,6 @@ dispatched MKL operation.
 
 from __future__ import annotations
 
-import argparse
 import os
 import re
 import shutil
@@ -18,7 +16,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from release_wheel_contract import MKL_DISPATCH_COMPONENTS
+from .contracts.mkl import MKL_DISPATCH_COMPONENTS
 
 
 def run(*command: str) -> None:
@@ -34,7 +32,15 @@ def restore(wheel: Path) -> None:
         temporary = Path(directory)
         unpack_dir = temporary / "unpacked"
         output_dir = temporary / "repacked"
-        run(sys.executable, "-m", "wheel", "unpack", "-d", str(unpack_dir), str(wheel))
+        run(
+            sys.executable,
+            "-m",
+            "wheel",
+            "unpack",
+            "-d",
+            str(unpack_dir),
+            str(wheel),
+        )
 
         roots = [path for path in unpack_dir.iterdir() if path.is_dir()]
         if len(roots) != 1:
@@ -48,7 +54,9 @@ def restore(wheel: Path) -> None:
 
         library_dirs = list(root.glob("pypgo.libs"))
         if len(library_dirs) != 1:
-            raise RuntimeError(f"expected one pypgo.libs directory, found {library_dirs}")
+            raise RuntimeError(
+                f"expected one pypgo.libs directory, found {library_dirs}"
+            )
         library_dir = library_dirs[0]
 
         for component in MKL_DISPATCH_COMPONENTS:
@@ -60,7 +68,8 @@ def restore(wheel: Path) -> None:
             ]
             if len(candidates) != 1:
                 raise RuntimeError(
-                    f"expected one repaired libmkl_{component} library, found {candidates}"
+                    f"expected one repaired libmkl_{component} library, "
+                    f"found {candidates}"
                 )
 
             repaired = candidates[0]
@@ -78,7 +87,15 @@ def restore(wheel: Path) -> None:
             )
 
         output_dir.mkdir()
-        run(sys.executable, "-m", "wheel", "pack", "-d", str(output_dir), str(root))
+        run(
+            sys.executable,
+            "-m",
+            "wheel",
+            "pack",
+            "-d",
+            str(output_dir),
+            str(root),
+        )
         packed = list(output_dir.glob("*.whl"))
         if len(packed) != 1:
             raise RuntimeError(f"expected one repacked wheel, found {packed}")
@@ -87,15 +104,3 @@ def restore(wheel: Path) -> None:
         os.replace(staged, wheel)
 
     print(f"restored oneMKL dispatch filenames in {wheel.name}")
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("wheel", type=Path)
-    args = parser.parse_args()
-    restore(args.wheel)
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

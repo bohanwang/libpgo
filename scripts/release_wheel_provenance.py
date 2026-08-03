@@ -15,10 +15,8 @@ from email.parser import BytesParser
 from pathlib import Path
 
 from project_version import read_project_version
-from release_wheel_contract import (
-    RELEASE_DISTRIBUTION,
-    SUPPORTED_PLATFORMS,
-)
+from pypgo_wheel.contracts import SUPPORTED_PLATFORMS
+from pypgo_wheel.contracts.common import RELEASE_DISTRIBUTION
 
 SOURCE_RECORD = "source-provenance.json"
 FINAL_RECORD = "wheel-provenance.json"

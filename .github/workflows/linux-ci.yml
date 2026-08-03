@@ -94,7 +94,6 @@ jobs:
           echo "/opt/python/cp312-cp312/bin" >> "${GITHUB_PATH}"
           /opt/python/cp312-cp312/bin/uv sync --locked \
             --python /opt/python/cp312-cp312/bin/python
-          echo "RAW_WHEEL_DIR=${RUNNER_TEMP}/raw-wheel" >> "${GITHUB_ENV}"
           echo "WHEEL_DIR=${RUNNER_TEMP}/wheelhouse" >> "${GITHUB_ENV}"
           echo "EVIDENCE_DIR=${RUNNER_TEMP}/evidence" >> "${GITHUB_ENV}"
           echo "CANDIDATE_DIR=${RUNNER_TEMP}/candidate" >> "${GITHUB_ENV}"
@@ -123,31 +122,11 @@ jobs:
           uv run python scripts/release_wheel_provenance.py preflight \
             --evidence-dir "${EVIDENCE_DIR}"
 
-      - name: Build and repair wheel
+      - name: Build, repair, and audit wheel
         run: |
-          mkdir -p "${RAW_WHEEL_DIR}" "${WHEEL_DIR}"
-          uv build --wheel --no-build-isolation --out-dir "${RAW_WHEEL_DIR}"
-          raw_wheel="$(find "${RAW_WHEEL_DIR}" -maxdepth 1 -name '*.whl' -print -quit)"
-          python_prefix="$(uv run python -c 'import sys; print(sys.prefix)')"
-          LD_LIBRARY_PATH="${python_prefix}/lib" \
-            uv run auditwheel repair \
-              --plat manylinux_2_28_x86_64 \
-              --only-plat \
-              --wheel-dir "${WHEEL_DIR}" \
-              "${raw_wheel}"
-          test "$(find "${WHEEL_DIR}" -maxdepth 1 -name '*.whl' | wc -l)" -eq 1
-          repaired_wheel="$(find "${WHEEL_DIR}" -maxdepth 1 -name '*.whl' -print -quit)"
-          uv run python scripts/restore_linux_mkl_dispatch_names.py "${repaired_wheel}"
-
-      - name: Audit repaired wheel
-        run: |
-          wheel="$(find "${WHEEL_DIR}" -maxdepth 1 -name '*.whl' -print -quit)"
-          uv run auditwheel show "${wheel}" | tee "${EVIDENCE_DIR}/auditwheel.txt"
-          uv run python scripts/audit_release_wheel.py \
-            --platform linux \
-            --wheel "${wheel}" \
-            --source-dir "${GITHUB_WORKSPACE}" \
-            | tee "${EVIDENCE_DIR}/wheel-linkage.txt"
+          uv run python scripts/pypgo_wheel_linux.py package \
+            --wheel-dir "${WHEEL_DIR}" \
+            --report-dir "${EVIDENCE_DIR}"
 
       - name: Assemble candidate artifact
         run: |

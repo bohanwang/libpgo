@@ -105,7 +105,6 @@ jobs:
           $uvVersion = python scripts/uv_version.py
           python -m pip install "uv==$uvVersion"
           uv sync --locked --python python
-          "RAW_WHEEL_DIR=$env:RUNNER_TEMP\raw-wheel" | Out-File $env:GITHUB_ENV -Append
           "WHEEL_DIR=$env:RUNNER_TEMP\wheelhouse" | Out-File $env:GITHUB_ENV -Append
           "EVIDENCE_DIR=$env:RUNNER_TEMP\evidence" | Out-File $env:GITHUB_ENV -Append
           "CANDIDATE_DIR=$env:RUNNER_TEMP\candidate" | Out-File $env:GITHUB_ENV -Append
@@ -135,64 +134,12 @@ jobs:
           uv run python scripts/release_wheel_provenance.py preflight `
             --evidence-dir "$env:EVIDENCE_DIR"
 
-      - name: Build and repair wheel
+      - name: Build, repair, and audit wheel
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force $env:RAW_WHEEL_DIR | Out-Null
-          New-Item -ItemType Directory -Force $env:WHEEL_DIR | Out-Null
-          uv build --wheel --no-build-isolation --out-dir "$env:RAW_WHEEL_DIR"
-          $rawWheel = @(Get-ChildItem $env:RAW_WHEEL_DIR -Filter '*.whl')[0].FullName
-          $venv = (Resolve-Path .venv).Path
-          $nativePaths = @(
-            "$venv\Library\bin",
-            "$env:GITHUB_WORKSPACE\third-party\gmp-msvc\release",
-            "$env:GITHUB_WORKSPACE\third-party\mpfr-msvc\release"
-          ) -join [IO.Path]::PathSeparator
-          # oneMKL dispatch DLLs and its TBB threading layer load runtime DLLs
-          # by their original filenames. Keep this runtime set unmangled.
-          $unmangledRuntimeDllNames = @(
-            "tbb12.dll",
-            "mkl_core.2.dll",
-            "mkl_tbb_thread.2.dll",
-            "mkl_def.2.dll",
-            "mkl_mc3.2.dll",
-            "mkl_avx2.2.dll",
-            "mkl_avx512.2.dll",
-            "mkl_vml_def.2.dll",
-            "mkl_vml_cmpt.2.dll",
-            "mkl_vml_mc3.2.dll",
-            "mkl_vml_avx2.2.dll",
-            "mkl_vml_avx512.2.dll"
-          )
-          $unmangledRuntimeDlls = $unmangledRuntimeDllNames `
-            -join [IO.Path]::PathSeparator
-          # GMPXX and MPFR are part of the release-wheel contract even when
-          # the extension's direct dependency graph does not reference them.
-          $includedDlls = @(
-            "gmpxx-4.dll",
-            "mpfr-6.dll"
-          ) + $unmangledRuntimeDllNames
-          $includedDlls = $includedDlls -join [IO.Path]::PathSeparator
-          uv run python -m delvewheel repair `
-            --add-path $nativePaths `
-            --include $includedDlls `
-            --no-mangle $unmangledRuntimeDlls `
+          uv run python scripts\pypgo_wheel_windows.py package `
             --wheel-dir "$env:WHEEL_DIR" `
-            $rawWheel
-          $wheels = @(Get-ChildItem $env:WHEEL_DIR -Filter '*.whl')
-          if ($wheels.Count -ne 1) { throw "Expected one repaired wheel" }
-
-      - name: Audit repaired wheel
-        shell: pwsh
-        run: |
-          $wheel = @(Get-ChildItem $env:WHEEL_DIR -Filter '*.whl')[0].FullName
-          uv run python -m delvewheel show $wheel | Tee-Object "$env:EVIDENCE_DIR\delvewheel.txt"
-          uv run python scripts/audit_release_wheel.py `
-            --platform windows `
-            --wheel $wheel `
-            --source-dir "$env:GITHUB_WORKSPACE" `
-            | Tee-Object "$env:EVIDENCE_DIR\wheel-linkage.txt"
-          if ($LASTEXITCODE -ne 0) { throw "Wheel audit failed" }
+            --report-dir "$env:EVIDENCE_DIR"
 
       - name: Assemble candidate artifact
         shell: pwsh

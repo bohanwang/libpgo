@@ -8,11 +8,19 @@ import pytest
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from audit_release_wheel import AuditError, audit_wheel_archive  # noqa: E402
-from release_wheel_contract import get_platform_contract  # noqa: E402
+from pypgo_wheel.audit import AuditError, audit_wheel_archive  # noqa: E402
+from pypgo_wheel_linux import LinuxPypgoWheelPlatform  # noqa: E402
+from pypgo_wheel_macos import MacOSPypgoWheelPlatform  # noqa: E402
+from pypgo_wheel_windows import WindowsPypgoWheelPlatform  # noqa: E402
+from pypgo_wheel.contracts import get_platform_contract  # noqa: E402
 
 
 PROJECT_VERSION = "0.0.4"
+PLATFORMS = {
+    "linux": LinuxPypgoWheelPlatform(),
+    "macos": MacOSPypgoWheelPlatform(),
+    "windows": WindowsPypgoWheelPlatform(),
+}
 REQUIRED_COMPONENT_CASES = tuple(
     (platform, component)
     for platform in ("macos", "linux", "windows")
@@ -112,7 +120,7 @@ def inspect(wheel: Path, platform: str):
         return audit_wheel_archive(
             wheel,
             archive,
-            platform,
+            PLATFORMS[platform],
             PROJECT_VERSION,
         )
 

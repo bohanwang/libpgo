@@ -102,7 +102,6 @@ jobs:
           uv_version="$(python scripts/uv_version.py)"
           python -m pip install "uv==${uv_version}"
           uv sync --locked --python python
-          echo "RAW_WHEEL_DIR=${RUNNER_TEMP}/raw-wheel" >> "${GITHUB_ENV}"
           echo "WHEEL_DIR=${RUNNER_TEMP}/wheelhouse" >> "${GITHUB_ENV}"
           echo "EVIDENCE_DIR=${RUNNER_TEMP}/evidence" >> "${GITHUB_ENV}"
           echo "CANDIDATE_DIR=${RUNNER_TEMP}/candidate" >> "${GITHUB_ENV}"
@@ -133,25 +132,11 @@ jobs:
           uv run python scripts/release_wheel_provenance.py preflight \
             --evidence-dir "${EVIDENCE_DIR}"
 
-      - name: Build and repair wheel
+      - name: Build, repair, and audit wheel
         run: |
-          mkdir -p "${RAW_WHEEL_DIR}" "${WHEEL_DIR}"
-          uv build --wheel --no-build-isolation --out-dir "${RAW_WHEEL_DIR}"
-          raw_wheel="$(find "${RAW_WHEEL_DIR}" -maxdepth 1 -name '*.whl' -print -quit)"
-          uv run delocate-wheel --require-archs arm64 \
+          uv run python scripts/pypgo_wheel_macos.py package \
             --wheel-dir "${WHEEL_DIR}" \
-            "${raw_wheel}"
-          test "$(find "${WHEEL_DIR}" -maxdepth 1 -name '*.whl' | wc -l)" -eq 1
-
-      - name: Audit repaired wheel
-        run: |
-          wheel="$(find "${WHEEL_DIR}" -maxdepth 1 -name '*.whl' -print -quit)"
-          uv run delocate-listdeps --all "${wheel}" | tee "${EVIDENCE_DIR}/delocate-listdeps.txt"
-          uv run python scripts/audit_release_wheel.py \
-            --platform macos \
-            --wheel "${wheel}" \
-            --source-dir "${GITHUB_WORKSPACE}" \
-            | tee "${EVIDENCE_DIR}/wheel-linkage.txt"
+            --report-dir "${EVIDENCE_DIR}"
 
       - name: Assemble candidate artifact
         run: |
