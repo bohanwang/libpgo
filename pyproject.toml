@@ -31,6 +31,10 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 
+[project.scripts]
+pgo-dump-abc = "pypgo.pgo_dump_abc:main"
+pgo-run-sim = "pypgo.pgo_run_sim:main"
+
 [project.optional-dependencies]
 test = [
     "pytest>=6.0",

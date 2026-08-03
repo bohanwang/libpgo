@@ -164,62 +164,37 @@ Evidence and wheel output directories must be outside the source checkout.
 
 ## Usage & Test
 
-We provide three Python scripts to exercise the installation. From a source
-checkout, run them through the locked project environment created by
-`uv sync --locked`.
+### Test a source build
 
-1. `pgo_test_01.py`. It runs a few basic pgo APIs.
+`uv sync` does not install `pypgo` into the development environment. Point
+Python at the CMake build tree and run the maintained pytest suite instead of
+the removed `pgo_test_01.py` script:
 
-    ```bash
-    cd examples
-    uv run python ../src/python/pypgo/pgo_test_01.py
-    ```
+```bash
+export PYTHONPATH="$PWD/build/pypgo/src/python"
+uv run python -m pytest -q tests/pypgo
+```
 
-    The expected result will look like
+PowerShell uses the equivalent environment variable syntax:
 
-    ```text
-    Opening file torus.veg.
-    #vtx:564
-    #tets:1950
-    164,134,506,563
-    L Info:
-    10067040
-    (10067040,)
-    (10067040,)
-    125.0
-    GTLTLG Info:
-    503400
-    (503400,)
-    (503400,)
-    9695578.0
-    [[  6.958279    0.          0.        -17.495821    0.          0.
-       13.10052     0.          0.         -2.5629783   0.          0.       ]
-     [  0.          6.958279    0.          0.        -17.495821    0.
-        0.         13.10052     0.          0.         -2.5629783   0.       ]
-     [  0.          0.          6.958279    0.          0.        -17.495821
-        0.          0.         13.10052     0.          0.         -2.5629783]
-     [ -5.1109824   0.          0.         10.111505    0.          0.
-        8.160282    0.          0.        -13.160804    0.          0.       ]
-     [  0.         -5.1109824   0.          0.         10.111505    0.
-        0.          8.160282    0.          0.        -13.160804    0.       ]
-     [  0.          0.         -5.1109824   0.          0.         10.111505
-        0.          0.          8.160282    0.          0.        -13.160804 ]
-     [ 23.97409     0.          0.         -6.634346    0.          0.
-       -1.4866991   0.          0.        -15.853046    0.          0.       ]
-     [  0.         23.97409     0.          0.         -6.634346    0.
-        0.         -1.4866991   0.          0.        -15.853046    0.       ]
-     [  0.          0.         23.97409     0.          0.         -6.634346
-        0.          0.         -1.4866991   0.          0.        -15.853046 ]]
-    ```
+```powershell
+$env:PYTHONPATH = "$PWD\build\pypgo\src\python"
+uv run python -m pytest -q tests\pypgo
+```
 
-2. `pgo_run_sim.py`. It reads input config file and run simulation. You can try `box`, `box-with-sphere`, `dragon`, and `dragon-dyn` to test different simulation results. Take the box example for illustration. You can run the box example using the following commands.
-   
-    ```bash
-    uv run python src/python/pypgo/pgo_run_sim.py \
-        examples/configs/volume/box/box-tet-sampled.json
-    ```
+### Use an installed wheel
 
-    The expected result will look like the first image. The time integrator is hard-coded as implicit backward Euler (BE). You are free to change it to implicit Newmark (NW) or TR-BDF2 integrator (not support friction).
+Installing the `pypgo` wheel provides two console commands. When the wheel is
+installed in the current uv environment, run a simulation with:
+
+```bash
+uv run pgo-run-sim \
+    examples/configs/volume/box/box-tet-sampled.json
+```
+
+The command returns the simulation status as its process exit code. The time
+integrator is selected by the configuration file.
+
     <table style="width: 100%; table-layout: fixed; border-collapse: collapse;">
         <tr>
             <th style="width: 50%;text-align:center; border-top: 1px solid #ddd;">Box (NM)</th>
@@ -247,21 +222,17 @@ checkout, run them through the locked project environment created by
         </tr>
     </table>
 
-3. `pgo_dump_abc.py`. It creates the abc file that can be used for blender/maya from config file `anim.json`. Essentially, it takes the simulation output `.obj` sequences and output a `.abc` file.
+Convert an OBJ animation sequence to Alembic files with:
 
-    ```bash
-    uv run python src/python/pypgo/pgo_dump_abc.py \
-        examples/configs/volume/box/box-tet-sampled-animation.json
-    ```
+```bash
+uv run pgo-dump-abc \
+    examples/configs/volume/box/box-tet-sampled-animation.json \
+    build/abc-output
+```
 
-    The `convertAnimation` tool provides the same conversion on the CLI:
-
-    ```bash
-        convertAnimation \
-            examples/configs/volume/box/box-tet-sampled-animation.json
-    ```
-
-    If the optional second argument is omitted, the tool writes `.abc` files into the folder containing `anim.json`, and each output filename uses the mesh `name` field from the config.
+The second argument is the output folder. The standalone `convertAnimation`
+C++ tool provides the same conversion and retains its existing optional-output
+behavior.
 
 ## Tools
 

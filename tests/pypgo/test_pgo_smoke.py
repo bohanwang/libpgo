@@ -154,6 +154,60 @@ def test_public_package_declares_native_api():
     )
 
 
+def test_project_declares_pypgo_console_scripts():
+    with (PROJECT_ROOT / "pyproject.toml").open("rb") as pyproject_file:
+        project = tomllib.load(pyproject_file)["project"]
+
+    assert project["scripts"] == {
+        "pgo-dump-abc": "pypgo.pgo_dump_abc:main",
+        "pgo-run-sim": "pypgo.pgo_run_sim:main",
+    }
+
+
+def test_run_sim_cli_forwards_config_and_returns_status(monkeypatch):
+    cli = importlib.import_module("pypgo.pgo_run_sim")
+    received = []
+    monkeypatch.setattr(
+        cli.pypgo,
+        "run_sim_from_config",
+        lambda filename: received.append(filename) or 7,
+    )
+
+    assert cli.main(["scene.json"]) == 7
+    assert received == ["scene.json"]
+
+
+def test_dump_abc_cli_forwards_paths_and_returns_status(monkeypatch):
+    cli = importlib.import_module("pypgo.pgo_dump_abc")
+    received = []
+    monkeypatch.setattr(
+        cli.pypgo,
+        "convert_animation_to_abc",
+        lambda config, output: received.append((config, output)) or 9,
+    )
+
+    assert cli.main(["animation.json", "abc-output"]) == 9
+    assert received == [("animation.json", "abc-output")]
+
+
+@pytest.mark.parametrize(
+    ("module_name", "arguments"),
+    [
+        ("pypgo.pgo_run_sim", []),
+        ("pypgo.pgo_dump_abc", []),
+        ("pypgo.pgo_dump_abc", ["animation.json"]),
+    ],
+)
+def test_pypgo_cli_rejects_missing_arguments(module_name, arguments, capsys):
+    cli = importlib.import_module(module_name)
+
+    with pytest.raises(SystemExit) as error:
+        cli.main(arguments)
+
+    assert error.value.code == 2
+    assert "usage:" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("mesh_type", ["tet", "cubic"])
 @pytest.mark.parametrize("contact_model", ["sampled", "ipc"])
 @pytest.mark.parametrize("sim_type", ["dynamic", "static"])
@@ -380,7 +434,7 @@ def test_can_load_tetmesh_from_example_file(path: Path):
     assert np.issubdtype(tets.dtype, np.integer)
 
 
-def test_python_api_smoke_workflow():
+def test_python_geometry_processing_smoke_workflow():
     vertices, tets = _load_torus_mesh()
     tetmesh, repeated_vertices, repeated_tets = _build_repeated_mesh(vertices, tets)
 
