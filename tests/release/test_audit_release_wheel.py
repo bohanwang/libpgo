@@ -62,7 +62,7 @@ def write_synthetic_wheel(
     platform: str,
     *,
     filename_tag: str | None = None,
-    metadata_tag: str | None = None,
+    metadata_tags: tuple[str, ...] | None = None,
     root_is_purelib: bool = False,
     remove_component: str | None = None,
     mangle_original_component: str | None = None,
@@ -70,7 +70,7 @@ def write_synthetic_wheel(
 ) -> Path:
     contract = get_platform_contract(platform)
     filename_tag = filename_tag or contract.expected_tag
-    metadata_tag = metadata_tag or contract.expected_tag
+    metadata_tags = metadata_tags or (contract.expected_tag,)
     wheel = tmp_path / f"pypgo-{PROJECT_VERSION}-{filename_tag}.whl"
     members = native_members(platform)
     if remove_component is not None:
@@ -92,7 +92,7 @@ def write_synthetic_wheel(
         "Wheel-Version: 1.0\n"
         "Generator: release-wheel-test\n"
         f"Root-Is-Purelib: {'true' if root_is_purelib else 'false'}\n"
-        f"Tag: {metadata_tag}\n"
+        + "".join(f"Tag: {tag}\n" for tag in metadata_tags)
     )
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr("pypgo/__init__.py", initializer)
@@ -141,17 +141,35 @@ def test_filename_and_metadata_tags_must_match(tmp_path: Path) -> None:
         inspect(wheel, "linux")
 
 
-def test_platform_tag_must_match_contract(tmp_path: Path) -> None:
-    wrong_tag = "cp312-cp312-linux_x86_64"
+def test_linux_tag_must_include_contract_tag(tmp_path: Path) -> None:
+    wrong_tag = "cp312-cp312-manylinux_2_27_x86_64"
     wheel = write_synthetic_wheel(
         tmp_path,
         "linux",
         filename_tag=wrong_tag,
-        metadata_tag=wrong_tag,
+        metadata_tags=(wrong_tag,),
     )
 
     with pytest.raises(AuditError, match="unexpected compatibility tags for linux"):
         inspect(wheel, "linux")
+
+
+def test_linux_accepts_more_compatible_auditwheel_tag(tmp_path: Path) -> None:
+    more_compatible_tag = "cp312-cp312-manylinux_2_27_x86_64"
+    contract_tag = get_platform_contract("linux").expected_tag
+    wheel = write_synthetic_wheel(
+        tmp_path,
+        "linux",
+        filename_tag=(
+            "cp312-cp312-"
+            "manylinux_2_27_x86_64.manylinux_2_28_x86_64"
+        ),
+        metadata_tags=(more_compatible_tag, contract_tag),
+    )
+
+    result = inspect(wheel, "linux")
+
+    assert result.filename_tags == result.metadata_tags
 
 
 def test_wheel_must_not_be_purelib(tmp_path: Path) -> None:

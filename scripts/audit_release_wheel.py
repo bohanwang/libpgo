@@ -158,8 +158,13 @@ def audit_wheel_archive(
         f"filename=[{format_tags(filename_tags)}], "
         f"metadata=[{format_tags(frozen_metadata_tags)}]",
     )
+    platform_tags_match = (
+        expected_tags.issubset(filename_tags)
+        if platform == "linux"
+        else filename_tags == expected_tags
+    )
     require(
-        filename_tags == expected_tags,
+        platform_tags_match,
         f"unexpected compatibility tags for {platform}: "
         f"expected=[{format_tags(expected_tags)}], "
         f"actual=[{format_tags(filename_tags)}]",
