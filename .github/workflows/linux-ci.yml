@@ -33,7 +33,7 @@ jobs:
           /opt/python/cp312-cp312/bin/uv sync --locked \
             --python /opt/python/cp312-cp312/bin/python
           echo "EVIDENCE_DIR=${RUNNER_TEMP}/native-evidence" >> "${GITHUB_ENV}"
-          echo "PYPGO_VERSION=$(.venv/bin/python scripts/project_version.py)" >> "${GITHUB_ENV}"
+          echo "PYPGO_VERSION=$(/opt/python/cp312-cp312/bin/uv run python scripts/project_version.py)" >> "${GITHUB_ENV}"
 
       - name: Record dependency environment
         run: |
@@ -93,7 +93,7 @@ jobs:
           echo "RAW_WHEEL_DIR=${RUNNER_TEMP}/raw-wheel" >> "${GITHUB_ENV}"
           echo "WHEEL_DIR=${RUNNER_TEMP}/wheelhouse" >> "${GITHUB_ENV}"
           echo "EVIDENCE_DIR=${RUNNER_TEMP}/evidence" >> "${GITHUB_ENV}"
-          echo "PYPGO_VERSION=$(.venv/bin/python scripts/project_version.py)" >> "${GITHUB_ENV}"
+          echo "PYPGO_VERSION=$(/opt/python/cp312-cp312/bin/uv run python scripts/project_version.py)" >> "${GITHUB_ENV}"
 
       - name: Download native test evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

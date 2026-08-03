@@ -40,7 +40,7 @@ jobs:
           python -m pip install "uv==$uvVersion"
           uv sync --locked --python python
           "EVIDENCE_DIR=$env:RUNNER_TEMP\native-evidence" | Out-File $env:GITHUB_ENV -Append
-          "PYPGO_VERSION=$(.\.venv\Scripts\python.exe scripts/project_version.py)" | Out-File $env:GITHUB_ENV -Append
+          "PYPGO_VERSION=$(uv run python scripts/project_version.py)" | Out-File $env:GITHUB_ENV -Append
 
       - name: Record dependency environment
         shell: pwsh
@@ -108,7 +108,7 @@ jobs:
           "RAW_WHEEL_DIR=$env:RUNNER_TEMP\raw-wheel" | Out-File $env:GITHUB_ENV -Append
           "WHEEL_DIR=$env:RUNNER_TEMP\wheelhouse" | Out-File $env:GITHUB_ENV -Append
           "EVIDENCE_DIR=$env:RUNNER_TEMP\evidence" | Out-File $env:GITHUB_ENV -Append
-          "PYPGO_VERSION=$(.\.venv\Scripts\python.exe scripts/project_version.py)" | Out-File $env:GITHUB_ENV -Append
+          "PYPGO_VERSION=$(uv run python scripts/project_version.py)" | Out-File $env:GITHUB_ENV -Append
 
       - name: Download native test evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

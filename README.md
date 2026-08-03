@@ -27,35 +27,36 @@ Download the artifact for the release commit. A prebuilt wheel does not
 require Conda or a system installation of MKL, TBB, GMP, or MPFR.
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/) first;
 `uv venv` downloads Python 3.12 when it is not already available.
+`uv pip` and `uv run` automatically use the default `.venv`.
 
 Linux:
 
 ```bash
-uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python "numpy==2.0.2"
-uv pip install --python .venv/bin/python --no-deps \
+uv venv --python 3.12
+uv pip install "numpy==2.0.2"
+uv pip install --no-deps \
   /path/to/pypgo-0.0.4-cp312-cp312-manylinux_2_28_x86_64.whl
-.venv/bin/python -c "import pypgo; print(pypgo)"
+uv run python -c "import pypgo; print(pypgo)"
 ```
 
 macOS 26 arm64:
 
 ```bash
-uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python "numpy==2.0.2"
-uv pip install --python .venv/bin/python --no-deps \
+uv venv --python 3.12
+uv pip install "numpy==2.0.2"
+uv pip install --no-deps \
   /path/to/pypgo-0.0.4-cp312-cp312-macosx_26_0_arm64.whl
-.venv/bin/python -c "import pypgo; print(pypgo)"
+uv run python -c "import pypgo; print(pypgo)"
 ```
 
 Windows PowerShell:
 
 ```powershell
-uv venv --python 3.12 .venv
-uv pip install --python .venv\Scripts\python.exe "numpy==2.0.2"
-uv pip install --python .venv\Scripts\python.exe --no-deps `
+uv venv --python 3.12
+uv pip install "numpy==2.0.2"
+uv pip install --no-deps `
   C:\path\to\pypgo-0.0.4-cp312-cp312-win_amd64.whl
-.\.venv\Scripts\python.exe -c "import pypgo; print(pypgo)"
+uv run python -c "import pypgo; print(pypgo)"
 ```
 
 Linux and Windows wheels bundle oneMKL, the matching oneTBB runtime, GMP, and
@@ -161,6 +162,8 @@ wheel passes its installed smoke test and Python tests, the `record` command
 requires exactly one wheel, rejects source archives, and records the wheel
 checksum together with the CMake, dependency, test, and runner evidence.
 Evidence and wheel output directories must be outside the source checkout.
+The [local release packaging guide](docs/guide/build/package-release.md)
+provides the equivalent platform-specific commands without GitHub Actions.
 
 ## Usage & Test
 
@@ -181,6 +184,32 @@ PowerShell uses the equivalent environment variable syntax:
 $env:PYTHONPATH = "$PWD\build\pypgo\src\python"
 uv run python -m pytest -q tests\pypgo
 ```
+
+The same build-tree package exposes the Python command-line modules without
+installing a wheel:
+
+```bash
+export PYTHONPATH="$PWD/build/pypgo/src/python"
+uv run python -m pypgo.pgo_run_sim \
+    examples/configs/volume/box/box-tet-sampled.json
+uv run python -m pypgo.pgo_dump_abc \
+    examples/configs/volume/box/box-tet-sampled-animation.json \
+    build/abc-output
+```
+
+PowerShell:
+
+```powershell
+$env:PYTHONPATH = "$PWD\build\pypgo\src\python"
+uv run python -m pypgo.pgo_run_sim `
+    examples/configs/volume/box/box-tet-sampled.json
+uv run python -m pypgo.pgo_dump_abc `
+    examples/configs/volume/box/box-tet-sampled-animation.json `
+    build\abc-output
+```
+
+These modules use the same `main()` implementations as the console commands
+installed by a wheel.
 
 ### Use an installed wheel
 
@@ -243,8 +272,8 @@ behavior.
 Build the tool:
 
 ```bash
-    uv run cmake --preset pypgo-wheel
-    uv run cmake --build build/pypgo --target cubicMesher
+uv run cmake --preset pypgo-wheel
+uv run cmake --build build/pypgo --target cubicMesher
 ```
 
 Generate the documented presets with the checked-in helper:
@@ -273,22 +302,22 @@ runner commands, and the old-to-new path table.
 Build the shell simulation CLI:
 
 ```bash
-    uv run cmake --preset pypgo-wheel
-    uv run cmake --build build/pypgo --target runShellSim
+uv run cmake --preset pypgo-wheel
+uv run cmake --build build/pypgo --target runShellSim
 ```
 
 Run the bundled shell example:
 
 ```bash
-    build/pypgo/bin/runShellSim \
-        examples/configs/shell/shell-dynamic-sampled.json
+build/pypgo/bin/runShellSim \
+    examples/configs/shell/shell-dynamic-sampled.json
 ```
 
 To also write command-line output to a log next to the config, add `--log`:
 
 ```bash
-    build/pypgo/bin/runShellSim \
-        examples/configs/shell/shell-dynamic-sampled.json --log
+build/pypgo/bin/runShellSim \
+    examples/configs/shell/shell-dynamic-sampled.json --log
 ```
 
 ---
