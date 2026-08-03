@@ -141,6 +141,19 @@ def test_public_package_wraps_private_native_extension():
     assert pypgo.run_sim_from_config is native_module.run_sim_from_config
 
 
+def test_public_package_declares_native_api():
+    native_module = importlib.import_module("pypgo._pypgo")
+    native_exports = {
+        name for name in dir(native_module) if not name.startswith("_")
+    }
+
+    assert set(pypgo.__all__) == native_exports | {"__version__"}
+    assert all(
+        getattr(pypgo, name) is getattr(native_module, name)
+        for name in native_exports
+    )
+
+
 @pytest.mark.parametrize("mesh_type", ["tet", "cubic"])
 @pytest.mark.parametrize("contact_model", ["sampled", "ipc"])
 @pytest.mark.parametrize("sim_type", ["dynamic", "static"])

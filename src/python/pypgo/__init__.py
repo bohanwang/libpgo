@@ -8,6 +8,10 @@ if _os.name == "nt":
     _dll_directory_handle = _os.add_dll_directory(_os.path.dirname(__file__))
 
 from . import _pypgo
+
+__all__ = [name for name in dir(_pypgo) if not name.startswith("_")]
+
 from ._pypgo import *
 
 __version__ = _pypgo.__version__
+__all__.append("__version__")
