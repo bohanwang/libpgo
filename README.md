@@ -293,34 +293,9 @@ Main arguments:
 - `--E`, `--nu`, `--density`: isotropic material parameters written into the output mesh
 
 Generated cubic meshes are written under the gitignored
-`examples/generated/cubic/` directory. See
+`examples/assets/generated/cubic/` directory. See
 [`examples/README.md`](./examples/README.md) for presets, custom input options,
 runner commands, and the old-to-new path table.
-
-### Shell Simulation
-
-Build the shell simulation CLI:
-
-```bash
-uv run cmake --preset pypgo-wheel
-uv run cmake --build build/pypgo --target runShellSim
-```
-
-Run the bundled shell example:
-
-```bash
-build/pypgo/bin/runShellSim \
-    examples/configs/shell/shell-dynamic-sampled.json
-```
-
-To also write command-line output to a log next to the config, add `--log`:
-
-```bash
-build/pypgo/bin/runShellSim \
-    examples/configs/shell/shell-dynamic-sampled.json --log
-```
-
----
 
 ## Build the C++ library without Python (optional)
 

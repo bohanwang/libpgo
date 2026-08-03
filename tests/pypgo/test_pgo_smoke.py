@@ -68,6 +68,7 @@ def _simulation_config(
     contact_model: str,
     sim_type: str,
     output_path: Path,
+    external_object_path: Path | None = None,
 ) -> dict:
     config = {
         f"{mesh_type}-mesh": str(SIM_ASSETS_DIR / f"box-{mesh_type}.veg"),
@@ -95,16 +96,24 @@ def _simulation_config(
         "contact-model": contact_model,
     }
     if contact_model == "ipc":
+        if external_object_path is None:
+            raise ValueError("IPC smoke configs require an external object path")
         config.update(
             {
                 "ipc-dhat": 0.002,
                 "ipc-kappa": 3000.0,
-                "use-floor": True,
-                "floor-axis": "y",
-                "floor-height": 0.0,
-                "floor-kappa": 3000.0,
+                "ipc-external-objects": [
+                    {
+                        "filename": str(external_object_path),
+                        "scale": 1.0,
+                        "initial-translation": [0.0, 0.0, 0.0],
+                        "movement": [0.0, 0.0, 0.0],
+                    }
+                ],
             }
         )
+        if sim_type == "dynamic":
+            config["init-disp"] = [0.01, 0.0, 0.0]
     else:
         config.update(
             {
@@ -124,6 +133,14 @@ def _assert_finite_obj(path: Path):
             vertices.append([float(value) for value in line.split()[1:4]])
     assert vertices
     assert all(math.isfinite(value) for vertex in vertices for value in vertex)
+
+
+def _obj_counts(path: Path) -> tuple[int, int]:
+    lines = path.read_text().splitlines()
+    return (
+        sum(line.startswith("v ") for line in lines),
+        sum(line.startswith("f ") for line in lines),
+    )
 
 
 def test_package_version_matches_project_metadata():
@@ -160,6 +177,7 @@ def test_project_declares_pypgo_console_scripts():
 
     assert project["scripts"] == {
         "pgo-dump-abc": "pypgo.pgo_dump_abc:main",
+        "pgo-run-cases": "pypgo.pgo_run_cases:main",
         "pgo-run-sim": "pypgo.pgo_run_sim:main",
     }
 
@@ -194,6 +212,7 @@ def test_dump_abc_cli_forwards_paths_and_returns_status(monkeypatch):
     ("module_name", "arguments"),
     [
         ("pypgo.pgo_run_sim", []),
+        ("pypgo.pgo_run_cases", []),
         ("pypgo.pgo_dump_abc", []),
         ("pypgo.pgo_dump_abc", ["animation.json"]),
     ],
@@ -226,9 +245,26 @@ def test_python_simulation_entry_point_smoke(
         else tmp_path / case_name
     )
     config_path = tmp_path / f"{case_name}.json"
+    external_object_path = None
+    if contact_model == "ipc":
+        external_object_path = tmp_path / f"{case_name}-external-plane.obj"
+        external_object_path.write_text(
+            "v -1 0 -1\n"
+            "v 1 0 -1\n"
+            "v 1 0 1\n"
+            "v -1 0 1\n"
+            "f 1 3 2\n"
+            "f 1 4 3\n"
+        )
     config_path.write_text(
         json.dumps(
-            _simulation_config(mesh_type, contact_model, sim_type, output_path),
+            _simulation_config(
+                mesh_type,
+                contact_model,
+                sim_type,
+                output_path,
+                external_object_path,
+            ),
             indent=2,
         )
         + "\n"
@@ -253,6 +289,15 @@ def test_python_simulation_entry_point_smoke(
         assert state_path.stat().st_size > 0
     assert surface_path.is_file()
     _assert_finite_obj(surface_path)
+    if contact_model == "ipc":
+        assert external_object_path is not None
+        assert _obj_counts(surface_path) == _obj_counts(SIM_ASSETS_DIR / "box-surface.obj")
+        assert _obj_counts(surface_path) != (
+            _obj_counts(SIM_ASSETS_DIR / "box-surface.obj")[0]
+            + _obj_counts(external_object_path)[0],
+            _obj_counts(SIM_ASSETS_DIR / "box-surface.obj")[1]
+            + _obj_counts(external_object_path)[1],
+        )
 
 
 def test_tetmeshgeo_memory_round_trip_and_barycentric_query():

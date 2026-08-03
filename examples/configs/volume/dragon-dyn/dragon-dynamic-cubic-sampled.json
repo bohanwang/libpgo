@@ -1,5 +1,5 @@
 {
-  "cubic-mesh": "../../../generated/cubic/dragon-cubic.veg",
+  "cubic-mesh": "../../../assets/generated/cubic/dragon-cubic.veg",
   "surface-mesh": "../../../assets/volume/dragon/dragon.obj",
   "fixed-vertices": [],
   "external-objects": [

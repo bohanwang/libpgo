@@ -33,6 +33,7 @@ classifiers = [
 
 [project.scripts]
 pgo-dump-abc = "pypgo.pgo_dump_abc:main"
+pgo-run-cases = "pypgo.pgo_run_cases:main"
 pgo-run-sim = "pypgo.pgo_run_sim:main"
 
 [project.optional-dependencies]

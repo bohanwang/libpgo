@@ -141,7 +141,7 @@ def test_filename_and_metadata_tags_must_match(tmp_path: Path) -> None:
         inspect(wheel, "linux")
 
 
-def test_linux_tag_must_include_contract_tag(tmp_path: Path) -> None:
+def test_linux_tag_must_match_contract_tag(tmp_path: Path) -> None:
     wrong_tag = "cp312-cp312-manylinux_2_27_x86_64"
     wheel = write_synthetic_wheel(
         tmp_path,
@@ -154,7 +154,7 @@ def test_linux_tag_must_include_contract_tag(tmp_path: Path) -> None:
         inspect(wheel, "linux")
 
 
-def test_linux_accepts_more_compatible_auditwheel_tag(tmp_path: Path) -> None:
+def test_linux_rejects_additional_platform_tag(tmp_path: Path) -> None:
     more_compatible_tag = "cp312-cp312-manylinux_2_27_x86_64"
     contract_tag = get_platform_contract("linux").expected_tag
     wheel = write_synthetic_wheel(
@@ -167,9 +167,8 @@ def test_linux_accepts_more_compatible_auditwheel_tag(tmp_path: Path) -> None:
         metadata_tags=(more_compatible_tag, contract_tag),
     )
 
-    result = inspect(wheel, "linux")
-
-    assert result.filename_tags == result.metadata_tags
+    with pytest.raises(AuditError, match="unexpected compatibility tags for linux"):
+        inspect(wheel, "linux")
 
 
 def test_wheel_must_not_be_purelib(tmp_path: Path) -> None:

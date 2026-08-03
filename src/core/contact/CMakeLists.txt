@@ -2,8 +2,8 @@ set(CONTACT_HEADERS
   CCDKernel.h
   contactEnergyUtilities.h
   mappedSurfacePotentialEnergy.h
-  embeddedSurfaceFloorPotentialEnergy.h
   embeddedSurfaceIPCPotentialEnergy.h
+  ipc/assembly/ipcCollisionSurfaceAssembler.h
   ipc/broadPhase/spatialHashGrid.h
   ipc/broadPhase/surfaceIPCSelfBroadPhase.h
   ipc/core/surfaceIPCBarrierAssembler.h
@@ -28,8 +28,8 @@ set(CONTACT_SOURCES
   CCDKernel.cpp
   contactEnergyUtilities.cpp
   mappedSurfacePotentialEnergy.cpp
-  embeddedSurfaceFloorPotentialEnergy.cpp
   embeddedSurfaceIPCPotentialEnergy.cpp
+  ipc/assembly/ipcCollisionSurfaceAssembler.cpp
   ipc/broadPhase/spatialHashGrid.cpp
   ipc/broadPhase/surfaceIPCSelfBroadPhase.cpp
   ipc/core/surfaceIPCBarrierAssembler.cpp

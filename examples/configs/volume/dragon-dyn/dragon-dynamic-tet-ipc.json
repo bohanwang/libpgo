@@ -2,10 +2,14 @@
   "tet-mesh": "../../../assets/volume/dragon/dragon-tet.veg",
   "surface-mesh": "../../../assets/volume/dragon/dragon.obj",
   "fixed-vertices": [],
-  "use-floor": true,
-  "floor-axis": "y",
-  "floor-height": -0.75,
-  "floor-kappa": 1000.0,
+  "ipc-external-objects": [
+    {
+      "filename": "../../../assets/common/bottom.obj",
+      "scale": 1.0,
+      "initial-translation": [0, 0, 0],
+      "movement": [0, 0, 0]
+    }
+  ],
   "g": [
     0,
     -9.81,
@@ -17,8 +21,8 @@
     0
   ],
   "init-disp": [
-    0,
-    0,
+    -1.2,
+    0.6,
     0
   ],
   "scale": 1.0,

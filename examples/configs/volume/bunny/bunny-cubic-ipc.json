@@ -1,11 +1,15 @@
 {
-  "cubic-mesh": "../../../generated/cubic/bunny-cubic.veg",
+  "cubic-mesh": "../../../assets/generated/cubic/bunny-cubic.veg",
   "surface-mesh": "../../../assets/volume/bunny/bunny.obj",
   "fixed-vertices": [],
-  "use-floor": true,
-  "floor-axis": "y",
-  "floor-height": -0.75,
-  "floor-kappa": 1000.0,
+  "ipc-external-objects": [
+    {
+      "filename": "../../../assets/common/bottom-large.obj",
+      "scale": 1.0,
+      "initial-translation": [0, 0, 0],
+      "movement": [0, 0, 0]
+    }
+  ],
   "g": [
     0,
     -9.81,
@@ -18,7 +22,7 @@
   ],
   "init-disp": [
     0,
-    0,
+    -0.3,
     0
   ],
   "scale": 1.0,

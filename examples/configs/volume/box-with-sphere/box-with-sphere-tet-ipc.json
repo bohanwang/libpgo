@@ -2,10 +2,14 @@
   "tet-mesh": "../../../assets/volume/box-with-sphere/box-with-sphere-tet.veg",
   "surface-mesh": "../../../assets/volume/box-with-sphere/box-with-sphere.obj",
   "fixed-vertices": [],
-  "use-floor": true,
-  "floor-axis": "y",
-  "floor-height": -1.0,
-  "floor-kappa": 1000.0,
+  "ipc-external-objects": [
+    {
+      "filename": "../../../assets/common/bottom-large.obj",
+      "scale": 1.0,
+      "initial-translation": [0, 0, 0],
+      "movement": [0, 0, 0]
+    }
+  ],
   "g": [
     0,
     -9.81,

@@ -150,6 +150,17 @@ ES::SpMatD makeCoupledEmbedding(int n3)
   W.setFromTriplets(triplets.begin(), triplets.end());
   return W;
 }
+
+ES::SpMatD makeDynamicOnlyEmbedding()
+{
+  std::vector<ES::TripletD> triplets;
+  triplets.reserve(9);
+  for (int i = 0; i < 9; ++i)
+    triplets.emplace_back(i, i, 1.0);
+  ES::SpMatD W(18, 9);
+  W.setFromTriplets(triplets.begin(), triplets.end());
+  return W;
+}
 }  // namespace
 
 TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, IdentityEmbeddingMatchesSurfaceIPCCore)
@@ -324,6 +335,78 @@ TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, SparseEmbeddingPullsBackGradientAnd
 
   EXPECT_LT(relativeError(simulationGradient, W.transpose() * surfaceGradient), 1e-12);
   EXPECT_LT(relativeError(sparseToDense(simulationHessian), sparseToDense(W.transpose() * surfaceHessian * W)), 1e-12);
+}
+
+TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, StaticExternalRowsPullBackContactDerivatives)
+{
+  const auto [V, F] = makeTwoTriangleMesh();
+  const ES::VXd rest = flattenPositions(V);
+  const ES::SpMatD W = makeDynamicOnlyEmbedding();
+  const std::vector<uint8_t> mask = { 1, 1, 1, 0, 0, 0 };
+  auto params = makeParams();
+  params.projectHessianToPSD = false;
+  EmbeddedSurfaceIPCPotentialEnergy adapter(V, F, W, mask, params);
+
+  const ES::VXd u = ES::VXd::Zero(9);
+  ASSERT_TRUE(std::isfinite(adapter.func(u)));
+  EXPECT_GT(adapter.func(u), 0.0);
+
+  ES::VXd gradient = ES::VXd::Zero(9);
+  adapter.gradient(u, gradient);
+  const ES::VXd fdGradient = pgo::Contact::CIPCTest::finiteDifferenceGradient(
+    [&adapter](const ES::VXd &state) { return adapter.func(state); }, u, 1e-6);
+  EXPECT_LT(relativeError(gradient, fdGradient), 2e-5);
+
+  ES::SpMatD hessian;
+  adapter.hessianDirect(u, hessian);
+  ASSERT_EQ(hessian.rows(), 9);
+  ASSERT_EQ(hessian.cols(), 9);
+  const ES::MXd fdHessian = finiteDifferenceHessian(
+    [&adapter](const ES::VXd &state) {
+      ES::VXd g = ES::VXd::Zero(adapter.getNumDOFs());
+      adapter.gradient(state, g);
+      return g;
+    },
+    u, 1e-5);
+  EXPECT_LT(relativeError(sparseToDense(hessian), fdHessian), 2e-5);
+
+  ES::VXd displaced = ES::VXd::Constant(9, 0.01);
+  const ES::VXd surfaceDisplacement = W * displaced;
+  EXPECT_TRUE(surfaceDisplacement.tail(9).isZero(0.0));
+
+  ES::VXd du = ES::VXd::Zero(9);
+  for (int vi = 0; vi < 3; ++vi)
+    du[3 * vi + 2] = 0.1;
+  const double alpha = adapter.computeMaxStepSize(u, du);
+  EXPECT_GT(alpha, 0.0);
+  EXPECT_LT(alpha, 1.0);
+}
+
+TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, RejectsNonzeroExternalMappingRows)
+{
+  const auto [V, F] = makeTwoTriangleMesh();
+  const std::vector<uint8_t> mask = { 1, 1, 1, 0, 0, 0 };
+  ES::SpMatD invalidW = makeDynamicOnlyEmbedding();
+  invalidW.coeffRef(9, 0) = 0.25;
+  invalidW.makeCompressed();
+  EXPECT_THROW(EmbeddedSurfaceIPCPotentialEnergy(V, F, invalidW, mask, makeParams()), std::invalid_argument);
+}
+
+TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, AllowsZeroRowsForDeformableVertices)
+{
+  const auto [V, F] = makeTwoTriangleMesh();
+  EXPECT_NO_THROW(EmbeddedSurfaceIPCPotentialEnergy(
+    V, F, makeDynamicOnlyEmbedding(), std::vector<uint8_t>(6, 1), makeParams()));
+}
+
+TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, RejectsCoincidentInitialCollisionState)
+{
+  auto [V, F] = makeTwoTriangleMesh();
+  V.bottomRows<3>() = V.topRows<3>();
+  EmbeddedSurfaceIPCPotentialEnergy adapter(
+    V, F, makeDynamicOnlyEmbedding(), std::vector<uint8_t>{ 1, 1, 1, 0, 0, 0 }, makeParams());
+
+  EXPECT_THROW(adapter.validateCollisionFreeState(ES::VXd::Zero(9)), std::invalid_argument);
 }
 
 TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, ReusesPreparedPairsAcrossEnergyGradientHessianForSameState)

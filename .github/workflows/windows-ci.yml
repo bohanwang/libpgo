@@ -150,7 +150,7 @@ jobs:
           ) -join [IO.Path]::PathSeparator
           # oneMKL dispatch DLLs and its TBB threading layer load runtime DLLs
           # by their original filenames. Keep this runtime set unmangled.
-          $unmangledRuntimeDlls = @(
+          $unmangledRuntimeDllNames = @(
             "tbb12.dll",
             "mkl_core.2.dll",
             "mkl_tbb_thread.2.dll",
@@ -163,10 +163,19 @@ jobs:
             "mkl_vml_mc3.2.dll",
             "mkl_vml_avx2.2.dll",
             "mkl_vml_avx512.2.dll"
-          ) -join [IO.Path]::PathSeparator
+          )
+          $unmangledRuntimeDlls = $unmangledRuntimeDllNames `
+            -join [IO.Path]::PathSeparator
+          # GMPXX and MPFR are part of the release-wheel contract even when
+          # the extension's direct dependency graph does not reference them.
+          $includedDlls = @(
+            "gmpxx-4.dll",
+            "mpfr-6.dll"
+          ) + $unmangledRuntimeDllNames
+          $includedDlls = $includedDlls -join [IO.Path]::PathSeparator
           uv run python -m delvewheel repair `
             --add-path $nativePaths `
-            --include $unmangledRuntimeDlls `
+            --include $includedDlls `
             --no-mangle $unmangledRuntimeDlls `
             --wheel-dir "$env:WHEEL_DIR" `
             $rawWheel
@@ -275,7 +284,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Installed wheel pytest failed" }
           Pop-Location
 
-      - name: Test both installed CLI tools through uv tool
+      - name: Test installed CLI tools through uv tool
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
@@ -298,6 +307,11 @@ jobs:
           if (-not (Test-Path cli-output\alembic\installed-wheel-smoke.abc)) {
             throw "pgo-dump-abc did not create an Alembic file"
           }
+          uv tool run --isolated --with "numpy==2.0.2" `
+            --from $env:WHEEL pgo-run-cases `
+            tests\pypgo\assets\installed-cli-cases.json --dry-run `
+            | Tee-Object "$env:EVIDENCE_DIR\installed-cli-run-cases.txt"
+          if ($LASTEXITCODE -ne 0) { throw "pgo-run-cases failed" }
           Pop-Location
 
       - name: Upload installed-wheel test evidence

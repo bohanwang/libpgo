@@ -5,6 +5,7 @@ set(SIMULATION_RUNNER_SOURCES
   runSimCliLogging.cpp
   runSimFEMSetup.cpp
   runSimVolumeMeshIO.cpp
+  runIPCExternalObjects.cpp
   runIPCSimSetup.cpp)
 
 set(SIMULATION_RUNNER_HEADERS
@@ -12,6 +13,7 @@ set(SIMULATION_RUNNER_HEADERS
   runSimCliLogging.h
   runSimFEMSetup.h
   runSimVolumeMeshIO.h
+  runIPCExternalObjects.h
   runIPCSimSetup.h)
 
 add_libpgo_lib(simulationRunner "${SIMULATION_RUNNER_SOURCES}" "${SIMULATION_RUNNER_HEADERS}")

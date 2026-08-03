@@ -1,8 +1,8 @@
 {
-  "surface-mesh": "../../assets/shell/shell.obj",
+  "surface-mesh": "../../../assets/shell/shell.obj",
   "fixed-vertices": [
     {
-      "filename": "../../assets/shell/shell-half-fixed.txt",
+      "filename": "../../../assets/shell/shell-half-fixed.txt",
       "movement": [
         0,
         0,
@@ -38,7 +38,7 @@
   "solver-max-iter": 500,
   "elastic-material": "koiter-stvk",
   "dump-interval": 10,
-  "output": "../../generated/output/shell-dynamic-ipc",
+  "output": "../../../generated/output/shell-dynamic-ipc",
   "ipc-heuristic": true,
   "contact-model": "ipc"
 }

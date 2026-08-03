@@ -1,0 +1,148 @@
+{
+  "version": 1,
+  "abc-output-root": "generated/abc",
+  "groups": {
+    "box": [
+      "box-tet-sampled",
+      "box-tet-ipc",
+      "box-cubic-sampled",
+      "box-cubic-ipc"
+    ],
+    "box-contact": [
+      "box-contact-static-tet-ipc",
+      "box-contact-dynamic-tet-ipc",
+      "box-contact-dynamic-tet-sampled"
+    ],
+    "box-with-sphere": [
+      "box-with-sphere-tet-sampled",
+      "box-with-sphere-tet-ipc",
+      "box-with-sphere-cubic-sampled",
+      "box-with-sphere-cubic-ipc"
+    ],
+    "bunny": [
+      "bunny-tet-sampled",
+      "bunny-tet-ipc",
+      "bunny-cubic-sampled",
+      "bunny-cubic-ipc"
+    ],
+    "dragon-dyn": [
+      "dragon-dynamic-tet-sampled",
+      "dragon-dynamic-tet-ipc",
+      "dragon-dynamic-cubic-sampled",
+      "dragon-dynamic-cubic-ipc"
+    ],
+    "dragon": [
+      "dragon-static-tet-sampled"
+    ],
+    "shell": [
+      "shell-dynamic-ipc"
+    ]
+  },
+  "cases": [
+    {
+      "name": "box-tet-sampled",
+      "simulation-config": "configs/volume/box/box-tet-sampled.json",
+      "animation-config": "configs/volume/box/box-tet-sampled-animation.json"
+    },
+    {
+      "name": "box-tet-ipc",
+      "simulation-config": "configs/volume/box/box-tet-ipc.json",
+      "animation-config": "configs/volume/box/box-tet-ipc-animation.json"
+    },
+    {
+      "name": "box-cubic-sampled",
+      "simulation-config": "configs/volume/box/box-cubic-sampled.json",
+      "animation-config": "configs/volume/box/box-cubic-sampled-animation.json"
+    },
+    {
+      "name": "box-cubic-ipc",
+      "simulation-config": "configs/volume/box/box-cubic-ipc.json",
+      "animation-config": "configs/volume/box/box-cubic-ipc-animation.json"
+    },
+    {
+      "name": "box-contact-static-tet-ipc",
+      "simulation-config": "configs/volume/box-contact/box-contact-static-tet-ipc.json",
+      "animation-config": "configs/volume/box-contact/box-contact-static-tet-ipc-animation.json"
+    },
+    {
+      "name": "box-contact-dynamic-tet-ipc",
+      "simulation-config": "configs/volume/box-contact/box-contact-dynamic-tet-ipc.json",
+      "animation-config": "configs/volume/box-contact/box-contact-dynamic-tet-ipc-animation.json"
+    },
+    {
+      "name": "box-contact-dynamic-tet-sampled",
+      "simulation-config": "configs/volume/box-contact/box-contact-dynamic-tet-sampled.json",
+      "animation-config": "configs/volume/box-contact/box-contact-dynamic-tet-sampled-animation.json"
+    },
+    {
+      "name": "box-with-sphere-tet-sampled",
+      "simulation-config": "configs/volume/box-with-sphere/box-with-sphere-tet-sampled.json",
+      "animation-config": "configs/volume/box-with-sphere/box-with-sphere-tet-sampled-animation.json"
+    },
+    {
+      "name": "box-with-sphere-tet-ipc",
+      "simulation-config": "configs/volume/box-with-sphere/box-with-sphere-tet-ipc.json",
+      "animation-config": "configs/volume/box-with-sphere/box-with-sphere-tet-ipc-animation.json"
+    },
+    {
+      "name": "box-with-sphere-cubic-sampled",
+      "simulation-config": "configs/volume/box-with-sphere/box-with-sphere-cubic-sampled.json",
+      "animation-config": "configs/volume/box-with-sphere/box-with-sphere-cubic-sampled-animation.json"
+    },
+    {
+      "name": "box-with-sphere-cubic-ipc",
+      "simulation-config": "configs/volume/box-with-sphere/box-with-sphere-cubic-ipc.json",
+      "animation-config": "configs/volume/box-with-sphere/box-with-sphere-cubic-ipc-animation.json"
+    },
+    {
+      "name": "bunny-tet-sampled",
+      "simulation-config": "configs/volume/bunny/bunny-tet-sampled.json",
+      "animation-config": "configs/volume/bunny/bunny-tet-sampled-animation.json"
+    },
+    {
+      "name": "bunny-tet-ipc",
+      "simulation-config": "configs/volume/bunny/bunny-tet-ipc.json",
+      "animation-config": "configs/volume/bunny/bunny-tet-ipc-animation.json"
+    },
+    {
+      "name": "bunny-cubic-sampled",
+      "simulation-config": "configs/volume/bunny/bunny-cubic-sampled.json",
+      "animation-config": "configs/volume/bunny/bunny-cubic-sampled-animation.json"
+    },
+    {
+      "name": "bunny-cubic-ipc",
+      "simulation-config": "configs/volume/bunny/bunny-cubic-ipc.json",
+      "animation-config": "configs/volume/bunny/bunny-cubic-ipc-animation.json"
+    },
+    {
+      "name": "dragon-dynamic-tet-sampled",
+      "simulation-config": "configs/volume/dragon-dyn/dragon-dynamic-tet-sampled.json",
+      "animation-config": "configs/volume/dragon-dyn/dragon-dynamic-tet-sampled-animation.json"
+    },
+    {
+      "name": "dragon-dynamic-tet-ipc",
+      "simulation-config": "configs/volume/dragon-dyn/dragon-dynamic-tet-ipc.json",
+      "animation-config": "configs/volume/dragon-dyn/dragon-dynamic-tet-ipc-animation.json"
+    },
+    {
+      "name": "dragon-dynamic-cubic-sampled",
+      "simulation-config": "configs/volume/dragon-dyn/dragon-dynamic-cubic-sampled.json",
+      "animation-config": "configs/volume/dragon-dyn/dragon-dynamic-cubic-sampled-animation.json"
+    },
+    {
+      "name": "dragon-dynamic-cubic-ipc",
+      "simulation-config": "configs/volume/dragon-dyn/dragon-dynamic-cubic-ipc.json",
+      "animation-config": "configs/volume/dragon-dyn/dragon-dynamic-cubic-ipc-animation.json"
+    },
+    {
+      "name": "dragon-static-tet-sampled",
+      "simulation-config": "configs/volume/dragon/dragon-static-tet-sampled.json",
+      "animation-config": "configs/volume/dragon/dragon-static-tet-sampled-animation.json"
+    },
+    {
+      "name": "shell-dynamic-ipc",
+      "simulation-config": "configs/shell/shell_hang/shell-dynamic-ipc.json",
+      "animation-config": "configs/shell/shell_hang/shell-dynamic-ipc-animation.json"
+    }
+  ]
+}

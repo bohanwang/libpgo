@@ -12,9 +12,6 @@ namespace
 {
 namespace ES = pgo::EigenSupport;
 using pgo::Contact::CIPC::SurfaceIPCCore;
-using pgo::Contact::CIPCTest::computeFloorEnergy;
-using pgo::Contact::CIPCTest::computeFloorGradient;
-using pgo::Contact::CIPCTest::computeFloorHessian;
 using pgo::Contact::CIPCTest::finiteDifferenceGradient;
 using pgo::Contact::CIPCTest::finiteDifferenceHessian;
 using pgo::Contact::CIPCTest::flattenPositions;

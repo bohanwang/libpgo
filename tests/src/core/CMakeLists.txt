@@ -3,7 +3,7 @@ target_link_libraries(configFileJSON_gtest PRIVATE GTest::gtest_main configFileJ
 target_compile_definitions(configFileJSON_gtest PRIVATE
   LIBPGO_TEST_BOX_JSON="${LIBPGO_TEST_TET_BOX_JSON}"
   LIBPGO_TEST_CUBIC_BOX_JSON="${LIBPGO_TEST_CUBIC_BOX_JSON}"
-  LIBPGO_TEST_SHELL_JSON="${CMAKE_SOURCE_DIR}/examples/configs/shell/shell-dynamic-sampled.json")
+  LIBPGO_TEST_SHELL_JSON="${CMAKE_SOURCE_DIR}/examples/configs/shell/shell_hang/shell-dynamic-ipc.json")
 set_property(TARGET configFileJSON_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(configFileJSON_gtest)
 

@@ -18,6 +18,11 @@ target_link_libraries(surfaceIPCTopology_gtest PRIVATE GTest::gtest_main contact
 set_property(TARGET surfaceIPCTopology_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(surfaceIPCTopology_gtest)
 
+add_executable(ipcCollisionSurfaceAssembler_gtest ipcCollisionSurfaceAssembler_gtest.cpp)
+target_link_libraries(ipcCollisionSurfaceAssembler_gtest PRIVATE GTest::gtest_main contact)
+set_property(TARGET ipcCollisionSurfaceAssembler_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(ipcCollisionSurfaceAssembler_gtest)
+
 add_executable(surfaceIPCSelfBroadPhase_gtest surfaceIPCSelfBroadPhase_gtest.cpp)
 target_link_libraries(surfaceIPCSelfBroadPhase_gtest PRIVATE GTest::gtest_main contact)
 set_property(TARGET surfaceIPCSelfBroadPhase_gtest PROPERTY FOLDER "tests/gtest")
@@ -37,11 +42,6 @@ add_executable(embeddedSurfaceIPCPotentialEnergy_gtest embeddedSurfaceIPCPotenti
 target_link_libraries(embeddedSurfaceIPCPotentialEnergy_gtest PRIVATE GTest::gtest_main contact)
 set_property(TARGET embeddedSurfaceIPCPotentialEnergy_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(embeddedSurfaceIPCPotentialEnergy_gtest)
-
-add_executable(embeddedSurfaceFloorPotentialEnergy_gtest embeddedSurfaceFloorPotentialEnergy_gtest.cpp)
-target_link_libraries(embeddedSurfaceFloorPotentialEnergy_gtest PRIVATE GTest::gtest_main contact)
-set_property(TARGET embeddedSurfaceFloorPotentialEnergy_gtest PROPERTY FOLDER "tests/gtest")
-gtest_discover_tests(embeddedSurfaceFloorPotentialEnergy_gtest)
 
 add_executable(sampledStaticContact_gtest sampledStaticContact_gtest.cpp)
 target_link_libraries(sampledStaticContact_gtest PRIVATE GTest::gtest_main contact)

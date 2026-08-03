@@ -17,16 +17,11 @@ class DeformationModelAssembler;
 class DeformationModelEnergy;
 class DeformationModelManager;
 class SimulationMesh;
-}
+}  // namespace SolidDeformationModel
 
 namespace ConstraintPotentialEnergies
 {
 class MultipleVertexPulling;
-}
-
-namespace NonlinearOptimization
-{
-class PotentialEnergy;
 }
 
 namespace Contact
@@ -43,6 +38,7 @@ struct IpcSimulationContext
 {
   EigenSupport::SpMatD M;
   EigenSupport::VXd simulationRestPosition;
+  EigenSupport::VXd initialDisplacement;
   EigenSupport::VXd surfaceRestPositions;
   EigenSupport::SpMatD surfaceFromSimulationDispMap;
   std::shared_ptr<SolidDeformationModel::SimulationMesh> simulationMeshOwner;
@@ -55,7 +51,6 @@ struct IpcSimulationContext
   std::vector<EigenSupport::VXd> pullingTargetRests;
   pgo::Mesh::TriMeshGeo surfaceMesh;
   std::shared_ptr<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy> collisionHandler;
-  std::vector<std::shared_ptr<NonlinearOptimization::PotentialEnergy>> extraGeneralImplicitForceModels;
 };
 
 IpcSimulationContext buildShellIpcSimulation(const ConfigFileJSON &jconfig);

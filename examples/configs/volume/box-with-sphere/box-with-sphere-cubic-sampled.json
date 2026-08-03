@@ -1,5 +1,5 @@
 {
-  "cubic-mesh": "../../../generated/cubic/box-with-sphere-cubic.veg",
+  "cubic-mesh": "../../../assets/generated/cubic/box-with-sphere-cubic.veg",
   "surface-mesh": "../../../assets/volume/box-with-sphere/box-with-sphere.obj",
   "fixed-vertices": [],
   "external-objects": [

@@ -28,6 +28,7 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/__init__.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/pgo_run_sim.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/pgo_dump_abc.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/pgo_run_cases.py"
         "$<TARGET_FILE_DIR:pypgo>"
     COMMENT "Staging the pypgo Python package beside $<TARGET_FILE_NAME:pypgo>"
     VERBATIM)

@@ -40,6 +40,7 @@ public:
   virtual void getDOFs(std::vector<int> &dofs) const override { dofs = simulationDOFs_; }
   virtual int getNumDOFs() const override { return static_cast<int>(simulationDOFs_.size()); }
   virtual int isHessianTopologyFixed() const override { return 0; }
+  const VXd &getSurfaceRestPositions() const { return surfaceRestPositions_; }
 
 protected:
   void validateSimulationDisplacementSize(EigenSupport::ConstRefVecXd simulationDisplacements) const;

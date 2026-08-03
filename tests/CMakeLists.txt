@@ -52,6 +52,14 @@ configure_file(
   "${CMAKE_SOURCE_DIR}/examples/assets/volume/box/box-fixed.txt"
   "${LIBPGO_TEST_CUBIC_BOX_DIR}/box-fixed.txt"
   COPYONLY)
+configure_file(
+  "${CMAKE_SOURCE_DIR}/examples/assets/common/bottom-large.obj"
+  "${LIBPGO_TEST_TET_BOX_DIR}/bottom-large.obj"
+  COPYONLY)
+configure_file(
+  "${CMAKE_SOURCE_DIR}/examples/assets/common/bottom-large.obj"
+  "${LIBPGO_TEST_CUBIC_BOX_DIR}/bottom-large.obj"
+  COPYONLY)
 
 function(libpgo_materialize_box_config source destination)
   file(READ "${source}" config_contents)
@@ -66,6 +74,10 @@ function(libpgo_materialize_box_config source destination)
   string(REGEX REPLACE
     "\"filename\"[ \t]*:[ \t]*\"[^\"]*box-fixed.txt\""
     "\"filename\": \"box-fixed.txt\""
+    config_contents "${config_contents}")
+  string(REGEX REPLACE
+    "\"filename\"[ \t]*:[ \t]*\"[^\"]*bottom-large.obj\""
+    "\"filename\": \"bottom-large.obj\""
     config_contents "${config_contents}")
   file(WRITE "${destination}" "${config_contents}")
 endfunction()

@@ -15,6 +15,7 @@ copyright to Bohan Wang
 
 #include <vector>
 #include <array>
+#include <cstdint>
 #include <cmath>
 #include <algorithm>
 
@@ -53,6 +54,7 @@ public:
   Parameters getParameters() const;
 
   void setMesh(const MXd &V, const MXi &F);
+  void setMesh(const MXd &V, const MXi &F, const std::vector<uint8_t> &vertexIsDeformableMask);
 
   double computeEnergy(EigenSupport::ConstRefVecXd x_surf) const;
   void computeGradient(EigenSupport::ConstRefVecXd x_surf, EigenSupport::RefVecXd g_surf) const;
@@ -72,6 +74,10 @@ public:
 
   int getNumSurfaceVertices() const { return topology_.numVerts; }
   int getNumSurfaceDOFs() const { return topology_.numSurfaceDOFs(); }
+  int getNumSurfaceTriangles() const { return static_cast<int>(topology_.triangles.size()); }
+  bool isSurfaceVertexDeformable(int vi) const { return topology_.isVertexDeformable(vi); }
+
+  void validateCollisionFreeSurfacePositions(EigenSupport::ConstRefVecXd x_surf) const;
 
 private:
   void findCollisionPairs(const VXd &positions) const;

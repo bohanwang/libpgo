@@ -41,19 +41,7 @@ void saveSurface(const pgo::RunIPCSim::IpcSimulationContext &context,
     throw std::runtime_error("Failed to save IPC surface output: " + filename.string());
 }
 
-void clearOutputDirectory(const std::filesystem::path &outputFolder)
-{
-  std::error_code ec;
-  std::filesystem::remove_all(outputFolder, ec);
-  if (ec)
-    throw std::runtime_error("Failed to clear output folder `" + outputFolder.string() + "`: " + ec.message());
-
-  std::filesystem::create_directories(outputFolder, ec);
-  if (ec)
-    throw std::runtime_error("Failed to create output folder `" + outputFolder.string() + "`: " + ec.message());
-}
-
-}
+}  // namespace
 
 int pgo::SimulationRunner::runIPCSimulationFromConfig(
   const std::filesystem::path &configFilename, bool enableCliLog)
@@ -75,13 +63,10 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
       throw std::invalid_argument("runIPCSim supports `sim-type` values `dynamic` and `static`.");
     const std::filesystem::path outputFolder = jconfig.getResolvedPath("output", 1);
     const bool restartFromU = jconfig.exist("restart-from-u") ? jconfig.getValue<bool>("restart-from-u", 1) : false;
+    if (simType == "static" && restartFromU)
+      throw std::invalid_argument("`restart-from-u=true` is only supported for dynamic IPC simulations.");
 
-    if (restartFromU) {
-      std::filesystem::create_directories(outputFolder);
-    }
-    else {
-      clearOutputDirectory(outputFolder);
-    }
+    std::filesystem::create_directories(outputFolder);
 
     std::unique_ptr<RunSim::ScopedRunSimCliLogRedirect> logRedirect;
     if (enableCliLog) {
@@ -90,21 +75,20 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
     }
     pgo::Logging::init(nullptr, RunSim::resolveConfiguredLogLevel(jconfig));
 
-    if (!restartFromU) {
-      std::cout << "restart-from-u=false; clearing output folder " << outputFolder << "." << std::endl;
-    }
+    if (!restartFromU)
+      std::cout << "restart-from-u=false; existing output files will be overwritten as frames are written." << std::endl;
     pgo::Mesh::initPredicates();
 
     const bool hasTetMesh = jconfig.exist("tet-mesh");
     const bool hasCubicMesh = jconfig.exist("cubic-mesh");
     const bool useVolumePath = hasTetMesh || hasCubicMesh;
 
-    RunIPCSim::IpcSimulationContext context = useVolumePath
-      ? RunIPCSim::buildVolumeIpcSimulation(jconfig)
-      : RunIPCSim::buildShellIpcSimulation(jconfig);
+    RunIPCSim::IpcSimulationContext context = useVolumePath ? RunIPCSim::buildVolumeIpcSimulation(jconfig) : RunIPCSim::buildShellIpcSimulation(jconfig);
 
     const int n3 = static_cast<int>(context.simulationRestPosition.size());
     const int n = n3 / 3;
+    if (context.initialDisplacement.size() != n3 || !context.initialDisplacement.allFinite())
+      throw std::runtime_error("IPC setup produced an invalid initial displacement.");
 
     ES::VXd g(n3);
     for (int vi = 0; vi < n; ++vi)
@@ -114,17 +98,9 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
     ES::mv(context.M, g, fext);
 
     if (simType == "static") {
-      ES::VXd u = ES::VXd::Zero(n3);
+      ES::VXd u = context.initialDisplacement;
       const std::filesystem::path statePath = outputFolder / "deform0000.u";
-      if (restartFromU && std::filesystem::exists(statePath)) {
-        ES::MXd state;
-        if (ES::readMatrix(statePath.string().c_str(), state) != 0 ||
-          state.rows() != n3 || state.cols() < 1) {
-          throw std::runtime_error("Invalid static IPC restart state: " + statePath.string());
-        }
-        u = state.col(0);
-        std::cout << "Restarting static IPC from " << statePath << "." << std::endl;
-      }
+      context.collisionHandler->validateCollisionFreeState(u);
 
       auto externalForcesEnergy =
         std::make_shared<PredefinedPotentialEnergies::LinearPotentialEnergy>(fext);
@@ -135,8 +111,6 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
         energyAll->addPotentialEnergy(pullingEnergy);
       energyAll->addPotentialEnergy(externalForcesEnergy, -1.0);
       energyAll->addPotentialEnergy(context.collisionHandler);
-      for (const auto &energy : context.extraGeneralImplicitForceModels)
-        energyAll->addPotentialEnergy(energy);
       energyAll->init();
 
       NonlinearOptimization::NewtonSolver::SolverParam solverParam;
@@ -156,6 +130,8 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
     }
 
     const ES::V3d initialVel = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("init-vel", 1).data());
+    if (!initialVel.allFinite())
+      throw std::invalid_argument("`init-vel` must contain exactly three finite values.");
     const double timestep = jconfig.getDouble("timestep", 1);
     const std::array<double, 2> dampingParams = jconfig.getValue<std::array<double, 2>>("damping-params", 1);
     const int numSimSteps = jconfig.getInt("num-timestep", 1);
@@ -170,7 +146,7 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
 
     intg->setExternalForce(fext.data());
 
-    ES::VXd u = ES::VXd::Zero(n3);
+    ES::VXd u = context.initialDisplacement;
     ES::VXd uvel = ES::VXd::Zero(n3);
     ES::VXd uacc = ES::VXd::Zero(n3);
 
@@ -180,19 +156,22 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
     int frameStart = -1;
     if (restartFromU) {
       for (int framei = numSimSteps - 1; framei >= 0; --framei) {
-        const std::string deformFilename = fmt::format("{}/deform{:04d}.u", outputFolder.string(), framei);
-        if (!std::filesystem::exists(deformFilename))
+        const std::filesystem::path deformPath = outputFolder / fmt::format("deform{:04d}.u", framei);
+        const std::string deformFilename = deformPath.string();
+        if (!std::filesystem::exists(deformPath))
           continue;
 
-        ES::MXd uMat(n3, 3);
-        if (ES::readMatrix(deformFilename.c_str(), uMat) == 0) {
-          frameStart = framei;
-          u.noalias() = uMat.col(0);
-          uvel.noalias() = uMat.col(1);
-          uacc.noalias() = uMat.col(2);
-          std::cout << "Restarting from frame " << framei << std::endl;
-          break;
-        }
+        ES::MXd uMat;
+        if (ES::readMatrix(deformFilename.c_str(), uMat) != 0)
+          throw std::runtime_error("Failed to read dynamic IPC restart state: " + deformFilename);
+        if (uMat.rows() != n3 || uMat.cols() < 3 || !uMat.leftCols(3).allFinite())
+          throw std::runtime_error("Invalid dynamic IPC restart state: " + deformFilename);
+        frameStart = framei;
+        u.noalias() = uMat.col(0);
+        uvel.noalias() = uMat.col(1);
+        uacc.noalias() = uMat.col(2);
+        std::cout << "Restarting from frame " << framei << std::endl;
+        break;
       }
     }
 
@@ -200,6 +179,8 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
       std::cout << "No restart state found in " << outputFolder << ". Starting from frame 0." << std::endl;
     else if (frameStart < 0)
       std::cout << "Starting from frame 0." << std::endl;
+
+    context.collisionHandler->validateCollisionFreeState(u);
 
     const double ratioDenom = numSimSteps > 1 ? static_cast<double>(numSimSteps - 1) : 1.0;
 
@@ -214,8 +195,6 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
       }
 
       intg->addGeneralImplicitForceModel(context.collisionHandler, 0, 0);
-      for (const auto &forceModel : context.extraGeneralImplicitForceModels)
-        intg->addGeneralImplicitForceModel(forceModel, 0, 0);
       intg->setqState(u, uvel, uacc);
       intg->doTimestep(1, 3, 1);
       intg->getq(u);
@@ -226,13 +205,13 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
       uMat.col(0) = u;
       uMat.col(1) = uvel;
       uMat.col(2) = uacc;
-      ES::writeMatrix(fmt::format("{}/deform{:04d}.u", outputFolder.string(), framei).c_str(), uMat);
-
+      const std::filesystem::path statePath = outputFolder / fmt::format("deform{:04d}.u", framei);
+      if (ES::writeMatrix(statePath.string().c_str(), uMat) != 0)
+        throw std::runtime_error("Failed to save dynamic IPC state: " + statePath.string());
       if (framei % frameGap == 0)
         saveSurface(context, u, scale,
           outputFolder / fmt::format("ret{:04d}.obj", framei / frameGap));
     }
-
   }
   catch (const std::exception &err) {
     SPDLOG_LOGGER_ERROR(Logging::lgr(), "{}", err.what());

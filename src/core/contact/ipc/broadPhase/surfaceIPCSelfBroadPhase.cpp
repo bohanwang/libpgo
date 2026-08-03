@@ -15,9 +15,12 @@ copyright to Bohan Wang
 #include <functional>
 #include <vector>
 
-namespace pgo {
-namespace Contact {
-namespace CIPC {
+namespace pgo
+{
+namespace Contact
+{
+namespace CIPC
+{
 using namespace pgo::EigenSupport;
 
 void SurfaceIPCSelfBroadPhase::buildPairs(
@@ -102,6 +105,8 @@ void SurfaceIPCSelfBroadPhase::buildPairs(
           triHash.query(vertBox[vi], -1, visited, vi + 1, candidates);
 
           for (int fi : candidates) {
+            if (!topology.isVertexDeformable(vi) && !topology.triangleContainsDeformableVertex(fi))
+              continue;
             auto &tri = topology.triangles[fi];
             if (vi == tri[0] || vi == tri[1] || vi == tri[2])
               continue;
@@ -148,6 +153,8 @@ void SurfaceIPCSelfBroadPhase::buildPairs(
           for (int ej : candidates) {
             if (ej <= ei)
               continue;
+            if (!topology.edgeContainsDeformableVertex(ei) && !topology.edgeContainsDeformableVertex(ej))
+              continue;
 
             int b0 = topology.edges[ej][0], b1 = topology.edges[ej][1];
             if (a0 == b0 || a0 == b1 || a1 == b0 || a1 == b1)
@@ -169,7 +176,6 @@ void SurfaceIPCSelfBroadPhase::buildPairs(
       eePairs.insert(eePairs.end(), lp.begin(), lp.end());
   }
 }
-
 
 }  // namespace CIPC
 }  // namespace Contact

@@ -15,9 +15,12 @@ copyright to Bohan Wang
 #include <stdexcept>
 #include <string>
 
-namespace pgo {
-namespace Contact {
-namespace CIPC {
+namespace pgo
+{
+namespace Contact
+{
+namespace CIPC
+{
 SurfaceIPCCore::SurfaceIPCCore(const SurfaceIPCCore &other):
   dhat(other.dhat),
   kappa(other.kappa),
@@ -88,6 +91,11 @@ SurfaceIPCCore::Parameters SurfaceIPCCore::getParameters() const
 
 void SurfaceIPCCore::setMesh(const MXd &V, const MXi &F)
 {
+  setMesh(V, F, std::vector<uint8_t>(static_cast<std::size_t>(V.rows()), uint8_t{ 1 }));
+}
+
+void SurfaceIPCCore::setMesh(const MXd &V, const MXi &F, const std::vector<uint8_t> &vertexIsDeformableMask)
+{
   if (V.cols() != 3 || V.rows() <= 0)
     throw std::invalid_argument("SurfaceIPCCore mesh vertices must be a non-empty N x 3 matrix.");
   if (!V.allFinite())
@@ -101,7 +109,7 @@ void SurfaceIPCCore::setMesh(const MXd &V, const MXi &F)
       throw std::invalid_argument("SurfaceIPCCore mesh triangles must reference three distinct vertices.");
   }
 
-  topology_.setMesh(V, F);
+  topology_.setMesh(V, F, vertexIsDeformableMask);
   hasMesh_ = true;
   invalidatePreparedState();
 }
@@ -140,6 +148,36 @@ void SurfaceIPCCore::prepareForSurfacePositions(EigenSupport::ConstRefVecXd x_su
   preparedPositions_ = x_surf;
   findCollisionPairs(preparedPositions_);
   hasPreparedState_ = true;
+}
+
+void SurfaceIPCCore::validateCollisionFreeSurfacePositions(
+  EigenSupport::ConstRefVecXd x_surf) const
+{
+  validateSurfaceState(x_surf, "initial surface positions");
+  invalidatePreparedState();
+  findCollisionPairs(x_surf);
+
+  for (const PTPair &pair : ptPairs_) {
+    const double d2 = distance::computePTSqDist(
+      vtx(x_surf, pair.p), vtx(x_surf, pair.t0), vtx(x_surf, pair.t1), vtx(x_surf, pair.t2));
+    if (!std::isfinite(d2) || d2 <= 0.0) {
+      throw std::invalid_argument(
+        "IPC initial collision surface is not strictly collision-free: zero/non-finite point-triangle distance for point " +
+        std::to_string(pair.p) + ".");
+    }
+  }
+
+  for (const EEPair &pair : eePairs_) {
+    const double d2 = distance::computeEESqDist(
+      vtx(x_surf, pair.ea0), vtx(x_surf, pair.ea1), vtx(x_surf, pair.eb0), vtx(x_surf, pair.eb1));
+    if (!std::isfinite(d2) || d2 <= 0.0) {
+      throw std::invalid_argument(
+        "IPC initial collision surface is not strictly collision-free: zero/non-finite edge-edge distance for edge (" +
+        std::to_string(pair.ea0) + ", " + std::to_string(pair.ea1) + ").");
+    }
+  }
+
+  invalidatePreparedState();
 }
 
 void SurfaceIPCCore::validateSurfaceState(EigenSupport::ConstRefVecXd x_surf, const char *argumentName) const

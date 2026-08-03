@@ -231,7 +231,7 @@ jobs:
             "${RUNTIME_PYTHON}" -m pytest -q tests/pypgo/test_pgo_smoke.py \
             | tee "${EVIDENCE_DIR}/installed-pytest.txt"
 
-      - name: Test both installed CLI tools through uv tool
+      - name: Test installed CLI tools through uv tool
         run: |
           cd "${VERIFY_DIR}"
           env -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH \
@@ -248,6 +248,11 @@ jobs:
               cli-output/alembic \
             | tee "${EVIDENCE_DIR}/installed-cli-dump-abc.txt"
           test -s cli-output/alembic/installed-wheel-smoke.abc
+          env -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH \
+            uv tool run --isolated --with "numpy==2.0.2" \
+              --from "${WHEEL}" pgo-run-cases \
+              tests/pypgo/assets/installed-cli-cases.json --dry-run \
+            | tee "${EVIDENCE_DIR}/installed-cli-run-cases.txt"
 
       - name: Upload installed-wheel test evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

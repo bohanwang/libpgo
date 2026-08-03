@@ -132,6 +132,7 @@ jobs:
           LD_LIBRARY_PATH="${python_prefix}/lib" \
             uv run auditwheel repair \
               --plat manylinux_2_28_x86_64 \
+              --only-plat \
               --wheel-dir "${WHEEL_DIR}" \
               "${raw_wheel}"
           test "$(find "${WHEEL_DIR}" -maxdepth 1 -name '*.whl' | wc -l)" -eq 1
@@ -226,7 +227,7 @@ jobs:
             "${RUNTIME_PYTHON}" -m pytest -q tests/pypgo/test_pgo_smoke.py \
             | tee "${EVIDENCE_DIR}/installed-pytest.txt"
 
-      - name: Test both installed CLI tools through uv tool
+      - name: Test installed CLI tools through uv tool
         run: |
           cd "${VERIFY_DIR}"
           env -u LD_LIBRARY_PATH \
@@ -243,6 +244,11 @@ jobs:
               cli-output/alembic \
             | tee "${EVIDENCE_DIR}/installed-cli-dump-abc.txt"
           test -s cli-output/alembic/installed-wheel-smoke.abc
+          env -u LD_LIBRARY_PATH \
+            uv tool run --isolated --with "numpy==2.0.2" \
+              --from "${WHEEL}" pgo-run-cases \
+              tests/pypgo/assets/installed-cli-cases.json --dry-run \
+            | tee "${EVIDENCE_DIR}/installed-cli-run-cases.txt"
 
       - name: Upload installed-wheel test evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

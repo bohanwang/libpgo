@@ -1,5 +1,5 @@
 {
-  "cubic-mesh": "../../../generated/cubic/box-cubic.veg",
+  "cubic-mesh": "../../../assets/generated/cubic/box-cubic.veg",
   "surface-mesh": "../../../assets/volume/box/box.obj",
   "fixed-vertices": [],
   "external-objects": [

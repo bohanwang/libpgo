@@ -60,7 +60,6 @@ projects
 build-test
 
 # *.obj
-*.png
 
 *.u
 
@@ -77,6 +76,7 @@ docs/*
 fv.obj
 ret*
 examples/generated/
+examples/assets/generated/
 
 paper/*
 *.pdf
