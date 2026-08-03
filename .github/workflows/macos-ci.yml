@@ -19,7 +19,7 @@ defaults:
 
 jobs:
   build-test:
-    name: Build and test macOS arm64
+    name: Full build and test on macOS arm64
     runs-on: macos-26
     timeout-minutes: 150
 
@@ -58,16 +58,16 @@ jobs:
             uv run python -c "import sys; print('python_prefix=' + sys.prefix)"
           } | tee "${EVIDENCE_DIR}/toolchain.txt"
 
-      - name: Build and test from the build tree
+      - name: Build and test the full source tree
         run: |
-          uv run cmake --preset pypgo-wheel
-          uv run cmake --build build/pypgo
-          uv run ctest --test-dir build/pypgo --output-on-failure \
+          uv run cmake --preset base -G Ninja
+          uv run cmake --build build/base --parallel 4
+          uv run ctest --test-dir build/base --output-on-failure \
             | tee "${EVIDENCE_DIR}/ctest.txt"
-          PYTHONPATH="${GITHUB_WORKSPACE}/build/pypgo/src/python" \
+          PYTHONPATH="${GITHUB_WORKSPACE}/build/base/src/python" \
             uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py \
             | tee "${EVIDENCE_DIR}/build-tree-pytest.txt"
-          cp build/pypgo/CMakeCache.txt "${EVIDENCE_DIR}/CMakeCache.txt"
+          cp build/base/CMakeCache.txt "${EVIDENCE_DIR}/CMakeCache.txt"
 
       - name: Upload native test evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

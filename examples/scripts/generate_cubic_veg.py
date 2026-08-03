@@ -139,6 +139,50 @@ def parse_cubic_veg(path: Path) -> dict:
     }
 
 
+def parse_surface_obj(path: Path) -> dict:
+    vertices = []
+    faces = []
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        fields = line.split()
+        if not fields or fields[0].startswith("#"):
+            continue
+        if fields[0] == "v":
+            if len(fields) < 4:
+                raise ValueError(f"Malformed OBJ vertex at {path}:{line_number}")
+            point = tuple(float(value) for value in fields[1:4])
+            if not all(math.isfinite(value) for value in point):
+                raise ValueError("OBJ contains a non-finite vertex")
+            vertices.append(point)
+        elif fields[0] == "f":
+            if len(fields) != 4:
+                raise ValueError(f"Non-triangle OBJ face at {path}:{line_number}")
+            face = []
+            for field in fields[1:]:
+                vertex_index = int(field.split("/", 1)[0])
+                if vertex_index <= 0:
+                    raise ValueError("Generated OBJ must use positive vertex indices")
+                face.append(vertex_index - 1)
+            faces.append(tuple(face))
+
+    if not vertices or not faces:
+        raise ValueError("Generated OBJ must contain vertices and triangle faces")
+    if any(index >= len(vertices) for face in faces for index in face):
+        raise ValueError("OBJ contains an out-of-range face index")
+
+    return {
+        "vertex_count": len(vertices),
+        "triangle_count": len(faces),
+        "bounds": {
+            "min": [min(point[axis] for point in vertices) for axis in range(3)],
+            "max": [max(point[axis] for point in vertices) for axis in range(3)],
+        },
+        "validation": {
+            "finite_vertices": True,
+            "valid_triangle_indices": True,
+        },
+    }
+
+
 def revision() -> str:
     result = subprocess.run(
         ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
@@ -223,6 +267,7 @@ def main() -> int:
             temporary_dir = Path(temporary)
             for name, scene in scenes.items():
                 output = temporary_dir / f"{name}-cubic.veg"
+                surface_output = temporary_dir / f"{name}-cubic-surface.obj"
                 command = [
                     str(mesher),
                     "--input-mesh",
@@ -231,6 +276,8 @@ def main() -> int:
                     str(scene.resolution),
                     "--output-mesh",
                     str(output),
+                    "--output-surface",
+                    str(surface_output),
                     "--E",
                     str(scene.youngs_modulus),
                     "--nu",
@@ -246,6 +293,8 @@ def main() -> int:
                     "input_sha256": sha256(scene.surface),
                     "output": f"{name}-cubic.veg",
                     "output_sha256": sha256(output),
+                    "surface_output": f"{name}-cubic-surface.obj",
+                    "surface_output_sha256": sha256(surface_output),
                     "arguments": {
                         "input_mesh": str(scene.surface),
                         "resolution": scene.resolution,
@@ -255,6 +304,7 @@ def main() -> int:
                         "density": scene.density,
                     },
                     **parse_cubic_veg(output),
+                    "surface": parse_surface_obj(surface_output),
                 }
                 records.append(record)
 

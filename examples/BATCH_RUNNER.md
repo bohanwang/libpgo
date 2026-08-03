@@ -87,7 +87,8 @@ batch summary.
 The animation stage creates each configured ABC output directory. Simulation
 output locations remain owned by the individual simulation JSON files.
 
-The cubic cases require their generated VEG assets. Generate them before an
+The cubic cases require their generated VEG assets. The same command also
+writes an extracted surface OBJ for each cubic mesh. Generate them before an
 all-case run:
 
 ```bash

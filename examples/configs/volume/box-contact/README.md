@@ -6,6 +6,7 @@ configurations with the same deformable mesh, top attachment target, and plane:
 | Configuration | Contact model | Solve mode | Purpose |
 | --- | --- | --- | --- |
 | `box-contact-static-tet-ipc.json` | IPC | static | Solve the final constrained state directly |
+| `box-contact-static-cubic-ipc.json` | IPC | static | Exercise the same contact setup with a small cubic mesh |
 | `box-contact-dynamic-tet-ipc.json` | IPC | dynamic | Slowly approach the same state and compare against Static IPC |
 | `box-contact-dynamic-tet-sampled.json` | sampled penalty | dynamic | Compare penalty contact against Dynamic IPC |
 
@@ -33,6 +34,7 @@ The OBJ results are written to:
 | Configuration | OBJ output |
 | --- | --- |
 | Static IPC | `examples/generated/output/box-contact-static-tet-ipc/ret0000.obj` |
+| Static cubic IPC | `examples/generated/output/box-contact-static-cubic-ipc/ret0000.obj` |
 | Dynamic IPC | `examples/generated/output/box-contact-dynamic-tet-ipc/ret0000.obj` through `ret0100.obj` |
 | Dynamic sampled | `examples/generated/output/box-contact-dynamic-tet-sampled/ret0000.obj` through `ret0100.obj` |
 
@@ -40,11 +42,11 @@ The OBJ results are written to:
 
 The reference run produced the following final surface results:
 
-| Result | Static IPC | Dynamic IPC | Dynamic sampled |
-| --- | ---: | ---: | ---: |
-| Surface vertices | 194 | 194 | 194 |
-| Minimum `y` | `0.36192673` | `0.36192658` | `0.35996874` |
-| Relation to the `y = 0.36` plane | separated by `1.93e-3` | separated by `1.93e-3` | penetrated by `3.13e-5` |
+| Result | Static tet IPC | Static cubic IPC | Dynamic tet IPC | Dynamic tet sampled |
+| --- | ---: | ---: | ---: | ---: |
+| Surface vertices | 194 | 194 | 194 | 194 |
+| Minimum `y` | `0.36192673` | `0.36192363` | `0.36192658` | `0.35996874` |
+| Relation to the `y = 0.36` plane | separated by `1.93e-3` | separated by `1.92e-3` | separated by `1.93e-3` | penetrated by `3.13e-5` |
 
 Comparing corresponding vertices in the final Static IPC and Dynamic IPC
 meshes gives a maximum position difference of `2.40e-4` and an RMS difference

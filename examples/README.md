@@ -22,12 +22,12 @@ runner prints an explicit warning. Sampled shell simulation is not supported.
 | Scene | Meshes | Contact models | Modes | Coverage |
 | --- | --- | --- | --- | --- |
 | [`box`](configs/volume/box/) | tet, cubic | sampled, IPC | dynamic | Small baseline volume simulation |
-| [`box-contact`](configs/volume/box-contact/README.md) | tet | sampled, IPC | dynamic, static | External plane contact and Static IPC/Dynamic IPC comparison |
+| [`box-contact`](configs/volume/box-contact/README.md) | tet, cubic | sampled, IPC | dynamic, static | External plane contact and Static IPC/Dynamic IPC comparison |
 | [`box-with-sphere`](configs/volume/box-with-sphere/) | tet, cubic | sampled, IPC | dynamic | External-object contact |
 | [`bunny`](configs/volume/bunny/) | tet, cubic | sampled, IPC | dynamic | Nonzero initial displacement |
 | [`dragon-dyn`](configs/volume/dragon-dyn/) | tet, cubic | sampled, IPC | dynamic | Translated falling object |
-| [`dragon`](configs/volume/dragon/) | tet | sampled | static | Static volume solve without contact |
-| [`shell_hang`](configs/shell/shell_hang/) | shell | IPC | dynamic | Shell FEM through the IPC runner |
+| [`dragon`](configs/volume/dragon/README.md) | tet, cubic | sampled | static | Static volume solve without contact |
+| [`shell_hang`](configs/shell/shell_hang/README.md) | shell | IPC | dynamic, static | Shell FEM through the IPC runner |
 
 Every simulation JSON has a sibling `*-animation.json`. Cubic configurations
 depend on meshes generated locally with
@@ -39,7 +39,8 @@ depend on meshes generated locally with
 - [`configs/volume/`](configs/volume/) contains tet and cubic configurations.
 - [`configs/shell/`](configs/shell/) contains shell configurations.
 - [`scripts/`](scripts/) contains example asset-generation utilities.
-- `assets/generated/cubic/` contains locally generated cubic VEG meshes.
+- `assets/generated/cubic/` contains locally generated cubic VEG meshes and
+  their extracted surface OBJ meshes.
 - `generated/` contains local OBJ sequences and Alembic output.
 
 Both generated directories are ignored by Git. Relative paths in a JSON file

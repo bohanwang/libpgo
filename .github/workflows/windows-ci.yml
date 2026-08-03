@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build-test:
-    name: Build and test Windows x86-64
+    name: Full build and test on Windows x86-64
     runs-on: windows-2022
     timeout-minutes: 150
 
@@ -56,20 +56,20 @@ jobs:
             uv run python -c "import sys; print('python_prefix=' + sys.prefix)"
           ) | Out-File "$env:EVIDENCE_DIR\toolchain.txt"
 
-      - name: Build and test from the build tree
+      - name: Build and test the full source tree
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          uv run cmake --preset pypgo-wheel
-          uv run cmake --build build\pypgo
-          uv run ctest --test-dir build\pypgo --output-on-failure `
+          uv run cmake --preset base -G Ninja
+          uv run cmake --build build\base --parallel 4
+          uv run ctest --test-dir build\base --output-on-failure `
             | Tee-Object "$env:EVIDENCE_DIR\ctest.txt"
           if ($LASTEXITCODE -ne 0) { throw "CTest failed" }
-          $env:PYTHONPATH = "$env:GITHUB_WORKSPACE\build\pypgo\src\python"
+          $env:PYTHONPATH = "$env:GITHUB_WORKSPACE\build\base\src\python"
           uv run python -m pytest -q tests\pypgo\test_pgo_smoke.py `
             | Tee-Object "$env:EVIDENCE_DIR\build-tree-pytest.txt"
           if ($LASTEXITCODE -ne 0) { throw "Build-tree pytest failed" }
-          Copy-Item build\pypgo\CMakeCache.txt "$env:EVIDENCE_DIR\CMakeCache.txt"
+          Copy-Item build\base\CMakeCache.txt "$env:EVIDENCE_DIR\CMakeCache.txt"
 
       - name: Upload native test evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

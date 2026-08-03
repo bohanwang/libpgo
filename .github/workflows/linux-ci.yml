@@ -19,7 +19,7 @@ defaults:
 
 jobs:
   build-test:
-    name: Build and test manylinux_2_28 x86-64
+    name: Full build and test on manylinux_2_28 x86-64
     runs-on: ubuntu-24.04
     container: quay.io/pypa/manylinux_2_28_x86_64
     timeout-minutes: 150
@@ -53,19 +53,19 @@ jobs:
             uv run python -c "import sys; print('python_prefix=' + sys.prefix)"
           } | tee "${EVIDENCE_DIR}/toolchain.txt"
 
-      - name: Build and test from the build tree
+      - name: Build and test the full source tree
         run: |
           python_prefix="$(uv run python -c 'import sys; print(sys.prefix)')"
-          uv run cmake --preset pypgo-wheel
-          uv run cmake --build build/pypgo
+          uv run cmake --preset base -G Ninja
+          uv run cmake --build build/base --parallel 4
           LD_LIBRARY_PATH="${python_prefix}/lib" \
-            uv run ctest --test-dir build/pypgo --output-on-failure \
+            uv run ctest --test-dir build/base --output-on-failure \
             | tee "${EVIDENCE_DIR}/ctest.txt"
           LD_LIBRARY_PATH="${python_prefix}/lib" \
-          PYTHONPATH="${GITHUB_WORKSPACE}/build/pypgo/src/python" \
+          PYTHONPATH="${GITHUB_WORKSPACE}/build/base/src/python" \
             uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py \
             | tee "${EVIDENCE_DIR}/build-tree-pytest.txt"
-          cp build/pypgo/CMakeCache.txt "${EVIDENCE_DIR}/CMakeCache.txt"
+          cp build/base/CMakeCache.txt "${EVIDENCE_DIR}/CMakeCache.txt"
 
       - name: Upload native test evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

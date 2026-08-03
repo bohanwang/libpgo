@@ -10,6 +10,7 @@
     ],
     "box-contact": [
       "box-contact-static-tet-ipc",
+      "box-contact-static-cubic-ipc",
       "box-contact-dynamic-tet-ipc",
       "box-contact-dynamic-tet-sampled"
     ],
@@ -32,10 +33,12 @@
       "dragon-dynamic-cubic-ipc"
     ],
     "dragon": [
-      "dragon-static-tet-sampled"
+      "dragon-static-tet-sampled",
+      "dragon-static-cubic-sampled"
     ],
     "shell": [
-      "shell-dynamic-ipc"
+      "shell-dynamic-ipc",
+      "shell-static-ipc"
     ]
   },
   "cases": [
@@ -63,6 +66,11 @@
       "name": "box-contact-static-tet-ipc",
       "simulation-config": "configs/volume/box-contact/box-contact-static-tet-ipc.json",
       "animation-config": "configs/volume/box-contact/box-contact-static-tet-ipc-animation.json"
+    },
+    {
+      "name": "box-contact-static-cubic-ipc",
+      "simulation-config": "configs/volume/box-contact/box-contact-static-cubic-ipc.json",
+      "animation-config": "configs/volume/box-contact/box-contact-static-cubic-ipc-animation.json"
     },
     {
       "name": "box-contact-dynamic-tet-ipc",
@@ -140,9 +148,19 @@
       "animation-config": "configs/volume/dragon/dragon-static-tet-sampled-animation.json"
     },
     {
+      "name": "dragon-static-cubic-sampled",
+      "simulation-config": "configs/volume/dragon/dragon-static-cubic-sampled.json",
+      "animation-config": "configs/volume/dragon/dragon-static-cubic-sampled-animation.json"
+    },
+    {
       "name": "shell-dynamic-ipc",
       "simulation-config": "configs/shell/shell_hang/shell-dynamic-ipc.json",
       "animation-config": "configs/shell/shell_hang/shell-dynamic-ipc-animation.json"
+    },
+    {
+      "name": "shell-static-ipc",
+      "simulation-config": "configs/shell/shell_hang/shell-static-ipc.json",
+      "animation-config": "configs/shell/shell_hang/shell-static-ipc-animation.json"
     }
   ]
 }

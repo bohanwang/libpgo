@@ -1,4 +1,6 @@
-## libpgo: Library for Physically based Simulation (P), Geometric Shape Modeling (G), and Optimization (O)
+# libpgo
+
+## Library for Physically based Simulation (P), Geometric Shape Modeling (G), and Optimization (O)
 
 The library is designed to primarily focus on physically based simulations, geometric shape modeling, and optimization.
 The source code extends [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) and is designed for academic research purposes.
@@ -6,7 +8,6 @@ The source code extends [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) an
 Release information:
 
 - [Release notes](release-notes.txt)
-- [Detailed 0.0.4 release notes](docs/release/0.0.4.md)
 
 ---
 
@@ -14,8 +15,6 @@ Release information:
 
 Release 0.0.4 is distributed as standalone CPython 3.12 wheels through the
 recorded [GitHub Actions artifacts](https://github.com/annajcy/libpgo/actions).
-It is not published to PyPI, no source distribution is produced, and wheels
-are not committed to this repository.
 
 | Platform | Supported target | Artifact name |
 | --- | --- | --- |
@@ -77,9 +76,10 @@ The repository tracks `.python-version` and a cross-platform `uv.lock`.
 platform's wheel-repair tool; Linux and Windows additionally receive the
 matching Intel MKL/TBB packages through environment markers. It prepares the
 environment but intentionally does not compile or install pypgo. The default
-developer workflow builds the extension in `build/pypgo` and imports it
-directly through `PYTHONPATH`, so an incremental C++ rebuild does not require
-another `pip install`.
+developer workflow uses the cross-platform full `base` preset, which includes
+the Python extension. The extension can then be imported directly from the build tree through
+`PYTHONPATH`, so an incremental C++ rebuild does not require another
+`pip install`.
 
 ### Linux x86-64
 
@@ -91,11 +91,11 @@ sudo apt install -y build-essential git libgmp-dev libmpfr-dev
 
 uv sync --locked
 
-uv run cmake --preset pypgo-wheel
-uv run cmake --build build/pypgo
-uv run ctest --test-dir build/pypgo --output-on-failure
+uv run cmake --preset base -G Ninja
+uv run cmake --build --preset base
+uv run ctest --test-dir build/base --output-on-failure
 
-export PYTHONPATH="$PWD/build/pypgo/src/python"
+export PYTHONPATH="$PWD/build/base/src/python"
 export LD_LIBRARY_PATH="$PWD/.venv/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 uv run python -c "import pypgo; print(pypgo)"
 uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py
@@ -114,11 +114,11 @@ brew install gmp mpfr tbb
 
 uv sync --locked
 
-uv run cmake --preset pypgo-wheel
-uv run cmake --build build/pypgo
-uv run ctest --test-dir build/pypgo --output-on-failure
+uv run cmake --preset base -G Ninja
+uv run cmake --build --preset base
+uv run ctest --test-dir build/base --output-on-failure
 
-export PYTHONPATH="$PWD/build/pypgo/src/python"
+export PYTHONPATH="$PWD/build/base/src/python"
 uv run python -c "import pypgo; print(pypgo)"
 uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py
 ```
@@ -134,11 +134,11 @@ workload. Run the following from an x64 Native Tools PowerShell:
 ```powershell
 uv sync --locked
 
-uv run cmake --preset pypgo-wheel
-uv run cmake --build build\pypgo
-uv run ctest --test-dir build\pypgo --output-on-failure
+uv run cmake --preset base -G Ninja
+uv run cmake --build build\base
+uv run ctest --test-dir build\base --output-on-failure
 
-$env:PYTHONPATH = "$PWD\build\pypgo\src\python"
+$env:PYTHONPATH = "$PWD\build\base\src\python"
 uv run python -c "import pypgo; print(pypgo)"
 uv run python -m pytest -q tests\pypgo\test_pgo_smoke.py
 ```
@@ -148,8 +148,9 @@ CMake stages the required GMP/MPFR, oneTBB, and oneMKL runtime DLLs beside
 source-built executables and `pypgo/_pypgo.pyd`; no dependency-specific `PATH`
 configuration is required.
 After the first configure, ordinary C++ edits only require
-`uv run cmake --build build/pypgo` (or `--target pypgo` when only the Python
-module is needed). Detailed commands and the separate release-wheel workflow
+`uv run cmake --build --preset base` (add `--target pypgo` when only the
+Python module is needed). Detailed commands and the separate
+release-wheel workflow
 are in the
 [source-build guide](docs/guide/build/build-from-source.md).
 
@@ -162,8 +163,9 @@ wheel passes its installed smoke test and Python tests, the `record` command
 requires exactly one wheel, rejects source archives, and records the wheel
 checksum together with the CMake, dependency, test, and runner evidence.
 Evidence and wheel output directories must be outside the source checkout.
-The [local release packaging guide](docs/guide/build/package-release.md)
-provides the equivalent platform-specific commands without GitHub Actions.
+The platform workflows under [`.github/workflows`](.github/workflows) contain
+the authoritative packaging, repair, audit, and clean-install verification
+commands.
 
 ## Usage & Test
 
@@ -174,14 +176,14 @@ Python at the CMake build tree and run the maintained pytest suite instead of
 the removed `pgo_test_01.py` script:
 
 ```bash
-export PYTHONPATH="$PWD/build/pypgo/src/python"
+export PYTHONPATH="$PWD/build/base/src/python"
 uv run python -m pytest -q tests/pypgo
 ```
 
 PowerShell uses the equivalent environment variable syntax:
 
 ```powershell
-$env:PYTHONPATH = "$PWD\build\pypgo\src\python"
+$env:PYTHONPATH = "$PWD\build\base\src\python"
 uv run python -m pytest -q tests\pypgo
 ```
 
@@ -189,7 +191,7 @@ The same build-tree package exposes the Python command-line modules without
 installing a wheel:
 
 ```bash
-export PYTHONPATH="$PWD/build/pypgo/src/python"
+export PYTHONPATH="$PWD/build/base/src/python"
 uv run python -m pypgo.pgo_run_sim \
     examples/configs/volume/box/box-tet-sampled.json
 uv run python -m pypgo.pgo_dump_abc \
@@ -200,7 +202,7 @@ uv run python -m pypgo.pgo_dump_abc \
 PowerShell:
 
 ```powershell
-$env:PYTHONPATH = "$PWD\build\pypgo\src\python"
+$env:PYTHONPATH = "$PWD\build\base\src\python"
 uv run python -m pypgo.pgo_run_sim `
     examples/configs/volume/box/box-tet-sampled.json
 uv run python -m pypgo.pgo_dump_abc `
@@ -224,32 +226,32 @@ uv run pgo-run-sim \
 The command returns the simulation status as its process exit code. The time
 integrator is selected by the configuration file.
 
-    <table style="width: 100%; table-layout: fixed; border-collapse: collapse;">
-        <tr>
-            <th style="width: 50%;text-align:center; border-top: 1px solid #ddd;">Box (NM)</th>
-            <th style="width: 50%;text-align:center; border-top: 1px solid #ddd;">Box with Sphere (NM)</th>
-        </tr>
-        <tr>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/box.gif" alt="box"></td>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/box-with-sphere.gif" alt="box with sphere"></td>
-        </tr>
-        <tr>
-            <th style="width: 50%;text-align:center;">Dragon (BE)</th>
-            <th style="width: 50%;text-align:center;">Bunny (BE)</th>
-        </tr>
-        <tr>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/dragon-dynamic.gif" alt="dragon"></td>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/bunny.gif" alt="bunny"></td>
-        </tr>
-        <tr>
-            <th style="width: 50%;text-align:center;">Rest Dragon</th>
-            <th style="width: 50%;text-align:center;">Deformed Dragon</th>           
-        </tr>
-        <tr>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/dragon-rest.png" alt="dragon rest shape"></td>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/dragon-deformed.png" alt="dragon deformed shape"></td>
-        </tr>
-    </table>
+<table style="width: 100%; table-layout: fixed; border-collapse: collapse;">
+    <tr>
+        <th style="width: 50%;text-align:center; border-top: 1px solid #ddd;">Box (NM)</th>
+        <th style="width: 50%;text-align:center; border-top: 1px solid #ddd;">Box with Sphere (NM)</th>
+    </tr>
+    <tr>
+        <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/box.gif" alt="box"></td>
+        <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/box-with-sphere.gif" alt="box with sphere"></td>
+    </tr>
+    <tr>
+        <th style="width: 50%;text-align:center;">Dragon (BE)</th>
+        <th style="width: 50%;text-align:center;">Bunny (BE)</th>
+    </tr>
+    <tr>
+        <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/dragon-dynamic.gif" alt="dragon"></td>
+        <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/bunny.gif" alt="bunny"></td>
+    </tr>
+    <tr>
+        <th style="width: 50%;text-align:center;">Rest Dragon</th>
+        <th style="width: 50%;text-align:center;">Deformed Dragon</th>
+    </tr>
+    <tr>
+        <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/dragon-rest.png" alt="dragon rest shape"></td>
+        <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/dragon-deformed.png" alt="dragon deformed shape"></td>
+    </tr>
+</table>
 
 Convert an OBJ animation sequence to Alembic files with:
 
@@ -265,72 +267,10 @@ behavior.
 
 ## Tools
 
-### Cubic Mesher
-
-`cubicMesher` converts a closed triangle surface mesh in `.obj` format into a cubic volumetric `.veg` mesh and can optionally export the extracted cubic surface as `.obj`.
-
-Build the tool:
-
-```bash
-uv run cmake --preset pypgo-wheel
-uv run cmake --build build/pypgo --target cubicMesher
-```
-
-Generate the documented presets with the checked-in helper:
-
-```bash
-uv run python examples/scripts/generate_cubic_veg.py \
-    --build-dir build/pypgo \
-    --scene box
-```
-
-Main arguments:
-
-- `--input-mesh`: input closed triangle mesh in `.obj`
-- `--resolution`: number of cubic cells along the shortest input AABB edge
-- `--output-mesh`: output cubic `.veg`
-- `--output-surface`: optional extracted surface `.obj`
-- `--E`, `--nu`, `--density`: isotropic material parameters written into the output mesh
-
-Generated cubic meshes are written under the gitignored
-`examples/assets/generated/cubic/` directory. See
-[`examples/README.md`](./examples/README.md) for presets, custom input options,
-runner commands, and the old-to-new path table.
-
-## Build the C++ library without Python (optional)
-
-After installing the platform dependencies from the source-build section,
-configure a native tree instead of running `pip`.
-
-Linux:
-
-```bash
-uv run cmake -S . -B build/native -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DPGO_ENABLE_FULL=ON
-uv run cmake --build build/native
-uv run ctest --test-dir build/native --output-on-failure
-```
-
-macOS 26 arm64:
-
-```bash
-uv run cmake -S . -B build/native -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DPGO_ENABLE_FULL=ON
-uv run cmake --build build/native
-uv run ctest --test-dir build/native --output-on-failure
-```
-
-Windows x64 Native Tools PowerShell:
-
-```powershell
-uv run cmake -S . -B build\native -G Ninja `
-  -DCMAKE_BUILD_TYPE=Release `
-  -DPGO_ENABLE_FULL=ON
-uv run cmake --build build\native
-uv run ctest --test-dir build\native --output-on-failure
-```
+The full source build includes simulation, animation conversion, cubic/tet
+meshing, and surface-processing executables. See the complete
+[`src/tools` command-line reference](./src/tools/README.md) for target
+availability, arguments, and examples.
 
 ---
 
@@ -352,7 +292,7 @@ In instances where specific licensing details are not provided within a source f
 ## TODO
 
 - [x] Functional and compilable on three major platforms.
-- [ ] Documentation
+- [x] Documentation
 - [ ] More python interface
 - [ ] Cleanup source code with non-MIT/non-FreeBSD licence.
 - [ ] GUI
