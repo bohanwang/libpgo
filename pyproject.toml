@@ -64,6 +64,7 @@ release = [
     "auditwheel==6.4.2; sys_platform == 'linux'",
     "delocate==0.13.0; sys_platform == 'darwin'",
     "delvewheel==1.13.0; sys_platform == 'win32'",
+    "packaging==26.2",
     "patchelf==0.17.2.4; sys_platform == 'linux'",
 ]
 

@@ -15,8 +15,11 @@ from email.parser import BytesParser
 from pathlib import Path
 
 from project_version import read_project_version
+from release_wheel_contract import (
+    RELEASE_DISTRIBUTION,
+    SUPPORTED_PLATFORMS,
+)
 
-RELEASE_DISTRIBUTION = "pypgo"
 SOURCE_RECORD = "source-provenance.json"
 FINAL_RECORD = "wheel-provenance.json"
 SDIST_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".zip")
@@ -113,7 +116,10 @@ def command_preflight(args: argparse.Namespace) -> None:
     print(output)
 
 
-def wheel_metadata(wheel: Path, release_version: str) -> dict[str, object]:
+def wheel_metadata(
+    wheel: Path,
+    release_version: str,
+) -> dict[str, object]:
     with zipfile.ZipFile(wheel) as archive:
         names = archive.namelist()
         metadata_names = [
@@ -167,7 +173,6 @@ def command_record(args: argparse.Namespace) -> None:
     wheel_dir = args.wheel_dir.resolve()
     ensure_outside_source(evidence_dir, source_dir, "evidence directory")
     ensure_outside_source(wheel_dir, source_dir, "wheel directory")
-
     source_record_path = evidence_dir / SOURCE_RECORD
     if not source_record_path.is_file():
         raise ProvenanceError(
@@ -198,8 +203,14 @@ def command_record(args: argparse.Namespace) -> None:
 
     cmake_cache = args.cmake_cache.resolve()
     dependency_evidence = [path.resolve() for path in args.dependency_evidence]
+    audit_evidence = [path.resolve() for path in args.audit_evidence]
     test_evidence = [path.resolve() for path in args.test_evidence]
-    required_files = [cmake_cache, *dependency_evidence, *test_evidence]
+    required_files = [
+        cmake_cache,
+        *dependency_evidence,
+        *audit_evidence,
+        *test_evidence,
+    ]
     missing = [str(path) for path in required_files if not path.is_file()]
     if missing:
         raise ProvenanceError("missing evidence files: " + ", ".join(missing))
@@ -214,6 +225,7 @@ def command_record(args: argparse.Namespace) -> None:
         "schema_version": 1,
         "release_version": release_version,
         "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
+        "platform": args.platform,
         "source": checkout,
         "wheel": {
             **evidence_entry(wheel),
@@ -221,9 +233,17 @@ def command_record(args: argparse.Namespace) -> None:
         },
         "cmake_cache": evidence_entry(cmake_cache),
         "dependency_evidence": [
-            evidence_entry(path) for path in dependency_evidence
+            evidence_entry(path)
+            for path in sorted(dependency_evidence, key=lambda path: path.name)
         ],
-        "test_evidence": [evidence_entry(path) for path in test_evidence],
+        "audit_evidence": [
+            evidence_entry(path)
+            for path in sorted(audit_evidence, key=lambda path: path.name)
+        ],
+        "test_evidence": [
+            evidence_entry(path)
+            for path in sorted(test_evidence, key=lambda path: path.name)
+        ],
         "ci": {
             "github_run_id": os.environ.get("GITHUB_RUN_ID"),
             "github_run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
@@ -258,9 +278,20 @@ def parser() -> argparse.ArgumentParser:
     record.add_argument("--source-dir", type=Path, default=source_default)
     record.add_argument("--evidence-dir", type=Path, required=True)
     record.add_argument("--wheel-dir", type=Path, required=True)
+    record.add_argument(
+        "--platform",
+        choices=SUPPORTED_PLATFORMS,
+        required=True,
+    )
     record.add_argument("--cmake-cache", type=Path, required=True)
     record.add_argument(
         "--dependency-evidence",
+        type=Path,
+        action="append",
+        required=True,
+    )
+    record.add_argument(
+        "--audit-evidence",
         type=Path,
         action="append",
         required=True,

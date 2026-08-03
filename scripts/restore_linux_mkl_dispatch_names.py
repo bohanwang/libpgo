@@ -18,18 +18,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-
-DISPATCH_COMPONENTS = (
-    "def",
-    "mc3",
-    "avx2",
-    "avx512",
-    "vml_def",
-    "vml_cmpt",
-    "vml_mc3",
-    "vml_avx2",
-    "vml_avx512",
-)
+from release_wheel_contract import MKL_DISPATCH_COMPONENTS
 
 
 def run(*command: str) -> None:
@@ -62,7 +51,7 @@ def restore(wheel: Path) -> None:
             raise RuntimeError(f"expected one pypgo.libs directory, found {library_dirs}")
         library_dir = library_dirs[0]
 
-        for component in DISPATCH_COMPONENTS:
+        for component in MKL_DISPATCH_COMPONENTS:
             pattern = re.compile(
                 rf"^libmkl_{re.escape(component)}-[0-9a-f]+\.so\.2$"
             )
