@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import subprocess
@@ -46,6 +47,100 @@ PLATFORM_IMPLEMENTATIONS = (
     (MacOSPypgoWheelPlatform, MACOS_CONTRACT),
     (WindowsPypgoWheelPlatform, WINDOWS_CONTRACT),
 )
+
+
+def test_cmake_presets_separate_portability_and_runtime_layout() -> None:
+    presets = json.loads((SOURCE_DIR / "CMakePresets.json").read_text(encoding="utf-8"))
+    configure_presets = {
+        preset["name"]: preset for preset in presets["configurePresets"]
+    }
+
+    base = configure_presets["base"]["cacheVariables"]
+    wheel = configure_presets["pypgo-wheel"]["cacheVariables"]
+
+    assert base["PGO_PORTABLE_BUILD"] == "OFF"
+    assert base["PGO_ENABLE_RELEASE_DEBUG_INFO"] == "ON"
+    assert base["PGO_RUNTIME_LAYOUT"] == "SOURCE"
+    assert wheel["PGO_PORTABLE_BUILD"] == "ON"
+    assert wheel["PGO_ENABLE_RELEASE_DEBUG_INFO"] == "OFF"
+    assert wheel["PGO_RUNTIME_LAYOUT"] == "WHEEL"
+    assert wheel["PGO_BUILD_TESTS"] == "OFF"
+    assert wheel["PGO_BUILD_SUBPROJECTS"] == "OFF"
+
+
+def test_wheel_runtime_layout_configures_without_source_staging(
+    tmp_path: Path,
+) -> None:
+    result = subprocess.run(
+        [
+            "cmake",
+            "-S",
+            str(SOURCE_DIR / "tests" / "cmake" / "runtimeDependencies"),
+            "-B",
+            str(tmp_path / "build"),
+            f"-DLIBPGO_SOURCE_DIR={SOURCE_DIR}",
+            "-DPGO_RUNTIME_LAYOUT=WHEEL",
+            "-DPGO_ENABLE_PYTHON=ON",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Runtime dependency layout: WHEEL" in result.stdout
+
+
+def test_active_environment_replaces_stale_cmake_python_cache(
+    tmp_path: Path,
+) -> None:
+    result = subprocess.run(
+        [
+            "cmake",
+            "-S",
+            str(SOURCE_DIR / "tests" / "cmake" / "pythonDependencies"),
+            "-B",
+            str(tmp_path / "build"),
+            f"-DLIBPGO_SOURCE_DIR={SOURCE_DIR}",
+            f"-DEXPECTED_PYTHON_PREFIX={Path(sys.prefix).resolve()}",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Using Python executable:" in result.stdout
+    assert "Using Python dependency prefix:" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("release_debug_info", "expected_strip"),
+    (("ON", "OFF"), ("OFF", "ON")),
+)
+def test_release_debug_info_controls_strip_policy(
+    tmp_path: Path,
+    release_debug_info: str,
+    expected_strip: str,
+) -> None:
+    result = subprocess.run(
+        [
+            "cmake",
+            "-S",
+            str(SOURCE_DIR / "tests" / "cmake" / "releaseBuildPolicy"),
+            "-B",
+            str(tmp_path / "build"),
+            "-DCMAKE_BUILD_TYPE=Release",
+            f"-DLIBPGO_SOURCE_DIR={SOURCE_DIR}",
+            f"-DPGO_ENABLE_RELEASE_DEBUG_INFO={release_debug_info}",
+            f"-DEXPECTED_STRIP={expected_strip}",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 class FakeWheelPlatform(PypgoWheelPlatform):

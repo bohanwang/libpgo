@@ -61,6 +61,14 @@ jobs:
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           uv run cmake --preset base -G Ninja
+          if (-not (Select-String -Quiet -SimpleMatch `
+              'PGO_PORTABLE_BUILD:BOOL=OFF' build\base\CMakeCache.txt)) {
+            throw "base did not disable PGO_PORTABLE_BUILD"
+          }
+          if (-not (Select-String -Quiet -SimpleMatch `
+              'PGO_RUNTIME_LAYOUT:STRING=SOURCE' build\base\CMakeCache.txt)) {
+            throw "base did not select the SOURCE runtime layout"
+          }
           uv run cmake --build build\base --parallel 4
           uv run ctest --test-dir build\base --output-on-failure `
             | Tee-Object "$env:EVIDENCE_DIR\ctest.txt"

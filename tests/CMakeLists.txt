@@ -18,7 +18,7 @@ if(TARGET pgo_windows_runtime)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY
     "${PGO_WINDOWS_RUNTIME_OUTPUT_DIRECTORY}")
   set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
-  add_dependencies(gtest_main pgo_windows_runtime)
+  pgo_attach_runtime_dependencies(gtest_main)
 endif()
 
 set(LIBPGO_TEST_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/fixtures")

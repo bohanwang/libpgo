@@ -12,15 +12,15 @@
             "binaryDir": "${sourceDir}/build/pypgo",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE": "PRE_TEST",
-                "BUILD_TESTING": "OFF",
-                "PGO_BUILD_TESTS": "ON",
+                "PGO_BUILD_TESTS": "OFF",
                 "PGO_ENABLE_PYTHON": "ON",
-                "PGO_BUILD_SUBPROJECTS": "ON",
+                "PGO_BUILD_SUBPROJECTS": "OFF",
                 "PGO_ENABLE_ALEMBIC": "ON",
                 "PGO_ENABLE_CUDA": "OFF",
                 "PGO_HAS_ORIG_PARDISO": "OFF",
                 "PGO_PORTABLE_BUILD": "ON",
+                "PGO_ENABLE_RELEASE_DEBUG_INFO": "OFF",
+                "PGO_RUNTIME_LAYOUT": "WHEEL",
                 "CMAKE_FIND_USE_PACKAGE_REGISTRY": "OFF",
                 "CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY": "OFF",
                 "PGO_USE_MKL": "ON"
@@ -38,7 +38,10 @@
                 "PGO_BUILD_TESTS": "ON",
                 "PGO_BUILD_SUBPROJECTS": "ON",
                 "PGO_ENABLE_ALEMBIC": "ON",
-                "PGO_ENABLE_GMSH": "ON"
+                "PGO_ENABLE_GMSH": "ON",
+                "PGO_PORTABLE_BUILD": "OFF",
+                "PGO_ENABLE_RELEASE_DEBUG_INFO": "ON",
+                "PGO_RUNTIME_LAYOUT": "SOURCE"
             }
         },
         {

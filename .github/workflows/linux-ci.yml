@@ -55,14 +55,15 @@ jobs:
 
       - name: Build and test the full source tree
         run: |
-          python_prefix="$(uv run python -c 'import sys; print(sys.prefix)')"
           uv run cmake --preset base -G Ninja
+          grep -F 'PGO_PORTABLE_BUILD:BOOL=OFF' build/base/CMakeCache.txt
+          grep -F 'PGO_RUNTIME_LAYOUT:STRING=SOURCE' build/base/CMakeCache.txt
           uv run cmake --build build/base --parallel 4
-          LD_LIBRARY_PATH="${python_prefix}/lib" \
+          env -u LD_LIBRARY_PATH \
             uv run ctest --test-dir build/base --output-on-failure \
             | tee "${EVIDENCE_DIR}/ctest.txt"
-          LD_LIBRARY_PATH="${python_prefix}/lib" \
-          PYTHONPATH="${GITHUB_WORKSPACE}/build/base/src/python" \
+          env -u LD_LIBRARY_PATH \
+            PYTHONPATH="${GITHUB_WORKSPACE}/build/base/src/python" \
             uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py \
             | tee "${EVIDENCE_DIR}/build-tree-pytest.txt"
           cp build/base/CMakeCache.txt "${EVIDENCE_DIR}/CMakeCache.txt"

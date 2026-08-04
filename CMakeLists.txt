@@ -32,7 +32,14 @@ option(PGO_OPT_USE_KNITRO "Use KNITRO" OFF)
 option(PGO_MKL_LINK_DYNAMIC "MKL Link" ON)
 option(PGO_ENABLE_ALEMBIC "Enable Alembic support" OFF)
 option(PGO_ENABLE_GMSH "Enable GMSH support" OFF)
-option(PGO_PORTABLE_BUILD "Disable host-specific code generation and release debug info" OFF)
+option(PGO_PORTABLE_BUILD
+  "Generate code without build-host-specific CPU assumptions" OFF)
+option(PGO_ENABLE_RELEASE_DEBUG_INFO
+  "Emit debug information in non-Debug POSIX builds" ON)
+include(CMakeModules/releaseBuildPolicy.cmake)
+set(PGO_RUNTIME_LAYOUT "SOURCE" CACHE STRING
+  "Runtime dependency layout: SOURCE or WHEEL")
+set_property(CACHE PGO_RUNTIME_LAYOUT PROPERTY STRINGS SOURCE WHEEL)
 
 if(APPLE AND PGO_ENABLE_PYTHON AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "26.0" CACHE STRING
@@ -55,40 +62,11 @@ endif()
 # own test suites. PGO_BUILD_TESTS controls only libpgo's tests below.
 set(BUILD_TESTING OFF CACHE BOOL "Third-party tests remain disabled" FORCE)
 
-# Python packages such as mkl-devel install their CMake package files below the
-# active Python prefix. Prefer the active virtual environment because `uv run`
-# can launch CMake without placing the venv's Python first on PATH on Windows.
-# This keeps uv/pip and direct CMake builds free of dependency-location flags.
-if(DEFINED ENV{VIRTUAL_ENV} AND IS_DIRECTORY "$ENV{VIRTUAL_ENV}")
-  set(_pgo_python_prefix "$ENV{VIRTUAL_ENV}")
-elseif(PYTHON_EXECUTABLE)
-  set(_pgo_python_executable "${PYTHON_EXECUTABLE}")
-else()
-  find_program(_pgo_python_executable NAMES python3 python)
-endif()
-if(NOT _pgo_python_prefix AND _pgo_python_executable)
-  execute_process(
-    COMMAND "${_pgo_python_executable}" -c "import sys; print(sys.prefix)"
-    OUTPUT_VARIABLE _pgo_python_prefix
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    RESULT_VARIABLE _pgo_python_prefix_result
-  )
-  if(NOT _pgo_python_prefix_result EQUAL 0)
-    unset(_pgo_python_prefix)
-  endif()
-endif()
-if(_pgo_python_prefix AND IS_DIRECTORY "${_pgo_python_prefix}")
-  list(PREPEND CMAKE_PREFIX_PATH "${_pgo_python_prefix}")
-  if(WIN32 AND IS_DIRECTORY "${_pgo_python_prefix}/Library")
-    list(PREPEND CMAKE_PREFIX_PATH "${_pgo_python_prefix}/Library")
-  endif()
-  set(PGO_PYTHON_DEPENDENCY_PREFIX "${_pgo_python_prefix}" CACHE INTERNAL
-    "Python environment that provides native build dependencies" FORCE)
-  message(STATUS "Using Python dependency prefix: ${_pgo_python_prefix}")
-endif()
-unset(_pgo_python_executable)
-unset(_pgo_python_prefix)
-unset(_pgo_python_prefix_result)
+include(CMakeModules/pythonDependencies.cmake)
+pgo_configure_python_dependencies()
+
+include(CMakeModules/runtimeDependencies.cmake)
+pgo_configure_runtime_dependencies()
 
 if(APPLE)
   set(BLA_VENDOR Apple CACHE STRING "BLAS/LAPACK provider" FORCE)
@@ -300,7 +278,7 @@ else()
   message(STATUS "Release Mode..")
 
   add_flag_poxis(compilation_flag INTERFACE -O3)
-  if(NOT PGO_PORTABLE_BUILD)
+  if(PGO_ENABLE_RELEASE_DEBUG_INFO)
     add_flag_poxis(compilation_flag INTERFACE -ggdb3)
     add_link_flag_poxis(compilation_flag -ggdb3)
   endif()
@@ -363,8 +341,6 @@ endif()
 if(PGO_ENABLE_PYTHON)
   include(CMakeModules/third-party/pybind11.cmake)
 endif()
-
-include(CMakeModules/windowsRuntime.cmake)
 
 if(TARGET MKL::MKL)
   add_compile_definitions(PGO_HAS_MKL)
@@ -466,10 +442,7 @@ function(add_libpgo_tools tgt sources deps)
   endif()
 
   add_executable(${tgt} ${sources})
-
-  if(TARGET pgo_windows_runtime)
-    add_dependencies(${tgt} pgo_windows_runtime)
-  endif()
+  pgo_attach_runtime_dependencies(${tgt})
 
   foreach(d ${deps})
     target_link_libraries(${tgt} PRIVATE ${d})

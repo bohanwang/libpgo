@@ -17,7 +17,7 @@ set_target_properties(pgo_c PROPERTIES
 )
 
 if(TARGET pgo_windows_runtime)
-  add_dependencies(pgo_c pgo_windows_runtime)
+  pgo_attach_runtime_dependencies(pgo_c)
   set_target_properties(pgo_c PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${PGO_WINDOWS_RUNTIME_OUTPUT_DIRECTORY}")
 endif()

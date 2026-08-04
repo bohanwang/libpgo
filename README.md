@@ -96,10 +96,15 @@ uv run cmake --build --preset base
 uv run ctest --test-dir build/base --output-on-failure
 
 export PYTHONPATH="$PWD/build/base/src/python"
-export LD_LIBRARY_PATH="$PWD/.venv/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 uv run python -c "import pypgo; print(pypgo)"
 uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py
 ```
+
+On Linux, CMake records the active Python environment's native library
+directory in the build-tree RPATH, so no `LD_LIBRARY_PATH` setup is required.
+The `base` preset selects `PGO_RUNTIME_LAYOUT=SOURCE`; release-wheel builds use
+the separate `WHEEL` layout and leave dependency vendoring to the platform
+repair tool.
 
 Use `gmp-devel` and `mpfr-devel` instead of `libgmp-dev` and `libmpfr-dev` on
 Fedora/RHEL. Intel's `mkl-devel` package installs its matching `tbb-devel`

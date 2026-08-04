@@ -11,8 +11,9 @@ target_compile_definitions(pypgo PRIVATE VERSION_INFO=${PYPGO_VERSION_INFO})
 
 pybind11_extension(pypgo)
 
-if(NOT MSVC AND NOT ${CMAKE_BUILD_TYPE} MATCHES Debug|RelWithDebInfo)
-    # Strip unnecessary sections of the binary on Linux/macOS
+pgo_should_strip_release_binary(PGO_STRIP_PYTHON_EXTENSION)
+if(PGO_STRIP_PYTHON_EXTENSION)
+    # Keep Release symbols for source diagnostics, but strip release wheels.
     pybind11_strip(pypgo)
 endif()
 
@@ -33,31 +34,4 @@ add_custom_command(
     COMMENT "Staging the pypgo Python package beside $<TARGET_FILE_NAME:pypgo>"
     VERBATIM)
 
-if(TARGET pgo_windows_runtime)
-    add_dependencies(pypgo pgo_windows_runtime)
-    add_custom_command(
-        TARGET pypgo
-        POST_BUILD
-        COMMAND
-            ${CMAKE_COMMAND} -E copy_if_different
-            ${PGO_WINDOWS_RUNTIME_DLLS}
-            "$<TARGET_FILE_DIR:pypgo>"
-        COMMENT "Staging Windows runtime DLLs beside $<TARGET_FILE_NAME:pypgo>"
-        COMMAND_EXPAND_LISTS
-        VERBATIM)
-endif()
-
-if(PGO_PORTABLE_BUILD)
-    if(APPLE)
-        set(PGO_PYTHON_RUNTIME_PATH "@loader_path/../..")
-    elseif(UNIX)
-        set(PGO_PYTHON_RUNTIME_PATH "$ORIGIN/../..")
-    endif()
-
-    if(DEFINED PGO_PYTHON_RUNTIME_PATH)
-        set_target_properties(pypgo PROPERTIES
-            BUILD_RPATH "${PGO_PYTHON_RUNTIME_PATH}"
-            BUILD_WITH_INSTALL_RPATH TRUE
-            INSTALL_RPATH "${PGO_PYTHON_RUNTIME_PATH}")
-    endif()
-endif()
+pgo_attach_runtime_dependencies(pypgo COPY_RUNTIME WHEEL_EXTENSION)

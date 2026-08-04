@@ -22,11 +22,6 @@ uv run cmake --preset base
 uv run cmake --build --preset base
 ```
 
-The `pypgo-wheel` preset is intended for the portable Python wheel. It enables
-Python bindings and selected optional dependencies, but leaves
-`PGO_ENABLE_FULL` disabled, so it is not the canonical build for the complete
-tool set documented here.
-
 Build one tool by target name when only a single executable is needed:
 
 ```bash
