@@ -128,15 +128,61 @@ message(STATUS "CMake Module Path: ${CMAKE_MODULE_PATH}")
 
 include(CompilationUtils)
 
-find_package(OpenMP COMPONENTS CXX)
+if(APPLE)
+  find_program(
+    _pgo_homebrew_executable
+    NAMES brew
+    HINTS /opt/homebrew/bin /usr/local/bin
+    NO_CACHE
+  )
+  if(NOT _pgo_homebrew_executable)
+    message(FATAL_ERROR
+      "Homebrew is required to locate OpenMP on macOS. "
+      "Install Homebrew, then run: brew install libomp")
+  endif()
 
-if(OpenMP_CXX_FOUND)
-  message(STATUS "OpenMP CXX found: ${OpenMP_CXX_FLAGS}")
+  execute_process(
+    COMMAND "${_pgo_homebrew_executable}" --prefix libomp
+    OUTPUT_VARIABLE _pgo_homebrew_libomp_prefix
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE _pgo_homebrew_libomp_result
+    ERROR_QUIET
+  )
+  if(NOT _pgo_homebrew_libomp_result EQUAL 0
+     OR NOT EXISTS "${_pgo_homebrew_libomp_prefix}/include/omp.h"
+     OR NOT EXISTS "${_pgo_homebrew_libomp_prefix}/lib/libomp.dylib")
+    message(FATAL_ERROR
+      "Homebrew libomp is required on macOS. Run: brew install libomp")
+  endif()
+
+  # libomp is keg-only, so it is not linked into Homebrew's common include
+  # and library directories. Prefer its exact paths over stale Conda or other
+  # OpenMP cache entries from an earlier configure.
+  list(PREPEND CMAKE_PREFIX_PATH "${_pgo_homebrew_libomp_prefix}")
+  set(OpenMP_CXX_INCLUDE_DIR
+    "${_pgo_homebrew_libomp_prefix}/include"
+    CACHE PATH "AppleClang OpenMP include directory" FORCE)
+  set(OpenMP_libomp_LIBRARY
+    "${_pgo_homebrew_libomp_prefix}/lib/libomp.dylib"
+    CACHE FILEPATH "AppleClang OpenMP runtime" FORCE)
+  message(STATUS "Using Homebrew libomp: ${_pgo_homebrew_libomp_prefix}")
+
+  unset(_pgo_homebrew_executable)
+  unset(_pgo_homebrew_libomp_prefix)
+  unset(_pgo_homebrew_libomp_result)
 endif()
 
-# openmp may cause mkl pardiso error
-include(Find_AVX)
-CHECK_FOR_AVX()
+find_package(OpenMP REQUIRED COMPONENTS CXX)
+message(STATUS "OpenMP CXX found: ${OpenMP_CXX_FLAGS}")
+
+# CPU feature probes execute on the build host, so they are valid only for
+# explicitly host-optimized builds and must never affect portable wheels.
+if(PGO_PORTABLE_BUILD)
+  message(STATUS "Portable build: disabling host CPU feature detection")
+else()
+  include(Find_AVX)
+  CHECK_FOR_AVX()
+endif()
 
 # basic debug flags
 add_library(compilation_flag_for_debug INTERFACE)
@@ -217,15 +263,17 @@ add_flag(compilation_flag MSVC All INTERFACE /bigobj)
 add_flag(compilation_flag MSVC All INTERFACE /Zc:__cplusplus)
 add_flag_cuda(cuda_compilation_flag MSVC All INTERFACE "-Xcompiler=/bigobj")
 
-if(HAVE_AVX512_EXTENSIONS)
-  add_flag(compilation_flag MSVC All INTERFACE /arch:AVX512)
-  add_flag_cuda(cuda_compilation_flag MSVC All INTERFACE "-Xcompiler=/arch:AVX512")
-elseif(HAVE_AVX2_EXTENSIONS)
-  add_flag(compilation_flag MSVC All INTERFACE /arch:AVX2)
-  add_flag_cuda(cuda_compilation_flag MSVC All INTERFACE "-Xcompiler=/arch:AVX2")
-elseif(HAVE_AVX_EXTENSIONS)
-  add_flag(compilation_flag MSVC All INTERFACE /arch:AVX)
-  add_flag_cuda(cuda_compilation_flag MSVC All INTERFACE "-Xcompiler=/arch:AVX")
+if(NOT PGO_PORTABLE_BUILD)
+  if(HAVE_AVX512_EXTENSIONS)
+    add_flag(compilation_flag MSVC All INTERFACE /arch:AVX512)
+    add_flag_cuda(cuda_compilation_flag MSVC All INTERFACE "-Xcompiler=/arch:AVX512")
+  elseif(HAVE_AVX2_EXTENSIONS)
+    add_flag(compilation_flag MSVC All INTERFACE /arch:AVX2)
+    add_flag_cuda(cuda_compilation_flag MSVC All INTERFACE "-Xcompiler=/arch:AVX2")
+  elseif(HAVE_AVX_EXTENSIONS)
+    add_flag(compilation_flag MSVC All INTERFACE /arch:AVX)
+    add_flag_cuda(cuda_compilation_flag MSVC All INTERFACE "-Xcompiler=/arch:AVX")
+  endif()
 endif()
 
 add_flag(compilation_flag MSVC All INTERFACE /MP)

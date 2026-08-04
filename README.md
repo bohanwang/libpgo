@@ -66,10 +66,10 @@ download and checksum commands.
 
 ## Build from source
 
-Source builds require CMake 3.29 or newer, a C++20 compiler, Python 3.12, and
-network access for pinned FetchContent archives. Unlike a repaired release
-wheel, a source installation may depend on native libraries installed on the
-build machine.
+Source builds require CMake 3.29 or newer, a C++20 compiler with OpenMP,
+Python 3.12, and network access for pinned FetchContent archives. OpenMP is a
+required configure-time dependency. Unlike a repaired release wheel, a source
+installation may depend on native libraries installed on the build machine.
 
 The repository tracks `.python-version` and a cross-platform `uv.lock`.
 `uv sync --locked` installs the common build/test tools plus the current
@@ -103,14 +103,15 @@ uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py
 
 Use `gmp-devel` and `mpfr-devel` instead of `libgmp-dev` and `libmpfr-dev` on
 Fedora/RHEL. Intel's `mkl-devel` package installs its matching `tbb-devel`
-dependency into the same virtual environment. CMake discovers native
-dependencies from the active Python environment and standard platform paths.
+dependency into the same virtual environment. GCC supplies the OpenMP headers
+and `libgomp` runtime used by `-fopenmp`. CMake discovers native dependencies
+from the active Python environment and standard platform paths.
 
 ### macOS 26 arm64
 
 ```bash
 xcode-select --install
-brew install gmp mpfr tbb
+brew install gmp mpfr libomp tbb
 
 uv sync --locked
 
@@ -123,8 +124,10 @@ uv run python -c "import pypgo; print(pypgo)"
 uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py
 ```
 
-This source-built extension links the Homebrew TBB/GMP/MPFR libraries
-directly. Keep those packages installed while using the environment.
+AppleClang does not ship an OpenMP runtime. CMake queries
+`brew --prefix libomp` and validates Homebrew's keg-only package automatically.
+This source-built extension also links the Homebrew TBB/GMP/MPFR libraries
+directly, so keep these packages installed while using the environment.
 
 ### Windows x86-64
 
@@ -144,6 +147,7 @@ uv run python -m pytest -q tests\pypgo\test_pgo_smoke.py
 ```
 
 Windows source builds use the approved GMP/MPFR files under `third-party`.
+CMake requires the OpenMP support supplied by the Visual Studio C++ workload.
 CMake stages the required GMP/MPFR, oneTBB, and oneMKL runtime DLLs beside
 source-built executables and `pypgo/_pypgo.pyd`; no dependency-specific `PATH`
 configuration is required.

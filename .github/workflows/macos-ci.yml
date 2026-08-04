@@ -34,7 +34,7 @@ jobs:
 
       - name: Set up native and uv dependencies
         run: |
-          brew install gmp mpfr tbb
+          brew install gmp mpfr libomp tbb
           uv_version="$(python scripts/uv_version.py)"
           python -m pip install "uv==${uv_version}"
           uv sync --locked --python python
@@ -46,7 +46,7 @@ jobs:
           test "$(uname -m)" = "arm64"
           mkdir -p "${EVIDENCE_DIR}"
           uv pip freeze | tee "${EVIDENCE_DIR}/uv-freeze.txt"
-          brew list --versions gmp mpfr tbb | tee "${EVIDENCE_DIR}/system-packages.txt"
+          brew list --versions gmp mpfr libomp tbb | tee "${EVIDENCE_DIR}/system-packages.txt"
           {
             uv --version
             uv run python --version
@@ -98,7 +98,7 @@ jobs:
 
       - name: Set up native and uv dependencies
         run: |
-          brew install gmp mpfr tbb
+          brew install gmp mpfr libomp tbb
           uv_version="$(python scripts/uv_version.py)"
           python -m pip install "uv==${uv_version}"
           uv sync --locked --python python
@@ -115,7 +115,7 @@ jobs:
       - name: Record package dependency environment
         run: |
           uv pip freeze | tee "${EVIDENCE_DIR}/package-uv-freeze.txt"
-          brew list --versions gmp mpfr tbb | tee "${EVIDENCE_DIR}/package-system-packages.txt"
+          brew list --versions gmp mpfr libomp tbb | tee "${EVIDENCE_DIR}/package-system-packages.txt"
           {
             uv --version
             uv run python --version

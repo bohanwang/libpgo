@@ -5,8 +5,11 @@ endif()
 if(PGO_USE_MKL)
   message(STATUS "Searching for MKL")
 
-  set(MKL_THREADING tbb_thread)
-  set(MKL_INTERFACE lp64)
+  # Project OpenMP is independent of oneMKL's internal threading backend.
+  # Keep Windows and Linux on oneTBB and reject cache overrides that could
+  # silently pull in an Intel/GNU OpenMP threading runtime.
+  set(MKL_THREADING tbb_thread CACHE STRING "oneMKL threading layer" FORCE)
+  set(MKL_INTERFACE lp64 CACHE STRING "oneMKL integer interface" FORCE)
 
   if(PGO_MKL_LINK_DYNAMIC)
     set(MKL_LINK dynamic)
