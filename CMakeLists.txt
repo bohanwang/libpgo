@@ -128,12 +128,10 @@ message(STATUS "CMake Module Path: ${CMAKE_MODULE_PATH}")
 
 include(CompilationUtils)
 
-find_package(OpenMP)
+find_package(OpenMP COMPONENTS CXX)
 
-if(OPENMP_FOUND)
-  message(STATUS "OpenMP found: ${OpenMP_CXX_FLAGS}")
-  set(OPENMP_FLAG "${OpenMP_CXX_FLAGS}")
-  add_compile_definitions(USE_OPENMP)
+if(OpenMP_CXX_FOUND)
+  message(STATUS "OpenMP CXX found: ${OpenMP_CXX_FLAGS}")
 endif()
 
 # openmp may cause mkl pardiso error
@@ -158,6 +156,11 @@ add_flag(compilation_flag_for_debug Clang All INTERFACE -fsanitize=leak)
 
 add_library(compilation_flag INTERFACE)
 add_library(cuda_compilation_flag INTERFACE)
+
+if(TARGET OpenMP::OpenMP_CXX)
+  target_link_libraries(compilation_flag INTERFACE OpenMP::OpenMP_CXX)
+  target_compile_definitions(compilation_flag INTERFACE USE_OPENMP)
+endif()
 
 message(STATUS "PGO compiler: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "OS: ${CMAKE_SYSTEM_NAME}")
@@ -207,15 +210,6 @@ add_flag(compilation_flag GNU All INTERFACE -static-libstdc++)
 add_flag(compilation_flag GNU All INTERFACE -static-libgcc)
 add_link_flag(compilation_flag GNU All -static-libstdc++)
 add_link_flag(compilation_flag GNU All -static-libgcc)
-
-# if has openmp flags
-if(OPENMP_FOUND)
-  add_flag(compilation_flag GNU All INTERFACE ${OPENMP_FLAG})
-  add_flag(compilation_flag Clang All INTERFACE ${OPENMP_FLAG})
-  add_link_flag(compilation_flag GNU All ${OPENMP_FLAG})
-  add_link_flag(compilation_flag Clang All ${OPENMP_FLAG})
-  add_flag(compilation_flag MSVC All INTERFACE ${OPENMP_FLAG})
-endif()
 
 # msvc flags
 add_def(compilation_flag MSVC All INTERFACE __BASE_FILE__=__FILE__)

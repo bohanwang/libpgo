@@ -91,6 +91,17 @@ _libpgo_replace_in_file(
 
 add_subdirectory(${geogram_SOURCE_DIR} ${geogram_BINARY_DIR} EXCLUDE_FROM_ALL)
 
+if(TARGET OpenMP::OpenMP_CXX)
+  # HLBFGS is compiled as an OBJECT library and directly includes omp.h.
+  target_link_libraries(geogram_third_party PRIVATE OpenMP::OpenMP_CXX)
+  target_compile_definitions(geogram_third_party PRIVATE USE_OPENMP)
+
+  # Geogram itself uses the legacy plain target_link_libraries signature.
+  # Keep the OpenMP runtime on the final Geogram link interface so consumers
+  # also receive it when Geogram is built from object/static sources.
+  target_link_libraries(geogram OpenMP::OpenMP_CXX)
+endif()
+
 set_target_properties(geogram PROPERTIES CXX_STANDARD 14)
 
 message(STATUS "Done.")
