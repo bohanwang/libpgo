@@ -7,21 +7,27 @@ import os
 import re
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Final
 
 from packaging.version import Version
 
 from pypgo_wheel.audit import require
-from pypgo_wheel.common import require_tool, run_capture
-from pypgo_wheel.contracts.macos import (
-    MACOS_ARCHITECTURE,
-    MACOS_CONTRACT,
-    MACOS_DEPLOYMENT_TARGET,
-)
+from pypgo_wheel.common import COMMON_NATIVE_COMPONENTS, require_tool, run_capture
 from pypgo_wheel.platform import PypgoWheelPlatform
 
 
+MACOS_DEPLOYMENT_TARGET: Final = "26.0"
+MACOS_ARCHITECTURE: Final = "arm64"
+MACOS_PLATFORM_TAG: Final = (
+    f"macosx_{MACOS_DEPLOYMENT_TARGET.replace('.', '_')}_{MACOS_ARCHITECTURE}"
+)
+
+
 class MacOSPypgoWheelPlatform(PypgoWheelPlatform):
-    contract = MACOS_CONTRACT
+    platform = "macos"
+    platform_tag = MACOS_PLATFORM_TAG
+    repair_report = "delocate-listdeps.txt"
+    required_native_components = COMMON_NATIVE_COMPONENTS
     supported_system = "darwin"
     supported_machines = frozenset({"arm64", "aarch64"})
 

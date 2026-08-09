@@ -13,9 +13,12 @@ import zipfile
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import ClassVar
 
 from .audit import AuditError, WheelArchiveInspection, audit_repaired_wheel
 from .common import (
+    ABI_TAG,
+    PYTHON_TAG,
     PackagingError,
     build_raw_wheel,
     exactly_one_wheel,
@@ -23,7 +26,6 @@ from .common import (
     publish_wheel,
     write_report,
 )
-from .contracts.common import WheelPlatformContract
 
 
 SOURCE_ROOT = Path(__file__).resolve().parents[2]
@@ -32,13 +34,17 @@ SOURCE_ROOT = Path(__file__).resolve().parents[2]
 class PypgoWheelPlatform(ABC):
     """Define platform hooks around one shared package/audit workflow."""
 
-    contract: WheelPlatformContract
-    supported_system: str
-    supported_machines: frozenset[str]
+    platform: ClassVar[str]
+    platform_tag: ClassVar[str]
+    repair_report: ClassVar[str]
+    required_native_components: ClassVar[tuple[str, ...]]
+    required_original_runtime_names: ClassVar[tuple[str, ...]] = ()
+    supported_system: ClassVar[str]
+    supported_machines: ClassVar[frozenset[str]]
 
     @property
-    def platform(self) -> str:
-        return self.contract.platform
+    def expected_tag(self) -> str:
+        return f"{PYTHON_TAG}-{ABI_TAG}-{self.platform_tag}"
 
     def validate_host(self) -> None:
         if sys.version_info[:2] != (3, 12):
@@ -127,7 +133,7 @@ class PypgoWheelPlatform(ABC):
             repair_report = self.collect_repair_report(repaired_wheel, source_dir)
             write_report(
                 report_dir,
-                self.contract.repair_report,
+                self.repair_report,
                 repair_report,
             )
             audit_report = self.audit(repaired_wheel, source_dir)

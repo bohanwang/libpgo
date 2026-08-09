@@ -11,15 +11,24 @@ SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import release_wheel_provenance as provenance  # noqa: E402
-from pypgo_wheel.contracts import get_platform_contract  # noqa: E402
+from pypgo_wheel_linux import LinuxPypgoWheelPlatform  # noqa: E402
+from pypgo_wheel_macos import MacOSPypgoWheelPlatform  # noqa: E402
+from pypgo_wheel_windows import WindowsPypgoWheelPlatform  # noqa: E402
+
+
+PLATFORMS = {
+    "linux": LinuxPypgoWheelPlatform(),
+    "macos": MacOSPypgoWheelPlatform(),
+    "windows": WindowsPypgoWheelPlatform(),
+}
 
 
 def write_wheel(
     wheel_dir: Path,
     platform: str,
 ) -> Path:
-    contract = get_platform_contract(platform)
-    wheel = wheel_dir / f"pypgo-0.0.4-{contract.expected_tag}.whl"
+    platform_instance = PLATFORMS[platform]
+    wheel = wheel_dir / f"pypgo-0.0.4-{platform_instance.expected_tag}.whl"
     dist_info = "pypgo-0.0.4.dist-info"
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr(
@@ -29,7 +38,7 @@ def write_wheel(
         archive.writestr(
             f"{dist_info}/WHEEL",
             "Wheel-Version: 1.0\n"
-            f"Tag: {contract.expected_tag}\n",
+            f"Tag: {platform_instance.expected_tag}\n",
         )
     return wheel
 
@@ -57,10 +66,12 @@ def record_args(
         encoding="utf-8",
     )
     write_wheel(wheel_dir, platform)
-    contract = get_platform_contract(platform)
+    platform_instance = PLATFORMS[platform]
     audit_evidence = [
         write_file(evidence_dir, name)
-        for name in reversed(contract.required_audit_evidence)
+        for name in reversed(
+            (platform_instance.repair_report, "wheel-linkage.txt")
+        )
     ]
 
     args = argparse.Namespace(
@@ -100,10 +111,10 @@ def test_record_captures_platform_and_sorted_evidence(
     assert record["schema_version"] == 1
     assert record["platform"] == platform
     assert record["wheel"]["tags"] == [
-        get_platform_contract(platform).expected_tag
+        PLATFORMS[platform].expected_tag
     ]
     assert [item["name"] for item in record["audit_evidence"]] == sorted(
-        get_platform_contract(platform).required_audit_evidence
+        (PLATFORMS[platform].repair_report, "wheel-linkage.txt")
     )
     assert [item["name"] for item in record["dependency_evidence"]] == [
         "system-packages.txt",

@@ -8,20 +8,40 @@ import re
 import zipfile
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
-
-from pypgo_wheel.contracts.windows import (
-    WINDOWS_CONTRACT,
-    WINDOWS_FORCED_INCLUDE_DLLS,
-    WINDOWS_UNMANGLED_RUNTIME_DLLS,
-)
+from typing import Final
 
 from pypgo_wheel.audit import WheelArchiveInspection, require
-from pypgo_wheel.common import require_tool, run_capture
+from pypgo_wheel.common import (
+    COMMON_NATIVE_COMPONENTS,
+    MKL_DISPATCH_COMPONENTS,
+    MKL_NATIVE_COMPONENTS,
+    require_tool,
+    run_capture,
+)
+
 from pypgo_wheel.platform import PypgoWheelPlatform
 
 
+WINDOWS_UNMANGLED_RUNTIME_DLLS: Final = (
+    "tbb12.dll",
+    "mkl_core.2.dll",
+    "mkl_tbb_thread.2.dll",
+    *(f"mkl_{component}.2.dll" for component in MKL_DISPATCH_COMPONENTS),
+)
+
+WINDOWS_FORCED_INCLUDE_DLLS: Final = (
+    "gmpxx-4.dll",
+    "mpfr-6.dll",
+    *WINDOWS_UNMANGLED_RUNTIME_DLLS,
+)
+
+
 class WindowsPypgoWheelPlatform(PypgoWheelPlatform):
-    contract = WINDOWS_CONTRACT
+    platform = "windows"
+    platform_tag = "win_amd64"
+    repair_report = "delvewheel.txt"
+    required_native_components = (*COMMON_NATIVE_COMPONENTS, *MKL_NATIVE_COMPONENTS)
+    required_original_runtime_names = WINDOWS_UNMANGLED_RUNTIME_DLLS
     supported_system = "win32"
     supported_machines = frozenset({"amd64", "x86_64"})
 
@@ -106,7 +126,7 @@ class WindowsPypgoWheelPlatform(PypgoWheelPlatform):
             for member in inspection.native_members
         }
         missing_original_names = sorted(
-            set(self.contract.required_original_runtime_names)
+            set(self.required_original_runtime_names)
             - native_filenames
         )
         require(

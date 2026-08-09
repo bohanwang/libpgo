@@ -12,7 +12,6 @@ from pypgo_wheel.audit import AuditError, audit_wheel_archive  # noqa: E402
 from pypgo_wheel_linux import LinuxPypgoWheelPlatform  # noqa: E402
 from pypgo_wheel_macos import MacOSPypgoWheelPlatform  # noqa: E402
 from pypgo_wheel_windows import WindowsPypgoWheelPlatform  # noqa: E402
-from pypgo_wheel.contracts import get_platform_contract  # noqa: E402
 
 
 PROJECT_VERSION = "0.0.4"
@@ -24,7 +23,7 @@ PLATFORMS = {
 REQUIRED_COMPONENT_CASES = tuple(
     (platform, component)
     for platform in ("macos", "linux", "windows")
-    for component in get_platform_contract(platform).required_native_components
+    for component in PLATFORMS[platform].required_native_components
 )
 
 
@@ -47,7 +46,7 @@ def native_members(platform: str) -> dict[str, str]:
             "mkl_core": "pypgo.libs/libmkl_core-deadbeef.so.2",
             "mkl_tbb_thread": "pypgo.libs/libmkl_tbb_thread-deadbeef.so.2",
         }
-        for component in get_platform_contract(platform).required_native_components:
+        for component in PLATFORMS[platform].required_native_components:
             if component.startswith("mkl_") and component not in members:
                 members[component] = f"pypgo.libs/lib{component}.so.2"
         return members
@@ -59,7 +58,7 @@ def native_members(platform: str) -> dict[str, str]:
         "gmpxx": "pypgo.libs/gmpxx-4-b2c3d4e5.dll",
         "mpfr": "pypgo.libs/mpfr-6-c3d4e5f6.dll",
     }
-    for component in get_platform_contract(platform).required_native_components:
+    for component in PLATFORMS[platform].required_native_components:
         if component.startswith("mkl_"):
             members[component] = f"pypgo.libs/{component}.2.dll"
     return members
@@ -76,9 +75,9 @@ def write_synthetic_wheel(
     mangle_original_component: str | None = None,
     extra_members: tuple[str, ...] = (),
 ) -> Path:
-    contract = get_platform_contract(platform)
-    filename_tag = filename_tag or contract.expected_tag
-    metadata_tags = metadata_tags or (contract.expected_tag,)
+    platform_instance = PLATFORMS[platform]
+    filename_tag = filename_tag or platform_instance.expected_tag
+    metadata_tags = metadata_tags or (platform_instance.expected_tag,)
     wheel = tmp_path / f"pypgo-{PROJECT_VERSION}-{filename_tag}.whl"
     members = native_members(platform)
     if remove_component is not None:
@@ -164,7 +163,7 @@ def test_linux_tag_must_match_contract_tag(tmp_path: Path) -> None:
 
 def test_linux_rejects_additional_platform_tag(tmp_path: Path) -> None:
     more_compatible_tag = "cp312-cp312-manylinux_2_27_x86_64"
-    contract_tag = get_platform_contract("linux").expected_tag
+    contract_tag = PLATFORMS["linux"].expected_tag
     wheel = write_synthetic_wheel(
         tmp_path,
         "linux",

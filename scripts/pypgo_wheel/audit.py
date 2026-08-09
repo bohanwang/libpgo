@@ -19,7 +19,7 @@ from packaging.utils import (
 from packaging.version import InvalidVersion, Version
 
 from project_version import read_project_version
-from .contracts.common import RELEASE_DISTRIBUTION, WheelPlatformContract
+from .common import RELEASE_DISTRIBUTION
 
 
 class AuditError(RuntimeError):
@@ -36,7 +36,13 @@ class WheelArchiveInspection:
 
 
 class WheelAuditPlatform(Protocol):
-    contract: WheelPlatformContract
+    platform: str
+    platform_tag: str
+    required_native_components: tuple[str, ...]
+    required_original_runtime_names: tuple[str, ...]
+
+    @property
+    def expected_tag(self) -> str: ...
 
     def native_component_pattern(self, component: str): ...
 
@@ -69,7 +75,7 @@ def missing_native_components(
     filenames = tuple(PurePosixPath(member).name.lower() for member in native_members)
     return [
         component
-        for component in platform.contract.required_native_components
+        for component in platform.required_native_components
         if not any(
             platform.native_component_pattern(component).fullmatch(filename)
             for filename in filenames
@@ -83,7 +89,6 @@ def audit_wheel_archive(
     platform: WheelAuditPlatform,
     project_version: str,
 ) -> WheelArchiveInspection:
-    contract = platform.contract
     try:
         distribution, version, _, filename_tags = parse_wheel_filename(wheel.name)
         expected_version = Version(project_version)
@@ -119,7 +124,7 @@ def audit_wheel_archive(
     try:
         for value in wheel_metadata.get_all("Tag", []):
             metadata_tags.update(parse_tag(value.strip()))
-        expected_tags = parse_tag(contract.expected_tag)
+        expected_tags = parse_tag(platform.expected_tag)
     except ValueError as error:
         raise AuditError(f"invalid wheel compatibility tag: {error}") from error
     frozen_metadata_tags = frozenset(metadata_tags)
@@ -131,7 +136,7 @@ def audit_wheel_archive(
     )
     require(
         filename_tags == expected_tags,
-        f"unexpected compatibility tags for {contract.platform}: "
+        f"unexpected compatibility tags for {platform.platform}: "
         f"expected=[{format_tags(expected_tags)}], "
         f"actual=[{format_tags(filename_tags)}]",
     )

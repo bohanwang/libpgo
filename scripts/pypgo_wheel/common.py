@@ -1,4 +1,4 @@
-"""Shared subprocess and filesystem helpers for pypgo wheel packaging."""
+"""Shared constants, subprocess, and filesystem helpers for pypgo wheel packaging."""
 
 from __future__ import annotations
 
@@ -6,7 +6,36 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Final, Mapping, Sequence
+
+
+RELEASE_DISTRIBUTION: Final = "pypgo"
+PYTHON_TAG: Final = "cp312"
+ABI_TAG: Final = "cp312"
+
+SUPPORTED_PLATFORMS: Final = ("linux", "macos", "windows")
+
+COMMON_NATIVE_COMPONENTS: Final = ("tbb", "gmp", "gmpxx", "mpfr")
+
+MKL_DISPATCH_COMPONENTS: Final = (
+    "def",
+    "mc3",
+    "avx2",
+    "avx512",
+    "vml_def",
+    "vml_cmpt",
+    "vml_mc3",
+    "vml_avx2",
+    "vml_avx512",
+)
+MKL_DISPATCH_LIBRARY_COMPONENTS: Final = tuple(
+    f"mkl_{component}" for component in MKL_DISPATCH_COMPONENTS
+)
+MKL_NATIVE_COMPONENTS: Final = (
+    "mkl_core",
+    "mkl_tbb_thread",
+    *MKL_DISPATCH_LIBRARY_COMPONENTS,
+)
 
 
 class PackagingError(RuntimeError):

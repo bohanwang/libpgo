@@ -7,16 +7,28 @@ import os
 import re
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Final
 
 from pypgo_wheel.audit import require
-from pypgo_wheel.common import PackagingError, require_tool, run_capture
-from pypgo_wheel.contracts.linux import LINUX_CONTRACT, MANYLINUX_TAG
+from pypgo_wheel.common import (
+    COMMON_NATIVE_COMPONENTS,
+    MKL_NATIVE_COMPONENTS,
+    PackagingError,
+    require_tool,
+    run_capture,
+)
 from pypgo_wheel.linux_mkl import restore
 from pypgo_wheel.platform import PypgoWheelPlatform
 
 
+MANYLINUX_TAG: Final = "manylinux_2_28_x86_64"
+
+
 class LinuxPypgoWheelPlatform(PypgoWheelPlatform):
-    contract = LINUX_CONTRACT
+    platform = "linux"
+    platform_tag = MANYLINUX_TAG
+    repair_report = "auditwheel.txt"
+    required_native_components = (*COMMON_NATIVE_COMPONENTS, *MKL_NATIVE_COMPONENTS)
     supported_system = "linux"
     supported_machines = frozenset({"x86_64", "amd64"})
 

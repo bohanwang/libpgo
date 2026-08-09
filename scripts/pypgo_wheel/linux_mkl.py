@@ -16,7 +16,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from .contracts.mkl import MKL_DISPATCH_COMPONENTS
+from .common import MKL_DISPATCH_COMPONENTS
 
 
 def run(*command: str) -> None:

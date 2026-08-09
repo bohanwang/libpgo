@@ -17,23 +17,21 @@ import pypgo_wheel.platform as platform_module  # noqa: E402
 import pypgo_wheel_windows as windows_module  # noqa: E402
 from pypgo_wheel.audit import AuditError  # noqa: E402
 from pypgo_wheel.common import (  # noqa: E402
+    COMMON_NATIVE_COMPONENTS,
     PackagingError,
+    SUPPORTED_PLATFORMS,
     clean_setuptools_wheel_staging,
     exactly_one_wheel,
     prepare_wheel_dir,
 )
-from pypgo_wheel.contracts.common import WheelPlatformContract  # noqa: E402
-from pypgo_wheel.contracts.linux import LINUX_CONTRACT  # noqa: E402
-from pypgo_wheel.contracts.macos import MACOS_CONTRACT  # noqa: E402
-from pypgo_wheel.contracts.windows import (  # noqa: E402
-    WINDOWS_CONTRACT,
-    WINDOWS_FORCED_INCLUDE_DLLS,
-    WINDOWS_UNMANGLED_RUNTIME_DLLS,
-)
 from pypgo_wheel_linux import LinuxPypgoWheelPlatform  # noqa: E402
 from pypgo_wheel_macos import MacOSPypgoWheelPlatform  # noqa: E402
 from pypgo_wheel.platform import PypgoWheelPlatform  # noqa: E402
-from pypgo_wheel_windows import WindowsPypgoWheelPlatform  # noqa: E402
+from pypgo_wheel_windows import (  # noqa: E402
+    WINDOWS_FORCED_INCLUDE_DLLS,
+    WINDOWS_UNMANGLED_RUNTIME_DLLS,
+    WindowsPypgoWheelPlatform,
+)
 
 
 ENTRY_POINTS = (
@@ -43,9 +41,9 @@ ENTRY_POINTS = (
 )
 
 PLATFORM_IMPLEMENTATIONS = (
-    (LinuxPypgoWheelPlatform, LINUX_CONTRACT),
-    (MacOSPypgoWheelPlatform, MACOS_CONTRACT),
-    (WindowsPypgoWheelPlatform, WINDOWS_CONTRACT),
+    LinuxPypgoWheelPlatform,
+    MacOSPypgoWheelPlatform,
+    WindowsPypgoWheelPlatform,
 )
 
 
@@ -144,7 +142,10 @@ def test_release_debug_info_controls_strip_policy(
 
 
 class FakeWheelPlatform(PypgoWheelPlatform):
-    contract = LINUX_CONTRACT
+    platform = "linux"
+    platform_tag = "manylinux_2_28_x86_64"
+    repair_report = "auditwheel.txt"
+    required_native_components = COMMON_NATIVE_COMPONENTS
     supported_system = sys.platform
     supported_machines = frozenset({"test"})
 
@@ -198,15 +199,16 @@ class FakeWheelPlatform(PypgoWheelPlatform):
         return "linkage report\n"
 
 
-@pytest.mark.parametrize(("implementation", "contract"), PLATFORM_IMPLEMENTATIONS)
-def test_platform_implementation_binds_its_contract(
+@pytest.mark.parametrize("implementation", PLATFORM_IMPLEMENTATIONS)
+def test_platform_implementation_declares_release_facts(
     implementation: type[PypgoWheelPlatform],
-    contract: WheelPlatformContract,
 ) -> None:
     platform = implementation()
 
-    assert platform.contract is contract
-    assert platform.platform == contract.platform
+    assert platform.platform in SUPPORTED_PLATFORMS
+    assert platform.expected_tag.endswith(platform.platform_tag)
+    assert platform.repair_report
+    assert platform.required_native_components
 
 
 def test_prepare_wheel_dir_rejects_stale_wheels(tmp_path: Path) -> None:
@@ -323,7 +325,7 @@ def test_base_template_does_not_publish_failed_audit(
     assert not list(wheel_dir.glob("*.whl"))
 
 
-def test_windows_repair_uses_contract_dll_lists(
+def test_windows_repair_uses_declared_dll_lists(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

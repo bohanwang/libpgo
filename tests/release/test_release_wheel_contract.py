@@ -1,5 +1,4 @@
 import sys
-from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
@@ -8,28 +7,29 @@ import pytest
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from pypgo_wheel.contracts import (  # noqa: E402
-    PLATFORM_CONTRACTS,
-    SUPPORTED_PLATFORMS,
-    get_platform_contract,
-)
-from pypgo_wheel.contracts.common import (  # noqa: E402
+from pypgo_wheel.common import (  # noqa: E402
     ABI_TAG,
     COMMON_NATIVE_COMPONENTS,
-    PYTHON_TAG,
-    RELEASE_DISTRIBUTION,
-)
-from pypgo_wheel.contracts.linux import LINUX_CONTRACT  # noqa: E402
-from pypgo_wheel.contracts.macos import MACOS_CONTRACT  # noqa: E402
-from pypgo_wheel.contracts.mkl import (  # noqa: E402
     MKL_DISPATCH_COMPONENTS,
     MKL_DISPATCH_LIBRARY_COMPONENTS,
+    PYTHON_TAG,
+    RELEASE_DISTRIBUTION,
+    SUPPORTED_PLATFORMS,
 )
-from pypgo_wheel.contracts.windows import (  # noqa: E402
-    WINDOWS_CONTRACT,
+from pypgo_wheel_linux import LinuxPypgoWheelPlatform  # noqa: E402
+from pypgo_wheel_macos import MacOSPypgoWheelPlatform  # noqa: E402
+from pypgo_wheel_windows import (  # noqa: E402
     WINDOWS_FORCED_INCLUDE_DLLS,
     WINDOWS_UNMANGLED_RUNTIME_DLLS,
+    WindowsPypgoWheelPlatform,
 )
+
+
+PLATFORM_CLASSES = {
+    "linux": LinuxPypgoWheelPlatform,
+    "macos": MacOSPypgoWheelPlatform,
+    "windows": WindowsPypgoWheelPlatform,
+}
 
 
 def test_shared_release_identity() -> None:
@@ -46,38 +46,30 @@ def test_shared_release_identity() -> None:
         ("windows", "cp312-cp312-win_amd64", "delvewheel.txt"),
     ],
 )
-def test_platform_contracts(
+def test_platform_release_facts(
     platform: str,
     expected_tag: str,
     repair_report: str,
 ) -> None:
-    contract = get_platform_contract(platform)
+    instance = PLATFORM_CLASSES[platform]()
 
-    assert contract.platform == platform
-    assert contract.expected_tag == expected_tag
-    assert contract.repair_report == repair_report
-    assert contract.required_audit_evidence == (
-        repair_report,
-        "wheel-linkage.txt",
-    )
+    assert instance.platform == platform
+    assert instance.expected_tag == expected_tag
+    assert instance.repair_report == repair_report
     assert {"tbb", "gmp", "gmpxx", "mpfr"}.issubset(
-        contract.required_native_components
+        instance.required_native_components
     )
 
 
-def test_supported_platforms_match_contract_keys() -> None:
-    assert set(SUPPORTED_PLATFORMS) == set(PLATFORM_CONTRACTS)
+def test_supported_platforms_match_platform_classes() -> None:
+    assert set(SUPPORTED_PLATFORMS) == set(PLATFORM_CLASSES)
 
 
-def test_registry_uses_platform_module_contracts() -> None:
-    assert PLATFORM_CONTRACTS == {
-        "linux": LINUX_CONTRACT,
-        "macos": MACOS_CONTRACT,
-        "windows": WINDOWS_CONTRACT,
-    }
+def test_every_platform_bundles_common_components() -> None:
     assert all(
-        COMMON_NATIVE_COMPONENTS == contract.required_native_components[:4]
-        for contract in PLATFORM_CONTRACTS.values()
+        tuple(PLATFORM_CLASSES[name]().required_native_components[:4])
+        == COMMON_NATIVE_COMPONENTS
+        for name in SUPPORTED_PLATFORMS
     )
 
 
@@ -93,12 +85,12 @@ def test_mkl_dispatch_names_are_derived_once() -> None:
     )
 
 
-def test_windows_original_runtime_names_are_part_of_its_contract() -> None:
-    windows = get_platform_contract("windows")
+def test_windows_original_runtime_names_are_declared_on_the_platform() -> None:
+    windows = PLATFORM_CLASSES["windows"]()
 
     assert windows.required_original_runtime_names == WINDOWS_UNMANGLED_RUNTIME_DLLS
-    assert not get_platform_contract("linux").required_original_runtime_names
-    assert not get_platform_contract("macos").required_original_runtime_names
+    assert not PLATFORM_CLASSES["linux"]().required_original_runtime_names
+    assert not PLATFORM_CLASSES["macos"]().required_original_runtime_names
 
 
 def test_windows_forced_includes_cover_indirect_and_unmangled_runtimes() -> None:
@@ -109,11 +101,7 @@ def test_windows_forced_includes_cover_indirect_and_unmangled_runtimes() -> None
     )
 
 
-def test_platform_contract_is_immutable() -> None:
-    with pytest.raises(FrozenInstanceError):
-        get_platform_contract("linux").platform_tag = "linux_x86_64"  # type: ignore[misc]
+def test_expected_tag_is_derived_from_shared_and_platform_tags() -> None:
+    linux = PLATFORM_CLASSES["linux"]()
 
-
-def test_unknown_platform_is_rejected() -> None:
-    with pytest.raises(ValueError, match="unsupported release-wheel platform"):
-        get_platform_contract("freebsd")
+    assert linux.expected_tag == f"{PYTHON_TAG}-{ABI_TAG}-{linux.platform_tag}"
