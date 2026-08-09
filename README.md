@@ -1,290 +1,285 @@
-## libpgo: Library for Physically based Simulation (P), Geometric Shape Modeling (G), and Optimization (O)
+# libpgo
+
+## Library for Physically based Simulation (P), Geometric Shape Modeling (G), and Optimization (O)
 
 The library is designed to primarily focus on physically based simulations, geometric shape modeling, and optimization.
 The source code extends [VegaFEM](https://viterbi-web.usc.edu/~jbarbic/vega/) and is designed for academic research purposes.
 
----
+Release information:
 
-## Prebuilt (Experimental)
-The wheel package of following platform have been provided for ease of use. They are in `./dist` folder:
-- Ubuntu 24.04: `ubuntu24.04/pypgo-0.0.3-cp312-cp312-linux_x86_64.whl`. Note that you still need to install `gmp` and `mpfr` as suggested in the prerequisites. You may `apt install` them if needed.
-- Ubuntu 22.04: `ubuntu22.04/pypgo-0.0.2-cp311-cp311-linux_x86_64.whl`. Note that you still need to install `gmp` and `mpfr` as suggested in the prerequisites. You may `apt install` them if needed. This version depends on a lower version of the libc, so it should be more compatible.
-- Windows: `win11/pypgo-0.0.3-cp312-cp312-win_amd64.whl`. The package is built under Windows 11, Visual Studio 2022. In theory, it supports other windows platforms.
-- MacOS Arm: `pypgo-0.0.3-cp312-cp312-macosx_26_0_arm64.whl`. The package is built under Tahoe 26.0.1 on Apple M3.
-
-Do `pip install ./dist/your-chosen.whl` to install the package. Note that the packages are experimental.
+- [Release notes](release-notes.txt)
 
 ---
 
-## Prerequisites
+## Install a prebuilt wheel
 
-1. CMake >= **3.28**\
-    We use several functionalities that are only supported by 3.28+. 
-    > In most cases, both system's CMake and Conda Environment's CMake have a lower version of CMake unfortunately. In this sitation, please install a new CMake into your system. The latest CMake, either pre-built binaries or source files, can be obtained directly from the [official](https://cmake.org/download/) website. Once installed, hook `cmake` to the newly installed one, either by adding the `your-new-cmake/bin` to the front of the `PATH` or by replacing the existing `cmake` executable with the new one.
+Release 0.0.4 is distributed as standalone CPython 3.12 wheels through the
+recorded [GitHub Actions artifacts](https://github.com/annajcy/libpgo/actions).
 
-2. Compilers
-    1. GCC **11, 12, 13** for Ubuntu\
-        We use C++20, so only GCC 11, 12, and 13 are supported. You can get new gcc using `apt` or compile a new one from its source code.
+| Platform | Supported target | Artifact name |
+| --- | --- | --- |
+| Linux | `manylinux_2_28`, x86-64 | `pypgo-0.0.4-manylinux_2_28-x86_64` |
+| macOS | macOS 26+, arm64 | `pypgo-0.0.4-macos-arm64` |
+| Windows | Windows x86-64 | `pypgo-0.0.4-windows-x86_64` |
 
-    2. Apple Clang (We tested on 15.0.0, Mac OS 14.5)\
-        Earlier versions might work if it supports C++20.
+Download the artifact for the release commit. A prebuilt wheel does not
+require Conda or a system installation of MKL, TBB, GMP, or MPFR.
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) first;
+`uv venv` downloads Python 3.12 when it is not already available.
+`uv pip` and `uv run` automatically use the default `.venv`.
 
-    3. Visual Studio 2022 (We tested on 17.9.5, Windows)\
-        Earlier Visual Studio 2022 versions might work.
-
-3. GMP and MPFR for **Ubuntu** and **Mac OS**\
-    This can be installed on Ubuntu by
-
-    ```bash
-        sudo apt install libgmp-dev libmpfr-dev
-    ```
-
-    Or it can be installed on Mac OS by
-
-    ```bash
-        brew install gmp mpfr imath
-    ```
-
-4. (Optional) Ninja\
-    It can be installed by
-
-    ```bash
-        pip install ninja
-    ```
-
-    for better compilation performance
-
-5. (Optional) numpy\
-    This is used for running tests.
-
-## Compilation
-
-Going forward, it is assumed that all specified prerequisites are installed and that a Conda environment is used for python.
-
-Install prerequisites:
+Linux:
 
 ```bash
-    conda install tbb tbb-devel mkl mkl-devel
-    conda install conda-forge::imath
+uv venv --python 3.12
+uv pip install "numpy==2.0.2"
+uv pip install --no-deps \
+  /path/to/pypgo-0.0.4-cp312-cp312-manylinux_2_28_x86_64.whl
+uv run python -c "import pypgo; print(pypgo)"
 ```
 
-### Windows & Ubuntu
-
-Install libpgo:
+macOS 26 arm64:
 
 ```bash
-    cd libpgo
-    pip install .
+uv venv --python 3.12
+uv pip install "numpy==2.0.2"
+uv pip install --no-deps \
+  /path/to/pypgo-0.0.4-cp312-cp312-macosx_26_0_arm64.whl
+uv run python -c "import pypgo; print(pypgo)"
 ```
 
-If `ninja` has been installed, it will compile source files in parallel. If it is not installed,
-set `CMAKE_BUILD_PARALLEL_LEVEL` to `n`, where `n` is the number of threads for compilation, to control the parallel compilation.
+Windows PowerShell:
 
-### Mac OS
+```powershell
+uv venv --python 3.12
+uv pip install "numpy==2.0.2"
+uv pip install --no-deps `
+  C:\path\to\pypgo-0.0.4-cp312-cp312-win_amd64.whl
+uv run python -c "import pypgo; print(pypgo)"
+```
 
-Install libpgo
+Linux and Windows wheels bundle oneMKL, the matching oneTBB runtime, GMP, and
+MPFR. The macOS wheel bundles oneTBB, GMP, and MPFR and links the system
+Accelerate framework. See the
+[prebuilt-wheel guide](docs/guide/build/build-from-wheel.md) for artifact
+download and checksum commands.
+
+## Build from source
+
+Source builds require CMake 3.29 or newer, a C++20 compiler with OpenMP,
+Python 3.12, and network access for pinned FetchContent archives. OpenMP is a
+required configure-time dependency. Unlike a repaired release wheel, a source
+installation may depend on native libraries installed on the build machine.
+
+The repository tracks `.python-version` and a cross-platform `uv.lock`.
+`uv sync --locked` installs the common build/test tools plus the current
+platform's wheel-repair tool; Linux and Windows additionally receive the
+matching Intel MKL/TBB packages through environment markers. It prepares the
+environment but intentionally does not compile or install pypgo. The default
+developer workflow uses the cross-platform full `base` preset, which includes
+the Python extension. The extension can then be imported directly from the build tree through
+`PYTHONPATH`, so an incremental C++ rebuild does not require another
+`pip install`.
+
+### Linux x86-64
+
+Ubuntu or Debian:
 
 ```bash
-    cd libpgo
-    pip install .
+sudo apt update
+sudo apt install -y build-essential git libgmp-dev libmpfr-dev
+
+uv sync --locked
+
+uv run cmake --preset base -G Ninja
+uv run cmake --build --preset base
+uv run ctest --test-dir build/base --output-on-failure
+
+export PYTHONPATH="$PWD/build/base/src/python"
+uv run python -c "import pypgo; print(pypgo)"
+uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py
 ```
+
+On Linux, CMake records the active Python environment's native library
+directory in the build-tree RPATH, so no `LD_LIBRARY_PATH` setup is required.
+The `base` preset selects `PGO_RUNTIME_LAYOUT=SOURCE`; release-wheel builds use
+the separate `WHEEL` layout and leave dependency vendoring to the platform
+repair tool.
+
+Use `gmp-devel` and `mpfr-devel` instead of `libgmp-dev` and `libmpfr-dev` on
+Fedora/RHEL. Intel's `mkl-devel` package installs its matching `tbb-devel`
+dependency into the same virtual environment. GCC supplies the OpenMP headers
+and `libgomp` runtime used by `-fopenmp`. CMake discovers native dependencies
+from the active Python environment and standard platform paths.
+
+### macOS 26 arm64
+
+```bash
+xcode-select --install
+brew install gmp mpfr libomp tbb
+
+uv sync --locked
+
+uv run cmake --preset base -G Ninja
+uv run cmake --build --preset base
+uv run ctest --test-dir build/base --output-on-failure
+
+export PYTHONPATH="$PWD/build/base/src/python"
+uv run python -c "import pypgo; print(pypgo)"
+uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py
+```
+
+AppleClang does not ship an OpenMP runtime. CMake queries
+`brew --prefix libomp` and validates Homebrew's keg-only package automatically.
+This source-built extension also links the Homebrew TBB/GMP/MPFR libraries
+directly, so keep these packages installed while using the environment.
+
+### Windows x86-64
+
+Install Python 3.12 and the Visual Studio 2022 **Desktop development with C++**
+workload. Run the following from an x64 Native Tools PowerShell:
+
+```powershell
+uv sync --locked
+
+uv run cmake --preset base -G Ninja
+uv run cmake --build build\base
+uv run ctest --test-dir build\base --output-on-failure
+
+$env:PYTHONPATH = "$PWD\build\base\src\python"
+uv run python -c "import pypgo; print(pypgo)"
+uv run python -m pytest -q tests\pypgo\test_pgo_smoke.py
+```
+
+Windows source builds use the approved GMP/MPFR files under `third-party`.
+CMake requires the OpenMP support supplied by the Visual Studio C++ workload.
+CMake stages the required GMP/MPFR, oneTBB, and oneMKL runtime DLLs beside
+source-built executables and `pypgo/_pypgo.pyd`; no dependency-specific `PATH`
+configuration is required.
+After the first configure, ordinary C++ edits only require
+`uv run cmake --build --preset base` (add `--target pypgo` when only the
+Python module is needed). Detailed commands and the separate
+release-wheel workflow
+are in the
+[source-build guide](docs/guide/build/build-from-source.md).
+
+CI separates these concerns into a source `build-test` job and a fresh
+`package` job. Release automation runs
+`scripts/release_wheel_provenance.py preflight` after downloading the native
+test evidence. The command rejects a dirty checkout and records the exact
+commit before `uv build --wheel --no-build-isolation` runs. After the repaired
+wheel passes its installed smoke test and Python tests, the `record` command
+requires exactly one wheel, rejects source archives, and records the wheel
+checksum together with the CMake, dependency, test, and runner evidence.
+Evidence and wheel output directories must be outside the source checkout.
+The [self-contained wheel packaging guide](docs/guide/build/package-pypgo-wheels.md)
+documents the local platform entry points. The workflows under
+`.github/workflows` add provenance and clean-job release verification.
 
 ## Usage & Test
 
-We provide three python scripts to test the installation.
+### Test a source build
 
-1. `pgo_test_01.py`. It runs a few basic pgo APIs.
+`uv sync` does not install `pypgo` into the development environment. Point
+Python at the CMake build tree and run the maintained pytest suite instead of
+the removed `pgo_test_01.py` script:
 
-    ```bash
-        cd examples
-        python ../src/python/pypgo/pgo_test_01.py
-    ```
+```bash
+export PYTHONPATH="$PWD/build/base/src/python"
+uv run python -m pytest -q tests/pypgo
+```
 
-    The expected result will look like
+PowerShell uses the equivalent environment variable syntax:
 
-    ```text
-    Opening file torus.veg.
-    #vtx:564
-    #tets:1950
-    164,134,506,563
-    L Info:
-    10067040
-    (10067040,)
-    (10067040,)
-    125.0
-    GTLTLG Info:
-    503400
-    (503400,)
-    (503400,)
-    9695578.0
-    [[  6.958279    0.          0.        -17.495821    0.          0.
-       13.10052     0.          0.         -2.5629783   0.          0.       ]
-     [  0.          6.958279    0.          0.        -17.495821    0.
-        0.         13.10052     0.          0.         -2.5629783   0.       ]
-     [  0.          0.          6.958279    0.          0.        -17.495821
-        0.          0.         13.10052     0.          0.         -2.5629783]
-     [ -5.1109824   0.          0.         10.111505    0.          0.
-        8.160282    0.          0.        -13.160804    0.          0.       ]
-     [  0.         -5.1109824   0.          0.         10.111505    0.
-        0.          8.160282    0.          0.        -13.160804    0.       ]
-     [  0.          0.         -5.1109824   0.          0.         10.111505
-        0.          0.          8.160282    0.          0.        -13.160804 ]
-     [ 23.97409     0.          0.         -6.634346    0.          0.
-       -1.4866991   0.          0.        -15.853046    0.          0.       ]
-     [  0.         23.97409     0.          0.         -6.634346    0.
-        0.         -1.4866991   0.          0.        -15.853046    0.       ]
-     [  0.          0.         23.97409     0.          0.         -6.634346
-        0.          0.         -1.4866991   0.          0.        -15.853046 ]]
-    ```
+```powershell
+$env:PYTHONPATH = "$PWD\build\base\src\python"
+uv run python -m pytest -q tests\pypgo
+```
 
-2. `pgo_run_sim.py`. It reads input config file and run simulation. You can try `box`, `box-with-sphere`, `dragon`, and `dragon-dyn` to test different simulation results. Take the box example for illustration. You can run the box example using the following commands.
-   
-    ```bash
-        python src/python/pypgo/pgo_run_sim.py examples/box/box.json
-    ```
+The same build-tree package exposes the Python command-line modules without
+installing a wheel:
 
-    The expected result will look like the first image. The time integrator is hard-coded as implicit backward Euler (BE). You are free to change it to implicit Newmark (NW) or TR-BDF2 integrator (not support friction).
-    <table style="width: 100%; table-layout: fixed; border-collapse: collapse;">
-        <tr>
-            <th style="width: 50%;text-align:center; border-top: 1px solid #ddd;">Box (NM)</th>
-            <th style="width: 50%;text-align:center; border-top: 1px solid #ddd;">Box with Sphere (NM)</th>
-        </tr>
-        <tr>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box/box.gif" alt="box"></td>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/box-with-sphere/box-with-sphere.gif" alt="box with sphere"></td>
-        </tr>
-        <tr>
-            <th style="width: 50%;text-align:center;">Dragon (BE)</th>
-            <th style="width: 50%;text-align:center;">Bunny (BE)</th>
-        </tr>
-        <tr>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/dragon-dyn/dragon-dyn.gif" alt="dragon"></td>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/bunny/bunny.gif" alt="bunny"></td>
-        </tr>
-        <tr>
-            <th style="width: 50%;text-align:center;">Rest Dragon</th>
-            <th style="width: 50%;text-align:center;">Deformed Dragon</th>           
-        </tr>
-        <tr>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/dragon/dragon-rest.png" alt="dragon rest shape"></td>
-            <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/dragon/dragon-deformed.png" alt="dragon deformed shape"></td>
-        </tr>
-    </table>
+```bash
+export PYTHONPATH="$PWD/build/base/src/python"
+uv run python -m pypgo.pgo_run_sim \
+    examples/configs/volume/box/box-tet-sampled.json
+uv run python -m pypgo.pgo_dump_abc \
+    examples/configs/volume/box/box-tet-sampled-animation.json \
+    build/abc-output
+```
 
-3. `pgo_dump_abc.py`. It creates the abc file that can be used for blender/maya from config file `anim.json`. Essentially, it takes the simulation output `.obj` sequences and output a `.abc` file.
+PowerShell:
 
-    ```bash
-        python src/python/pypgo/pgo_dump_abc.py examples/box/anim.json examples/box/
-    ```
+```powershell
+$env:PYTHONPATH = "$PWD\build\base\src\python"
+uv run python -m pypgo.pgo_run_sim `
+    examples/configs/volume/box/box-tet-sampled.json
+uv run python -m pypgo.pgo_dump_abc `
+    examples/configs/volume/box/box-tet-sampled-animation.json `
+    build\abc-output
+```
 
-    The `convertAnimation` tool provides the same conversion on the CLI:
+These modules use the same `main()` implementations as the console commands
+installed by a wheel.
 
-    ```bash
-        convertAnimation examples/box/anim.json
-    ```
+### Use an installed wheel
 
-    If the optional second argument is omitted, the tool writes `.abc` files into the folder containing `anim.json`, and each output filename uses the mesh `name` field from the config.
+Installing the `pypgo` wheel provides three console commands. When the wheel is
+installed in the current uv environment, run a simulation with:
+
+```bash
+uv run pgo-run-sim \
+    examples/configs/volume/box/box-tet-sampled.json
+```
+
+The command returns the simulation status as its process exit code. The time
+integrator is selected by the configuration file.
+
+<table style="width: 100%; table-layout: fixed; border-collapse: collapse;">
+    <tr>
+        <th style="width: 50%;text-align:center; border-top: 1px solid #ddd;">Box (NM)</th>
+        <th style="width: 50%;text-align:center; border-top: 1px solid #ddd;">Box with Sphere (NM)</th>
+    </tr>
+    <tr>
+        <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/box.gif" alt="box"></td>
+        <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/box-with-sphere.gif" alt="box with sphere"></td>
+    </tr>
+    <tr>
+        <th style="width: 50%;text-align:center;">Dragon (BE)</th>
+        <th style="width: 50%;text-align:center;">Bunny (BE)</th>
+    </tr>
+    <tr>
+        <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/dragon-dynamic.gif" alt="dragon"></td>
+        <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/bunny.gif" alt="bunny"></td>
+    </tr>
+    <tr>
+        <th style="width: 50%;text-align:center;">Rest Dragon</th>
+        <th style="width: 50%;text-align:center;">Deformed Dragon</th>
+    </tr>
+    <tr>
+        <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/dragon-rest.png" alt="dragon rest shape"></td>
+        <td style="text-align: center; border-bottom: 1px solid #ddd;"><img src="./examples/assets/media/dragon-deformed.png" alt="dragon deformed shape"></td>
+    </tr>
+</table>
+
+Convert an OBJ animation sequence to Alembic files with:
+
+```bash
+uv run pgo-dump-abc \
+    examples/configs/volume/box/box-tet-sampled-animation.json \
+    build/abc-output
+```
+
+The second argument is the output folder. The standalone `convertAnimation`
+C++ tool provides the same conversion and retains its existing optional-output
+behavior.
 
 ## Tools
 
-### Cubic Mesher
-
-`cubicMesher` converts a closed triangle surface mesh in `.obj` format into a cubic volumetric `.veg` mesh and can optionally export the extracted cubic surface as `.obj`.
-
-Build the tool:
-
-```bash
-    cmake --preset base_no_mkl
-    cmake --build build/base_no_mkl --target cubicMesher
-```
-
-Basic usage:
-
-```bash
-    build/base_no_mkl/bin/cubicMesher \
-        --input-mesh examples/cubic/box/box.obj \
-        --resolution 4 \
-        --output-mesh examples/cubic/box/box.veg \
-        --output-surface examples/cubic/box/box-surface.obj \
-        --E 10000000 \
-        --nu 0.45 \
-        --density 1000
-```
-
-Main arguments:
-
-- `--input-mesh`: input closed triangle mesh in `.obj`
-- `--resolution`: number of cubic cells along the shortest input AABB edge
-- `--output-mesh`: output cubic `.veg`
-- `--output-surface`: optional extracted surface `.obj`
-- `--E`, `--nu`, `--density`: isotropic material parameters written into the output mesh
-
-Generated sample cubic assets are stored under `examples/cubic/`. See [`examples/cubic/README.md`](./examples/cubic/README.md) for the exact commands and parameters used for `box`, `box-hang`, `bunny`, `dragon-dyn`, and `box-with-sphere`.
-
-### Shell Simulation
-
-Build the shell simulation CLI:
-
-```bash
-    cmake --preset base_no_mkl
-    cmake --build build/base_no_mkl --target runShellSim
-```
-
-Run the bundled shell example:
-
-```bash
-    build/base_no_mkl/bin/runShellSim examples/shell/shell.json
-```
-
-To also write the command-line output to `examples/shell/shell.log`, add `--log`:
-
-```bash
-    build/base_no_mkl/bin/runShellSim examples/shell/shell.json --log
-```
-
----
-
-## Setup without Python (Optional)
-
-If you want to use the library with your C++ code or modify the source code, you may build it without python.
-
-### Windows & Ubuntu
-
-To compile the lib with a basic functionality,
-
-```bash
-    cd libpgo
-    mkdir build
-    cd build
-    cmake ..
-```
-
-To enable all functionalities, Install [MKL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html). Then,
-
-```bash
-    cd libpgo
-    mkdir build
-    cd build
-    cmake .. -DPGO_USE_MKL=1 -DPGO_ENABLE_FULL=1
-```
-
-> On Windows, a few extra steps are need before running the above commands. First, the library should be configured in "x64 Native Tools Command Prompt for VS 2022". In addition, before running the commands above, run `c:\Program Files (x86)\Intel\oneAPI\setvars.bat` to setup the environments for MKL, where `c:\Program Files (x86)\Intel\oneAPI` is the path to the oneAPI installation. Once setup, run above commands.
-
-> On Ubuntu, a similar procedure is needed. Before configuring the library, run `bash /opt/intel/oneapi/setvars.sh` to setup the MKL environments for the subsequent cmake configuration.
-
-### Mac OS
-
-To have a basic functionality, use CMake to compile it like on Windows & Ubuntu.
-
-To enable all functionalities,
-
-```bash
-    cd libpgo
-    mkdir build
-    cd build
-    cmake .. -DPGO_ENABLE_FULL=1 -DDPGO_ENABLE_ALEMBIC=1 -DPGO_ENABLE_GMSH=1
-```
-The last two flags work only if you have imath and gmesh libs.
+The full source build includes simulation, animation conversion, cubic/tet
+meshing, and surface-processing executables. See the complete
+[`src/tools` command-line reference](./src/tools/README.md) for target
+availability, arguments, and examples.
 
 ---
 
@@ -306,7 +301,7 @@ In instances where specific licensing details are not provided within a source f
 ## TODO
 
 - [x] Functional and compilable on three major platforms.
-- [ ] Documentation
+- [x] Documentation
 - [ ] More python interface
 - [ ] Cleanup source code with non-MIT/non-FreeBSD licence.
 - [ ] GUI

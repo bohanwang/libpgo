@@ -11,10 +11,27 @@ target_compile_definitions(pypgo PRIVATE VERSION_INFO=${PYPGO_VERSION_INFO})
 
 pybind11_extension(pypgo)
 
-if(NOT MSVC AND NOT ${CMAKE_BUILD_TYPE} MATCHES Debug|RelWithDebInfo)
-    # Strip unnecessary sections of the binary on Linux/macOS
+pgo_should_strip_release_binary(PGO_STRIP_PYTHON_EXTENSION)
+if(PGO_STRIP_PYTHON_EXTENSION)
+    # Keep Release symbols for source diagnostics, but strip release wheels.
     pybind11_strip(pypgo)
 endif()
 
-set_target_properties(pypgo PROPERTIES CXX_VISIBILITY_PRESET "hidden"
+set_target_properties(pypgo PROPERTIES OUTPUT_NAME "_pypgo"
+    CXX_VISIBILITY_PRESET "hidden"
     CUDA_VISIBILITY_PRESET "hidden")
+
+add_custom_command(
+    TARGET pypgo
+    POST_BUILD
+    COMMAND
+        ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/__init__.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/pgo_run_sim.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/pgo_dump_abc.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/pgo_run_cases.py"
+        "$<TARGET_FILE_DIR:pypgo>"
+    COMMENT "Staging the pypgo Python package beside $<TARGET_FILE_NAME:pypgo>"
+    VERBATIM)
+
+pgo_attach_runtime_dependencies(pypgo COPY_RUNTIME WHEEL_EXTENSION)

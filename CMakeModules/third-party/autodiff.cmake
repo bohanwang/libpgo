@@ -13,9 +13,9 @@ include(FetchContent)
 FetchContent_Declare(
   autodiff_pkg
   URL https://github.com/autodiff/autodiff/archive/refs/tags/v1.1.2.tar.gz
+  URL_HASH SHA256=86f68aabdae1eed214bfbf0ddaa182c78ea1bb99e4df404efb7b94d30e06b744
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
-  FIND_PACKAGE_ARGS NAMES autodiff
 )
 
 FetchContent_MakeAvailable(autodiff_pkg)

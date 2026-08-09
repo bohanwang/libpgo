@@ -5,6 +5,7 @@ copyright to Bohan Wang
 #include "surfaceIPCTopology.h"
 
 #include <set>
+#include <stdexcept>
 
 namespace pgo
 {
@@ -15,7 +16,21 @@ namespace CIPC
 
 void SurfaceIPCTopology::setMesh(const EigenSupport::MXd &V, const EigenSupport::MXi &F)
 {
+  setMesh(V, F, std::vector<uint8_t>(static_cast<std::size_t>(V.rows()), uint8_t{ 1 }));
+}
+
+void SurfaceIPCTopology::setMesh(const EigenSupport::MXd &V, const EigenSupport::MXi &F,
+  const std::vector<uint8_t> &vertexIsDeformableMask)
+{
   numVerts = static_cast<int>(V.rows());
+  if (vertexIsDeformableMask.size() != static_cast<std::size_t>(numVerts))
+    throw std::invalid_argument("SurfaceIPCTopology deformable-role mask length must equal the number of mesh vertices.");
+  for (uint8_t value : vertexIsDeformableMask) {
+    if (value > 1)
+      throw std::invalid_argument("SurfaceIPCTopology deformable-role mask entries must be 0 or 1.");
+  }
+  vertexIsDeformable = vertexIsDeformableMask;
+
   triangles.resize(F.rows());
   for (int i = 0; i < static_cast<int>(F.rows()); ++i)
     triangles[i] = { F(i, 0), F(i, 1), F(i, 2) };
@@ -36,6 +51,20 @@ void SurfaceIPCTopology::setMesh(const EigenSupport::MXd &V, const EigenSupport:
 
   const int nTri = static_cast<int>(triangles.size());
   const int nEdge = static_cast<int>(edges.size());
+
+  triangleHasDeformableVertex.resize(nTri);
+  for (int fi = 0; fi < nTri; ++fi) {
+    const auto &tri = triangles[fi];
+    triangleHasDeformableVertex[fi] = static_cast<uint8_t>(
+      isVertexDeformable(tri[0]) || isVertexDeformable(tri[1]) || isVertexDeformable(tri[2]));
+  }
+
+  edgeHasDeformableVertex.resize(nEdge);
+  for (int ei = 0; ei < nEdge; ++ei) {
+    const auto &edge = edges[ei];
+    edgeHasDeformableVertex[ei] = static_cast<uint8_t>(
+      isVertexDeformable(edge[0]) || isVertexDeformable(edge[1]));
+  }
 
   triArea.resize(nTri);
   for (int fi = 0; fi < nTri; ++fi) {

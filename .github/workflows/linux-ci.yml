@@ -1,0 +1,304 @@
+name: Linux CI
+
+on:
+  push:
+    branches: [main, "release/**", add-no-conda]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-test:
+    name: Full build and test on manylinux_2_28 x86-64
+    runs-on: ubuntu-24.04
+    container: quay.io/pypa/manylinux_2_28_x86_64
+    timeout-minutes: 150
+
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up native and uv dependencies
+        run: |
+          dnf install -y gmp-devel mpfr-devel
+          uv_version="$(/opt/python/cp312-cp312/bin/python scripts/uv_version.py)"
+          /opt/python/cp312-cp312/bin/python -m pip install "uv==${uv_version}"
+          echo "/opt/python/cp312-cp312/bin" >> "${GITHUB_PATH}"
+          /opt/python/cp312-cp312/bin/uv sync --locked \
+            --python /opt/python/cp312-cp312/bin/python
+          echo "EVIDENCE_DIR=${RUNNER_TEMP}/native-evidence" >> "${GITHUB_ENV}"
+          echo "PYPGO_VERSION=$(/opt/python/cp312-cp312/bin/uv run python scripts/project_version.py)" >> "${GITHUB_ENV}"
+
+      - name: Record dependency environment
+        run: |
+          mkdir -p "${EVIDENCE_DIR}"
+          uv pip freeze | tee "${EVIDENCE_DIR}/uv-freeze.txt"
+          rpm -q gmp-devel mpfr-devel | tee "${EVIDENCE_DIR}/system-packages.txt"
+          {
+            uv --version
+            uv run python --version
+            uv run cmake --version
+            uv run ninja --version
+            c++ --version
+            uv run python -c "import sys; print('python_prefix=' + sys.prefix)"
+          } | tee "${EVIDENCE_DIR}/toolchain.txt"
+
+      - name: Build and test the full source tree
+        run: |
+          uv run cmake --preset base -G Ninja
+          grep -F 'PGO_PORTABLE_BUILD:BOOL=OFF' build/base/CMakeCache.txt
+          grep -F 'PGO_RUNTIME_LAYOUT:STRING=SOURCE' build/base/CMakeCache.txt
+          uv run cmake --build build/base --parallel 4
+          env -u LD_LIBRARY_PATH \
+            uv run ctest --test-dir build/base --output-on-failure \
+            | tee "${EVIDENCE_DIR}/ctest.txt"
+          env -u LD_LIBRARY_PATH \
+            PYTHONPATH="${GITHUB_WORKSPACE}/build/base/src/python" \
+            uv run python -m pytest -q tests/pypgo/test_pgo_smoke.py \
+            | tee "${EVIDENCE_DIR}/build-tree-pytest.txt"
+          cp build/base/CMakeCache.txt "${EVIDENCE_DIR}/CMakeCache.txt"
+
+      - name: Upload native test evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pypgo-native-evidence-linux
+          path: ${{ env.EVIDENCE_DIR }}
+          if-no-files-found: error
+          retention-days: 1
+
+  package-candidate:
+    name: Package and audit candidate wheel
+    needs: build-test
+    runs-on: ubuntu-24.04
+    container: quay.io/pypa/manylinux_2_28_x86_64
+    timeout-minutes: 150
+
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up native and uv dependencies
+        run: |
+          dnf install -y gmp-devel mpfr-devel
+          uv_version="$(/opt/python/cp312-cp312/bin/python scripts/uv_version.py)"
+          /opt/python/cp312-cp312/bin/python -m pip install "uv==${uv_version}"
+          echo "/opt/python/cp312-cp312/bin" >> "${GITHUB_PATH}"
+          /opt/python/cp312-cp312/bin/uv sync --locked \
+            --python /opt/python/cp312-cp312/bin/python
+          echo "WHEEL_DIR=${RUNNER_TEMP}/wheelhouse" >> "${GITHUB_ENV}"
+          echo "EVIDENCE_DIR=${RUNNER_TEMP}/evidence" >> "${GITHUB_ENV}"
+          echo "CANDIDATE_DIR=${RUNNER_TEMP}/candidate" >> "${GITHUB_ENV}"
+
+      - name: Download native test evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pypgo-native-evidence-linux
+          path: ${{ env.EVIDENCE_DIR }}
+
+      - name: Record package dependency environment
+        run: |
+          uv pip freeze | tee "${EVIDENCE_DIR}/package-uv-freeze.txt"
+          rpm -q gmp-devel mpfr-devel | tee "${EVIDENCE_DIR}/package-system-packages.txt"
+          {
+            uv --version
+            uv run python --version
+            uv run cmake --version
+            uv run ninja --version
+            c++ --version
+            uv run python -c "import sys; print('python_prefix=' + sys.prefix)"
+          } | tee "${EVIDENCE_DIR}/package-toolchain.txt"
+
+      - name: Lock source provenance
+        run: |
+          uv run python scripts/release_wheel_provenance.py preflight \
+            --evidence-dir "${EVIDENCE_DIR}"
+
+      - name: Build, repair, and audit wheel
+        run: |
+          uv run python scripts/pypgo_wheel_linux.py package \
+            --wheel-dir "${WHEEL_DIR}" \
+            --report-dir "${EVIDENCE_DIR}"
+
+      - name: Assemble candidate artifact
+        run: |
+          mkdir -p \
+            "${CANDIDATE_DIR}/wheelhouse" \
+            "${CANDIDATE_DIR}/evidence" \
+            "${CANDIDATE_DIR}/verify/scripts" \
+            "${CANDIDATE_DIR}/verify/tests/pypgo" \
+            "${CANDIDATE_DIR}/verify/examples/assets/common"
+          cp "${WHEEL_DIR}"/*.whl "${CANDIDATE_DIR}/wheelhouse/"
+          cp -R "${EVIDENCE_DIR}/." "${CANDIDATE_DIR}/evidence/"
+          cp pyproject.toml "${CANDIDATE_DIR}/verify/"
+          cp scripts/installed_wheel_smoke.py scripts/project_version.py \
+            "${CANDIDATE_DIR}/verify/scripts/"
+          cp tests/pypgo/test_pgo_smoke.py "${CANDIDATE_DIR}/verify/tests/pypgo/"
+          cp -R tests/pypgo/assets "${CANDIDATE_DIR}/verify/tests/pypgo/"
+          cp examples/assets/common/torus-tet.veg \
+            "${CANDIDATE_DIR}/verify/examples/assets/common/"
+          uv run python scripts/uv_version.py > "${CANDIDATE_DIR}/verify/uv-version.txt"
+
+      - name: Upload candidate wheel and verification bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pypgo-candidate-linux
+          path: ${{ env.CANDIDATE_DIR }}
+          if-no-files-found: error
+          retention-days: 1
+
+  verify-installed-wheel:
+    name: Verify installed wheel in a clean job
+    needs: package-candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Download candidate wheel and test bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pypgo-candidate-linux
+          path: ${{ runner.temp }}/candidate
+
+      - name: Install wheel in a fresh environment
+        run: |
+          verify_dir="${RUNNER_TEMP}/candidate/verify"
+          uv_version="$(cat "${verify_dir}/uv-version.txt")"
+          python -m pip install "uv==${uv_version}"
+          uv venv --python 3.12 "${RUNNER_TEMP}/pypgo-runtime"
+          runtime_python="${RUNNER_TEMP}/pypgo-runtime/bin/python"
+          uv pip install --python "${runtime_python}" "numpy==2.0.2" "pytest==8.4.2"
+          wheel="$(find "${RUNNER_TEMP}/candidate/wheelhouse" -maxdepth 1 -name '*.whl' -print -quit)"
+          uv pip install --python "${runtime_python}" --no-deps "${wheel}"
+          echo "VERIFY_DIR=${verify_dir}" >> "${GITHUB_ENV}"
+          echo "RUNTIME_PYTHON=${runtime_python}" >> "${GITHUB_ENV}"
+          echo "WHEEL=${wheel}" >> "${GITHUB_ENV}"
+          echo "EVIDENCE_DIR=${RUNNER_TEMP}/verification-evidence" >> "${GITHUB_ENV}"
+
+      - name: Test the installed package
+        run: |
+          mkdir -p "${EVIDENCE_DIR}"
+          uv pip freeze --python "${RUNTIME_PYTHON}" \
+            | tee "${EVIDENCE_DIR}/verification-uv-freeze.txt"
+          {
+            uv --version
+            "${RUNTIME_PYTHON}" --version
+          } | tee "${EVIDENCE_DIR}/verification-toolchain.txt"
+          cd "${VERIFY_DIR}"
+          env -u LD_LIBRARY_PATH \
+            "${RUNTIME_PYTHON}" scripts/installed_wheel_smoke.py \
+              --platform linux --source-dir "${VERIFY_DIR}" \
+            | tee "${EVIDENCE_DIR}/installed-smoke.txt"
+          env -u LD_LIBRARY_PATH \
+            "${RUNTIME_PYTHON}" -m pytest -q tests/pypgo/test_pgo_smoke.py \
+            | tee "${EVIDENCE_DIR}/installed-pytest.txt"
+
+      - name: Test installed CLI tools through uv tool
+        run: |
+          cd "${VERIFY_DIR}"
+          env -u LD_LIBRARY_PATH \
+            uv tool run --isolated --with "numpy==2.0.2" \
+              --from "${WHEEL}" pgo-run-sim \
+              tests/pypgo/assets/installed-cli-sim.json \
+            | tee "${EVIDENCE_DIR}/installed-cli-run-sim.txt"
+          test -s tests/pypgo/assets/cli-output/simulation/ret0000.obj
+          mkdir -p cli-output/alembic
+          env -u LD_LIBRARY_PATH \
+            uv tool run --isolated --with "numpy==2.0.2" \
+              --from "${WHEEL}" pgo-dump-abc \
+              tests/pypgo/assets/installed-cli-animation.json \
+              cli-output/alembic \
+            | tee "${EVIDENCE_DIR}/installed-cli-dump-abc.txt"
+          test -s cli-output/alembic/installed-wheel-smoke.abc
+          env -u LD_LIBRARY_PATH \
+            uv tool run --isolated --with "numpy==2.0.2" \
+              --from "${WHEEL}" pgo-run-cases \
+              tests/pypgo/assets/installed-cli-cases.json --dry-run \
+            | tee "${EVIDENCE_DIR}/installed-cli-run-cases.txt"
+
+      - name: Upload installed-wheel test evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pypgo-verification-evidence-linux
+          path: ${{ env.EVIDENCE_DIR }}
+          if-no-files-found: error
+          retention-days: 1
+
+  finalize-release:
+    name: Finalize release artifact
+    needs: verify-installed-wheel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Download candidate wheel
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pypgo-candidate-linux
+          path: ${{ runner.temp }}/candidate
+
+      - name: Download installed-wheel test evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pypgo-verification-evidence-linux
+          path: ${{ runner.temp }}/candidate/evidence
+
+      - name: Record provenance and checksum
+        run: |
+          evidence_dir="${RUNNER_TEMP}/candidate/evidence"
+          wheel_dir="${RUNNER_TEMP}/candidate/wheelhouse"
+          python scripts/release_wheel_provenance.py record \
+            --platform linux \
+            --evidence-dir "${evidence_dir}" \
+            --wheel-dir "${wheel_dir}" \
+            --cmake-cache "${evidence_dir}/CMakeCache.txt" \
+            --dependency-evidence "${evidence_dir}/uv-freeze.txt" \
+            --dependency-evidence "${evidence_dir}/system-packages.txt" \
+            --dependency-evidence "${evidence_dir}/toolchain.txt" \
+            --dependency-evidence "${evidence_dir}/package-uv-freeze.txt" \
+            --dependency-evidence "${evidence_dir}/package-system-packages.txt" \
+            --dependency-evidence "${evidence_dir}/package-toolchain.txt" \
+            --dependency-evidence "${evidence_dir}/verification-uv-freeze.txt" \
+            --dependency-evidence "${evidence_dir}/verification-toolchain.txt" \
+            --audit-evidence "${evidence_dir}/auditwheel.txt" \
+            --audit-evidence "${evidence_dir}/wheel-linkage.txt" \
+            --test-evidence "${evidence_dir}/ctest.txt" \
+            --test-evidence "${evidence_dir}/build-tree-pytest.txt" \
+            --test-evidence "${evidence_dir}/installed-smoke.txt" \
+            --test-evidence "${evidence_dir}/installed-pytest.txt" \
+            --test-evidence "${evidence_dir}/installed-cli-run-sim.txt" \
+            --test-evidence "${evidence_dir}/installed-cli-dump-abc.txt"
+          sha256sum "${wheel_dir}"/*.whl | tee "${evidence_dir}/wheel.sha256"
+          echo "PYPGO_VERSION=$(python scripts/project_version.py)" >> "${GITHUB_ENV}"
+
+      - name: Upload release-ready wheel and evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pypgo-${{ env.PYPGO_VERSION }}-manylinux_2_28-x86_64
+          path: |
+            ${{ runner.temp }}/candidate/wheelhouse/*.whl
+            ${{ runner.temp }}/candidate/evidence
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,14 @@
+{
+  "meshes": [
+    {
+      "name": "dragon-tet-ipc",
+      "driving-mesh": "../../../assets/volume/dragon/dragon.obj",
+      "sequence": "../../../generated/output/dragon-dynamic-tet-ipc/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        400
+      ]
+    }
+  ]
+}

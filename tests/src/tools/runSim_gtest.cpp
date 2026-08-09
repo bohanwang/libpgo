@@ -13,6 +13,7 @@
 #include "runSimCliLogging.h"
 #include "runSimFEMSetup.h"
 #include "runSimVolumeMeshIO.h"
+#include "simulationRunner.h"
 #include "simulationMesh.h"
 #include "tetMesh.h"
 #include "triangleMeshExternalContactHandler.h"
@@ -45,26 +46,6 @@ constexpr const char *kTetBoxVegPath = LIBPGO_TEST_TET_BOX_VEG;
 constexpr const char *kTetBoxObjPath = LIBPGO_TEST_TET_BOX_OBJ;
 constexpr const char *kCubicBoxVegPath = LIBPGO_TEST_CUBIC_BOX_VEG;
 constexpr const char *kCubicBoxObjPath = LIBPGO_TEST_CUBIC_BOX_OBJ;
-constexpr const char *kShellJsonPath = LIBPGO_TEST_SHELL_JSON;
-
-std::string quotePath(const fs::path &path)
-{
-  return "\"" + path.string() + "\"";
-}
-
-std::string shellExecutable(const fs::path &path)
-{
-#ifdef _WIN32
-  return "call " + quotePath(path);
-#else
-  return quotePath(path);
-#endif
-}
-
-int runCommand(const std::string &command)
-{
-  return std::system(command.c_str());
-}
 
 class ScopedTempDir
 {
@@ -122,53 +103,6 @@ std::string tetConfigPath()
 std::string cubicConfigPath()
 {
   return (cubicExampleDir() / "box.json").string();
-}
-
-fs::path shellExampleDir()
-{
-  return fs::path(kShellJsonPath).parent_path();
-}
-
-fs::path runShellSimBinaryPath()
-{
-  if (std::string(PGO_TEST_RUN_SHELL_SIM_BIN).empty())
-    return {};
-
-  return fs::path(PGO_TEST_RUN_SHELL_SIM_BIN);
-}
-
-std::string makeShellSimConfig(const fs::path &surfaceMeshPath, const fs::path &fixedVerticesPath,
-  const fs::path &outputDir, int numTimesteps, int dumpInterval, double contactStiffness = 0.0)
-{
-  std::ostringstream json;
-  json << "{\n"
-       << "  \"surface-mesh\": " << quotePath(surfaceMeshPath) << ",\n"
-       << "  \"fixed-vertices\": [\n"
-       << "    {\n"
-       << "      \"filename\": " << quotePath(fixedVerticesPath) << ",\n"
-       << "      \"movement\": [0, 0, 0],\n"
-       << "      \"coeff\": 1e5\n"
-       << "    }\n"
-       << "  ],\n"
-       << "  \"g\": [0, -9.81, 0],\n"
-       << "  \"init-vel\": [0, 0, 0],\n"
-       << "  \"init-disp\": [0, 0, 0],\n"
-       << "  \"scale\": 1.0,\n"
-       << "  \"timestep\": 0.001,\n"
-       << "  \"num-timestep\": " << numTimesteps << ",\n"
-       << "  \"damping-params\": [0, 0],\n"
-       << "  \"sim-type\": \"dynamic\",\n"
-       << "  \"contact-stiffness\": " << contactStiffness << ",\n"
-       << "  \"contact-samples\": 1,\n"
-       << "  \"contact-friction-coeff\": 0.0,\n"
-       << "  \"contact-vel-eps\": 1e-5,\n"
-       << "  \"solver-eps\": 1e-4,\n"
-       << "  \"solver-max-iter\": 5,\n"
-       << "  \"elastic-material\": \"koiter-stvk\",\n"
-       << "  \"dump-interval\": " << dumpInterval << ",\n"
-       << "  \"output\": " << quotePath(outputDir) << "\n"
-       << "}";
-  return json.str();
 }
 
 VolumeMeshInputConfig parseConfig(const char *key, const char *filename, const std::string &configFilename)
@@ -339,7 +273,7 @@ TEST(RunSimVolumeMeshIOGTest, AcceptsLegacyTetMeshKey)
 {
   const VolumeMeshInputConfig config = parseConfig("tet-mesh", "box.veg", tetConfigPath());
   EXPECT_EQ(config.configKey, "tet-mesh");
-  EXPECT_EQ(config.meshFilename, kTetBoxVegPath);
+  EXPECT_EQ(fs::path(config.meshFilename), fs::path(kTetBoxVegPath));
   EXPECT_EQ(config.expectedElementType, VolumetricMesh::TET);
 
   pgo::VolumetricMeshes::TetMesh referenceMesh(kTetBoxVegPath);
@@ -353,7 +287,7 @@ TEST(RunSimVolumeMeshIOGTest, AcceptsCubicMeshKey)
 {
   const VolumeMeshInputConfig config = parseConfig("cubic-mesh", "box.veg", cubicConfigPath());
   EXPECT_EQ(config.configKey, "cubic-mesh");
-  EXPECT_EQ(config.meshFilename, kCubicBoxVegPath);
+  EXPECT_EQ(fs::path(config.meshFilename), fs::path(kCubicBoxVegPath));
   EXPECT_EQ(config.expectedElementType, VolumetricMesh::CUBIC);
 
   pgo::VolumetricMeshes::CubicMesh referenceMesh(kCubicBoxVegPath);
@@ -413,12 +347,12 @@ TEST(RunSimVolumeMeshIOGTest, ResolvesCubicExamplePathsAgainstConfigDirectory)
   config.handle()["external-objects"] = nlohmann::json::array({ { { "filename", "../bottom.obj" }, { "movement", { 0.0, 0.0, 0.0 } } } });
 
   const ResolvedRunSimPaths paths = resolvePaths(config, cubicConfigPath());
-  EXPECT_EQ(paths.surfaceMeshFilename, kCubicBoxObjPath);
-  EXPECT_EQ(paths.outputPath, (cubicExampleDir() / "ret-cubic-box").string());
+  EXPECT_EQ(fs::path(paths.surfaceMeshFilename), fs::path(kCubicBoxObjPath));
+  EXPECT_EQ(fs::path(paths.outputPath), cubicExampleDir() / "ret-cubic-box");
   ASSERT_EQ(paths.fixedVertexFilenames.size(), 1u);
-  EXPECT_EQ(paths.fixedVertexFilenames[0], (cubicExampleDir() / "fixed.txt").string());
+  EXPECT_EQ(fs::path(paths.fixedVertexFilenames[0]), cubicExampleDir() / "fixed.txt");
   ASSERT_EQ(paths.externalObjectFilenames.size(), 1u);
-  EXPECT_EQ(paths.externalObjectFilenames[0], (cubicExampleDir() / "../bottom.obj").lexically_normal().string());
+  EXPECT_EQ(fs::path(paths.externalObjectFilenames[0]), (cubicExampleDir() / "../bottom.obj").lexically_normal());
 }
 
 TEST(RunSimVolumeMeshIOGTest, ResolvesLegacyTetExamplePathsAgainstConfigDirectory)
@@ -431,10 +365,10 @@ TEST(RunSimVolumeMeshIOGTest, ResolvesLegacyTetExamplePathsAgainstConfigDirector
   config.handle()["external-objects"] = nlohmann::json::array({ { { "filename", "../bottom.obj" }, { "movement", { 0.0, 0.0, 0.0 } } } });
 
   const ResolvedRunSimPaths paths = resolvePaths(config, tetConfigPath());
-  EXPECT_EQ(paths.surfaceMeshFilename, kTetBoxObjPath);
-  EXPECT_EQ(paths.outputPath, (tetExampleDir() / "ret-box").string());
+  EXPECT_EQ(fs::path(paths.surfaceMeshFilename), fs::path(kTetBoxObjPath));
+  EXPECT_EQ(fs::path(paths.outputPath), tetExampleDir() / "ret-box");
   ASSERT_EQ(paths.externalObjectFilenames.size(), 1u);
-  EXPECT_EQ(paths.externalObjectFilenames[0], (tetExampleDir() / "../bottom.obj").lexically_normal().string());
+  EXPECT_EQ(fs::path(paths.externalObjectFilenames[0]), (tetExampleDir() / "../bottom.obj").lexically_normal());
 }
 
 TEST(RunSimCliLoggingGTest, DerivesDefaultLogPathFromConfigPath)
@@ -472,35 +406,6 @@ TEST(RunSimCliLoggingGTest, RedirectsStdoutAndStderrToLogFile)
   EXPECT_EQ(afterContents.find("stderr restored check"), std::string::npos);
 }
 
-TEST(RunShellSimCliLoggingGTest, LogFlagWritesCliOutputNextToConfig)
-{
-  const fs::path binary = runShellSimBinaryPath();
-  ASSERT_FALSE(binary.empty());
-  ASSERT_TRUE(fs::exists(binary));
-
-  ScopedTempDir tempDir;
-  const fs::path configPath = tempDir.path() / "shell-log-test.json";
-  const fs::path logPath = tempDir.path() / "shell-log-test.log";
-  const fs::path outputDir = tempDir.path() / "shell-output";
-  const fs::path surfaceMeshPath = shellExampleDir() / "shell.obj";
-  const fs::path fixedVerticesPath = shellExampleDir() / "shell-fixed.txt";
-
-  writeTextFile(configPath, makeShellSimConfig(surfaceMeshPath, fixedVerticesPath, outputDir, 0, 1));
-
-  std::ostringstream command;
-  command << shellExecutable(binary)
-          << " --log "
-          << quotePath(configPath);
-
-  ASSERT_EQ(runCommand(command.str()), 0);
-  ASSERT_TRUE(fs::exists(logPath));
-
-  std::ifstream in(logPath);
-  ASSERT_TRUE(in.is_open());
-  const std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-  EXPECT_NE(contents.find("No restart state found"), std::string::npos);
-}
-
 TEST(RunSimCliLoggingGTest, ResolveConfiguredLogLevelDefaultsToInfo)
 {
   ScopedTempDir tempDir;
@@ -530,36 +435,29 @@ TEST(RunSimCliLoggingGTest, ResolveConfiguredLogLevelParsesTraceAndWarn)
   EXPECT_EQ(pgo::RunSim::resolveConfiguredLogLevel(warnConfig), spdlog::level::warn);
 }
 
-TEST(RunShellSimCliLoggingGTest, DeformStateIsWrittenEveryTimestep)
-{
-  const fs::path binary = runShellSimBinaryPath();
-  ASSERT_FALSE(binary.empty());
-  ASSERT_TRUE(fs::exists(binary));
-
-  ScopedTempDir tempDir;
-  const fs::path configPath = tempDir.path() / "shell-deform-every-step.json";
-  const fs::path outputDir = tempDir.path() / "shell-output";
-  const fs::path surfaceMeshPath = shellExampleDir() / "shell.obj";
-  const fs::path fixedVerticesPath = shellExampleDir() / "shell-fixed.txt";
-
-  writeTextFile(configPath, makeShellSimConfig(surfaceMeshPath, fixedVerticesPath, outputDir, 2, 10));
-
-  std::ostringstream command;
-  command << shellExecutable(binary)
-          << " "
-          << quotePath(configPath);
-
-  ASSERT_EQ(runCommand(command.str()), 0);
-  EXPECT_TRUE(fs::exists(outputDir / "deform0000.u"));
-  EXPECT_TRUE(fs::exists(outputDir / "deform0001.u"));
-  EXPECT_TRUE(fs::exists(outputDir / "ret0000.obj"));
-  EXPECT_FALSE(fs::exists(outputDir / "ret0001.obj"));
-}
-
 TEST(RunSimVolumeMeshIOGTest, BuildsCommonPreprocessingForTetAndCubic)
 {
   expectCommonPreprocessingWorks(tetConfigPath(), "tet-mesh", "box.veg", "box.obj", VolumetricMesh::TET);
   expectCommonPreprocessingWorks(cubicConfigPath(), "cubic-mesh", "box.veg", "box.obj", VolumetricMesh::CUBIC);
+}
+
+TEST(SimulationRunnerDispatchGTest, MissingConfigFails)
+{
+  pgo::Logging::init();
+  ScopedTempDir tempDir;
+
+  EXPECT_NE(
+    pgo::SimulationRunner::runSimulationFromConfig(tempDir.path() / "missing.json"), 0);
+}
+
+TEST(SimulationRunnerDispatchGTest, UnknownContactModelFailsBeforeSimulation)
+{
+  pgo::Logging::init();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "unknown-contact.json";
+  writeTextFile(configPath, R"({"contact-model":"unknown"})");
+
+  EXPECT_NE(pgo::SimulationRunner::runSimulationFromConfig(configPath), 0);
 }
 
 TEST(RunSimVolumeMeshIOGTest, InitializesCubicRuntimeMainPath)

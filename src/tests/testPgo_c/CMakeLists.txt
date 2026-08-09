@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.25.0 FATAL_ERROR)
 
 project(pgo_c_test C CXX)
 
-find_package(pgo CONFIG REQUIRED)
+find_package(pgo 0.0.4 CONFIG REQUIRED)
 
 
 add_executable(pgo_c_test pgo_c_test.cpp)

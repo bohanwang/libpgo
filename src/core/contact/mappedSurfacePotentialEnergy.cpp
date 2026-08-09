@@ -4,9 +4,7 @@ copyright to Bohan Wang
 
 #include "mappedSurfacePotentialEnergy.h"
 
-#include "scopedProfileSection.h"
-#include "ipc/profiling/surfaceIPCProfiling.h"
-
+#include <cmath>
 #include <numeric>
 #include <stdexcept>
 
@@ -26,10 +24,16 @@ MappedSurfacePotentialEnergy::MappedSurfacePotentialEnergy(
     throw std::invalid_argument("surfaceRestVertices must be an N x 3 matrix.");
   if (surfaceRestVertices.rows() <= 0)
     throw std::invalid_argument("surfaceRestVertices must contain at least one vertex.");
+  if (!surfaceRestVertices.allFinite())
+    throw std::invalid_argument("surfaceRestVertices must be finite.");
   if (surfaceFromSimulationDispMap_.rows() != surfaceRestVertices.rows() * 3)
     throw std::invalid_argument("surfaceFromSimulationDispMap row count must equal 3 * numSurfaceVertices.");
   if (surfaceFromSimulationDispMap_.cols() <= 0)
     throw std::invalid_argument("surfaceFromSimulationDispMap must contain at least one simulation DOF.");
+  for (Eigen::Index i = 0; i < surfaceFromSimulationDispMap_.nonZeros(); ++i) {
+    if (!std::isfinite(surfaceFromSimulationDispMap_.valuePtr()[i]))
+      throw std::invalid_argument("surfaceFromSimulationDispMap must contain only finite coefficients.");
+  }
 
   surfaceRestPositions_.resize(surfaceRestVertices.rows() * 3);
   for (int vi = 0; vi < surfaceRestVertices.rows(); ++vi)
@@ -49,7 +53,6 @@ VXd MappedSurfacePotentialEnergy::computeSurfaceDisplacementsFromSimulationDispl
   EigenSupport::ConstRefVecXd simulationDisplacements) const
 {
   validateSimulationDisplacementSize(simulationDisplacements);
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kAdapterMapToSurface);
   return VXd(surfaceFromSimulationDispMap_ * simulationDisplacements);
 }
 
@@ -61,7 +64,6 @@ VXd MappedSurfacePotentialEnergy::computeSurfacePositionsFromSimulationDisplacem
 
 double MappedSurfacePotentialEnergy::func(EigenSupport::ConstRefVecXd simulationDisplacements) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kAdapterFunc);
   const VXd surfacePositions = computeSurfacePositionsFromSimulationDisplacements(simulationDisplacements);
   return computeSurfaceEnergy(surfacePositions);
 }
@@ -70,14 +72,12 @@ void MappedSurfacePotentialEnergy::gradient(
   EigenSupport::ConstRefVecXd simulationDisplacements,
   EigenSupport::RefVecXd simulationGradient) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kAdapterGradient);
   const VXd surfacePositions = computeSurfacePositionsFromSimulationDisplacements(simulationDisplacements);
 
   VXd surfaceGradient = VXd::Zero(surfaceRestPositions_.size());
   computeSurfaceGradient(surfacePositions, surfaceGradient);
 
   {
-    Profiling::ScopedProfileSection pullbackProfile(SurfaceIPCProfileSections::kAdapterPullbackGradient);
     simulationGradient = surfaceFromSimulationDispMap_.transpose() * surfaceGradient;
   }
 }
@@ -96,14 +96,12 @@ void MappedSurfacePotentialEnergy::hessianDirect(
   EigenSupport::ConstRefVecXd simulationDisplacements,
   EigenSupport::SpMatD &simulationHessian) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kAdapterHessianDirect);
   const VXd surfacePositions = computeSurfacePositionsFromSimulationDisplacements(simulationDisplacements);
 
   SpMatD surfaceHessian(surfaceRestPositions_.size(), surfaceRestPositions_.size());
   computeSurfaceHessian(surfacePositions, surfaceHessian);
 
   {
-    Profiling::ScopedProfileSection pullbackProfile(SurfaceIPCProfileSections::kAdapterPullbackHessian);
     simulationHessian = surfaceFromSimulationDispMap_.transpose() * surfaceHessian * surfaceFromSimulationDispMap_;
   }
 }
@@ -112,7 +110,6 @@ double MappedSurfacePotentialEnergy::computeMaxStepSize(
   EigenSupport::ConstRefVecXd simulationDisplacements,
   EigenSupport::ConstRefVecXd trialSimulationDisplacements) const
 {
-  Profiling::ScopedProfileSection scopedProfile(SurfaceIPCProfileSections::kAdapterMaxStep);
   const VXd surfacePositions = computeSurfacePositionsFromSimulationDisplacements(simulationDisplacements);
   const VXd trialSurfaceDisplacements = computeSurfaceDisplacementsFromSimulationDisplacements(trialSimulationDisplacements);
   return computeSurfaceMaxStepSize(surfacePositions, trialSurfaceDisplacements);

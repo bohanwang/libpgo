@@ -26,7 +26,7 @@ namespace py = pybind11;
 
 extern std::vector<std::function<void(py::module &)>> initFunctions;
 
-PYBIND11_MODULE(pypgo, m)
+PYBIND11_MODULE(_pypgo, m)
 {
   static pypgoInit init;
 

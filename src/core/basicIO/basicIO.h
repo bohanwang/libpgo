@@ -128,7 +128,7 @@ int write2DMatrixToStream(std::ofstream &ofile, int m, int n, const real *matrix
 }
 
 // writes out the m x n matrix header onto the stream
-int write2DMatrixHeaderToStream(std::ofstream &ofile, int m, int n)
+inline int write2DMatrixHeaderToStream(std::ofstream &ofile, int m, int n)
 {
   ofile.write((const char *)&m, sizeof(int));
   if (!ofile)
@@ -180,7 +180,7 @@ int read2DMatrixFromStream(std::ifstream &ifile, int M, int N, real *matrix)
   return 0;
 }
 
-int read2DMatrixSizeFromStream(std::ifstream &ifile, int *m, int *n)
+inline int read2DMatrixSizeFromStream(std::ifstream &ifile, int *m, int *n)
 {
   ifile.read((char *)m, sizeof(int));
   if (!ifile) {

@@ -4,11 +4,14 @@
 #include "barycentricCoordinates.h"
 #include "configFileJSON.h"
 #include "deformationModelEnergy.h"
+#include "embeddedSurfaceIPCPotentialEnergy.h"
 #include "initPredicates.h"
 #include "pgoLogging.h"
 #include "runIPCSimSetup.h"
+#include "runIPCExternalObjects.h"
 #include "runSimCliLogging.h"
 #include "runSimVolumeMeshIO.h"
+#include "simulationRunner.h"
 #include "triMeshGeo.h"
 #include "volumetricMesh.h"
 
@@ -17,7 +20,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
-#include <optional>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -33,7 +36,9 @@ constexpr const char *kCubicIPCExampleDir = LIBPGO_TEST_IPC_CUBIC_EXAMPLE_DIR;
 
 std::string quotePath(const fs::path &path)
 {
-  return "\"" + path.string() + "\"";
+  // Forward slashes are accepted by Windows command-line tools and do not
+  // become accidental escape sequences when this helper is used in JSON.
+  return "\"" + path.generic_string() + "\"";
 }
 
 std::string shellExecutable(const fs::path &path)
@@ -88,6 +93,29 @@ void writeTextFile(const fs::path &path, const std::string &contents)
   out << contents;
 }
 
+void writeExternalPlane(const fs::path &path, double y = 0.0, bool includeIsolatedVertex = false)
+{
+  std::ostringstream obj;
+  obj << "v -1 " << y << " -1\n"
+      << "v 1 " << y << " -1\n"
+      << "v 1 " << y << " 1\n"
+      << "v -1 " << y << " 1\n";
+  if (includeIsolatedVertex)
+    obj << "v 20 20 20\n";
+  obj << "f 1 3 2\n"
+      << "f 1 4 3\n";
+  writeTextFile(path, obj.str());
+}
+
+void addIPCExternalObject(pgo::ConfigFileJSON &config, const fs::path &path,
+  const nlohmann::json &movement = nlohmann::json::array({ 0.0, 0.0, 0.0 }),
+  const nlohmann::json &scale = 1.0,
+  const nlohmann::json &initialTranslation = nlohmann::json::array({ 0.0, 0.0, 0.0 }))
+{
+  config.handle()["ipc-external-objects"] = nlohmann::json::array(
+    { { { "filename", path.generic_string() }, { "scale", scale }, { "initial-translation", initialTranslation }, { "movement", movement } } });
+}
+
 std::string readTextFile(const fs::path &path)
 {
   std::ifstream in(path);
@@ -106,6 +134,46 @@ std::string addBoolConfigField(std::string json, const std::string &name, bool v
   return json;
 }
 
+std::string makeStaticConfig(std::string json)
+{
+  const std::string dynamicField = "\"sim-type\": \"dynamic\"";
+  const std::size_t pos = json.find(dynamicField);
+  if (pos == std::string::npos)
+    throw std::runtime_error("Failed to find dynamic sim-type in test JSON.");
+
+  json.replace(pos, dynamicField.size(), "\"sim-type\": \"static\"");
+  return json;
+}
+
+std::string replaceTextOnce(std::string text, const std::string &from, const std::string &to)
+{
+  const std::size_t pos = text.find(from);
+  if (pos == std::string::npos)
+    throw std::runtime_error("Failed to find text in test configuration: " + from);
+
+  text.replace(pos, from.size(), to);
+  return text;
+}
+
+void expectFiniteStaticOutput(const fs::path &outputDir)
+{
+  const fs::path statePath = outputDir / "deform0000.u";
+  const fs::path surfacePath = outputDir / "ret0000.obj";
+  ASSERT_TRUE(fs::exists(statePath));
+  ASSERT_TRUE(fs::exists(surfacePath));
+
+  ES::MXd state;
+  ASSERT_EQ(ES::readMatrix(statePath.string().c_str(), state), 0);
+  ASSERT_EQ(state.cols(), 3);
+  EXPECT_TRUE(state.allFinite());
+  EXPECT_GT(state.col(0).norm(), 1e-12);
+
+  pgo::Mesh::TriMeshGeo surface;
+  ASSERT_TRUE(surface.load(surfacePath.string()));
+  for (int vi = 0; vi < surface.numVertices(); ++vi)
+    EXPECT_TRUE(surface.pos(vi).allFinite());
+}
+
 void writeZeroShellRestartState(const fs::path &outputDir, int frame)
 {
   pgo::Mesh::TriMeshGeo mesh;
@@ -116,27 +184,6 @@ void writeZeroShellRestartState(const fs::path &outputDir, int frame)
   std::ostringstream filename;
   filename << "deform" << std::setfill('0') << std::setw(4) << frame << ".u";
   ASSERT_EQ(ES::writeMatrix((outputDir / filename.str()).string().c_str(), restartState), 0);
-}
-
-void appendFloorFields(std::ostringstream &json, bool useFloor,
-  std::optional<std::string> floorAxis = std::nullopt,
-  std::optional<double> floorHeight = std::nullopt,
-  std::optional<double> floorKappa = std::nullopt)
-{
-  if (!useFloor && !floorAxis.has_value() && !floorHeight.has_value() && !floorKappa.has_value())
-    return;
-
-  json << ",\n"
-       << "  \"use-floor\": " << (useFloor ? "true" : "false");
-  if (floorAxis.has_value())
-    json << ",\n"
-         << "  \"floor-axis\": \"" << *floorAxis << "\"";
-  if (floorHeight.has_value())
-    json << ",\n"
-         << "  \"floor-height\": " << *floorHeight;
-  if (floorKappa.has_value())
-    json << ",\n"
-         << "  \"floor-kappa\": " << *floorKappa;
 }
 
 fs::path runIPCSimBinaryPath()
@@ -155,11 +202,6 @@ fs::path tetIPCExampleDir()
 fs::path cubicIPCExampleDir()
 {
   return fs::path(kCubicIPCExampleDir);
-}
-
-fs::path cubicBoxSquashIPCExampleDir()
-{
-  return fs::path(__FILE__).parent_path().parent_path().parent_path().parent_path() / "examples" / "ipc" / "cubic" / "box-squash";
 }
 
 fs::path tetIPCConfigPath()
@@ -185,11 +227,7 @@ void initializeRunIPCSimTestEnvironment()
 std::string makeShellIPCConfig(const fs::path &tempDir, int numTimesteps,
   bool includeIPCFields = true, bool ipcHeuristic = false,
   double ipcDhat = 0.002, double ipcKappa = 3000.0, int dumpInterval = 1,
-  const std::string &logLevel = "info",
-  bool useFloor = false,
-  std::optional<std::string> floorAxis = std::nullopt,
-  std::optional<double> floorHeight = std::nullopt,
-  std::optional<double> floorKappa = std::nullopt)
+  const std::string &logLevel = "info")
 {
   const fs::path shellDir = fs::path(kShellExampleDir);
   const fs::path outputDir = tempDir / "shell-output";
@@ -212,14 +250,13 @@ std::string makeShellIPCConfig(const fs::path &tempDir, int numTimesteps,
        << "  \"num-timestep\": " << numTimesteps << ",\n"
        << "  \"damping-params\": [0, 0],\n"
        << "  \"sim-type\": \"dynamic\",\n"
+       << "  \"contact-model\": \"ipc\",\n"
        << "  \"solver-eps\": 1e-4,\n"
        << "  \"solver-max-iter\": 5,\n"
        << "  \"elastic-material\": \"koiter-stvk\",\n"
        << "  \"loglevel\": \"" << logLevel << "\",\n"
        << "  \"dump-interval\": " << dumpInterval << ",\n"
        << "  \"output\": " << quotePath(outputDir);
-
-  appendFloorFields(json, useFloor, floorAxis, floorHeight, floorKappa);
 
   if (ipcHeuristic) {
     json << ",\n"
@@ -262,6 +299,7 @@ std::string makeShellIPCConfigWithIgnoredLegacyContactFields(const fs::path &tem
        << "  \"num-timestep\": " << numTimesteps << ",\n"
        << "  \"damping-params\": [0, 0],\n"
        << "  \"sim-type\": \"dynamic\",\n"
+       << "  \"contact-model\": \"ipc\",\n"
        << "  \"solver-eps\": 1e-4,\n"
        << "  \"solver-max-iter\": 5,\n"
        << "  \"elastic-material\": \"koiter-stvk\",\n"
@@ -280,11 +318,7 @@ std::string makeShellIPCConfigWithIgnoredLegacyContactFields(const fs::path &tem
 std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey, const fs::path &outputDir, int numTimesteps,
   double scale = 1.0, bool includeIPCFields = true, bool ipcHeuristic = false, const std::string &material = "stable-neo",
   double ipcDhat = 0.002, double ipcKappa = 3000.0, int dumpInterval = 1,
-  bool enableMaterialMaxStep = true, const std::string &logLevel = "info",
-  bool useFloor = false,
-  std::optional<std::string> floorAxis = std::nullopt,
-  std::optional<double> floorHeight = std::nullopt,
-  std::optional<double> floorKappa = std::nullopt)
+  bool enableMaterialMaxStep = true, const std::string &logLevel = "info")
 {
   std::ostringstream json;
   json << "{\n"
@@ -305,6 +339,7 @@ std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey,
        << "  \"num-timestep\": " << numTimesteps << ",\n"
        << "  \"damping-params\": [0, 0],\n"
        << "  \"sim-type\": \"dynamic\",\n"
+       << "  \"contact-model\": \"ipc\",\n"
        << "  \"solver-eps\": 1e-4,\n"
        << "  \"solver-max-iter\": 5,\n"
        << "  \"elastic-material\": \"" << material << "\",\n"
@@ -312,8 +347,6 @@ std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey,
        << "  \"dump-interval\": " << dumpInterval << ",\n"
        << "  \"output\": " << quotePath(outputDir) << ",\n"
        << "  \"enable-material-max-step\": " << (enableMaterialMaxStep ? "true" : "false");
-
-  appendFloorFields(json, useFloor, floorAxis, floorHeight, floorKappa);
 
   if (ipcHeuristic) {
     json << ",\n"
@@ -335,68 +368,18 @@ std::string makeVolumeIPCConfig(const fs::path &exampleDir, const char *meshKey,
 
 std::string makeTetIPCConfig(const fs::path &tempDir, int numTimesteps,
   double scale = 1.0, bool includeIPCFields = true, bool ipcHeuristic = false, const std::string &material = "stable-neo",
-  int dumpInterval = 1, const std::string &logLevel = "info",
-  bool useFloor = false,
-  std::optional<std::string> floorAxis = std::nullopt,
-  std::optional<double> floorHeight = std::nullopt,
-  std::optional<double> floorKappa = std::nullopt)
+  int dumpInterval = 1, const std::string &logLevel = "info")
 {
   return makeVolumeIPCConfig(tetIPCExampleDir(), "tet-mesh", tempDir / "tet-output", numTimesteps,
-    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel, useFloor, floorAxis, floorHeight, floorKappa);
+    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel);
 }
 
 std::string makeCubicIPCConfig(const fs::path &tempDir, int numTimesteps,
   double scale = 1.0, bool includeIPCFields = true, bool ipcHeuristic = false, const std::string &material = "stable-neo",
-  int dumpInterval = 1, const std::string &logLevel = "info",
-  bool useFloor = false,
-  std::optional<std::string> floorAxis = std::nullopt,
-  std::optional<double> floorHeight = std::nullopt,
-  std::optional<double> floorKappa = std::nullopt)
+  int dumpInterval = 1, const std::string &logLevel = "info")
 {
   return makeVolumeIPCConfig(cubicIPCExampleDir(), "cubic-mesh", tempDir / "cubic-output", numTimesteps,
-    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel, useFloor, floorAxis, floorHeight, floorKappa);
-}
-
-std::string makeCubicSquashIPCConfig(const fs::path &tempDir, int numTimesteps, const std::string &logLevel = "info")
-{
-  const fs::path exampleDir = cubicBoxSquashIPCExampleDir();
-  const fs::path outputDir = tempDir / "cubic-squash-output";
-
-  std::ostringstream json;
-  json << "{\n"
-       << "  \"cubic-mesh\": " << quotePath(exampleDir / "box.veg") << ",\n"
-       << "  \"surface-mesh\": " << quotePath(exampleDir / "box.obj") << ",\n"
-       << "  \"fixed-vertices\": [\n"
-       << "    {\n"
-       << "      \"filename\": " << quotePath(exampleDir / "box-zmin-fixed.txt") << ",\n"
-       << "      \"movement\": [0, 0, 0],\n"
-       << "      \"coeff\": 1e5\n"
-       << "    },\n"
-       << "    {\n"
-       << "      \"filename\": " << quotePath(exampleDir / "box-zmax-push.txt") << ",\n"
-       << "      \"movement\": [0, 0, 500.55],\n"
-       << "      \"coeff\": 1e5\n"
-       << "    }\n"
-       << "  ],\n"
-       << "  \"g\": [0, 0, 0],\n"
-       << "  \"init-vel\": [0, 0, 0],\n"
-       << "  \"init-disp\": [0, 0, 0],\n"
-       << "  \"scale\": 1.0,\n"
-       << "  \"timestep\": 0.001,\n"
-       << "  \"num-timestep\": " << numTimesteps << ",\n"
-       << "  \"damping-params\": [0, 0],\n"
-       << "  \"sim-type\": \"dynamic\",\n"
-       << "  \"solver-eps\": 1e-5,\n"
-       << "  \"solver-max-iter\": 20,\n"
-       << "  \"elastic-material\": \"stable-neo\",\n"
-       << "  \"loglevel\": \"" << logLevel << "\",\n"
-       << "  \"dump-interval\": 1,\n"
-       << "  \"output\": " << quotePath(outputDir) << ",\n"
-       << "  \"ipc-dhat\": 0.002,\n"
-       << "  \"ipc-kappa\": 3000.0,\n"
-       << "  \"enable-material-max-step\": true\n"
-       << "}\n";
-  return json.str();
+    scale, includeIPCFields, ipcHeuristic, material, 0.002, 3000.0, dumpInterval, true, logLevel);
 }
 
 ES::SpMatD computeExpectedEmbeddingMatrix(const fs::path &configPath)
@@ -484,43 +467,16 @@ TEST(RunIPCSimCliGTest, LogFlagWritesCliOutputIntoOutputDirectory)
   EXPECT_NE(contents.find("ipc-kappa"), std::string::npos);
   EXPECT_NE(contents.find("eps_ee"), std::string::npos);
   EXPECT_NE(contents.find("slackness"), std::string::npos);
-  EXPECT_NE(contents.find("max-step summary"), std::string::npos);
-  EXPECT_NE(contents.find("minFeasibleAlphaThisSolve"), std::string::npos);
-  EXPECT_NE(contents.find("minLineSearchAlphaThisSolve"), std::string::npos);
-  EXPECT_NE(contents.find("minEffectiveAlphaThisSolve"), std::string::npos);
+  EXPECT_EQ(contents.find("max-step summary"), std::string::npos);
+  EXPECT_EQ(contents.find("minFeasibleAlphaThisSolve"), std::string::npos);
+  EXPECT_EQ(contents.find("minLineSearchAlphaThisSolve"), std::string::npos);
+  EXPECT_EQ(contents.find("minEffectiveAlphaThisSolve"), std::string::npos);
   EXPECT_EQ(contents.find("finalAlpha"), std::string::npos);
   EXPECT_EQ(contents.find("lastMaterialAlpha"), std::string::npos);
   EXPECT_EQ(contents.find("lastContactAlpha"), std::string::npos);
-  EXPECT_EQ(contents.find("runIPCSim profiling summary:"), std::string::npos);
 }
 
-TEST(RunIPCSimCliGTest, ProfilingConfigWritesSummaryToOutputLog)
-{
-  const fs::path binary = runIPCSimBinaryPath();
-  ASSERT_FALSE(binary.empty());
-  ASSERT_TRUE(fs::exists(binary));
-
-  ScopedTempDir tempDir;
-  const fs::path configPath = tempDir.path() / "shell-ipc-profile.json";
-  const fs::path logPath = tempDir.path() / "shell-output" / "runIPCSim.log";
-
-  writeTextFile(configPath, addBoolConfigField(makeShellIPCConfig(tempDir.path(), 1), "profiling", true));
-
-  std::ostringstream command;
-  command << shellExecutable(binary)
-          << " --log "
-          << quotePath(configPath);
-
-  ASSERT_EQ(runCommand(command.str()), 0);
-  ASSERT_TRUE(fs::exists(logPath));
-
-  const std::string contents = readTextFile(logPath);
-  EXPECT_NE(contents.find("runIPCSim profiling summary:"), std::string::npos);
-  EXPECT_NE(contents.find("profile name=contact.surface.pair_build.static"), std::string::npos);
-  EXPECT_NE(contents.find("callCount="), std::string::npos);
-}
-
-TEST(RunIPCSimCliGTest, DefaultRunClearsOutputAndDoesNotRestartFromDeformState)
+TEST(RunIPCSimCliGTest, DefaultRunPreservesUnrelatedOutputAndOverwritesFrames)
 {
   const fs::path binary = runIPCSimBinaryPath();
   ASSERT_FALSE(binary.empty());
@@ -542,11 +498,11 @@ TEST(RunIPCSimCliGTest, DefaultRunClearsOutputAndDoesNotRestartFromDeformState)
           << quotePath(configPath);
 
   ASSERT_EQ(runCommand(command.str()), 0);
-  EXPECT_FALSE(fs::exists(sentinelPath));
+  EXPECT_TRUE(fs::exists(sentinelPath));
   ASSERT_TRUE(fs::exists(logPath));
 
   const std::string contents = readTextFile(logPath);
-  EXPECT_NE(contents.find("restart-from-u=false; clearing output folder"), std::string::npos);
+  EXPECT_NE(contents.find("existing output files will be overwritten as frames are written"), std::string::npos);
   EXPECT_NE(contents.find("Starting from frame 0."), std::string::npos);
   EXPECT_EQ(contents.find("Restarting from frame"), std::string::npos);
 }
@@ -563,7 +519,11 @@ TEST(RunIPCSimCliGTest, RestartFromUTrueKeepsExistingDeformState)
   const fs::path logPath = outputDir / "runIPCSim.log";
 
   writeZeroShellRestartState(outputDir, 0);
-  writeTextFile(configPath, addBoolConfigField(makeShellIPCConfig(tempDir.path(), 2), "restart-from-u", true));
+  std::string config = replaceTextOnce(makeShellIPCConfig(tempDir.path(), 2),
+    "\"init-disp\": [0, 0, 0]", "\"init-disp\": [0.1, 0, 0]");
+  config = replaceTextOnce(std::move(config),
+    "\"init-vel\": [0, 0, 0]", "\"init-vel\": [100, 0, 0]");
+  writeTextFile(configPath, addBoolConfigField(std::move(config), "restart-from-u", true));
 
   std::ostringstream command;
   command << shellExecutable(binary)
@@ -576,37 +536,58 @@ TEST(RunIPCSimCliGTest, RestartFromUTrueKeepsExistingDeformState)
 
   const std::string contents = readTextFile(logPath);
   EXPECT_NE(contents.find("Restarting from frame 0"), std::string::npos);
-  EXPECT_EQ(contents.find("restart-from-u=false; clearing output folder"), std::string::npos);
+  EXPECT_EQ(contents.find("existing output files will be overwritten as frames are written"), std::string::npos);
+
+  ES::MXd state;
+  ASSERT_EQ(ES::readMatrix((outputDir / "deform0001.u").string().c_str(), state), 0);
+  ASSERT_EQ(state.cols(), 3);
+  double maxAbsX = 0.0;
+  for (Eigen::Index vi = 0; vi < state.rows() / 3; ++vi)
+    maxAbsX = std::max(maxAbsX, std::abs(state(3 * vi, 0)));
+  EXPECT_LT(maxAbsX, 0.05);
 }
 
-TEST(RunIPCSimCliGTest, FloorEnabledLogPrintsFloorParameters)
+TEST(RunIPCSimCliGTest, MissingDynamicRestartFallsBackToInitialDisplacement)
 {
   const fs::path binary = runIPCSimBinaryPath();
   ASSERT_FALSE(binary.empty());
   ASSERT_TRUE(fs::exists(binary));
-
   ScopedTempDir tempDir;
-  const fs::path configPath = tempDir.path() / "shell-ipc-floor.json";
-  const fs::path logPath = tempDir.path() / "shell-output" / "runIPCSim.log";
+  const fs::path outputDir = tempDir.path() / "shell-output";
+  const fs::path configPath = tempDir.path() / "shell-restart-fallback.json";
+  std::string config = replaceTextOnce(makeShellIPCConfig(tempDir.path(), 1),
+    "\"init-disp\": [0, 0, 0]", "\"init-disp\": [0.02, 0, 0]");
+  writeTextFile(configPath, addBoolConfigField(std::move(config), "restart-from-u", true));
 
-  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "info", true, "y", -0.15, 4321.0));
-
-  std::ostringstream command;
-  command << shellExecutable(binary)
-          << " --log "
-          << quotePath(configPath);
-
-  ASSERT_EQ(runCommand(command.str()), 0);
-  ASSERT_TRUE(fs::exists(logPath));
-
-  const std::string contents = readTextFile(logPath);
-  EXPECT_NE(contents.find("use-floor=true"), std::string::npos);
-  EXPECT_NE(contents.find("floor-axis=y"), std::string::npos);
-  EXPECT_NE(contents.find("floor-height=-0.15"), std::string::npos);
-  EXPECT_NE(contents.find("floor-kappa=4321"), std::string::npos);
+  ASSERT_EQ(runCommand(shellExecutable(binary) + " " + quotePath(configPath)), 0);
+  ES::MXd state;
+  ASSERT_EQ(ES::readMatrix((outputDir / "deform0000.u").string().c_str(), state), 0);
+  double meanX = 0.0;
+  for (Eigen::Index vi = 0; vi < state.rows() / 3; ++vi)
+    meanX += state(3 * vi, 0);
+  meanX /= static_cast<double>(state.rows() / 3);
+  EXPECT_GT(meanX, 1e-3);
 }
 
-TEST(RunIPCSimCliGTest, DebugLogLevelPrintsFullMaxStepSummary)
+TEST(RunIPCSimCliGTest, RejectsInitiallyIntersectingExternalSurface)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-initial-intersection.json";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1));
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  config.handle()["ipc-external-objects"] = nlohmann::json::array(
+    { { { "filename", (fs::path(kShellExampleDir) / "shell.obj").generic_string() } } });
+  writeTextFile(configPath, config.handle().dump(2) + "\n");
+
+  EXPECT_NE(runCommand(shellExecutable(binary) + " " + quotePath(configPath)), 0);
+}
+
+TEST(RunIPCSimCliGTest, DebugLogLevelPrintsNewtonStepDiagnosticsWithoutClassification)
 {
   const fs::path binary = runIPCSimBinaryPath();
   ASSERT_FALSE(binary.empty());
@@ -627,12 +608,12 @@ TEST(RunIPCSimCliGTest, DebugLogLevelPrintsFullMaxStepSummary)
   ASSERT_TRUE(fs::exists(logPath));
 
   const std::string contents = readTextFile(logPath);
-  EXPECT_NE(contents.find("max-step summary"), std::string::npos);
-  EXPECT_NE(contents.find("minMaterialFeasibleAlphaThisSolve"), std::string::npos);
-  EXPECT_NE(contents.find("minContactFeasibleAlphaThisSolve"), std::string::npos);
-  EXPECT_NE(contents.find("minFeasibleAlphaThisSolve"), std::string::npos);
-  EXPECT_NE(contents.find("minLineSearchAlphaThisSolve"), std::string::npos);
-  EXPECT_NE(contents.find("minEffectiveAlphaThisSolve"), std::string::npos);
+  EXPECT_EQ(contents.find("max-step summary"), std::string::npos);
+  EXPECT_EQ(contents.find("minMaterialFeasibleAlphaThisSolve"), std::string::npos);
+  EXPECT_EQ(contents.find("minContactFeasibleAlphaThisSolve"), std::string::npos);
+  EXPECT_EQ(contents.find("minFeasibleAlphaThisSolve"), std::string::npos);
+  EXPECT_EQ(contents.find("minLineSearchAlphaThisSolve"), std::string::npos);
+  EXPECT_EQ(contents.find("minEffectiveAlphaThisSolve"), std::string::npos);
   EXPECT_NE(contents.find("rawStepMaxNorm="), std::string::npos);
   EXPECT_NE(contents.find("feasibleAlpha="), std::string::npos);
   EXPECT_NE(contents.find("lineSearchAlpha="), std::string::npos);
@@ -642,55 +623,6 @@ TEST(RunIPCSimCliGTest, DebugLogLevelPrintsFullMaxStepSummary)
   EXPECT_EQ(contents.find("finalAlpha"), std::string::npos);
   EXPECT_EQ(contents.find("lastMaterialAlpha"), std::string::npos);
   EXPECT_EQ(contents.find("lastContactAlpha"), std::string::npos);
-}
-
-TEST(RunIPCSimCliGTest, DebugLogLevelPrintsClampedFeasibleAlphaBreakdownForCubicIPC)
-{
-  const fs::path binary = runIPCSimBinaryPath();
-  ASSERT_FALSE(binary.empty());
-  ASSERT_TRUE(fs::exists(binary));
-
-  ScopedTempDir tempDir;
-  const fs::path configPath = tempDir.path() / "cubic-squash-ipc-debug.json";
-  const fs::path logPath = tempDir.path() / "cubic-squash-output" / "runIPCSim.log";
-
-  writeTextFile(configPath, makeCubicSquashIPCConfig(tempDir.path(), 3, "debug"));
-
-  std::ostringstream command;
-  command << shellExecutable(binary)
-          << " --log "
-          << quotePath(configPath);
-
-  ASSERT_EQ(runCommand(command.str()), 0);
-  ASSERT_TRUE(fs::exists(logPath));
-
-  const std::string contents = readTextFile(logPath);
-  EXPECT_NE(contents.find("feasible alpha clamped: material:"), std::string::npos);
-  EXPECT_NE(contents.find("contact:"), std::string::npos);
-}
-
-TEST(RunIPCSimCliGTest, WarnLogLevelSuppressesMaxStepSummary)
-{
-  const fs::path binary = runIPCSimBinaryPath();
-  ASSERT_FALSE(binary.empty());
-  ASSERT_TRUE(fs::exists(binary));
-
-  ScopedTempDir tempDir;
-  const fs::path configPath = tempDir.path() / "shell-ipc-warn.json";
-  const fs::path logPath = tempDir.path() / "shell-output" / "runIPCSim.log";
-
-  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "warn"));
-
-  std::ostringstream command;
-  command << shellExecutable(binary)
-          << " --log "
-          << quotePath(configPath);
-
-  ASSERT_EQ(runCommand(command.str()), 0);
-  ASSERT_TRUE(fs::exists(logPath));
-
-  const std::string contents = readTextFile(logPath);
-  EXPECT_EQ(contents.find("max-step summary"), std::string::npos);
 }
 
 TEST(RunIPCSimCliGTest, MissingIPCDhatOrKappaFails)
@@ -749,27 +681,6 @@ TEST(RunIPCSimCliGTest, OneTimestepShellSmokeSucceeds)
 
   ASSERT_EQ(runCommand(command.str()), 0);
   ASSERT_TRUE(fs::exists(tempDir.path() / "shell-output"));
-}
-
-TEST(RunIPCSimCliGTest, OneTimestepShellFloorSmokeSucceeds)
-{
-  const fs::path binary = runIPCSimBinaryPath();
-  ASSERT_FALSE(binary.empty());
-  ASSERT_TRUE(fs::exists(binary));
-
-  ScopedTempDir tempDir;
-  const fs::path configPath = tempDir.path() / "shell-ipc-floor-step.json";
-
-  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 1, true, false, 0.002, 3000.0, 1, "info", true, "y", -0.15, 4000.0));
-
-  std::ostringstream command;
-  command << shellExecutable(binary)
-          << " "
-          << quotePath(configPath);
-
-  ASSERT_EQ(runCommand(command.str()), 0);
-  EXPECT_TRUE(fs::exists(tempDir.path() / "shell-output" / "deform0000.u"));
-  EXPECT_TRUE(fs::exists(tempDir.path() / "shell-output" / "ret0000.obj"));
 }
 
 TEST(RunIPCSimCliGTest, DeformStateIsWrittenEveryTimestep)
@@ -907,16 +818,22 @@ TEST(RunIPCSimCliGTest, CubicOneTimestepSmokeWritesDeformAndRet)
   EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "ret0000.obj"));
 }
 
-TEST(RunIPCSimCliGTest, CubicOneTimestepFloorSmokeWritesDeformAndRet)
+TEST(RunIPCSimCliGTest, TetStaticIPCSmokeWritesFiniteStateAndSurface)
 {
   const fs::path binary = runIPCSimBinaryPath();
   ASSERT_FALSE(binary.empty());
   ASSERT_TRUE(fs::exists(binary));
 
   ScopedTempDir tempDir;
-  const fs::path configPath = tempDir.path() / "cubic-ipc-floor-one-step.json";
-
-  writeTextFile(configPath, makeCubicIPCConfig(tempDir.path(), 1, 1.0, true, false, "stable-neo", 1, "info", true, "y", -0.15, 4000.0));
+  const fs::path configPath = tempDir.path() / "tet-ipc-static.json";
+  const fs::path fixedVerticesPath = tempDir.path() / "tet-static-fixed.txt";
+  writeTextFile(fixedVerticesPath, "0\n4\n20\n");
+  std::string config = makeStaticConfig(makeTetIPCConfig(tempDir.path(), 1));
+  config = replaceTextOnce(
+    std::move(config),
+    quotePath(tetIPCExampleDir() / "box-fixed.txt"),
+    quotePath(fixedVerticesPath));
+  writeTextFile(configPath, config);
 
   std::ostringstream command;
   command << shellExecutable(binary)
@@ -924,8 +841,48 @@ TEST(RunIPCSimCliGTest, CubicOneTimestepFloorSmokeWritesDeformAndRet)
           << quotePath(configPath);
 
   ASSERT_EQ(runCommand(command.str()), 0);
-  EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "deform0000.u"));
-  EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "ret0000.obj"));
+  expectFiniteStaticOutput(tempDir.path() / "tet-output");
+}
+
+TEST(RunIPCSimCliGTest, CubicStaticIPCSharedDispatcherWritesFiniteStateAndSurface)
+{
+  initializeRunIPCSimTestEnvironment();
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "cubic-ipc-static.json";
+  const fs::path fixedVerticesPath = tempDir.path() / "cubic-static-fixed.txt";
+  writeTextFile(fixedVerticesPath, "0\n4\n20\n");
+  std::string config = makeStaticConfig(makeCubicIPCConfig(tempDir.path(), 1));
+  config = replaceTextOnce(
+    std::move(config),
+    quotePath(cubicIPCExampleDir() / "box-fixed.txt"),
+    quotePath(fixedVerticesPath));
+  writeTextFile(configPath, config);
+
+  ASSERT_EQ(pgo::SimulationRunner::runSimulationFromConfig(configPath), 0);
+  expectFiniteStaticOutput(tempDir.path() / "cubic-output");
+}
+
+TEST(RunIPCSimCliGTest, ShellStaticIPCSmokeWritesFiniteStateAndSurface)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-ipc-static.json";
+  std::string config = makeStaticConfig(makeShellIPCConfig(tempDir.path(), 1));
+  config = replaceTextOnce(std::move(config),
+    "\"init-disp\": [0, 0, 0]", "\"init-disp\": [0.01, 0, 0]");
+  writeTextFile(configPath, config);
+
+  std::ostringstream command;
+  command << shellExecutable(binary)
+          << " "
+          << quotePath(configPath);
+
+  ASSERT_EQ(runCommand(command.str()), 0);
+  expectFiniteStaticOutput(tempDir.path() / "shell-output");
 }
 
 TEST(RunIPCSimCliGTest, TetRejectsIPCHeuristic)
@@ -1053,43 +1010,249 @@ TEST(RunIPCSimSetupGTest, CubicEmbeddingMatrixMatchesBarycentricBaseline)
   expectSparseMatrixNear(context.surfaceFromSimulationDispMap, expected);
 }
 
-TEST(RunIPCSimSetupGTest, UseFloorRequiresExplicitAxisHeightAndKappa)
+TEST(RunIPCSimSetupGTest, RemovedAnalyticFloorFieldsAreRejected)
 {
   initializeRunIPCSimTestEnvironment();
-
   ScopedTempDir tempDir;
-  const fs::path missingAxisConfig = tempDir.path() / "shell-floor-missing-axis.json";
-  const fs::path missingHeightConfig = tempDir.path() / "shell-floor-missing-height.json";
-  const fs::path missingKappaConfig = tempDir.path() / "shell-floor-missing-kappa.json";
+  const fs::path configPath = tempDir.path() / "shell-removed-floor.json";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
 
-  writeTextFile(missingAxisConfig, makeShellIPCConfig(tempDir.path(), 0, true, false, 0.002, 3000.0, 1, "info", true, std::nullopt, -0.1, 4000.0));
-  writeTextFile(missingHeightConfig, makeShellIPCConfig(tempDir.path(), 0, true, false, 0.002, 3000.0, 1, "info", true, "y", std::nullopt, 4000.0));
-  writeTextFile(missingKappaConfig, makeShellIPCConfig(tempDir.path(), 0, true, false, 0.002, 3000.0, 1, "info", true, "y", -0.1, std::nullopt));
-
-  pgo::ConfigFileJSON missingAxis;
-  ASSERT_TRUE(missingAxis.open(missingAxisConfig.string().c_str()));
-  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(missingAxis), std::invalid_argument);
-
-  pgo::ConfigFileJSON missingHeight;
-  ASSERT_TRUE(missingHeight.open(missingHeightConfig.string().c_str()));
-  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(missingHeight), std::invalid_argument);
-
-  pgo::ConfigFileJSON missingKappa;
-  ASSERT_TRUE(missingKappa.open(missingKappaConfig.string().c_str()));
-  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(missingKappa), std::invalid_argument);
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  config.handle()["use-floor"] = true;
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
 }
 
-TEST(RunIPCSimSetupGTest, FloorEnabledSetupCreatesExtraGeneralImplicitForceModel)
+TEST(RunIPCSimSetupGTest, ShellExternalObjectBuildsCombinedCollisionSurfaceOnly)
 {
   initializeRunIPCSimTestEnvironment();
-
   ScopedTempDir tempDir;
-  const fs::path configPath = tempDir.path() / "cubic-floor-setup.json";
-  writeTextFile(configPath, makeCubicIPCConfig(tempDir.path(), 0, 1.0, true, false, "stable-neo", 1, "info", true, "y", -0.15, 4000.0));
+  const fs::path configPath = tempDir.path() / "shell-external.json";
+  const fs::path externalPath = tempDir.path() / "external-plane.obj";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
+  writeExternalPlane(externalPath, -0.2, true);
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  addIPCExternalObject(config, externalPath);
+  const auto context = pgo::RunIPCSim::buildShellIpcSimulation(config);
+
+  ASSERT_NE(context.collisionHandler, nullptr);
+  EXPECT_EQ(context.collisionHandler->getNumSurfaceVertices(), context.surfaceMesh.numVertices() + 4);
+  EXPECT_EQ(context.collisionHandler->getNumSurfaceTriangles(), context.surfaceMesh.numTriangles() + 2);
+  EXPECT_EQ(context.surfaceRestPositions.size(), context.surfaceMesh.numVertices() * 3);
+  EXPECT_EQ(context.surfaceFromSimulationDispMap.rows(), context.surfaceMesh.numVertices() * 3);
+  for (int vi = 0; vi < context.surfaceMesh.numVertices(); ++vi)
+    EXPECT_TRUE(context.collisionHandler->isSurfaceVertexDeformable(vi));
+  for (int vi = context.surfaceMesh.numVertices(); vi < context.collisionHandler->getNumSurfaceVertices(); ++vi)
+    EXPECT_FALSE(context.collisionHandler->isSurfaceVertexDeformable(vi));
+}
+
+TEST(RunIPCSimSetupGTest, VolumeExternalObjectPreservesDeformableEmbeddingColumns)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "tet-external.json";
+  const fs::path externalPath = tempDir.path() / "external-plane.obj";
+  writeTextFile(configPath, makeTetIPCConfig(tempDir.path(), 0));
+  writeExternalPlane(externalPath, -0.2);
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  addIPCExternalObject(config, externalPath);
+  const auto context = pgo::RunIPCSim::buildVolumeIpcSimulation(config);
+
+  EXPECT_EQ(context.collisionHandler->getNumSurfaceVertices(), context.surfaceMesh.numVertices() + 4);
+  EXPECT_EQ(context.collisionHandler->getNumSurfaceTriangles(), context.surfaceMesh.numTriangles() + 2);
+  EXPECT_EQ(context.collisionHandler->getNumDOFs(), context.surfaceFromSimulationDispMap.cols());
+  EXPECT_EQ(context.surfaceFromSimulationDispMap.rows(), context.surfaceMesh.numVertices() * 3);
+}
+
+TEST(RunIPCSimSetupGTest, ShellSupportsMultipleExternalObjects)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-multiple-external.json";
+  const fs::path externalA = tempDir.path() / "external-a.obj";
+  const fs::path externalB = tempDir.path() / "external-b.obj";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
+  writeExternalPlane(externalA, -0.2);
+  writeExternalPlane(externalB, -0.4);
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  config.handle()["ipc-external-objects"] = nlohmann::json::array(
+    { { { "filename", externalA.generic_string() }, { "scale", 1.0 }, { "initial-translation", { 0.0, 0.0, 0.0 } }, { "movement", { 0.0, 0.0, 0.0 } } },
+      { { "filename", externalB.generic_string() }, { "scale", 1.0 }, { "initial-translation", { 0.0, 0.0, 0.0 } }, { "movement", { 0.0, 0.0, 0.0 } } } });
+  const auto context = pgo::RunIPCSim::buildShellIpcSimulation(config);
+  EXPECT_EQ(context.collisionHandler->getNumSurfaceVertices(), context.surfaceMesh.numVertices() + 8);
+  EXPECT_EQ(context.collisionHandler->getNumSurfaceTriangles(), context.surfaceMesh.numTriangles() + 4);
+}
+
+TEST(RunIPCSimSetupGTest, ShellSceneAndExternalScalesAreIndependentAndPrecedeInitialDisplacement)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-scaled-external.json";
+  const fs::path externalPath = tempDir.path() / "external-plane.obj";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
+  writeExternalPlane(externalPath, -0.25);
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  config.handle()["scale"] = 2.0;
+  config.handle()["init-disp"] = { 0.1, -0.2, 0.3 };
+  addIPCExternalObject(config, externalPath, nlohmann::json::array({ 0.0, 0.0, 0.0 }), 3.0,
+    nlohmann::json::array({ 0.5, 1.0, -0.25 }));
+  const auto context = pgo::RunIPCSim::buildShellIpcSimulation(config);
+
+  pgo::Mesh::TriMeshGeo rawSurface;
+  ASSERT_TRUE(rawSurface.load((fs::path(kShellExampleDir) / "shell.obj").string()));
+  EXPECT_TRUE(context.surfaceMesh.pos(0).isApprox(rawSurface.pos(0) * 2.0, 1e-14));
+  EXPECT_TRUE(context.initialDisplacement.segment<3>(0).isApprox(ES::V3d(0.1, -0.2, 0.3), 1e-14));
+  EXPECT_TRUE(context.initialDisplacement.tail<3>().isApprox(ES::V3d(0.1, -0.2, 0.3), 1e-14));
+
+  const ES::VXd &combinedRest = context.collisionHandler->getSurfaceRestPositions();
+  const int externalOffset = context.surfaceMesh.numVertices() * 3;
+  EXPECT_TRUE(combinedRest.segment<3>(externalOffset).isApprox(ES::V3d(-2.5, 0.25, -3.25), 1e-14));
+}
+
+TEST(RunIPCSimSetupGTest, ExternalObjectValidationRejectsUnsupportedInputs)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-external-errors.json";
+  const fs::path validPath = tempDir.path() / "valid.obj";
+  const fs::path emptyPath = tempDir.path() / "empty.obj";
+  const fs::path repeatedPath = tempDir.path() / "repeated.obj";
+  const fs::path zeroAreaPath = tempDir.path() / "zero-area.obj";
+  const fs::path nonFiniteAreaPath = tempDir.path() / "non-finite-area.obj";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
+  writeExternalPlane(validPath);
+  writeTextFile(emptyPath, "v 0 0 0\n");
+  writeTextFile(repeatedPath, "v 0 0 0\nv 1 0 0\nf 1 2 2\n");
+  writeTextFile(zeroAreaPath, "v 0 0 0\nv 1 0 0\nv 2 0 0\nf 1 2 3\n");
+  writeTextFile(nonFiniteAreaPath,
+    "v 1e308 0 0\nv 0 1e308 0\nv 0 0 1e308\nf 1 2 3\n");
 
   pgo::ConfigFileJSON config;
   ASSERT_TRUE(config.open(configPath.string().c_str()));
 
-  const auto context = pgo::RunIPCSim::buildVolumeIpcSimulation(config);
-  EXPECT_EQ(context.extraGeneralImplicitForceModels.size(), 1u);
+  config.handle()["ipc-external-objects"] = nlohmann::json::array(
+    { { { "filename", validPath.generic_string() }, { "movement", { 0.0, 0.0, 0.0 } } } });
+  EXPECT_NO_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config));
+  addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, 0.0, 0.0 }), 0.0);
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, 0.0, 0.0 }), "bad");
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, 0.0, 0.0 }), std::numeric_limits<double>::infinity());
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+
+  config.handle()["ipc-external-objects"] = nlohmann::json::array(
+    { { { "filename", validPath.generic_string() }, { "scale", 1.0 }, { "movement", { 0.0, 0.0, 0.0 } } } });
+  EXPECT_NO_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config));
+  addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, 0.0, 0.0 }), 1.0,
+    nlohmann::json::array({ 0.0, 0.0 }));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, 0.0, 0.0 }), 1.0,
+    nlohmann::json::array({ 0.0, "bad", 0.0 }));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, 0.0, 0.0 }), 1.0,
+    nlohmann::json::array({ 0.0, std::numeric_limits<double>::infinity(), 0.0 }));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+
+  addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, 0.1, 0.0 }));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, 0.0 }));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, "bad", 0.0 }));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, std::numeric_limits<double>::infinity(), 0.0 }));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, tempDir.path() / "missing.obj");
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, emptyPath);
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, repeatedPath);
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, zeroAreaPath);
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, nonFiniteAreaPath);
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+
+  config.handle().erase("ipc-external-objects");
+  config.handle()["external-objects"] = nlohmann::json::array();
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  config.handle().erase("external-objects");
+
+  config.handle()["ipc-external-objects"] = "not-an-array";
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  config.handle()["scale"] = 0.0;
+  config.handle()["ipc-external-objects"] = nlohmann::json::array();
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+}
+
+TEST(RunIPCSimSetupGTest, ExternalObjectDefaultsAndTypedMovementArePreserved)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-external-defaults.json";
+  const fs::path externalPath = tempDir.path() / "external-plane.obj";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
+  writeExternalPlane(externalPath, -0.2);
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  config.handle()["ipc-external-objects"] = nlohmann::json::array(
+    { { { "filename", externalPath.generic_string() } } });
+
+  const auto specs = pgo::RunIPCSim::parseIPCExternalObjectSpecs(config);
+  ASSERT_EQ(specs.size(), 1u);
+  EXPECT_EQ(specs[0].path, externalPath);
+  EXPECT_DOUBLE_EQ(specs[0].scale, 1.0);
+  EXPECT_TRUE(specs[0].initialTranslation.isZero(0.0));
+  EXPECT_TRUE(specs[0].movement.isZero(0.0));
+  EXPECT_NO_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config));
+}
+
+TEST(RunIPCSimCliGTest, StaticRestartRequestIsRejected)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-static-restart.json";
+  std::string config = makeStaticConfig(makeShellIPCConfig(tempDir.path(), 1));
+  config = addBoolConfigField(std::move(config), "restart-from-u", true);
+  writeTextFile(configPath, config);
+
+  EXPECT_NE(runCommand(shellExecutable(binary) + " " + quotePath(configPath)), 0);
+}
+
+TEST(RunIPCSimCliGTest, InvalidDynamicRestartStatesAreRejected)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+  ScopedTempDir tempDir;
+  const fs::path outputDir = tempDir.path() / "shell-output";
+  const fs::path configPath = tempDir.path() / "shell-malformed-restart.json";
+  fs::create_directories(outputDir);
+  writeTextFile(configPath, addBoolConfigField(makeShellIPCConfig(tempDir.path(), 2), "restart-from-u", true));
+  const std::string command = shellExecutable(binary) + " " + quotePath(configPath);
+  const fs::path restartPath = outputDir / "deform0000.u";
+
+  writeTextFile(restartPath, "not a matrix\n");
+  EXPECT_NE(runCommand(command), 0);
+
+  ES::MXd wrongSize = ES::MXd::Zero(2, 2);
+  ASSERT_EQ(ES::writeMatrix(restartPath.string().c_str(), wrongSize), 0);
+  EXPECT_NE(runCommand(command), 0);
+
+  pgo::Mesh::TriMeshGeo mesh;
+  ASSERT_TRUE(mesh.load((fs::path(kShellExampleDir) / "shell.obj").string()));
+  ES::MXd nonFinite = ES::MXd::Zero(mesh.numVertices() * 3, 3);
+  nonFinite(0, 0) = std::numeric_limits<double>::quiet_NaN();
+  ASSERT_EQ(ES::writeMatrix(restartPath.string().c_str(), nonFinite), 0);
+  EXPECT_NE(runCommand(command), 0);
 }

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "abc-output-root": "cli-output/batch-abc",
+  "cases": [
+    {
+      "name": "installed-wheel-smoke",
+      "simulation-config": "installed-cli-sim.json",
+      "animation-config": "installed-cli-animation.json"
+    }
+  ]
+}

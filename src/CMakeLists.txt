@@ -1,7 +1,6 @@
 set(PGO_GLOBAL_LIBRARY_TARGETS
   macros  
   basicAlgorithms
-  profiling
   pgoLogging
   basicIO
   eigenSupport
@@ -31,6 +30,8 @@ endif()
 foreach(lib ${PGO_GLOBAL_LIBRARY_TARGETS})
   add_subdirectory(core/${lib})
 endforeach()
+
+add_subdirectory(simulationRunner)
 
 if(PGO_UI)
   add_subdirectory(render)
