@@ -35,8 +35,7 @@ jobs:
       - name: Set up native and uv dependencies
         run: |
           brew install gmp mpfr libomp tbb
-          uv_version="$(python scripts/uv_version.py)"
-          python -m pip install "uv==${uv_version}"
+          python -m pip install uv
           uv sync --locked --python python
           echo "EVIDENCE_DIR=${RUNNER_TEMP}/native-evidence" >> "${GITHUB_ENV}"
           echo "PYPGO_VERSION=$(uv run python scripts/project_version.py)" >> "${GITHUB_ENV}"
@@ -101,8 +100,7 @@ jobs:
       - name: Set up native and uv dependencies
         run: |
           brew install gmp mpfr libomp tbb
-          uv_version="$(python scripts/uv_version.py)"
-          python -m pip install "uv==${uv_version}"
+          python -m pip install uv
           uv sync --locked --python python
           echo "WHEEL_DIR=${RUNNER_TEMP}/wheelhouse" >> "${GITHUB_ENV}"
           echo "EVIDENCE_DIR=${RUNNER_TEMP}/evidence" >> "${GITHUB_ENV}"
@@ -157,7 +155,6 @@ jobs:
           cp -R tests/pypgo/assets "${CANDIDATE_DIR}/verify/tests/pypgo/"
           cp examples/assets/common/torus-tet.veg \
             "${CANDIDATE_DIR}/verify/examples/assets/common/"
-          uv run python scripts/uv_version.py > "${CANDIDATE_DIR}/verify/uv-version.txt"
 
       - name: Upload candidate wheel and verification bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -188,8 +185,7 @@ jobs:
       - name: Install wheel in a fresh environment
         run: |
           verify_dir="${RUNNER_TEMP}/candidate/verify"
-          uv_version="$(cat "${verify_dir}/uv-version.txt")"
-          python -m pip install "uv==${uv_version}"
+          python -m pip install uv
           uv venv --python 3.12 "${RUNNER_TEMP}/pypgo-runtime"
           runtime_python="${RUNNER_TEMP}/pypgo-runtime/bin/python"
           uv pip install --python "${runtime_python}" "numpy==2.0.2" "pytest==8.4.2"

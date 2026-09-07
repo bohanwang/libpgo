@@ -36,8 +36,7 @@ jobs:
       - name: Set up uv dependencies
         shell: pwsh
         run: |
-          $uvVersion = python scripts/uv_version.py
-          python -m pip install "uv==$uvVersion"
+          python -m pip install uv
           uv sync --locked --python python
           "EVIDENCE_DIR=$env:RUNNER_TEMP\native-evidence" | Out-File $env:GITHUB_ENV -Append
           "PYPGO_VERSION=$(uv run python scripts/project_version.py)" | Out-File $env:GITHUB_ENV -Append
@@ -110,8 +109,7 @@ jobs:
       - name: Set up uv dependencies
         shell: pwsh
         run: |
-          $uvVersion = python scripts/uv_version.py
-          python -m pip install "uv==$uvVersion"
+          python -m pip install uv
           uv sync --locked --python python
           "WHEEL_DIR=$env:RUNNER_TEMP\wheelhouse" | Out-File $env:GITHUB_ENV -Append
           "EVIDENCE_DIR=$env:RUNNER_TEMP\evidence" | Out-File $env:GITHUB_ENV -Append
@@ -172,8 +170,6 @@ jobs:
             "$env:CANDIDATE_DIR\verify\tests\pypgo\" -Recurse
           Copy-Item examples\assets\common\torus-tet.veg `
             "$env:CANDIDATE_DIR\verify\examples\assets\common\"
-          uv run python scripts\uv_version.py `
-            | Out-File "$env:CANDIDATE_DIR\verify\uv-version.txt"
 
       - name: Upload candidate wheel and verification bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -205,8 +201,7 @@ jobs:
         shell: pwsh
         run: |
           $verifyDir = "$env:RUNNER_TEMP\candidate\verify"
-          $uvVersion = (Get-Content "$verifyDir\uv-version.txt" -Raw).Trim()
-          python -m pip install "uv==$uvVersion"
+          python -m pip install uv
           $runtime = "$env:RUNNER_TEMP\pypgo-runtime"
           uv venv --python 3.12 $runtime
           $runtimePython = "$runtime\Scripts\python.exe"

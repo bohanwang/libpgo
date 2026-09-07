@@ -72,7 +72,6 @@ release = [
 [tool.uv]
 default-groups = ["release"]
 package = false
-required-version = "==0.11.6"
 
 [tool.uv.dependency-groups]
 dev = { requires-python = ">=3.12,<3.13" }
