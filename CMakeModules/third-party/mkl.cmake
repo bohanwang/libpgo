@@ -24,6 +24,7 @@ if(PGO_USE_MKL)
   endif()
 
   find_package(MKL CONFIG REQUIRED)
+  target_link_options(MKL::MKL INTERFACE "LINKER:--no-as-needed")
   message(STATUS "Using external MKL package: ${MKL_DIR}")
 
   # oneMKL loads its CPU dispatch kernels with dlopen(), so repair tools cannot
