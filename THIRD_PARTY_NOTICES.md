@@ -62,3 +62,11 @@ GPL/LGPL/MPL obligations, the distribution license and corresponding-source
 offer, and the complete license texts/notices that accompany the artifact.
 This is a release gate, not legal advice. P4.6 must retain the final linked
 component report with the wheel evidence.
+
+## Example assets
+
+Example assets are not packaged into wheels.
+
+| Asset | Source | License |
+| --- | --- | --- |
+| `examples/assets/shell/shirt.obj` | [newton-physics/newton](https://github.com/newton-physics/newton) commit `e42568d9895f12b5bb004f3fedb600053e233f8c`, `newton/examples/assets/unisex_shirt.usd` prim `/root/shirt`, converted to OBJ, scaled from centimeters to meters, and remeshed with MeshLab isotropic explicit remeshing (target edge length 2 cm), then rotated -75° about the x axis and translated so its lowest point is 0.5 m above the example ground plane | Apache-2.0 |

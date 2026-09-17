@@ -78,17 +78,49 @@ double parseScale(const pgo::ConfigFileJSON &jconfig)
   return scale;
 }
 
-Contact::CIPC::SurfaceIPCCore::Parameters makeShellIPCParams(
-  const pgo::ConfigFileJSON &jconfig, const pgo::Mesh::BoundingBox &surfaceBox)
+struct ShellMaterial
 {
-  constexpr double kShellYoungsModulus = 1000000.0;
-  constexpr double kShellThickness = 3e-3;
+  std::string name;
+  SolidDeformationModel::DeformationModelElasticMaterial type;
+  std::vector<double> elementParams;  // elastic parameters shared by every element
+  double membraneStiffness;           // scales the heuristic IPC kappa
+  double thickness;
+  double arealDensity;
+};
 
+double parseOptionalPositive(const pgo::ConfigFileJSON &jconfig, const char *key, double defaultValue)
+{
+  const double value = jconfig.getValue<double>(key, 0, defaultValue);
+  if (!std::isfinite(value) || value <= 0.0)
+    throwConfigError(std::string("`") + key + "` must be finite and strictly positive.");
+  return value;
+}
+
+ShellMaterial parseShellMaterial(const pgo::ConfigFileJSON &jconfig)
+{
+  ShellMaterial material;
+  material.name = jconfig.getString("elastic-material");
+  material.thickness = parseOptionalPositive(jconfig, "shell-thickness", 3e-3);
+  material.arealDensity = parseOptionalPositive(jconfig, "shell-areal-density", 100.0);
+
+  if (material.name != "koiter-stvk")
+    throwConfigError("runIPCSim phase1D shell path only supports `elastic-material = koiter-stvk`.");
+  const double E = parseOptionalPositive(jconfig, "shell-youngs-modulus", 1000000.0);
+  const double bendingE = parseOptionalPositive(jconfig, "shell-bending-youngs-modulus", E);
+  material.type = SolidDeformationModel::DeformationModelElasticMaterial::KOITER_STVK;
+  material.elementParams = { E, 0.4, bendingE, 0.4, material.thickness };
+  material.membraneStiffness = E;
+  return material;
+}
+
+Contact::CIPC::SurfaceIPCCore::Parameters makeShellIPCParams(
+  const pgo::ConfigFileJSON &jconfig, const pgo::Mesh::BoundingBox &surfaceBox, const ShellMaterial &material)
+{
   Contact::CIPC::SurfaceIPCCore::Parameters ipcParams;
   const bool ipcHeuristic = jconfig.exist("ipc-heuristic") ? jconfig.getValue<bool>("ipc-heuristic", 1) : false;
   if (ipcHeuristic) {
     ipcParams.dhat = surfaceBox.sides().norm() * 1e-3;
-    ipcParams.kappa = kShellYoungsModulus * kShellThickness;
+    ipcParams.kappa = material.membraneStiffness * material.thickness;
   }
   else {
     if (!jconfig.exist("ipc-dhat"))
@@ -216,9 +248,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
 
   const double scale = parseScale(jconfig);
 
-  const std::string material = jconfig.getString("elastic-material");
-  if (material != "koiter-stvk")
-    throwConfigError("runIPCSim phase1D shell path only supports `elastic-material = koiter-stvk`.");
+  const ShellMaterial shellMaterial = parseShellMaterial(jconfig);
 
   const std::string surfaceMeshFilename = jconfig.getResolvedPath("surface-mesh", 1);
 
@@ -228,8 +258,15 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   const pgo::Mesh::BoundingBox surfaceBox(surfaceMesh.positions());
   const bool ipcHeuristic = jconfig.exist("ipc-heuristic") ? jconfig.getValue<bool>("ipc-heuristic", 1) : false;
   const bool enableMaterialMaxStep = parseEnableMaterialMaxStep(jconfig);
-  const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeShellIPCParams(jconfig, surfaceBox);
+  const bool zeroRestCurvature = jconfig.exist("shell-zero-rest-curvature") ? jconfig.getValue<bool>("shell-zero-rest-curvature", 1) : false;
+  const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeShellIPCParams(jconfig, surfaceBox, shellMaterial);
 
+  std::cout << "runIPCSim phase1D shell material: elastic-material=" << shellMaterial.name << ", element-params=[";
+  for (std::size_t i = 0; i < shellMaterial.elementParams.size(); ++i)
+    std::cout << (i ? ", " : "") << shellMaterial.elementParams[i];
+  std::cout << "], shell-thickness=" << shellMaterial.thickness
+            << ", shell-areal-density=" << shellMaterial.arealDensity
+            << ", shell-zero-rest-curvature=" << (zeroRestCurvature ? "true" : "false") << std::endl;
   std::cout << "runIPCSim phase1D shell IPC parameters: "
             << "ipc-heuristic=" << (ipcHeuristic ? "true" : "false") << ", "
             << "source=" << (ipcHeuristic ? "heuristic" : "config") << ", "
@@ -246,9 +283,10 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
     std::make_shared<SolidDeformationModel::DeformationModelManager>();
 
   dmm->setMesh(simMesh.get(), nullptr, nullptr);
-  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::SHELL_FF_DOF0,
-    pgo::SolidDeformationModel::DeformationModelElasticMaterial::KOITER_STVK);
+  dmm->init(pgo::SolidDeformationModel::DeformationModelPlasticMaterial::SHELL_FF_DOF0, shellMaterial.type);
   dmm->setEnforceSPD(1);
+  if (zeroRestCurvature)
+    dmm->zeroShellRestCurvature();
 
   std::vector<double> elementWeights(simMesh->getNumElements(), 1.0);
   std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> assembler =
@@ -257,20 +295,12 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   const int n = simMesh->getNumVertices();
   const int n3 = n * 3;
   const int nele = simMesh->getNumElements();
-  constexpr double kShellYoungsModulus = 1000000.0;
-  constexpr double kShellThickness = 3e-3;
 
-  ES::VXd elasticParams(5 * nele);
-  for (int ei = 0; ei < nele; ++ei) {
-    const double E_bend = kShellYoungsModulus;
-    const double nu = 0.4;
-
-    elasticParams[ei * 5 + 0] = kShellYoungsModulus;
-    elasticParams[ei * 5 + 1] = nu;
-    elasticParams[ei * 5 + 2] = E_bend;
-    elasticParams[ei * 5 + 3] = nu;
-    elasticParams[ei * 5 + 4] = kShellThickness;
-  }
+  const int numElementParams = static_cast<int>(shellMaterial.elementParams.size());
+  ES::VXd elasticParams(numElementParams * nele);
+  for (int ei = 0; ei < nele; ++ei)
+    elasticParams.segment(ei * numElementParams, numElementParams) =
+      Eigen::Map<const ES::VXd>(shellMaterial.elementParams.data(), numElementParams);
 
   ES::VXd simulationRestPosition(n3);
   for (int vi = 0; vi < n; ++vi) {
@@ -301,7 +331,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
 
   ES::SpMatD M;
   libiglInterface::computeMassMatrix(surfaceMesh, M, 1, 1);
-  M *= 100;
+  M *= shellMaterial.arealDensity;
 
   ES::MXd V;
   ES::MXi F;

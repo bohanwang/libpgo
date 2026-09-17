@@ -39,6 +39,9 @@
     "shell": [
       "shell-dynamic-ipc",
       "shell-static-ipc"
+    ],
+    "shirt-drop": [
+      "shirt-drop-dynamic-ipc"
     ]
   },
   "cases": [
@@ -161,6 +164,11 @@
       "name": "shell-static-ipc",
       "simulation-config": "configs/shell/shell_hang/shell-static-ipc.json",
       "animation-config": "configs/shell/shell_hang/shell-static-ipc-animation.json"
+    },
+    {
+      "name": "shirt-drop-dynamic-ipc",
+      "simulation-config": "configs/shell/shirt_drop/shirt-drop-dynamic-ipc.json",
+      "animation-config": "configs/shell/shirt_drop/shirt-drop-dynamic-ipc-animation.json"
     }
   ]
 }

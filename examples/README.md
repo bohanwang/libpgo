@@ -28,6 +28,7 @@ runner prints an explicit warning. Sampled shell simulation is not supported.
 | [`dragon-dyn`](configs/volume/dragon-dyn/) | tet, cubic | sampled, IPC | dynamic | Translated falling object |
 | [`dragon`](configs/volume/dragon/README.md) | tet, cubic | sampled | static | Static volume solve without contact |
 | [`shell_hang`](configs/shell/shell_hang/README.md) | shell | IPC | dynamic, static | Shell FEM through the IPC runner |
+| [`shirt-drop`](configs/shell/shirt_drop/) | shell | IPC | dynamic | Garment falling onto a ground plane |
 
 Every simulation JSON has a sibling `*-animation.json`. Cubic configurations
 depend on meshes generated locally with

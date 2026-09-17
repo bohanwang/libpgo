@@ -726,6 +726,16 @@ void DeformationModelManager::setEnforceSPD(int enable)
   }
 }
 
+void DeformationModelManager::zeroShellRestCurvature()
+{
+  for (auto pm : data->plasticShellConstant)
+    if (pm)
+      pm->set_bbar(ES::M2d::Zero());
+  for (auto pm : data->plasticShellUniformStretch)
+    if (pm)
+      pm->set_bbar(ES::M2d::Zero());
+}
+
 const SimulationMesh *DeformationModelManager::getMesh() const
 {
   return data->simulationMesh;

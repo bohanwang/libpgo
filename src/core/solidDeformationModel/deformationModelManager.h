@@ -51,6 +51,10 @@ public:
   void setMesh(const SimulationMesh *simulationMesh, const double *elementFiberDirections = nullptr, const double *vertexFiberDirections = nullptr);
   void init(DeformationModelPlasticMaterial plasticModelType, DeformationModelElasticMaterial elasticMaterialType);
   void setEnforceSPD(int enable);
+  // Zeroes every shell element's rest curvature (bbar), treating the rest
+  // configuration as a flat fabric panel that happens to be pre-bent. Call
+  // after init(); membrane rest metrics (abar) are left untouched.
+  void zeroShellRestCurvature();
   void updateMeshRigidTransformation(const double R[9]);
 
   int getNumPlasticParameters() const;

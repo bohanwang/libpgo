@@ -1,0 +1,24 @@
+{
+  "meshes": [
+    {
+      "name": "shirt-drop-dynamic-ipc",
+      "driving-mesh": "../../../assets/shell/shirt.obj",
+      "sequence": "../../../generated/output/shirt-drop-dynamic-ipc/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        100
+      ]
+    },
+    {
+      "name": "shirt-drop-plane",
+      "driving-mesh": "../../../assets/volume/box-contact/plane.obj",
+      "sequence": "../../../assets/volume/box-contact/plane.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        100
+      ]
+    }
+  ]
+}

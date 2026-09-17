@@ -1023,6 +1023,84 @@ TEST(RunIPCSimSetupGTest, RemovedAnalyticFloorFieldsAreRejected)
   EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
 }
 
+TEST(RunIPCSimSetupGTest, ShellArealDensityScalesMassAndRejectsNonPositiveMaterial)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-material.json";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  const double defaultMass = pgo::RunIPCSim::buildShellIpcSimulation(config).M.sum();
+
+  config.handle()["shell-areal-density"] = 0.25;
+  EXPECT_NEAR(pgo::RunIPCSim::buildShellIpcSimulation(config).M.sum(), defaultMass * 0.25 / 100.0, 1e-9 * defaultMass);
+
+  config.handle()["shell-bending-youngs-modulus"] = 0.0;
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+}
+
+TEST(RunIPCSimSetupGTest, ShellZeroRestCurvatureMakesCurvedRestCarryBendingEnergy)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path meshPath = tempDir.path() / "paraboloid.obj";
+  const fs::path configPath = tempDir.path() / "shell-flat-rest.json";
+
+  // 5x5 grid bent into a paraboloid: nonzero rest curvature, curved rest metric.
+  {
+    std::ostringstream obj;
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j) {
+        const double x = -0.4 + 0.2 * i, y = -0.4 + 0.2 * j;
+        obj << "v " << x << " " << y << " " << 0.5 * (x * x + y * y) << "\n";
+      }
+    for (int i = 0; i < 4; ++i)
+      for (int j = 0; j < 4; ++j) {
+        const int a = i * 5 + j + 1, b = a + 1, c = a + 6, d = a + 5;
+        obj << "f " << a << " " << b << " " << c << "\n";
+        obj << "f " << a << " " << c << " " << d << "\n";
+      }
+    writeTextFile(meshPath, obj.str());
+  }
+
+  std::ostringstream json;
+  json << "{\n"
+       << "  \"surface-mesh\": " << quotePath(meshPath) << ",\n"
+       << "  \"fixed-vertices\": [],\n"
+       << "  \"g\": [0, 0, 0],\n"
+       << "  \"init-vel\": [0, 0, 0],\n"
+       << "  \"init-disp\": [0, 0, 0],\n"
+       << "  \"scale\": 1.0,\n"
+       << "  \"timestep\": 0.001,\n"
+       << "  \"num-timestep\": 0,\n"
+       << "  \"damping-params\": [0, 0],\n"
+       << "  \"sim-type\": \"dynamic\",\n"
+       << "  \"solver-eps\": 1e-4,\n"
+       << "  \"solver-max-iter\": 5,\n"
+       << "  \"elastic-material\": \"koiter-stvk\",\n"
+       << "  \"dump-interval\": 1,\n"
+       << "  \"output\": " << quotePath(tempDir.path() / "shell-flat-rest-output") << ",\n"
+       << "  \"ipc-heuristic\": true,\n"
+       << "  \"contact-model\": \"ipc\"\n"
+       << "}\n";
+  writeTextFile(configPath, json.str());
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  auto context = pgo::RunIPCSim::buildShellIpcSimulation(config);
+  const ES::VXd zero = ES::VXd::Zero(context.simulationRestPosition.size());
+  const double restEnergyWithCurvature = context.elasticEnergy->func(zero);
+  EXPECT_LT(restEnergyWithCurvature, 1e-9);
+
+  config.handle()["shell-zero-rest-curvature"] = true;
+  context = pgo::RunIPCSim::buildShellIpcSimulation(config);
+  const double restEnergyFlatRest = context.elasticEnergy->func(zero);
+  EXPECT_GT(restEnergyFlatRest, 1e-6);
+  EXPECT_TRUE(std::isfinite(restEnergyFlatRest));
+}
+
 TEST(RunIPCSimSetupGTest, ShellExternalObjectBuildsCombinedCollisionSurfaceOnly)
 {
   initializeRunIPCSimTestEnvironment();
