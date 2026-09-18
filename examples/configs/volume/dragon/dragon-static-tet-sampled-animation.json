@@ -1,0 +1,14 @@
+{
+  "meshes": [
+    {
+      "name": "dragon-static-tet",
+      "driving-mesh": "../../../assets/volume/dragon/dragon.obj",
+      "sequence": "../../../generated/output/dragon-static-tet-sampled.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        1
+      ]
+    }
+  ]
+}

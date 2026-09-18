@@ -52,25 +52,12 @@ void PotentialEnergies::init()
   // std::vector<ES::TripletD> entries;
   tbb::concurrent_vector<ES::TripletD> entries;
   for (auto energy : potentialEnergies) {
-    ES::SpMatD h;
-    energy->createHessian(h);
-
     std::vector<int> dofs;
     energy->getDOFs(dofs);
 
-    /*
-    for (Eigen::Index outeri = 0; outeri < h.outerSize(); outeri++) {
-      for (ES::SpMatD::InnerIterator it(h, outeri); it; ++it) {
-        entries.emplace_back(
-          (ES::SpMatD::StorageIndex)dofs[it.row()],
-          (ES::SpMatD::StorageIndex)dofs[it.col()],
-          1.0);
-      }
-    }
-    */
-
-    // Only include fixed-topology energies in hessianAll
+    ES::SpMatD h;
     if (energy->isHessianTopologyFixed()) {
+      energy->createHessian(h);
       tbb::parallel_for((ES::IDX)0, h.outerSize(), [&](ES::IDX outeri) {
         for (ES::SpMatD::InnerIterator it(h, outeri); it; ++it) {
           entries.emplace_back(
@@ -284,6 +271,9 @@ double PotentialEnergies::computeMaxStepSize(EigenSupport::ConstRefVecXd x, Eige
 {
   double maxStepSize = 1.0;
   for (size_t i = 0; i < potentialEnergies.size(); i++) {
+    if (energyCoeffs[i] == 0)
+      continue;
+
     mapx(x, energyDOFs[i], buffer->xlocals[i]);
     mapx(dx, energyDOFs[i], buffer->vecs[i]);
     double s = potentialEnergies[i]->computeMaxStepSize(buffer->xlocals[i], buffer->vecs[i]);

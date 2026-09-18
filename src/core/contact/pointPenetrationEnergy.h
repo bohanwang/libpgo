@@ -43,7 +43,6 @@ public:
   virtual void getDOFs(std::vector<int> &dofs) const override { dofs = allDOFs; }
   virtual int getNumDOFs() const override { return (int)hessianConstant.rows(); }
 
-  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override { return 1.0; }
 
 protected:
   bool isInside(const EigenSupport::V3d &p, const EigenSupport::V3d p0, const EigenSupport::V3d n) const;

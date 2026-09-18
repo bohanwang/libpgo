@@ -1,3 +1,51 @@
+-- v0.0.4
+
+- Add cubic volume simulation
+  - support cubic .veg meshes and eight-node cubic FEM
+  - add cubicMesher
+  - add scripts that generate showcase and lightweight tet/cubic assets
+  - keep generated cubic meshes outside git
+
+- Add incremental potential contact (IPC)
+  - point-triangle and edge-edge self-contact
+  - explicit floor contact
+  - barrier value, gradient, Hessian, broad phase, and CCD
+  - material-inversion and collision-free Newton maximum steps
+  - fixed/dynamic Hessian topology contracts and correct symbolic
+    factorization reuse/reanalysis
+  - static and dynamic tet/cubic/shell IPC through runIPCSim and the shared
+    config dispatcher
+
+- Reuse simulation implementations across interfaces
+  - add pgo_run_sim_from_config to the C API
+  - add pypgo.run_sim_from_config to the Python API
+  - route tet/cubic sampled and IPC configs through the shared dispatcher
+  - keep a missing volume contact-model defaulting to sampled contact
+  - preserve runSim for sampled volume and runIPCSim for IPC volume/shell
+
+- Improve correctness coverage
+  - add tet/cubic FEM derivative and inversion-limit tests
+  - add IPC primitive, barrier, mapping, transition, and CCD tests
+  - add static sampled and static IPC tests
+  - fix the pulling-Hessian template lifetime in the reusable IPC context
+
+- Reorganize examples
+  - separate checked-in assets, JSON configs, scripts, and generated output
+  - intentionally remove compatibility copies at old example paths
+
+- Replace the Conda build and packaging path
+  - use uv, CMake presets, pinned FetchContent sources, and platform-native
+    GMP/MPFR/TBB/MKL discovery
+  - use oneMKL Pardiso with TBB on Linux and Windows
+  - use Accelerate without MKL on macOS
+  - repair standalone wheels with auditwheel, delocate, or delvewheel
+  - remove tracked binary wheel artifacts
+
+- Package policy
+  - provide CPython 3.12 wheels through GitHub Actions artifacts
+  - support manylinux_2_28 x86-64, macOS 26+ arm64, and Windows x86-64 wheels
+  - IPC supports self-contact and external-contact
+
 -- v0.0.3
   - fix various bug in cmake
   - fix bugs about misusage of eigen library

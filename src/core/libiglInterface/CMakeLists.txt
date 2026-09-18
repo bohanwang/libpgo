@@ -1,6 +1,6 @@
 set(LIBIGL_INTERFACE_HEADERS libiglInterface.h)
 set(LIBIGL_INTERFACE_SOURCES libiglInterface.cpp)
-set(LIBIGL_INTERFACE_DEPS pgoLogging eigenSupport mesh igl::core igl_copyleft::cgal)
+set(LIBIGL_INTERFACE_DEPS pgoLogging eigenSupport mesh igl::core)
 
 foreach (tgt ${LIBIGL_INTERFACE_DEPS})
   if (NOT TARGET ${tgt})

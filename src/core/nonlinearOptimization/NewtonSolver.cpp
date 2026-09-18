@@ -266,10 +266,6 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     deltaxSmall.noalias() = solver->solve(rhs);
 #endif
 
-    if (energy->isHessianTopologyFixed()) {
-      solver.reset();  // free symbolic factorization memory since we won't reuse it anymore
-    }
-
     if (verbose >= 3 && iter % printGap == 0)
       std::cout << (A11 * deltaxSmall - rhs).norm() << ' ' << rhs.norm() << std::endl;
 
@@ -380,17 +376,9 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
 
       const double effectiveAlpha = feasibleAlpha * alpha;
       const double acceptedStepMaxNorm = std::abs(alpha) * deltax.cwiseAbs().maxCoeff();
-      energy->recordLineSearchStepDiagnostics(feasibleAlpha, alpha, effectiveAlpha);
 
       if (verbose >= 2 && iter % printGap == 0) {
         std::cout << "        feasibleAlpha=" << feasibleAlpha << std::endl;
-        if (feasibleAlpha < 1.0) {
-          double materialAlpha = 1.0;
-          double contactAlpha = 1.0;
-          energy->getFeasibleAlphaClampBreakdown(materialAlpha, contactAlpha);
-          std::cout << "        feasible alpha clamped: material:" << materialAlpha
-                    << " contact:" << contactAlpha << std::endl;
-        }
         std::cout << "        lineSearchAlpha=" << alpha << std::endl;
         std::cout << "        effectiveAlpha=" << effectiveAlpha << std::endl;
         std::cout << "        acceptedStepMaxNorm=" << acceptedStepMaxNorm << std::endl;

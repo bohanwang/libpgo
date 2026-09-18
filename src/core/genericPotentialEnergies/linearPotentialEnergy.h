@@ -33,7 +33,6 @@ public:
   virtual int isQuadratic() const override { return 0; }
   virtual int hasHessianVector() const override { return 0; }
 
-  virtual double computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSupport::ConstRefVecXd dx) const override { return 1.0; }
 
 protected:
   std::vector<int> allDOFs;

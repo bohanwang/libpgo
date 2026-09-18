@@ -1,0 +1,14 @@
+{
+  "meshes": [
+    {
+      "name": "bunny-tet",
+      "driving-mesh": "../../../assets/volume/bunny/bunny.obj",
+      "sequence": "../../../generated/output/bunny-tet-sampled/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        200
+      ]
+    }
+  ]
+}

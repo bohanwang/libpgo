@@ -1,0 +1,55 @@
+{
+  "cubic-mesh": "../../../assets/generated/cubic/box-cubic.veg",
+  "surface-mesh": "../../../assets/volume/box/box.obj",
+  "fixed-vertices": [
+    {
+      "filename": "../../../assets/volume/box-contact/top-fixed-cubic.txt",
+      "movement": [
+        0,
+        -0.1,
+        0
+      ],
+      "coeff": 100000
+    }
+  ],
+  "ipc-external-objects": [
+    {
+      "filename": "../../../assets/volume/box-contact/plane.obj",
+      "scale": 1.0,
+      "initial-translation": [0, 0, 0],
+      "movement": [0, 0, 0]
+    }
+  ],
+  "g": [
+    0,
+    0,
+    0
+  ],
+  "init-vel": [
+    0,
+    0,
+    0
+  ],
+  "init-disp": [
+    0,
+    0,
+    0
+  ],
+  "scale": 1.0,
+  "timestep": 0.001,
+  "num-timestep": 1,
+  "damping-params": [
+    0,
+    0
+  ],
+  "sim-type": "static",
+  "solver-eps": 0.000001,
+  "solver-max-iter": 300,
+  "elastic-material": "stable-neo",
+  "dump-interval": 1,
+  "output": "../../../generated/output/box-contact-static-cubic-ipc",
+  "ipc-dhat": 0.002,
+  "ipc-kappa": 3000.0,
+  "enable-material-max-step": true,
+  "contact-model": "ipc"
+}

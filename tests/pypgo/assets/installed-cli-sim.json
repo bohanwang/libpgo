@@ -1,0 +1,29 @@
+{
+  "tet-mesh": "box-tet.veg",
+  "surface-mesh": "box-surface.obj",
+  "fixed-vertices": [
+    {
+      "filename": "box-fixed.txt",
+      "movement": [0.0, 0.0, 0.0],
+      "coeff": 100000.0
+    }
+  ],
+  "g": [0.0, -0.1, 0.0],
+  "init-vel": [0.0, 0.0, 0.0],
+  "init-disp": [0.0, 0.0, 0.0],
+  "scale": 1.0,
+  "timestep": 0.001,
+  "num-timestep": 2,
+  "damping-params": [0.0, 0.0],
+  "sim-type": "dynamic",
+  "solver-eps": 0.0001,
+  "solver-max-iter": 5,
+  "elastic-material": "stable-neo",
+  "dump-interval": 1,
+  "output": "cli-output/simulation",
+  "contact-model": "sampled",
+  "contact-stiffness": 1000.0,
+  "contact-sample": 1,
+  "contact-friction-coeff": 0.0,
+  "contact-vel-eps": 0.00001
+}

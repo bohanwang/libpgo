@@ -1,0 +1,11 @@
+{
+  "meshes": [
+    {
+      "name": "installed-wheel-smoke",
+      "driving-mesh": "box-surface.obj",
+      "sequence": "cli-output/simulation/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [0, 1]
+    }
+  ]
+}

@@ -7,6 +7,7 @@ copyright to Bohan Wang
 #include "mappedSurfacePotentialEnergy.h"
 #include "ipc/core/surfaceIPCCore.h"
 
+#include <cstdint>
 #include <vector>
 
 namespace pgo
@@ -26,10 +27,17 @@ public:
     const EigenSupport::MXi &surfaceTriangles,
     const EigenSupport::SpMatD &surfaceFromSimulationDispMap,
     const SurfaceIPCCore::Parameters &ipcParams = {});
+  EmbeddedSurfaceIPCPotentialEnergy(
+    const EigenSupport::MXd &surfaceRestVertices,
+    const EigenSupport::MXi &surfaceTriangles,
+    const EigenSupport::SpMatD &surfaceFromSimulationDispMap,
+    const std::vector<uint8_t> &vertexIsDeformableMask,
+    const SurfaceIPCCore::Parameters &ipcParams = {});
 
-  std::int64_t getContactClampCount() const { return surfaceIPCCore_.getContactClampCount(); }
-  double getMinContactFeasibleAlphaThisSolve() const { return surfaceIPCCore_.getMinContactFeasibleAlphaThisSolve(); }
-  void resetContactMaxStepStats() const { surfaceIPCCore_.resetContactMaxStepStats(); }
+  int getNumSurfaceVertices() const { return surfaceIPCCore_.getNumSurfaceVertices(); }
+  int getNumSurfaceTriangles() const { return surfaceIPCCore_.getNumSurfaceTriangles(); }
+  bool isSurfaceVertexDeformable(int vi) const { return surfaceIPCCore_.isSurfaceVertexDeformable(vi); }
+  void validateCollisionFreeState(EigenSupport::ConstRefVecXd simulationDisplacements) const;
 
 private:
   virtual double computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const override;

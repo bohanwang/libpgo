@@ -1,0 +1,45 @@
+{
+  "cubic-mesh": "../../../assets/generated/cubic/bunny-cubic.veg",
+  "surface-mesh": "../../../assets/volume/bunny/bunny.obj",
+  "fixed-vertices": [],
+  "ipc-external-objects": [
+    {
+      "filename": "../../../assets/common/bottom-large.obj",
+      "scale": 1.0,
+      "initial-translation": [0, 0, 0],
+      "movement": [0, 0, 0]
+    }
+  ],
+  "g": [
+    0,
+    -9.81,
+    0
+  ],
+  "init-vel": [
+    0,
+    0,
+    0
+  ],
+  "init-disp": [
+    0,
+    -0.3,
+    0
+  ],
+  "scale": 1.0,
+  "timestep": 0.001,
+  "num-timestep": 2000,
+  "damping-params": [
+    0,
+    0
+  ],
+  "sim-type": "dynamic",
+  "solver-eps": 0.0001,
+  "solver-max-iter": 200,
+  "elastic-material": "stable-neo",
+  "dump-interval": 10,
+  "output": "../../../generated/output/bunny-cubic-ipc",
+  "ipc-dhat": 0.002,
+  "ipc-kappa": 3000.0,
+  "enable-material-max-step": true,
+  "contact-model": "ipc"
+}

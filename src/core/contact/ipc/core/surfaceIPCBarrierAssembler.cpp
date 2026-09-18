@@ -191,6 +191,7 @@ void SurfaceIPCBarrierAssembler::computeHessian(
   double dhat,
   double kappa,
   double eps_ee,
+  bool projectHessianToPSD,
   SpMatD &hess) const
 {
   int n = 3 * numVerts;
@@ -246,7 +247,8 @@ void SurfaceIPCBarrierAssembler::computeHessian(
         double gp = barrier::dbds(d2, dhat2);
         double gpp = barrier::d2bds2(d2, dhat2);
         M12d localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
-        localH = projectToPSD(localH);
+        if (projectHessianToPSD)
+          localH = projectToPSD(localH);
 
         int idx[4] = { pair.p, pair.t0, pair.t1, pair.t2 };
         scatterH(i, localH, idx);
@@ -288,7 +290,8 @@ void SurfaceIPCBarrierAssembler::computeHessian(
         else {
           localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
         }
-        localH = projectToPSD(localH);
+        if (projectHessianToPSD)
+          localH = projectToPSD(localH);
 
         int idx[4] = { pair.ea0, pair.ea1, pair.eb0, pair.eb1 };
         scatterH(nPT + i, localH, idx);
@@ -312,6 +315,7 @@ void SurfaceIPCBarrierAssembler::computeAll(
   double dhat,
   double kappa,
   double eps_ee,
+  bool projectHessianToPSD,
   double &energy,
   VXd &grad,
   SpMatD &hess) const
@@ -387,7 +391,8 @@ void SurfaceIPCBarrierAssembler::computeAll(
         M12d Hd2 = distance::computePTSqDistHess(p, t0, t1, t2);
         double gpp = barrier::d2bds2(d2, dhat2);
         M12d localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
-        localH = projectToPSD(localH);
+        if (projectHessianToPSD)
+          localH = projectToPSD(localH);
         scatterH(i, localH, idx);
       }
       return localE;
@@ -445,7 +450,8 @@ void SurfaceIPCBarrierAssembler::computeAll(
         else {
           localH = wk * (gpp * gd2 * gd2.transpose() + gp * Hd2);
         }
-        localH = projectToPSD(localH);
+        if (projectHessianToPSD)
+          localH = projectToPSD(localH);
         scatterH(nPT + i, localH, idx);
       }
       return localE;

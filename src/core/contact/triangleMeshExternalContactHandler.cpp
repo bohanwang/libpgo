@@ -300,6 +300,19 @@ TriangleMeshExternalContactHandler::TriangleMeshExternalContactHandler(const std
     interpolationMatrix.resize(sampleInfoAndIDs.size() * 3, vertices.size() * 3);
     interpolationMatrix.setFromTriplets(entries.begin(), entries.end());
   }
+  // With one sample per original vertex, the surface degrees of freedom map
+  // directly to the simulation degrees of freedom. Contact-energy assembly
+  // still consumes interpolationMatrix, so make that identity mapping
+  // explicit instead of leaving a 0-by-0 matrix.
+  else {
+    if (nDOFs != static_cast<int>(vertices.size()) * 3) {
+      throw std::invalid_argument(
+        "Direct contact sampling requires three simulation DOFs per surface vertex.");
+    }
+
+    interpolationMatrix.resize(nDOFs, nDOFs);
+    interpolationMatrix.setIdentity();
+  }
 
   n3 = (int)vertices.size() * 3;
   restP = ES::VXd::Zero(n3);

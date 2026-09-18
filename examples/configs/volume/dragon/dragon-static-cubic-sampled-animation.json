@@ -1,0 +1,14 @@
+{
+  "meshes": [
+    {
+      "name": "dragon-static-cubic",
+      "driving-mesh": "../../../assets/volume/dragon/dragon.obj",
+      "sequence": "../../../generated/output/dragon-static-cubic-sampled.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        1
+      ]
+    }
+  ]
+}

@@ -87,45 +87,6 @@ inline double relativeError(const ES::MXd &A, const ES::MXd &B)
   return (A - B).norm() / denom;
 }
 
-inline double computeFloorEnergy(const ES::VXd &x, double floorHeight, double floorKappa, int floorAxis = 2)
-{
-  if (floorAxis < 0 || floorAxis > 2)
-    throw std::invalid_argument("floorAxis must be 0, 1, or 2.");
-  double energy = 0.0;
-  for (int vi = 0; vi < x.size() / 3; ++vi) {
-    const double dz = x[3 * vi + floorAxis] - floorHeight;
-    if (dz < 0.0)
-      energy += 0.5 * floorKappa * dz * dz;
-  }
-  return energy;
-}
-
-inline ES::VXd computeFloorGradient(const ES::VXd &x, double floorHeight, double floorKappa, int floorAxis = 2)
-{
-  if (floorAxis < 0 || floorAxis > 2)
-    throw std::invalid_argument("floorAxis must be 0, 1, or 2.");
-  ES::VXd g = ES::VXd::Zero(x.size());
-  for (int vi = 0; vi < x.size() / 3; ++vi) {
-    const double dz = x[3 * vi + floorAxis] - floorHeight;
-    if (dz < 0.0)
-      g[3 * vi + floorAxis] = floorKappa * dz;
-  }
-  return g;
-}
-
-inline ES::MXd computeFloorHessian(const ES::VXd &x, double floorHeight, double floorKappa, int floorAxis = 2)
-{
-  if (floorAxis < 0 || floorAxis > 2)
-    throw std::invalid_argument("floorAxis must be 0, 1, or 2.");
-  ES::MXd H = ES::MXd::Zero(x.size(), x.size());
-  for (int vi = 0; vi < x.size() / 3; ++vi) {
-    const double dz = x[3 * vi + floorAxis] - floorHeight;
-    if (dz < 0.0)
-      H(3 * vi + floorAxis, 3 * vi + floorAxis) = floorKappa;
-  }
-  return H;
-}
-
 inline ES::MXd sparseToDense(const ES::SpMatD &H)
 {
   return ES::MXd(H);

@@ -2,8 +2,8 @@ set(CONTACT_HEADERS
   CCDKernel.h
   contactEnergyUtilities.h
   mappedSurfacePotentialEnergy.h
-  embeddedSurfaceFloorPotentialEnergy.h
   embeddedSurfaceIPCPotentialEnergy.h
+  ipc/assembly/ipcCollisionSurfaceAssembler.h
   ipc/broadPhase/spatialHashGrid.h
   ipc/broadPhase/surfaceIPCSelfBroadPhase.h
   ipc/core/surfaceIPCBarrierAssembler.h
@@ -16,22 +16,20 @@ set(CONTACT_HEADERS
   ipc/geometry/ipcHessianProjection.h
   ipc/geometry/generated/CIPC_autogen.h
   ipc/geometry/generated/CIPC_autogen_ll.h
-  ipc/profiling/surfaceIPCProfiling.h
   ipc/topology/surfaceIPCTopology.h
   pointPenetrationEnergy.h
   pointTrianglePairCouplingEnergyWithCollision.h
   triangleMeshExternalContactHandler.h
   triangleMeshSelfContactDetection.h
   triangleMeshSelfContactHandler.h
-  CIPC.h
 )
 
 set(CONTACT_SOURCES
   CCDKernel.cpp
   contactEnergyUtilities.cpp
   mappedSurfacePotentialEnergy.cpp
-  embeddedSurfaceFloorPotentialEnergy.cpp
   embeddedSurfaceIPCPotentialEnergy.cpp
+  ipc/assembly/ipcCollisionSurfaceAssembler.cpp
   ipc/broadPhase/spatialHashGrid.cpp
   ipc/broadPhase/surfaceIPCSelfBroadPhase.cpp
   ipc/core/surfaceIPCBarrierAssembler.cpp
@@ -47,10 +45,9 @@ set(CONTACT_SOURCES
   triangleMeshExternalContactHandler.cpp
   triangleMeshSelfContactDetection.cpp
   triangleMeshSelfContactHandler.cpp
-  CIPC.cpp
 )
 
-set(CONTACT_DEPS mesh nonlinearOptimization profiling CCD::SafeCCD CCD::Exact)
+set(CONTACT_DEPS mesh nonlinearOptimization CCD::SafeCCD CCD::Exact)
 
 foreach(tgt ${CONTACT_DEPS})
   if(NOT TARGET ${tgt})

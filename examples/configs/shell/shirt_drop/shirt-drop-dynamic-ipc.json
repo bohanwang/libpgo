@@ -1,0 +1,54 @@
+{
+  "surface-mesh": "../../../assets/shell/shirt.obj",
+  "fixed-vertices": [],
+  "ipc-external-objects": [
+    {
+      "filename": "../../../assets/volume/box-contact/plane.obj",
+      "scale": 1.0,
+      "initial-translation": [
+        0,
+        0,
+        0
+      ],
+      "movement": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "g": [
+    0,
+    -9.81,
+    0
+  ],
+  "init-vel": [
+    0,
+    0,
+    0
+  ],
+  "init-disp": [
+    0,
+    0,
+    0
+  ],
+  "scale": 1.0,
+  "timestep": 0.001,
+  "num-timestep": 1000,
+  "damping-params": [
+    2.0,
+    0.003
+  ],
+  "sim-type": "dynamic",
+  "solver-eps": 1e-06,
+  "solver-max-iter": 500,
+  "elastic-material": "koiter-stvk",
+  "shell-areal-density": 0.2,
+  "dump-interval": 10,
+  "output": "../../../generated/output/shirt-drop-dynamic-ipc",
+  "ipc-heuristic": true,
+  "contact-model": "ipc",
+  "shell-zero-rest-curvature": true,
+  "shell-youngs-modulus": 10000.0,
+  "shell-bending-youngs-modulus": 100
+}

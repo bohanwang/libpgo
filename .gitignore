@@ -31,9 +31,22 @@
 *.out
 *.app
 
-*.egg-info
-build
+*.egg-info/
+/.eggs/
+/.venv/
+/build/
 _skbuild
+/dist/
+/wheelhouse/
+
+# In-source CMake artifacts
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+DartConfiguration.tcl
+Testing/
+compile_commands.json
 
 .DS_Store
 .vscode/*
@@ -47,7 +60,6 @@ projects
 build-test
 
 # *.obj
-*.png
 
 *.u
 
@@ -63,6 +75,8 @@ docs/*
 
 fv.obj
 ret*
+examples/generated/
+examples/assets/generated/
 
 paper/*
 *.pdf

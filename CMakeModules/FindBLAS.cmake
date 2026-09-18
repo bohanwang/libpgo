@@ -255,6 +255,18 @@ linked against MKL to run.
 # The approach follows that of the ``autoconf`` macro file, ``acx_blas.m4``
 # (distributed at http://ac-archive.sourceforge.net/ac-archive/acx_blas.html).
 
+if(TARGET MKL::MKL)
+  set(BLAS_FOUND TRUE)
+  set(BLAS_LIBRARIES MKL::MKL)
+  if(NOT TARGET BLAS::BLAS)
+    add_library(BLAS::BLAS INTERFACE IMPORTED)
+    set_target_properties(BLAS::BLAS PROPERTIES
+      INTERFACE_LINK_LIBRARIES MKL::MKL)
+  endif()
+  message(STATUS "Using the configured MKL::MKL target as BLAS")
+  return()
+endif()
+
 message(WARNING "our blas finder")
 
 # Check the language being used

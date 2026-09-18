@@ -13,7 +13,7 @@ include(FetchContent)
 FetchContent_Declare(
   cuco
   GIT_REPOSITORY https://github.com/NVIDIA/cuCollections.git
-  GIT_TAG dev
+  GIT_TAG 1a1e640179e85139765a27d2d376e02628b2ccbc
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
   FIND_PACKAGE_ARGS NAMES cuco

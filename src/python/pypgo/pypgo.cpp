@@ -8,6 +8,8 @@
 #include <iostream>
 #include <chrono>
 #include <fstream>
+#include <stdexcept>
+#include <vector>
 
 namespace py = pybind11;
 
@@ -39,19 +41,11 @@ void pypgo_init(py::module &m)
       py::buffer_info vtxInfo = vertices.request();
       py::buffer_info tetInfo = elements.request();
 
-      if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.format != py::format_descriptor<float>::format()) {
-        std::cerr << "Wrong vertex type:" << vtxInfo.ndim << ',' << vtxInfo.format << std::endl;
-        return TetMeshGeo();
-      }
+      if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.size % 3 != 0)
+        throw py::value_error("Expected a flat vertex array whose length is a multiple of 3");
 
-#if defined(_WIN32)
-      if (tetInfo.ndim != (py::ssize_t)1) {
-#else
-      if (tetInfo.ndim != (py::ssize_t)1 || (tetInfo.format != py::format_descriptor<int>::format())) {
-#endif
-        std::cerr << "Wrong tet type:" << tetInfo.ndim << ',' << tetInfo.format << ',' << py::format_descriptor<int64_t>::format() << std::endl;
-        return TetMeshGeo();
-      }
+      if (tetInfo.ndim != (py::ssize_t)1 || tetInfo.size % 4 != 0)
+        throw py::value_error("Expected a flat tet array whose length is a multiple of 4");
 
       Eigen::VectorXd vertexPosDouble = Eigen::Map<const Eigen::VectorXf>((float *)vtxInfo.ptr, vtxInfo.size).cast<double>();
       Eigen::VectorXi tets = Eigen::Map<const Eigen::VectorXi>((int *)tetInfo.ptr, tetInfo.size);
@@ -101,15 +95,11 @@ void pypgo_init(py::module &m)
     py::buffer_info vtxInfo = vertices.request();
     py::buffer_info tetInfo = elements.request();
 
-    if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.format != py::format_descriptor<float>::format()) {
-      std::cerr << "Wrong vertex type:" << vtxInfo.ndim << ',' << vtxInfo.format << std::endl;
-      return TetMesh();
-    }
+    if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.size % 3 != 0)
+      throw py::value_error("Expected a flat vertex array whose length is a multiple of 3");
 
-    if (tetInfo.ndim != (py::ssize_t)1 || (tetInfo.format != py::format_descriptor<int>::format())) {
-      std::cerr << "Wrong tet type:" << tetInfo.ndim << ',' << tetInfo.format << ',' << py::format_descriptor<int64_t>::format() << std::endl;
-      return TetMesh();
-    }
+    if (tetInfo.ndim != (py::ssize_t)1 || tetInfo.size % 4 != 0)
+      throw py::value_error("Expected a flat tet array whose length is a multiple of 4");
 
     Eigen::VectorXd vertexPosDouble = Eigen::Map<const Eigen::VectorXf>((float *)vtxInfo.ptr, vtxInfo.size).cast<double>();
     Eigen::VectorXi tets = Eigen::Map<const Eigen::VectorXi>((int *)tetInfo.ptr, tetInfo.size);
@@ -121,6 +111,10 @@ void pypgo_init(py::module &m)
   m.def("create_tetmesh_from_file", [](const std::string &tetmeshFilename) -> TetMesh {
     pgoTetMeshStructHandle tetmesh = pgo_create_tetmesh_from_file(const_cast<char *>(tetmeshFilename.c_str()));
     return TetMesh(tetmesh);
+  });
+
+  m.def("destroy_tetmesh", [](TetMesh tetmesh) {
+    pgo_destroy_tetmesh(tetmesh.handle);
   });
 
   m.def("save_tetmesh_to_file", [](const TetMesh &tetmesh, const std::string &tetmeshFilename) {
@@ -150,16 +144,27 @@ void pypgo_init(py::module &m)
   });
 
   m.def("update_tetmesh_vertices", [](TetMesh &tetmesh, pyArrayFloat vtxNew) -> TetMesh {
+    if (tetmesh.handle == nullptr)
+      throw py::value_error("Cannot update a null tetmesh handle");
+
     py::buffer_info vtxInfo = vtxNew.request();
     if (vtxInfo.ndim != (py::ssize_t)2 || vtxInfo.shape[1] != 3 || vtxInfo.format != py::format_descriptor<float>::format()) {
-      std::cerr << "Wrong vertex type:" << vtxInfo.ndim << ',' << vtxInfo.format << std::endl;
-      return tetmesh;
+      throw py::value_error("Expected a float32 vertex array with shape (num_vertices, 3)");
     }
 
-    vtxNew.resize({ vtxInfo.shape[0] * 3 });
+    const int numVertices = pgo_tetmesh_get_num_vertices(tetmesh.handle);
+    if (vtxInfo.shape[0] != numVertices)
+      throw py::value_error("Vertex array row count does not match the tetmesh");
 
-    Eigen::VectorXd vtxNewDouble = Eigen::Map<const Eigen::VectorXf>((float *)vtxInfo.ptr, vtxInfo.shape[0] * 3).cast<double>();
-    pgoTetMeshStructHandle tetmeshNewHandle = pgo_tetmesh_update_vertices(tetmesh.handle, vtxNewDouble.data());
+    const float *vertices = static_cast<const float *>(vtxInfo.ptr);
+    std::vector<double> verticesDouble(static_cast<size_t>(numVertices) * 3);
+    for (size_t i = 0; i < verticesDouble.size(); ++i)
+      verticesDouble[i] = static_cast<double>(vertices[i]);
+
+    pgoTetMeshStructHandle tetmeshNewHandle = pgo_tetmesh_update_vertices(tetmesh.handle, verticesDouble.data());
+    if (tetmeshNewHandle == nullptr)
+      throw std::runtime_error("Failed to update tetmesh vertices");
+
     TetMesh tetmeshNew = TetMesh(tetmeshNewHandle);
     return tetmeshNew;
   });
@@ -301,19 +306,11 @@ void pypgo_init(py::module &m)
       py::buffer_info vtxInfo = vertices.request();
       py::buffer_info triInfo = triangles.request();
 
-      if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.format != py::format_descriptor<float>::format()) {
-        std::cerr << "Wrong vertex type:" << vtxInfo.ndim << ',' << vtxInfo.format << std::endl;
-        return TriMeshGeo();
-      }
+      if (vtxInfo.ndim != (py::ssize_t)1 || vtxInfo.size % 3 != 0)
+        throw py::value_error("Expected a flat vertex array whose length is a multiple of 3");
 
-#if defined(_WIN32)
-      if (triInfo.ndim != (py::ssize_t)1) {
-#else
-        if (triInfo.ndim != (py::ssize_t)1 || (triInfo.format != py::format_descriptor<int>::format())) {
-#endif
-        std::cerr << "Wrong tri type:" << triInfo.ndim << ',' << triInfo.format << ',' << py::format_descriptor<int64_t>::format() << std::endl;
-        return TriMeshGeo();
-      }
+      if (triInfo.ndim != (py::ssize_t)1 || triInfo.size % 3 != 0)
+        throw py::value_error("Expected a flat triangle array whose length is a multiple of 3");
 
       Eigen::VectorXd vertexPosDouble = Eigen::Map<const Eigen::VectorXf>((float *)vtxInfo.ptr, vtxInfo.size).cast<double>();
       Eigen::VectorXi tris = Eigen::Map<const Eigen::VectorXi>((int *)triInfo.ptr, triInfo.size);

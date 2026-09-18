@@ -46,6 +46,7 @@ public:
     double dhat,
     double kappa,
     double eps_ee,
+    bool projectHessianToPSD,
     EigenSupport::SpMatD &hess) const;
 
   void computeAll(
@@ -56,6 +57,7 @@ public:
     double dhat,
     double kappa,
     double eps_ee,
+    bool projectHessianToPSD,
     double &energy,
     EigenSupport::VXd &grad,
     EigenSupport::SpMatD &hess) const;

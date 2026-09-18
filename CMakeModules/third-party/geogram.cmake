@@ -11,6 +11,7 @@ include(FetchContent)
 FetchContent_Declare(
   geogram
   URL https://github.com/BrunoLevy/geogram/releases/download/v1.9.0/geogram_1.9.0.zip
+  URL_HASH SHA256=f2b51adf05fc8599893032c79866b4f2ff29326f810dcde649adf205896b76ab
   EXCLUDE_FROM_ALL
   DOWNLOAD_EXTRACT_TIMESTAMP ON
   FIND_PACKAGE_ARGS NAMES geogram
@@ -89,6 +90,17 @@ _libpgo_replace_in_file(
 )
 
 add_subdirectory(${geogram_SOURCE_DIR} ${geogram_BINARY_DIR} EXCLUDE_FROM_ALL)
+
+if(TARGET OpenMP::OpenMP_CXX)
+  # HLBFGS is compiled as an OBJECT library and directly includes omp.h.
+  target_link_libraries(geogram_third_party PRIVATE OpenMP::OpenMP_CXX)
+  target_compile_definitions(geogram_third_party PRIVATE USE_OPENMP)
+
+  # Geogram itself uses the legacy plain target_link_libraries signature.
+  # Keep the OpenMP runtime on the final Geogram link interface so consumers
+  # also receive it when Geogram is built from object/static sources.
+  target_link_libraries(geogram OpenMP::OpenMP_CXX)
+endif()
 
 set_target_properties(geogram PROPERTIES CXX_STANDARD 14)
 

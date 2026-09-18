@@ -1,0 +1,24 @@
+{
+  "meshes": [
+    {
+      "name": "box-contact-static-tet-ipc",
+      "driving-mesh": "../../../assets/volume/box/box.obj",
+      "sequence": "../../../generated/output/box-contact-static-tet-ipc/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "box-contact-plane-static-ipc",
+      "driving-mesh": "../../../assets/volume/box-contact/plane.obj",
+      "sequence": "../../../assets/volume/box-contact/plane.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        1
+      ]
+    }
+  ]
+}

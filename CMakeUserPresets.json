@@ -1,0 +1,18 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "base-8",
+            "inherits": "base",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/base-8"
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "base-8",
+            "configurePreset": "base-8",
+            "jobs": 8
+        }
+    ]
+}
