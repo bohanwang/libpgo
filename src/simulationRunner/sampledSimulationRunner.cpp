@@ -61,10 +61,6 @@ int pgo::SimulationRunner::runSampledSimulationFromConfig(
   tbb::global_control c(tbb::global_control::max_allowed_parallelism, std::min(64, (int)std::thread::hardware_concurrency()));
   tbb::global_control global_limit(tbb::global_control::thread_stack_size, 16 * 1024 * 1024);
 
-  // Logging::lgr() is null until init(); ConfigFileJSON logs through it when
-  // the file cannot be opened. The level is re-applied once the config is read.
-  pgo::Logging::init();
-
   ConfigFileJSON jconfig;
   if (jconfig.open(configFilename.string().c_str()) != true)
     return 1;
@@ -74,7 +70,9 @@ int pgo::SimulationRunner::runSampledSimulationFromConfig(
     const std::filesystem::path logPath = RunSim::deriveDefaultLogPathFromConfig(configFilename);
     logRedirect = std::make_unique<RunSim::ScopedRunSimCliLogRedirect>(logPath.string());
   }
-  pgo::Logging::init(nullptr, RunSim::resolveConfiguredLogLevel(jconfig));
+  // Logging is initialized by the process entry point; only the configured
+  // level is applied here.
+  pgo::Logging::setLevel(RunSim::resolveConfiguredLogLevel(jconfig));
   pgo::Mesh::initPredicates();
 
   RunSim::ResolvedRunSimPaths resolvedPaths;

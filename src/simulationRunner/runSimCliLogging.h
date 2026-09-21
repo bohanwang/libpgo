@@ -1,7 +1,7 @@
 #pragma once
 
 // Logging support shared by the sampled and IPC config runners.
-#include <spdlog/common.h>
+#include "pgoLogging.h"
 
 #include <filesystem>
 #include <string>

@@ -3,7 +3,6 @@
 // Optional process-level logging used by the simulation CLI wrappers.
 #include "configFileJSON.h"
 #include "NewtonSolver.h"
-#include "pgoLogging.h"
 
 #include <cstdio>
 #include <cerrno>
@@ -166,6 +165,9 @@ ScopedRunSimCliLogRedirect::ScopedRunSimCliLogRedirect(const std::string &logFil
   }
 
   closeFD(logFd);
+  // The console sink decided on colors for the original terminal; the file
+  // must not receive ANSI escape codes.
+  Logging::refreshConsoleColorMode();
 }
 
 ScopedRunSimCliLogRedirect::~ScopedRunSimCliLogRedirect()
@@ -186,5 +188,7 @@ ScopedRunSimCliLogRedirect::~ScopedRunSimCliLogRedirect()
     closeFD(savedStderrFd);
     savedStderrFd = -1;
   }
+
+  Logging::refreshConsoleColorMode();
 }
 }  // namespace pgo::RunSim

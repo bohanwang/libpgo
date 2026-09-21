@@ -1,4 +1,5 @@
 #include "simulationRunner.h"
+#include "pgoLogging.h"
 
 #include <argparse/argparse.hpp>
 
@@ -7,6 +8,8 @@
 
 int main(int argc, char *argv[])
 {
+  pgo::Logging::init();
+
   argparse::ArgumentParser program("Run Simulation");
   program.add_argument("config").help("Config File").required();
   program.add_argument("--log")

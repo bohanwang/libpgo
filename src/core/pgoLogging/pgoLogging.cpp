@@ -5,12 +5,14 @@
 
 #include <cstring>
 std::shared_ptr<spdlog::logger> pgo::Logging::logger;
+std::shared_ptr<spdlog::sinks::sink> pgo::Logging::consoleSink;
 
 void pgo::Logging::init(const char *filename, spdlog::level::level_enum level)
 {
   auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
   console_sink->set_level(spdlog::level::trace);
   console_sink->set_pattern("%^[%D][%H:%M:%S:%e][%L][%n][%s:%#] %v%$");
+  consoleSink = console_sink;
 
   if (filename && std::strlen(filename)) {
     auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(filename, false);
@@ -36,7 +38,11 @@ void pgo::Logging::init(const char *filename, spdlog::level::level_enum level)
 
 void pgo::Logging::setLevel(spdlog::level::level_enum level)
 {
-  if (logger) {
-    logger->set_level(level);
-  }
+  lgr()->set_level(level);
+}
+
+void pgo::Logging::refreshConsoleColorMode()
+{
+  if (auto sink = std::dynamic_pointer_cast<spdlog::sinks::stdout_color_sink_mt>(consoleSink))
+    sink->set_color_mode(spdlog::color_mode::automatic);
 }

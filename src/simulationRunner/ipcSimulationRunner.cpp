@@ -50,11 +50,6 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
   using namespace pgo;
   namespace ES = EigenSupport;
 
-  // Logging::lgr() is null until init(); ConfigFileJSON, the runner, and the
-  // catch block below all log through it, so it must exist before anything
-  // that can fail. The level is re-applied once the config has been read.
-  pgo::Logging::init();
-
   try {
     ConfigFileJSON jconfig;
     if (jconfig.open(configFilename.string().c_str()) != true)
@@ -79,9 +74,9 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
       const std::filesystem::path logPath = outputFolder / "runIPCSim.log";
       logRedirect = std::make_unique<RunSim::ScopedRunSimCliLogRedirect>(logPath.string());
     }
-    // Re-create the sinks after the optional redirect so the configured level
-    // and terminal detection apply to the final stdout.
-    pgo::Logging::init(nullptr, RunSim::resolveConfiguredLogLevel(jconfig));
+    // Logging is initialized by the process entry point; only the configured
+    // level is applied here.
+    pgo::Logging::setLevel(RunSim::resolveConfiguredLogLevel(jconfig));
 
     if (!restartFromU)
       std::cout << "restart-from-u=false; existing output files will be overwritten as frames are written." << std::endl;
