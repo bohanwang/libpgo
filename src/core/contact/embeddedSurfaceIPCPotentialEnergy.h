@@ -42,6 +42,9 @@ public:
     EigenSupport::ConstRefVecXd laggedDisplacements, double timestep);
   double getFrictionCoeff() const { return surfaceIPCCore_.getParameters().frictionCoeff; }
   std::size_t getNumFrictionPairs() const { return surfaceIPCCore_.getNumFrictionPairs(); }
+  // See SurfaceIPCCore::setDeterministic.
+  void setDeterministic(bool on) { surfaceIPCCore_.setDeterministic(on); }
+  bool isDeterministic() const { return surfaceIPCCore_.isDeterministic(); }
 
 private:
   virtual double computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const override;

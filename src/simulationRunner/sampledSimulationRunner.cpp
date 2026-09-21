@@ -172,6 +172,11 @@ int pgo::SimulationRunner::runSampledSimulationFromConfig(
   std::shared_ptr<SolidDeformationModel::SimulationMesh> simMesh = initialized.simMesh;
   std::shared_ptr<SolidDeformationModel::DeformationModelManager> dmm = initialized.dmm;
   std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> assembler = initialized.assembler;
+  // Bit-reproducible elastic assembly (fixed summation order); the sampled
+  // contact energies are not covered by this flag.
+  const bool deterministicAssembly = jconfig.exist("deterministic-assembly") ? jconfig.getValue<bool>("deterministic-assembly", 1) : false;
+  assembler->setDeterministic(deterministicAssembly);
+  std::cout << "deterministic-assembly=" << (deterministicAssembly ? "true" : "false") << std::endl;
   std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy = initialized.elasticEnergy;
 
   ES::VXd plasticity = initialized.plasticity;

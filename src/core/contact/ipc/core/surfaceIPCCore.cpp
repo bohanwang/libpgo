@@ -10,10 +10,13 @@ copyright to Bohan Wang
 #include "ipc/core/surfaceIPCBarrierAssembler.h"
 #include "ipc/core/surfaceIPCMaxStep.h"
 
+#include <tbb/parallel_sort.h>
+
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 
 namespace pgo
 {
@@ -31,12 +34,15 @@ SurfaceIPCCore::SurfaceIPCCore(const SurfaceIPCCore &other):
   frictionEpsV(other.frictionEpsV),
   friction_(other.friction_),
   frictionReady_(other.frictionReady_),
+  deterministic_(other.deterministic_),
   hasMesh_(other.hasMesh_),
   topology_(other.topology_),
   ptPairs_(other.ptPairs_),
   eePairs_(other.eePairs_),
   hasPreparedState_(other.hasPreparedState_),
-  preparedPositions_(other.preparedPositions_)
+  preparedPositions_(other.preparedPositions_),
+  gatherMap_(other.gatherMap_),
+  gatherMapBuilt_(other.gatherMapBuilt_)
 {
 }
 
@@ -54,13 +60,49 @@ SurfaceIPCCore &SurfaceIPCCore::operator=(const SurfaceIPCCore &other)
   frictionEpsV = other.frictionEpsV;
   friction_ = other.friction_;
   frictionReady_ = other.frictionReady_;
+  deterministic_ = other.deterministic_;
   hasMesh_ = other.hasMesh_;
   topology_ = other.topology_;
   ptPairs_ = other.ptPairs_;
   eePairs_ = other.eePairs_;
   hasPreparedState_ = other.hasPreparedState_;
   preparedPositions_ = other.preparedPositions_;
+  gatherMap_ = other.gatherMap_;
+  gatherMapBuilt_ = other.gatherMapBuilt_;
   return *this;
+}
+
+void SurfaceIPCCore::setDeterministic(bool on)
+{
+  if (on == deterministic_)
+    return;
+  deterministic_ = on;
+  // Prepared pairs were produced under the other ordering policy.
+  invalidatePreparedState();
+}
+
+void SurfaceIPCCore::sortPairsCanonically(std::vector<PTPair> &ptPairs, std::vector<EEPair> &eePairs) const
+{
+  // Broad-phase pairs are collected per worker thread, so their order is
+  // scheduling dependent. Keys are unique for a valid mesh, so the sorted
+  // order is canonical.
+  tbb::parallel_sort(ptPairs.begin(), ptPairs.end(), [](const PTPair &a, const PTPair &b) {
+    return std::tie(a.p, a.t0, a.t1, a.t2) < std::tie(b.p, b.t0, b.t1, b.t2);
+  });
+  tbb::parallel_sort(eePairs.begin(), eePairs.end(), [](const EEPair &a, const EEPair &b) {
+    return std::tie(a.ea0, a.ea1, a.eb0, a.eb1) < std::tie(b.ea0, b.ea1, b.eb0, b.eb1);
+  });
+}
+
+const SurfaceIPCGradientGatherMap *SurfaceIPCCore::preparedGatherMap() const
+{
+  if (!deterministic_)
+    return nullptr;
+  if (!gatherMapBuilt_) {
+    gatherMap_.build(ptPairs_, eePairs_, topology_.numVerts);
+    gatherMapBuilt_ = true;
+  }
+  return &gatherMap_;
 }
 
 void SurfaceIPCCore::setParameters(const Parameters &params)
@@ -141,8 +183,11 @@ void SurfaceIPCCore::updateFriction(ConstRefVecXd reference, ConstRefVecXd lagge
   frictionReady_ = false;
   std::vector<PTPair> ptPairs;
   std::vector<EEPair> eePairs;
-  if (frictionCoeff > 0)
+  if (frictionCoeff > 0) {
     SurfaceIPCSelfBroadPhase().buildPairs(topology_, lagged, dhat, ptPairs, eePairs);
+    if (deterministic_)
+      sortPairsCanonically(ptPairs, eePairs);
+  }
   friction_.update(reference, lagged, ptPairs, eePairs, dhat, kappa, eps_ee,
     frictionCoeff, frictionEpsV, timestep);
   frictionReady_ = true;
@@ -159,6 +204,9 @@ void SurfaceIPCCore::updateFriction(ConstRefVecXd reference, ConstRefVecXd lagge
 void SurfaceIPCCore::findCollisionPairs(const VXd &positions) const
 {
   SurfaceIPCSelfBroadPhase().buildPairs(topology_, positions, dhat, ptPairs_, eePairs_);
+  if (deterministic_)
+    sortPairsCanonically(ptPairs_, eePairs_);
+  gatherMapBuilt_ = false;
 }
 
 void SurfaceIPCCore::invalidatePreparedState() const
@@ -167,6 +215,7 @@ void SurfaceIPCCore::invalidatePreparedState() const
   preparedPositions_.resize(0);
   ptPairs_.clear();
   eePairs_.clear();
+  gatherMapBuilt_ = false;
 }
 
 bool SurfaceIPCCore::isPreparedFor(EigenSupport::ConstRefVecXd x_surf) const
@@ -261,7 +310,8 @@ double SurfaceIPCCore::computeEnergy(EigenSupport::ConstRefVecXd pos) const
 double SurfaceIPCCore::computeEnergyWithPreparedPairs() const
 {
   requirePreparedState();
-  double energy = SurfaceIPCBarrierAssembler().computeEnergy(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee);
+  double energy = SurfaceIPCBarrierAssembler().computeEnergy(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts,
+    dhat, kappa, eps_ee, deterministic_);
   if (frictionCoeff > 0)
     energy += friction_.computeEnergy(preparedPositions_);
   return energy;
@@ -281,7 +331,8 @@ void SurfaceIPCCore::computeGradientWithPreparedPairs(EigenSupport::RefVecXd gra
 {
   requirePreparedState();
   validateSurfaceGradient(grad);
-  SurfaceIPCBarrierAssembler().computeGradient(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, grad);
+  SurfaceIPCBarrierAssembler().computeGradient(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts,
+    dhat, kappa, eps_ee, grad, preparedGatherMap());
   if (frictionCoeff > 0)
     friction_.addGradient(preparedPositions_, grad);
 }
@@ -321,7 +372,7 @@ void SurfaceIPCCore::computeAllWithPreparedPairs(double &energy, VXd &grad, SpMa
 {
   requirePreparedState();
   SurfaceIPCBarrierAssembler().computeAll(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts,
-    dhat, kappa, eps_ee, projectHessianToPSD, energy, grad, hess);
+    dhat, kappa, eps_ee, projectHessianToPSD, energy, grad, hess, preparedGatherMap());
   if (frictionCoeff > 0) {
     energy += friction_.computeEnergy(preparedPositions_);
     friction_.addGradient(preparedPositions_, grad);

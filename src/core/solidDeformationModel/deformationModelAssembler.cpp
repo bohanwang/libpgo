@@ -18,6 +18,7 @@ copyright to USC,MIT,NUS
 #include <tbb/parallel_for.h>
 #include <tbb/enumerable_thread_specific.h>
 
+#include <algorithm>
 #include <atomic>
 
 using namespace pgo::SolidDeformationModel;
@@ -291,14 +292,100 @@ void DeformationModelAssembler::getElasticParameters(int ele, const double *para
   }
 }
 
+void DeformationModelAssembler::setDeterministic(bool on) const
+{
+  deterministic = on;
+  if (on && !detMapsBuilt)
+    buildDeterministicMaps();
+}
+
+// Build destination -> contributions maps once. Assembly then becomes a gather
+// per destination (each destination written by exactly one thread, contributions
+// summed in a fixed index order), which is deterministic regardless of how TBB
+// schedules the work.
+void DeformationModelAssembler::buildDeterministicMaps() const
+{
+  const std::ptrdiff_t ndof = localDOFs;
+  const std::ptrdiff_t nloc = ndof * ndof;
+
+  elemEnergyBuf.assign(nele, 0.0);
+  elemGradBuf.assign(static_cast<std::size_t>(nele) * ndof, 0.0);
+  elemHessBuf.assign(static_cast<std::size_t>(nele) * nloc, 0.0);
+
+  // gradient: destination = global dof index
+  {
+    std::vector<std::ptrdiff_t> count(n3 + 1, 0);
+    for (int ele = 0; ele < nele; ele++) {
+      const int *vi = deformationModelManager->getMesh()->getVertexIndices(ele);
+      for (int v = 0; v < neleVtx; v++) {
+        if (vi[v] < 0)
+          continue;
+        for (int d = 0; d < 3; d++)
+          count[vi[v] * 3 + d + 1]++;
+      }
+    }
+    for (int i = 0; i < n3; i++)
+      count[i + 1] += count[i];
+    gradScatterStart = count;
+    gradScatterSrc.assign(count[n3], -1);
+    std::vector<std::ptrdiff_t> cursor(count.begin(), count.end() - 1);
+    for (int ele = 0; ele < nele; ele++) {
+      const int *vi = deformationModelManager->getMesh()->getVertexIndices(ele);
+      for (int v = 0; v < neleVtx; v++) {
+        if (vi[v] < 0)
+          continue;
+        for (int d = 0; d < 3; d++)
+          gradScatterSrc[cursor[vi[v] * 3 + d]++] = ele * ndof + v * 3 + d;
+      }
+    }
+  }
+
+  // hessian: destination = index into the sparse value array
+  {
+    const std::ptrdiff_t nnz = KTemplate.nonZeros();
+    std::vector<std::ptrdiff_t> count(nnz + 1, 0);
+    for (int ele = 0; ele < nele; ele++) {
+      const auto &idxM = elementKInverseIndices[ele];
+      for (std::ptrdiff_t r = 0; r < ndof; r++)
+        for (std::ptrdiff_t c = 0; c < ndof; c++) {
+          std::ptrdiff_t off = idxM(r, c);
+          if (off >= 0)
+            count[off + 1]++;
+        }
+    }
+    for (std::ptrdiff_t i = 0; i < nnz; i++)
+      count[i + 1] += count[i];
+    hessScatterStart = count;
+    hessScatterSrc.assign(count[nnz], -1);
+    std::vector<std::ptrdiff_t> cursor(count.begin(), count.end() - 1);
+    for (int ele = 0; ele < nele; ele++) {
+      const auto &idxM = elementKInverseIndices[ele];
+      for (std::ptrdiff_t r = 0; r < ndof; r++)
+        for (std::ptrdiff_t c = 0; c < ndof; c++) {
+          std::ptrdiff_t off = idxM(r, c);
+          if (off >= 0)  // per-element buffers hold the column-major local matrix
+            hessScatterSrc[cursor[off]++] = ele * nloc + c * ndof + r;
+        }
+    }
+  }
+
+  detMapsBuilt = true;
+  SPDLOG_LOGGER_INFO(Logging::lgr(),
+    "Deterministic assembly enabled: {} elements, {} gradient contributions, {} Hessian contributions",
+    nele, static_cast<long long>(gradScatterSrc.size()), static_cast<long long>(hessScatterSrc.size()));
+}
+
 double DeformationModelAssembler::computeEnergy(const double *x, const double *plasticParams, const double *elasticParams) const
 {
   for (auto it = data->energyLocalBuffer.begin(); it != data->energyLocalBuffer.end(); ++it)
     *it = 0.0;
 
   auto localEnergyFunc = [this, x, plasticParams, elasticParams](int ele) {
-    if (elementFlags[ele] == 0)
+    if (elementFlags[ele] == 0) {
+      if (deterministic)
+        elemEnergyBuf[ele] = 0.0;
       return;
+    }
 
     ES::VXd localp(localDOFs);
     gatherLocalPositions(*deformationModelManager, ele, neleVtx, x, localp);
@@ -311,7 +398,10 @@ double DeformationModelAssembler::computeEnergy(const double *x, const double *p
     fem->prepareData(localp.data(), paramPtr(plasticParam), paramPtr(elasticParam), data->elementCacheData[ele]);
     double energy = fem->computeEnergy(data->elementCacheData[ele]);
 
-    data->energyLocalBuffer.local() += energy * elementFlags[ele];
+    if (deterministic)
+      elemEnergyBuf[ele] = energy * elementFlags[ele];
+    else
+      data->energyLocalBuffer.local() += energy * elementFlags[ele];
   };
 
   // for (int ele = 0; ele < nele; ele++)
@@ -319,8 +409,15 @@ double DeformationModelAssembler::computeEnergy(const double *x, const double *p
   tbb::parallel_for(0, nele, localEnergyFunc, data->partitioners[0]);
 
   double energyAll = 0;
-  for (auto it = data->energyLocalBuffer.begin(); it != data->energyLocalBuffer.end(); ++it)
-    energyAll += *it;
+  if (deterministic) {
+    // fixed summation order, independent of how the work was scheduled
+    for (int ele = 0; ele < nele; ele++)
+      energyAll += elemEnergyBuf[ele];
+  }
+  else {
+    for (auto it = data->energyLocalBuffer.begin(); it != data->energyLocalBuffer.end(); ++it)
+      energyAll += *it;
+  }
 
   return energyAll;
 }
@@ -368,8 +465,11 @@ void DeformationModelAssembler::computeGradient(const double *x, const double *p
 {
   memset(grad, 0, sizeof(double) * n3);
   auto localGradFunc = [this, x, plasticParams, elasticParams, grad](int ele) {
-    if (elementFlags[ele] == 0)
+    if (elementFlags[ele] == 0) {
+      if (deterministic)
+        std::fill_n(elemGradBuf.begin() + static_cast<std::ptrdiff_t>(ele) * localDOFs, localDOFs, 0.0);
       return;
+    }
 
     ES::VXd localp(localDOFs);
     gatherLocalPositions(*deformationModelManager, ele, neleVtx, x, localp);
@@ -402,6 +502,13 @@ void DeformationModelAssembler::computeGradient(const double *x, const double *p
       }
     }
 
+    if (deterministic) {
+      // stash this element's contribution; the gather below sums in a fixed order
+      std::copy(localGradx.data(), localGradx.data() + localDOFs,
+        elemGradBuf.begin() + static_cast<std::ptrdiff_t>(ele) * localDOFs);
+      return;
+    }
+
     const int *vertexIndices = deformationModelManager->getMesh()->getVertexIndices(ele);
     for (int v = 0; v < neleVtx; v++) {
       if (vertexIndices[v] >= 0) {
@@ -421,6 +528,16 @@ void DeformationModelAssembler::computeGradient(const double *x, const double *p
   //   localGradFunc(ele);
   // }
   tbb::parallel_for(0, nele, localGradFunc, data->partitioners[1]);
+
+  if (deterministic) {
+    // one destination dof per task, contributions summed in stored (fixed) order
+    tbb::parallel_for(0, n3, [this, grad](int d) {
+      double s = 0.0;
+      for (std::ptrdiff_t k = gradScatterStart[d]; k < gradScatterStart[d + 1]; k++)
+        s += elemGradBuf[gradScatterSrc[k]];
+      grad[d] = s;
+    });
+  }
 
   // clean the numbers
   if (enableSanityCheck) {
@@ -496,11 +613,48 @@ void DeformationModelAssembler::computeHessian(const double *x, const double *pl
     }  // va
   };
 
+  auto localHessFuncDet = [this, x, plasticParams, elasticParams](int ele) {
+    const std::ptrdiff_t ndof = localDOFs;
+    double *dst = elemHessBuf.data() + static_cast<std::ptrdiff_t>(ele) * ndof * ndof;
+    if (elementFlags[ele] == 0) {
+      std::fill(dst, dst + ndof * ndof, 0.0);
+      return;
+    }
+
+    ES::VXd localp(localDOFs);
+    gatherLocalPositions(*deformationModelManager, ele, neleVtx, x, localp);
+
+    ES::VXd plasticParam(numPlasticParams), elasticParam(numElasticParams);
+    getPlasticParameters(ele, plasticParams, plasticParam.data());
+    getElasticParameters(ele, elasticParams, elasticParam.data());
+
+    const DeformationModel *fem = femModels[ele];
+    fem->prepareData(localp.data(), paramPtr(plasticParam), paramPtr(elasticParam), data->elementCacheData[ele]);
+
+    // compute_d2E_dx2 fills the local matrix column-major, the same layout the
+    // default path maps; the gather map was built with that layout.
+    fem->compute_d2E_dx2(data->elementCacheData[ele], dst);
+    ES::Mp<ES::MXd> localK(dst, localDOFs, localDOFs);
+    localK *= elementFlags[ele];
+  };
+
   // for (int ele = 0; ele < nele; ele++) {
   //   localHessFunc(ele);
   // }
 
-  tbb::parallel_for(0, nele, localHessFunc, data->partitioners[2]);
+  if (deterministic) {
+    tbb::parallel_for(0, nele, localHessFuncDet, data->partitioners[2]);
+    const std::ptrdiff_t nnz = hess.nonZeros();
+    tbb::parallel_for(std::ptrdiff_t(0), nnz, [this, &hess](std::ptrdiff_t i) {
+      double s = 0.0;
+      for (std::ptrdiff_t k = hessScatterStart[i]; k < hessScatterStart[i + 1]; k++)
+        s += elemHessBuf[hessScatterSrc[k]];
+      hess.valuePtr()[i] = s;
+    });
+  }
+  else {
+    tbb::parallel_for(0, nele, localHessFunc, data->partitioners[2]);
+  }
 
   // clean the numbers
   if (enableSanityCheck) {

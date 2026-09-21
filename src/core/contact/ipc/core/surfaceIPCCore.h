@@ -10,6 +10,7 @@ copyright to Bohan Wang
 #include "ipc/geometry/ipcDistancePrimitives.h"
 #include "ipc/geometry/ipcHessianProjection.h"
 #include "ipc/core/surfaceIPCPairs.h"
+#include "ipc/core/surfaceIPCBarrierAssembler.h"
 #include "ipc/core/surfaceIPCFriction.h"
 #include "ipc/topology/surfaceIPCTopology.h"
 #include "potentialEnergy.h"
@@ -64,6 +65,17 @@ public:
     EigenSupport::ConstRefVecXd laggedPositions, double timestep);
   std::size_t getNumFrictionPairs() const { return friction_.numPairs(); }
 
+  // Deterministic assembly (opt-in; default off). The default paths reduce
+  // energies and scatter gradients in thread-scheduling order and keep the
+  // broad-phase pairs in the order the worker threads produced them, so
+  // results differ in the last ULPs between otherwise identical runs. When
+  // enabled, pairs are sorted canonically after every broad phase, energies
+  // are summed in pair order, and gradients are gathered per vertex in a
+  // fixed order; the per-pair kernels stay parallel. The Hessian and the
+  // friction terms already depend only on the pair order.
+  void setDeterministic(bool on);
+  bool isDeterministic() const { return deterministic_; }
+
   double computeEnergy(EigenSupport::ConstRefVecXd x_surf) const;
   void computeGradient(EigenSupport::ConstRefVecXd x_surf, EigenSupport::RefVecXd g_surf) const;
   void computeHessian(EigenSupport::ConstRefVecXd x_surf, EigenSupport::SpMatD &H_surf) const;
@@ -89,6 +101,8 @@ public:
 
 private:
   void findCollisionPairs(const VXd &positions) const;
+  void sortPairsCanonically(std::vector<PTPair> &ptPairs, std::vector<EEPair> &eePairs) const;
+  const SurfaceIPCGradientGatherMap *preparedGatherMap() const;
   void requirePreparedState() const;
   void validateSurfaceState(EigenSupport::ConstRefVecXd x_surf, const char *argumentName) const;
   void validateSurfaceGradient(EigenSupport::RefVecXd g_surf) const;
@@ -107,12 +121,16 @@ private:
   double frictionEpsV = 1e-3;
   SurfaceIPCFriction friction_;
   bool frictionReady_ = false;
+  bool deterministic_ = false;
   bool hasMesh_ = false;
   SurfaceIPCTopology topology_;
   mutable std::vector<PTPair> ptPairs_;
   mutable std::vector<EEPair> eePairs_;
   mutable bool hasPreparedState_ = false;
   mutable VXd preparedPositions_;
+  // gradient gather map for the prepared pairs (deterministic mode only)
+  mutable SurfaceIPCGradientGatherMap gatherMap_;
+  mutable bool gatherMapBuilt_ = false;
 };
 
 }  // namespace CIPC

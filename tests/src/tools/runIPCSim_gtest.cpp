@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <fmt/format.h>
+
 #include "EigenSupport.h"
 #include "barycentricCoordinates.h"
 #include "configFileJSON.h"
@@ -764,6 +766,9 @@ TEST(RunIPCSimCliGTest, FrictionReducesSlidingAndRestartMatchesUninterruptedRun)
   config["solver-eps"] = 1e-8;
   config["solver-max-iter"] = 100;
   config["ipc-friction-iterations"] = 2;
+  // The restart comparison below asks for agreement to 1e-8; the default
+  // parallel assembly alone varies more than that between runs.
+  config["deterministic-assembly"] = true;
   const fs::path configPath = tempDir.path() / "sliding.json";
   ES::MXd frictionless, frictional;
   for (double mu : { 0.0, .5 }) {
@@ -802,6 +807,53 @@ TEST(RunIPCSimCliGTest, FrictionReducesSlidingAndRestartMatchesUninterruptedRun)
   EXPECT_LT((resumed.col(0) - frictional.col(0)).norm(), 1e-8);
   EXPECT_LT((resumed.col(1) - frictional.col(1)).norm(), 1e-6);
   EXPECT_LT((resumed.col(2) - frictional.col(2)).norm(), 1e-4);
+}
+
+TEST(RunIPCSimCliGTest, DeterministicAssemblyReproducesStatesBitwiseAcrossRuns)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path plane = tempDir.path() / "plane.obj";
+  const fs::path cloth = tempDir.path() / "cloth.obj";
+  writeExternalPlane(plane);
+  writeTextFile(cloth,
+    "v -.1 .019 -.1\nv .1 .019 -.1\nv .1 .019 .1\nv -.1 .019 .1\nf 1 3 2\nf 1 4 3\n");
+  nlohmann::json config = nlohmann::json::parse(makeShellIPCConfig(tempDir.path(), 12));
+  config["surface-mesh"] = cloth.generic_string();
+  config["fixed-vertices"] = nlohmann::json::array();
+  config["ipc-external-objects"] = nlohmann::json::array({ { { "filename", plane.generic_string() } } });
+  config["init-vel"] = { .2, 0, 0 };
+  config["timestep"] = .002;
+  config["ipc-dhat"] = .02;
+  config["ipc-kappa"] = 1.0;
+  config["shell-youngs-modulus"] = 1000;
+  config["shell-bending-youngs-modulus"] = 1000;
+  config["shell-areal-density"] = 1.0;
+  config["solver-eps"] = 1e-8;
+  config["solver-max-iter"] = 100;
+  config["contact-friction-coeff"] = .5;
+  config["ipc-friction-iterations"] = 2;
+  config["deterministic-assembly"] = true;
+
+  std::vector<std::string> states;
+  for (int run = 0; run < 2; ++run) {
+    const fs::path output = tempDir.path() / ("deterministic-" + std::to_string(run));
+    config["output"] = output.generic_string();
+    const fs::path configPath = tempDir.path() / "deterministic.json";
+    writeTextFile(configPath, config.dump(2));
+    ASSERT_EQ(pgo::SimulationRunner::runIPCSimulationFromConfig(configPath), 0);
+    std::string concatenated;
+    for (int frame = 0; frame < 12; ++frame) {
+      const fs::path state = output / fmt::format("deform{:04d}.u", frame);
+      ASSERT_TRUE(fs::exists(state));
+      concatenated += readTextFile(state);
+    }
+    states.push_back(std::move(concatenated));
+  }
+  ASSERT_EQ(states.size(), 2u);
+  EXPECT_FALSE(states[0].empty());
+  // Every saved displacement, velocity and acceleration must match to the bit.
+  EXPECT_TRUE(states[0] == states[1]);
 }
 
 TEST(RunIPCSimCliGTest, RejectsInvalidFrictionConfiguration)

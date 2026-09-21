@@ -10,7 +10,9 @@
 #include "tetMesh.h"
 #include "triMeshGeo.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <memory>
 
 namespace
@@ -107,6 +109,120 @@ std::shared_ptr<SimulationMesh> makeSingleElementTetSimulationMesh()
     SimulationMeshType::TET));
 }
 
+struct AssemblerCase
+{
+  std::shared_ptr<SimulationMesh> mesh;
+  std::shared_ptr<DeformationModelManager> dmm;
+  std::shared_ptr<DeformationModelAssembler> assembler;
+  ES::VXd x, plasticParams, elasticParams;
+};
+
+void fillIdentityPlasticity(AssemblerCase &c)
+{
+  c.plasticParams.resize(c.dmm->getNumPlasticParameters() * c.mesh->getNumElements());
+  const auto *plasticModel = dynamic_cast<const PlasticModel3DDeformationGradient *>(
+    c.dmm->getDeformationModel(0)->getPlasticModel());
+  ASSERT_NE(plasticModel, nullptr);
+  const ES::M3d identity = ES::M3d::Identity();
+  for (int ei = 0; ei < c.mesh->getNumElements(); ei++)
+    plasticModel->toParam(identity.data(), c.plasticParams.data() + ei * c.dmm->getNumPlasticParameters());
+}
+
+AssemblerCase makeVolumetricCase(std::shared_ptr<SimulationMesh> mesh)
+{
+  AssemblerCase c;
+  c.mesh = std::move(mesh);
+  c.dmm = std::make_shared<DeformationModelManager>();
+  c.dmm->setMesh(c.mesh.get());
+  c.dmm->init(DeformationModelPlasticMaterial::VOLUMETRIC_DOF6, DeformationModelElasticMaterial::STABLE_NEO);
+  c.assembler = std::make_shared<DeformationModelAssembler>(c.dmm, nullptr);
+  c.x = makePerturbedRestPositions(*c.mesh);
+  fillIdentityPlasticity(c);
+  c.elasticParams = ES::VXd::Zero(c.dmm->getNumElasticParameters() * c.mesh->getNumElements());
+  return c;
+}
+
+AssemblerCase makeShellCase()
+{
+  AssemblerCase c;
+  pgo::Mesh::TriMeshGeo surfaceMesh;
+  EXPECT_TRUE(surfaceMesh.load(kShellObjPath));
+  SimulationMeshENuhMaterial mat(1000.0, 0.45, 1e-3);
+  c.mesh.reset(pgo::SolidDeformationModel::loadShellMesh(surfaceMesh, &mat));
+  c.dmm = std::make_shared<DeformationModelManager>();
+  c.dmm->setMesh(c.mesh.get());
+  c.dmm->init(DeformationModelPlasticMaterial::SHELL_FF_DOF1, DeformationModelElasticMaterial::KOITER_STVK);
+  c.assembler = std::make_shared<DeformationModelAssembler>(c.dmm, nullptr);
+  c.x = makePerturbedRestPositions(*c.mesh);
+  c.plasticParams = ES::VXd::Constant(c.dmm->getNumPlasticParameters() * c.mesh->getNumElements(), 1.2);
+  c.elasticParams.resize(c.dmm->getNumElasticParameters() * c.mesh->getNumElements());
+  EXPECT_EQ(c.dmm->getNumElasticParameters(), 5);
+  for (int ei = 0; ei < c.mesh->getNumElements(); ei++)
+    c.elasticParams.segment<5>(ei * 5) << 20000.0, 0.45, 10000.0, 0.3, 1e-3;
+  return c;
+}
+
+struct AssemblyResult
+{
+  double energy = 0.0;
+  ES::VXd gradient;
+  ES::SpMatD hessian;
+};
+
+AssemblyResult assemble(const AssemblerCase &c)
+{
+  AssemblyResult r;
+  r.energy = c.assembler->computeEnergy(c.x.data(), dataOrNull(c.plasticParams), dataOrNull(c.elasticParams));
+  r.gradient = ES::VXd::Zero(c.assembler->getNumDOFs());
+  c.assembler->computeGradient(c.x.data(), dataOrNull(c.plasticParams), dataOrNull(c.elasticParams), r.gradient.data());
+  r.hessian = c.assembler->getHessianTemplate();
+  c.assembler->computeHessian(c.x.data(), dataOrNull(c.plasticParams), dataOrNull(c.elasticParams), r.hessian);
+  return r;
+}
+
+bool bitwiseEqual(const ES::VXd &a, const ES::VXd &b)
+{
+  return a.size() == b.size() && std::memcmp(a.data(), b.data(), sizeof(double) * a.size()) == 0;
+}
+
+bool bitwiseEqual(const ES::SpMatD &a, const ES::SpMatD &b)
+{
+  return a.nonZeros() == b.nonZeros() && std::memcmp(a.valuePtr(), b.valuePtr(), sizeof(double) * a.nonZeros()) == 0;
+}
+
+// The deterministic mode only changes the summation order, so it must agree
+// with the default mode to roundoff and reproduce itself exactly.
+void expectDeterministicAssemblyMatches(const AssemblerCase &c)
+{
+  c.assembler->setDeterministic(false);
+  EXPECT_FALSE(c.assembler->isDeterministic());
+  const AssemblyResult base = assemble(c);
+  expectAllFinite(base.gradient);
+  expectAllFinite(base.hessian);
+  EXPECT_GT(base.gradient.norm(), 0.0);
+
+  c.assembler->setDeterministic(true);
+  EXPECT_TRUE(c.assembler->isDeterministic());
+  const AssemblyResult det = assemble(c);
+  const AssemblyResult again = assemble(c);
+
+  EXPECT_NEAR(det.energy, base.energy, 1e-10 * std::max(1.0, std::abs(base.energy)));
+  EXPECT_LT((det.gradient - base.gradient).norm(), 1e-10 * std::max(1.0, base.gradient.norm()));
+  ASSERT_EQ(det.hessian.nonZeros(), base.hessian.nonZeros());
+  const Eigen::Map<const ES::VXd> detValues(det.hessian.valuePtr(), det.hessian.nonZeros());
+  const Eigen::Map<const ES::VXd> baseValues(base.hessian.valuePtr(), base.hessian.nonZeros());
+  EXPECT_LT((detValues - baseValues).norm(), 1e-10 * std::max(1.0, baseValues.norm()));
+
+  EXPECT_EQ(det.energy, again.energy);
+  EXPECT_TRUE(bitwiseEqual(det.gradient, again.gradient));
+  EXPECT_TRUE(bitwiseEqual(det.hessian, again.hessian));
+
+  // switching back restores the default path
+  c.assembler->setDeterministic(false);
+  const AssemblyResult back = assemble(c);
+  EXPECT_NEAR(back.energy, base.energy, 1e-10 * std::max(1.0, std::abs(base.energy)));
+}
+
 void expectAssemblerDirectionalDerivatives(const std::shared_ptr<SimulationMesh> &mesh)
 {
   auto dmm = std::make_shared<DeformationModelManager>();
@@ -153,6 +269,25 @@ void expectAssemblerDirectionalDerivatives(const std::shared_ptr<SimulationMesh>
   EXPECT_LT((analyticHessianVector - fdHessianVector).norm(),
     3e-4 * std::max(1.0, fdHessianVector.norm()));
 }
+}
+
+TEST(DeformationModelAssemblerGTest, DeterministicAssemblyMatchesDefaultAndReproducesBitwise)
+{
+  pgo::Logging::init();
+
+  pgo::VolumetricMeshes::TetMesh tetMesh(kTorusVegPath);
+  std::shared_ptr<SimulationMesh> tet(pgo::SolidDeformationModel::loadTetMesh(&tetMesh));
+  ASSERT_NE(tet, nullptr);
+  expectDeterministicAssemblyMatches(makeVolumetricCase(tet));
+
+  pgo::VolumetricMeshes::CubicMesh cubicMesh(kCubicBoxVegPath);
+  std::shared_ptr<SimulationMesh> cubic(pgo::SolidDeformationModel::loadCubicMesh(&cubicMesh));
+  ASSERT_NE(cubic, nullptr);
+  expectDeterministicAssemblyMatches(makeVolumetricCase(cubic));
+
+  const AssemblerCase shell = makeShellCase();
+  ASSERT_NE(shell.mesh, nullptr);
+  expectDeterministicAssemblyMatches(shell);
 }
 
 TEST(DeformationModelAssemblerGTest, TetAssemblerRegression)

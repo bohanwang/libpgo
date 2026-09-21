@@ -95,6 +95,29 @@ in the capability table. `--static-sampled-ipc-companions` adds two separately
 named IPC tests of those scenes using the dynamic dragon example's barrier
 parameters, while retaining the original sampled runs.
 
+## Deterministic assembly
+
+Parallel assembly is not bit-reproducible by default: element and contact-pair
+contributions are accumulated with atomic adds and per-thread partial sums, and
+the IPC broad phase lists pairs in the order the worker threads produced them,
+so two identical runs differ in the last digits and the differences grow over a
+simulation. Set
+
+```json
+"deterministic-assembly": true
+```
+
+to make the elastic assembly (tet, cubic and shell elements) and the IPC
+contact assembly bit-reproducible across runs, independent of thread count and
+scheduling. Contributions are still computed in parallel; they are written to
+per-element or per-pair buffers and then summed per destination in a fixed
+order, the IPC pairs are sorted canonically after every broad phase, and the
+friction and Hessian terms follow that order. The cost is the extra buffers and
+one gather pass per assembly. With this flag the runIPCSim tests compare
+restarted and uninterrupted runs exactly, and two runs of the same
+configuration write identical state files. The flag is accepted by both
+runners; the sampled contact energies are not covered by it.
+
 ## Example index
 
 | Scene | Meshes | Contact models | Modes | Coverage |

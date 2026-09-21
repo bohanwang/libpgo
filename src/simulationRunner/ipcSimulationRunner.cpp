@@ -2,6 +2,7 @@
 
 #include "configFileJSON.h"
 #include "EigenSupport.h"
+#include "deformationModelAssembler.h"
 #include "deformationModelEnergy.h"
 #include "embeddedSurfaceIPCPotentialEnergy.h"
 #include "implicitBackwardEulerTimeIntegrator.h"
@@ -87,6 +88,12 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
     const bool useVolumePath = hasTetMesh || hasCubicMesh;
 
     RunIPCSim::IpcSimulationContext context = useVolumePath ? RunIPCSim::buildVolumeIpcSimulation(jconfig) : RunIPCSim::buildShellIpcSimulation(jconfig);
+    // Bit-reproducible elastic and contact assembly (fixed summation order);
+    // off by default because the default paths avoid the extra buffers.
+    const bool deterministicAssembly = jconfig.exist("deterministic-assembly") ? jconfig.getValue<bool>("deterministic-assembly", 1) : false;
+    context.deformationModelAssemblerOwner->setDeterministic(deterministicAssembly);
+    context.collisionHandler->setDeterministic(deterministicAssembly);
+    std::cout << "deterministic-assembly=" << (deterministicAssembly ? "true" : "false") << std::endl;
     const bool frictionEnabled = context.collisionHandler->getFrictionCoeff() > 0;
     const int frictionIterations = jconfig.getValue<int>("ipc-friction-iterations", 0, 1);
     if (frictionIterations < 1)

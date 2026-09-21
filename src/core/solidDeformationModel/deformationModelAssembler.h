@@ -49,6 +49,16 @@ public:
   const EigenSupport::SpMatD &get_dfda_Template() const { return dfdaTemplate; }
   const EigenSupport::SpMatD &get_dfdb_Template() const { return dfdbTemplate; }
 
+  // Deterministic assembly (opt-in; default off). The default paths accumulate
+  // element contributions with atomic fetch_add and per-thread partial sums, so
+  // the summation order depends on thread scheduling and results differ in the
+  // last ULPs between otherwise identical runs. When enabled, element
+  // contributions are computed in parallel into per-element buffers and then
+  // summed per destination in a fixed order, which is bit-reproducible while
+  // staying fully parallel.
+  void setDeterministic(bool on) const;
+  bool isDeterministic() const { return deterministic; }
+
 protected:
   void getPlasticParameters(int ele, const double *paramsAll, double *param) const;
   void getElasticParameters(int ele, const double *paramsAll, double *param) const;
@@ -70,6 +80,16 @@ protected:
   std::vector<const DeformationModel *> femModels;
 
   const int enableSanityCheck = 1;
+
+  // deterministic-assembly state (mutable: the compute* methods are const)
+  void buildDeterministicMaps() const;
+  mutable bool deterministic = false;
+  mutable bool detMapsBuilt = false;
+  mutable std::vector<double> elemEnergyBuf, elemGradBuf, elemHessBuf;
+  // destination -> contribution lists (CSR): gradient by global DOF, Hessian by
+  // position in the sparse value array
+  mutable std::vector<std::ptrdiff_t> gradScatterStart, gradScatterSrc;
+  mutable std::vector<std::ptrdiff_t> hessScatterStart, hessScatterSrc;
 };
 }  // namespace SolidDeformationModel
 }  // namespace pgo

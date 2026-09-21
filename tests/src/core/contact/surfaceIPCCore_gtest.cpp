@@ -1,12 +1,16 @@
 #include <gtest/gtest.h>
 
 #include "pgoLogging.h"
+#include "embeddedSurfaceIPCPotentialEnergy.h"
 #include "ipc/core/surfaceIPCCore.h"
 
 #include "testCIPCHelpers.h"
 
+#include <algorithm>
+#include <cstring>
 #include <limits>
 #include <stdexcept>
+#include <tuple>
 
 namespace
 {
@@ -54,6 +58,43 @@ SurfaceIPCCore makeConfiguredCore(bool projectHessianToPSD = true)
   auto [V, F] = makeTwoTriangleMesh();
   core.setMesh(V, F);
   return core;
+}
+
+// Two n x n triangulated sheets a small distance apart: many point-triangle
+// and edge-edge pairs, enough for parallel scheduling to matter.
+std::tuple<ES::MXd, ES::MXi> makeSheetPairMesh(int n, double separation)
+{
+  const int verticesPerSheet = (n + 1) * (n + 1);
+  ES::MXd V(2 * verticesPerSheet, 3);
+  ES::MXi F(2 * 2 * n * n, 3);
+  int f = 0;
+  for (int sheet = 0; sheet < 2; ++sheet) {
+    const int base = sheet * verticesPerSheet;
+    const double shift = sheet * 0.37 / n;  // avoid exactly aligned vertices
+    for (int j = 0; j <= n; ++j)
+      for (int i = 0; i <= n; ++i)
+        V.row(base + j * (n + 1) + i) << static_cast<double>(i) / n + shift,
+          static_cast<double>(j) / n + shift, sheet * separation;
+    for (int j = 0; j < n; ++j)
+      for (int i = 0; i < n; ++i) {
+        const int v00 = base + j * (n + 1) + i, v10 = v00 + 1, v01 = v00 + n + 1, v11 = v01 + 1;
+        F.row(f++) << v00, v10, v11;
+        F.row(f++) << v00, v11, v01;
+      }
+  }
+  return { V, F };
+}
+
+bool bitwiseEqual(const ES::VXd &a, const ES::VXd &b)
+{
+  return a.size() == b.size() && std::memcmp(a.data(), b.data(), sizeof(double) * a.size()) == 0;
+}
+
+bool bitwiseEqual(const ES::SpMatD &a, const ES::SpMatD &b)
+{
+  return a.nonZeros() == b.nonZeros() &&
+    std::memcmp(a.innerIndexPtr(), b.innerIndexPtr(), sizeof(ES::SpMatD::StorageIndex) * a.nonZeros()) == 0 &&
+    std::memcmp(a.valuePtr(), b.valuePtr(), sizeof(double) * a.nonZeros()) == 0;
 }
 
 void initializeLogging()
@@ -367,6 +408,85 @@ TEST(SurfaceIPCCoreGTest, PreparedPairsMatchDirectEnergyGradientHessian)
   EXPECT_NEAR(preparedEnergy, directEnergy, 1e-12);
   EXPECT_LT(relativeError(preparedGradient, directGradient), 1e-12);
   EXPECT_LT(relativeError(sparseToDense(preparedHessian), sparseToDense(directHessian)), 1e-12);
+}
+
+TEST(SurfaceIPCCoreGTest, DeterministicAssemblyMatchesDefaultSortsPairsAndReproducesBitwise)
+{
+  initializeLogging();
+  const auto [V, F] = makeSheetPairMesh(12, 0.05);
+  const ES::VXd x = flattenPositions(V);
+
+  SurfaceIPCCore::Parameters params;
+  params.dhat = 0.1;
+  params.kappa = 1.0;
+  params.frictionCoeff = 0.3;
+  SurfaceIPCCore core(params);
+  core.setMesh(V, F);
+  EXPECT_FALSE(core.isDeterministic());
+
+  struct Result
+  {
+    double energy = 0.0;
+    ES::VXd gradient;
+    ES::SpMatD hessian;
+    double allEnergy = 0.0;
+    ES::VXd allGradient;
+    ES::SpMatD allHessian;
+  };
+  auto evaluate = [&]() {
+    core.updateFriction(x, x, 0.01);
+    Result r;
+    r.energy = core.computeEnergy(x);
+    r.gradient = ES::VXd::Zero(x.size());
+    core.computeGradient(x, r.gradient);
+    core.computeHessian(x, r.hessian);
+    r.allGradient = ES::VXd::Zero(x.size());
+    core.computeAll(x, r.allEnergy, r.allGradient, r.allHessian);
+    return r;
+  };
+
+  const Result base = evaluate();
+  ASSERT_GT(core.getPTPairs().size() + core.getEEPairs().size(), 100u);
+  EXPECT_GT(core.getNumFrictionPairs(), 0u);
+  EXPECT_GT(base.gradient.norm(), 0.0);
+
+  core.setDeterministic(true);
+  EXPECT_TRUE(core.isDeterministic());
+  const Result det = evaluate();
+  const Result again = evaluate();
+
+  // canonical pair order after every broad phase
+  const auto &pt = core.getPTPairs();
+  const auto &ee = core.getEEPairs();
+  EXPECT_TRUE(std::is_sorted(pt.begin(), pt.end(), [](const pgo::Contact::CIPC::PTPair &a, const pgo::Contact::CIPC::PTPair &b) {
+    return std::tie(a.p, a.t0, a.t1, a.t2) < std::tie(b.p, b.t0, b.t1, b.t2);
+  }));
+  EXPECT_TRUE(std::is_sorted(ee.begin(), ee.end(), [](const pgo::Contact::CIPC::EEPair &a, const pgo::Contact::CIPC::EEPair &b) {
+    return std::tie(a.ea0, a.ea1, a.eb0, a.eb1) < std::tie(b.ea0, b.ea1, b.eb0, b.eb1);
+  }));
+
+  // same values as the default path up to summation order
+  EXPECT_NEAR(det.energy, base.energy, 1e-10 * std::max(1.0, std::abs(base.energy)));
+  EXPECT_LT(relativeError(det.gradient, base.gradient), 1e-10);
+  EXPECT_LT(relativeError(sparseToDense(det.hessian), sparseToDense(base.hessian)), 1e-10);
+  EXPECT_NEAR(det.allEnergy, det.energy, 1e-12 * std::max(1.0, std::abs(det.energy)));
+  EXPECT_LT(relativeError(det.allGradient, det.gradient), 1e-12);
+  EXPECT_LT(relativeError(sparseToDense(det.allHessian), sparseToDense(det.hessian)), 1e-12);
+
+  // bit-reproducible across repeated broad phases and assemblies
+  EXPECT_EQ(det.energy, again.energy);
+  EXPECT_TRUE(bitwiseEqual(det.gradient, again.gradient));
+  EXPECT_TRUE(bitwiseEqual(det.hessian, again.hessian));
+  EXPECT_EQ(det.allEnergy, again.allEnergy);
+  EXPECT_TRUE(bitwiseEqual(det.allGradient, again.allGradient));
+  EXPECT_TRUE(bitwiseEqual(det.allHessian, again.allHessian));
+
+  // the embedded energy forwards the switch
+  const ES::SpMatD W = ES::MXd::Identity(x.size(), x.size()).sparseView();
+  pgo::Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy embedded(V, F, W, params);
+  EXPECT_FALSE(embedded.isDeterministic());
+  embedded.setDeterministic(true);
+  EXPECT_TRUE(embedded.isDeterministic());
 }
 
 TEST(SurfaceIPCCoreGTest, PreparedPairConsumersRequirePreparedState)
