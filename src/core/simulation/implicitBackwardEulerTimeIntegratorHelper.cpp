@@ -17,9 +17,11 @@ ImplicitBackwardEulerEnergy::ImplicitBackwardEulerEnergy(ImplicitBackwardEulerTi
 
 double ImplicitBackwardEulerEnergy::func(ES::ConstRefVecXd x) const
 {
-  // x is u (the full position), not du
-  // 0.5 Au^2
-  double energy = ES::vTMv(intg->A, x, intg->temp0, 0) * 0.5;
+  // Algebraically the same quadratic up to a constant, evaluated around q_n.
+  // Small frictional steps must not lose their energy changes to cancellation
+  // between O(||q_n||^2 / h^2) terms in translated or already-deformed scenes.
+  const ES::VXd du = x - intg->stepReference;
+  double energy = ES::vTMv(intg->A, du, intg->temp0, 0) * 0.5 - du.dot(intg->b);
 
   for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
     // elastic(u)
@@ -27,19 +29,14 @@ double ImplicitBackwardEulerEnergy::func(ES::ConstRefVecXd x) const
     energy += tempEnergy;
   }
 
-  // - b^T u
-  double last_term = x.dot(intg->b);
-
-  energy -= last_term;
-
   return energy;
 }
 
 void ImplicitBackwardEulerEnergy::gradient(ES::ConstRefVecXd x, ES::RefVecXd grad) const
 {
-  // x is u (the full position)
-  // Au
-  ES::mv(intg->A, x, grad, 0);
+  const ES::VXd du = x - intg->stepReference;
+  ES::mv(intg->A, du, grad, 0);
+  grad -= intg->b;
 
   for (size_t i = 0; i < intg->implicitModelsAll.size(); i++) {
     ES::VXd &fint = *intg->implicitModelsAll_fint[i];
@@ -50,8 +47,6 @@ void ImplicitBackwardEulerEnergy::gradient(ES::ConstRefVecXd x, ES::RefVecXd gra
     grad += fint;
   }
 
-  //cblas_daxpy(intg->n3, -1.0, intg->b.data(), 1, grad.data(), 1);
-  grad -= intg->b;
 }
 
 void ImplicitBackwardEulerEnergy::hessian(ES::ConstRefVecXd x, ES::SpMatD &hess) const
@@ -92,14 +87,8 @@ int ImplicitBackwardEulerEnergy::getNumDOFs() const
 
 void ImplicitBackwardEulerEnergy::printImplicitEnergy(ES::ConstRefVecXd x) const
 {
-  // x is u (the full position)
-  //std::cout << "Energy: ";
-  // 0.5 Au^2
-  double energy = ES::vTMv(intg->A, x, intg->temp0, 0) * 0.5;
-  // - b^T u
-  // double last_term = cblas_ddot(intg->n3, x.data(), 1, intg->b.data(), 1);
-  double last_term = x.dot(intg->b);
-  energy -= last_term;
+  const ES::VXd du = x - intg->stepReference;
+  double energy = ES::vTMv(intg->A, du, intg->temp0, 0) * 0.5 - du.dot(intg->b);
 
   std::cout << "  main: " << energy << '\n';
 

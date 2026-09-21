@@ -269,6 +269,25 @@ class TestImplicitBackwardEulerTimeIntegrator : public ImplicitBackwardEulerTime
 public:
   using ImplicitBackwardEulerTimeIntegrator::ImplicitBackwardEulerTimeIntegrator;
   using pgo::Simulation::TimeIntegrator::assembleImplicitModels;
+  void prepareStepEnergy()
+  {
+    assembleImplicitModels();
+    updateD();
+    updateA();
+    updateb();
+  }
+};
+
+class ZeroElasticEnergy : public FixedMaxStepEnergy
+{
+public:
+  explicit ZeroElasticEnergy(int n): FixedMaxStepEnergy(n, 1.0) {}
+  void createHessian(ES::SpMatD &hessian) const override
+  {
+    hessian.resize(getNumDOFs(), getNumDOFs());
+    hessian.setIdentity();
+    hessian.coeffs().setZero();
+  }
 };
 
 class TestTRBDF2TimeIntegrator : public TRBDF2TimeIntegrator
@@ -466,6 +485,49 @@ TEST(DeformationModelEnergyMaxStepGTest, ShellKeepsUnitStep)
   applyUniformTranslation(dx, 0.1, -0.05, 0.2);
 
   EXPECT_DOUBLE_EQ(fixture.energy->computeMaxStepSize(x, dx), 1.0);
+}
+
+TEST(DeformationModelEnergyMaxStepGTest, BackwardEulerResolvesSmallStepsAtLargeDisplacement)
+{
+  initializeLogging();
+  ES::SpMatD mass(3, 3);
+  mass.setIdentity();
+  mass.coeffRef(0, 0) = 2;
+  mass.coeffRef(1, 1) = 3;
+  mass.coeffRef(2, 2) = 4;
+  constexpr double h = 1e-3, damping = .4;
+  TestImplicitBackwardEulerTimeIntegrator integrator(mass, std::make_shared<ZeroElasticEnergy>(3), damping, 0, h, 10, 1e-8);
+  const ES::VXd q = ES::VXd::Constant(3, -16384);
+  const ES::V3d velocity(.2, -.1, .5), force(.4, -.7, .2);
+  integrator.setqState(q, velocity, ES::V3d::Zero());
+  integrator.setExternalForce(force.data());
+  integrator.prepareStepEnergy();
+  const auto energy = integrator.getInternalEnergy();
+  const ES::V3d du(std::ldexp(1., -12), -std::ldexp(1., -13), std::ldexp(1., -14));
+  const ES::VXd x = q + du;
+  const ES::M3d A = ES::M3d(mass) * (1 / (h * h) + damping / h);
+  const ES::V3d b = mass * velocity / h + force;
+  const double expected = .5 * du.dot(A * du) - du.dot(b);
+  EXPECT_DOUBLE_EQ(energy->func(q), 0);
+  EXPECT_NEAR(energy->func(x), expected, 1e-13);
+  ES::VXd g(3);
+  energy->gradient(x, g);
+  EXPECT_LT((g - (A * du - b)).norm(), 1e-10);
+  ES::SpMatD H;
+  energy->hessianDirect(x, H);
+  EXPECT_LT((ES::M3d(H) - A).norm(), 1e-9);
+  for (int i = 0; i < 3; ++i) {
+    constexpr double delta = 1.0 / 65536;
+    ES::VXd xp = x, xm = x;
+    xp[i] += delta;
+    xm[i] -= delta;
+    EXPECT_NEAR((energy->func(xp) - energy->func(xm)) / (2 * delta), g[i], 1e-9);
+  }
+  integrator.setSolution(x);
+  integrator.proceedTimestep();
+  EXPECT_NEAR(energy->func(x), expected, 1e-13);
+  integrator.prepareStepEnergy();
+  EXPECT_DOUBLE_EQ(energy->func(x), 0);
 }
 
 TEST(DeformationModelEnergyMaxStepGTest, ImplicitBackwardEulerTakesMinWithOtherEnergy)

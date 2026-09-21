@@ -7,6 +7,7 @@ set(CONTACT_HEADERS
   ipc/broadPhase/spatialHashGrid.h
   ipc/broadPhase/surfaceIPCSelfBroadPhase.h
   ipc/core/surfaceIPCBarrierAssembler.h
+  ipc/core/surfaceIPCFriction.h
   ipc/core/surfaceIPCMaxStep.h
   ipc/core/surfaceIPCCore.h
   ipc/core/surfaceIPCPairs.h
@@ -33,6 +34,7 @@ set(CONTACT_SOURCES
   ipc/broadPhase/spatialHashGrid.cpp
   ipc/broadPhase/surfaceIPCSelfBroadPhase.cpp
   ipc/core/surfaceIPCBarrierAssembler.cpp
+  ipc/core/surfaceIPCFriction.cpp
   ipc/core/surfaceIPCMaxStep.cpp
   ipc/core/surfaceIPCCore.cpp
   ipc/geometry/ipcBarrier.cpp

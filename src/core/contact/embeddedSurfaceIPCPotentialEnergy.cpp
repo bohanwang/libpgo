@@ -54,6 +54,15 @@ void EmbeddedSurfaceIPCPotentialEnergy::validateCollisionFreeState(
     computeSurfacePositionsFromSimulationDisplacements(simulationDisplacements));
 }
 
+void EmbeddedSurfaceIPCPotentialEnergy::updateFriction(
+  EigenSupport::ConstRefVecXd referenceDisplacements,
+  EigenSupport::ConstRefVecXd laggedDisplacements, double timestep)
+{
+  surfaceIPCCore_.updateFriction(
+    computeSurfacePositionsFromSimulationDisplacements(referenceDisplacements),
+    computeSurfacePositionsFromSimulationDisplacements(laggedDisplacements), timestep);
+}
+
 void EmbeddedSurfaceIPCPotentialEnergy::ensurePreparedForSurfacePositions(
   EigenSupport::ConstRefVecXd surfacePositions) const
 {

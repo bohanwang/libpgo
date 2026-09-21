@@ -61,6 +61,10 @@ int pgo::SimulationRunner::runSampledSimulationFromConfig(
   tbb::global_control c(tbb::global_control::max_allowed_parallelism, std::min(64, (int)std::thread::hardware_concurrency()));
   tbb::global_control global_limit(tbb::global_control::thread_stack_size, 16 * 1024 * 1024);
 
+  // Logging::lgr() is null until init(); ConfigFileJSON logs through it when
+  // the file cannot be opened. The level is re-applied once the config is read.
+  pgo::Logging::init();
+
   ConfigFileJSON jconfig;
   if (jconfig.open(configFilename.string().c_str()) != true)
     return 1;
@@ -442,6 +446,8 @@ int pgo::SimulationRunner::runSampledSimulationFromConfig(
       intg->setqState(u, uvel, uacc);
 
       intg->doTimestep(1, 2, 1);
+      if (RunSim::newtonStatusIsFatal(intg->getSolverReturn(), fmt::format("Frame {}", framei)))
+        return 1;
 
       intg->getq(u);
       intg->getqvel(uvel);
@@ -513,7 +519,8 @@ int pgo::SimulationRunner::runSampledSimulationFromConfig(
     energyAll->printEnergy(u);
 
     NonlinearOptimization::NewtonSolver solver(u.data(), solverParam, energyAll, std::vector<int>(), nullptr);
-    solver.solve(u.data(), solverMaxIter, solverEps, 2);
+    if (RunSim::newtonStatusIsFatal(solver.solve(u.data(), solverMaxIter, solverEps, 2), "Static sampled solve"))
+      return 1;
 
     ES::VXd x = restPosition + u;
 

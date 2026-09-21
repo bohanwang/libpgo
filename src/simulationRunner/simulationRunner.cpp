@@ -8,6 +8,9 @@
 
 int pgo::SimulationRunner::runSimulationFromConfig(const std::filesystem::path &configFilename)
 {
+  // Logging::lgr() is null until init(); every error path below logs through it.
+  pgo::Logging::init();
+
   try {
     ConfigFileJSON config;
     if (!config.open(configFilename.string().c_str())) {

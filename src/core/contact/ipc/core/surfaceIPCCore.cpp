@@ -27,6 +27,10 @@ SurfaceIPCCore::SurfaceIPCCore(const SurfaceIPCCore &other):
   eps_ee(other.eps_ee),
   slackness(other.slackness),
   projectHessianToPSD(other.projectHessianToPSD),
+  frictionCoeff(other.frictionCoeff),
+  frictionEpsV(other.frictionEpsV),
+  friction_(other.friction_),
+  frictionReady_(other.frictionReady_),
   hasMesh_(other.hasMesh_),
   topology_(other.topology_),
   ptPairs_(other.ptPairs_),
@@ -46,6 +50,10 @@ SurfaceIPCCore &SurfaceIPCCore::operator=(const SurfaceIPCCore &other)
   eps_ee = other.eps_ee;
   slackness = other.slackness;
   projectHessianToPSD = other.projectHessianToPSD;
+  frictionCoeff = other.frictionCoeff;
+  frictionEpsV = other.frictionEpsV;
+  friction_ = other.friction_;
+  frictionReady_ = other.frictionReady_;
   hasMesh_ = other.hasMesh_;
   topology_ = other.topology_;
   ptPairs_ = other.ptPairs_;
@@ -65,12 +73,20 @@ void SurfaceIPCCore::setParameters(const Parameters &params)
     throw std::invalid_argument("SurfaceIPCCore::Parameters::eps_ee must be finite and non-negative.");
   if (!std::isfinite(params.slackness) || params.slackness <= 0.0 || params.slackness > 1.0)
     throw std::invalid_argument("SurfaceIPCCore::Parameters::slackness must be finite and in (0, 1].");
+  if (!std::isfinite(params.frictionCoeff) || params.frictionCoeff < 0.0)
+    throw std::invalid_argument("SurfaceIPCCore::Parameters::frictionCoeff must be finite and non-negative.");
+  if (!std::isfinite(params.frictionEpsV) || params.frictionEpsV <= 0.0)
+    throw std::invalid_argument("SurfaceIPCCore::Parameters::frictionEpsV must be finite and positive.");
 
   dhat = params.dhat;
   kappa = params.kappa;
   eps_ee = params.eps_ee;
   slackness = params.slackness;
   projectHessianToPSD = params.projectHessianToPSD;
+  frictionCoeff = params.frictionCoeff;
+  frictionEpsV = params.frictionEpsV;
+  friction_.clear();
+  frictionReady_ = false;
   invalidatePreparedState();
 }
 
@@ -82,6 +98,8 @@ SurfaceIPCCore::Parameters SurfaceIPCCore::getParameters() const
   params.eps_ee = eps_ee;
   params.slackness = slackness;
   params.projectHessianToPSD = projectHessianToPSD;
+  params.frictionCoeff = frictionCoeff;
+  params.frictionEpsV = frictionEpsV;
   return params;
 }
 
@@ -111,7 +129,23 @@ void SurfaceIPCCore::setMesh(const MXd &V, const MXi &F, const std::vector<uint8
 
   topology_.setMesh(V, F, vertexIsDeformableMask);
   hasMesh_ = true;
+  friction_.clear();
+  frictionReady_ = false;
   invalidatePreparedState();
+}
+
+void SurfaceIPCCore::updateFriction(ConstRefVecXd reference, ConstRefVecXd lagged, double timestep)
+{
+  validateSurfaceState(reference, "friction reference positions");
+  validateSurfaceState(lagged, "friction lagged positions");
+  frictionReady_ = false;
+  std::vector<PTPair> ptPairs;
+  std::vector<EEPair> eePairs;
+  if (frictionCoeff > 0)
+    SurfaceIPCSelfBroadPhase().buildPairs(topology_, lagged, dhat, ptPairs, eePairs);
+  friction_.update(reference, lagged, ptPairs, eePairs, dhat, kappa, eps_ee,
+    frictionCoeff, frictionEpsV, timestep);
+  frictionReady_ = true;
 }
 
 // =========================================================================
@@ -200,6 +234,8 @@ void SurfaceIPCCore::requirePreparedState() const
 {
   if (!hasPreparedState_)
     throw std::logic_error("SurfaceIPCCore prepared active pairs are missing. Call prepareForSurfacePositions() first.");
+  if (frictionCoeff > 0 && !frictionReady_)
+    throw std::logic_error("IPC friction is enabled: call updateFriction() before evaluating the potential.");
 }
 
 // =========================================================================
@@ -225,7 +261,10 @@ double SurfaceIPCCore::computeEnergy(EigenSupport::ConstRefVecXd pos) const
 double SurfaceIPCCore::computeEnergyWithPreparedPairs() const
 {
   requirePreparedState();
-  return SurfaceIPCBarrierAssembler().computeEnergy(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee);
+  double energy = SurfaceIPCBarrierAssembler().computeEnergy(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee);
+  if (frictionCoeff > 0)
+    energy += friction_.computeEnergy(preparedPositions_);
+  return energy;
 }
 
 // =========================================================================
@@ -243,6 +282,8 @@ void SurfaceIPCCore::computeGradientWithPreparedPairs(EigenSupport::RefVecXd gra
   requirePreparedState();
   validateSurfaceGradient(grad);
   SurfaceIPCBarrierAssembler().computeGradient(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts, dhat, kappa, eps_ee, grad);
+  if (frictionCoeff > 0)
+    friction_.addGradient(preparedPositions_, grad);
 }
 
 // =========================================================================
@@ -259,6 +300,11 @@ void SurfaceIPCCore::computeHessianWithPreparedPairs(SpMatD &hess) const
   requirePreparedState();
   SurfaceIPCBarrierAssembler().computeHessian(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts,
     dhat, kappa, eps_ee, projectHessianToPSD, hess);
+  if (frictionCoeff > 0) {
+    SpMatD frictionHessian;
+    friction_.computeHessian(preparedPositions_, frictionHessian);
+    hess += frictionHessian;
+  }
 }
 
 // =========================================================================
@@ -276,6 +322,13 @@ void SurfaceIPCCore::computeAllWithPreparedPairs(double &energy, VXd &grad, SpMa
   requirePreparedState();
   SurfaceIPCBarrierAssembler().computeAll(preparedPositions_, ptPairs_, eePairs_, topology_.numVerts,
     dhat, kappa, eps_ee, projectHessianToPSD, energy, grad, hess);
+  if (frictionCoeff > 0) {
+    energy += friction_.computeEnergy(preparedPositions_);
+    friction_.addGradient(preparedPositions_, grad);
+    SpMatD frictionHessian;
+    friction_.computeHessian(preparedPositions_, frictionHessian);
+    hess += frictionHessian;
+  }
 }
 
 }  // namespace CIPC

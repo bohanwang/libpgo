@@ -18,6 +18,9 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -53,6 +56,19 @@ std::string shellExecutable(const fs::path &path)
 int runCommand(const std::string &command)
 {
   return std::system(command.c_str());
+}
+
+// Exit code of a runCommand() result, or -1 when the process did not exit
+// normally (for example when it was killed by a signal such as SIGSEGV).
+int exitCodeOf(int commandStatus)
+{
+#ifdef _WIN32
+  return commandStatus;
+#else
+  if (commandStatus == -1 || !WIFEXITED(commandStatus))
+    return -1;
+  return WEXITSTATUS(commandStatus);
+#endif
 }
 
 class ScopedTempDir
@@ -276,7 +292,7 @@ std::string makeShellIPCConfig(const fs::path &tempDir, int numTimesteps,
   return json.str();
 }
 
-std::string makeShellIPCConfigWithIgnoredLegacyContactFields(const fs::path &tempDir, int numTimesteps)
+std::string makeShellIPCConfigWithSampledContactFields(const fs::path &tempDir, int numTimesteps)
 {
   const fs::path shellDir = fs::path(kShellExampleDir);
   const fs::path outputDir = tempDir / "shell-output";
@@ -706,7 +722,7 @@ TEST(RunIPCSimCliGTest, DeformStateIsWrittenEveryTimestep)
   EXPECT_FALSE(fs::exists(tempDir.path() / "shell-output" / "ret0001.obj"));
 }
 
-TEST(RunIPCSimCliGTest, LegacyContactFieldsAreIgnoredWhenPresent)
+TEST(RunIPCSimCliGTest, SharedFrictionCoefficientIsAcceptedWithSampledOnlyFields)
 {
   const fs::path binary = runIPCSimBinaryPath();
   ASSERT_FALSE(binary.empty());
@@ -715,7 +731,7 @@ TEST(RunIPCSimCliGTest, LegacyContactFieldsAreIgnoredWhenPresent)
   ScopedTempDir tempDir;
   const fs::path configPath = tempDir.path() / "shell-ipc-with-legacy-contact.json";
 
-  writeTextFile(configPath, makeShellIPCConfigWithIgnoredLegacyContactFields(tempDir.path(), 0));
+  writeTextFile(configPath, makeShellIPCConfigWithSampledContactFields(tempDir.path(), 1));
 
   std::ostringstream command;
   command << shellExecutable(binary)
@@ -723,6 +739,85 @@ TEST(RunIPCSimCliGTest, LegacyContactFieldsAreIgnoredWhenPresent)
           << quotePath(configPath);
 
   ASSERT_EQ(runCommand(command.str()), 0);
+}
+
+TEST(RunIPCSimCliGTest, FrictionReducesSlidingAndRestartMatchesUninterruptedRun)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path plane = tempDir.path() / "plane.obj";
+  const fs::path cloth = tempDir.path() / "cloth.obj";
+  writeExternalPlane(plane);
+  writeTextFile(cloth,
+    "v -.1 .019 -.1\nv .1 .019 -.1\nv .1 .019 .1\nv -.1 .019 .1\nf 1 3 2\nf 1 4 3\n");
+  nlohmann::json config = nlohmann::json::parse(makeShellIPCConfig(tempDir.path(), 40));
+  config["surface-mesh"] = cloth.generic_string();
+  config["fixed-vertices"] = nlohmann::json::array();
+  config["ipc-external-objects"] = nlohmann::json::array({ { { "filename", plane.generic_string() } } });
+  config["init-vel"] = { .2, 0, 0 };
+  config["timestep"] = .002;
+  config["ipc-dhat"] = .02;
+  config["ipc-kappa"] = 1.0;
+  config["shell-youngs-modulus"] = 1000;
+  config["shell-bending-youngs-modulus"] = 1000;
+  config["shell-areal-density"] = 1.0;
+  config["solver-eps"] = 1e-8;
+  config["solver-max-iter"] = 100;
+  config["ipc-friction-iterations"] = 2;
+  const fs::path configPath = tempDir.path() / "sliding.json";
+  ES::MXd frictionless, frictional;
+  for (double mu : { 0.0, .5 }) {
+    const fs::path output = tempDir.path() / (mu == 0 ? "frictionless" : "frictional");
+    config["output"] = output.generic_string();
+    config["contact-friction-coeff"] = mu;
+    writeTextFile(configPath, config.dump(2));
+    ASSERT_EQ(pgo::SimulationRunner::runIPCSimulationFromConfig(configPath), 0);
+    ES::MXd &state = mu == 0 ? frictionless : frictional;
+    ASSERT_EQ(ES::readMatrix((output / "deform0039.u").string().c_str(), state), 0);
+    ASSERT_TRUE(state.allFinite());
+    for (int i = 0; i < 4; ++i)
+      EXPECT_GT(.019 + state(3 * i + 1, 0), 0);
+  }
+  auto mean = [](const ES::MXd &state, int column) {
+    double sum = 0;
+    for (int i = 0; i < 4; ++i)
+      sum += state(3 * i, column);
+    return sum / 4;
+  };
+  // Finite floor triangles also contribute EE barrier forces near their
+  // diagonal; allow their small tangential influence in the mu=0 baseline.
+  EXPECT_NEAR(mean(frictionless, 1), .2, .002);
+  EXPECT_LT(std::abs(mean(frictional, 1)), .2 * std::abs(mean(frictionless, 1)));
+  EXPECT_LT(mean(frictional, 0), .7 * mean(frictionless, 0));
+
+  const fs::path restartOutput = tempDir.path() / "restart";
+  fs::create_directories(restartOutput);
+  fs::copy_file(tempDir.path() / "frictional/deform0019.u", restartOutput / "deform0019.u");
+  config["output"] = restartOutput.generic_string();
+  config["restart-from-u"] = true;
+  writeTextFile(configPath, config.dump(2));
+  ASSERT_EQ(pgo::SimulationRunner::runIPCSimulationFromConfig(configPath), 0);
+  ES::MXd resumed;
+  ASSERT_EQ(ES::readMatrix((restartOutput / "deform0039.u").string().c_str(), resumed), 0);
+  EXPECT_LT((resumed.col(0) - frictional.col(0)).norm(), 1e-8);
+  EXPECT_LT((resumed.col(1) - frictional.col(1)).norm(), 1e-6);
+  EXPECT_LT((resumed.col(2) - frictional.col(2)).norm(), 1e-4);
+}
+
+TEST(RunIPCSimCliGTest, RejectsInvalidFrictionConfiguration)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "invalid-friction.json";
+  const nlohmann::json valid = nlohmann::json::parse(makeShellIPCConfig(tempDir.path(), 0));
+  for (const auto &[key, value] : std::vector<std::pair<std::string, double>>{
+         { "contact-friction-coeff", -.1 }, { "ipc-friction-epsv", 0 },
+         { "ipc-friction-iterations", 0 }, { "timestep", 0 } }) {
+    auto config = valid;
+    config[key] = value;
+    writeTextFile(configPath, config.dump(2));
+    EXPECT_NE(pgo::SimulationRunner::runIPCSimulationFromConfig(configPath), 0) << key;
+  }
 }
 
 TEST(RunIPCSimCliGTest, HeuristicOverridesExplicitIPCFieldsInLog)
@@ -1304,7 +1399,30 @@ TEST(RunIPCSimCliGTest, StaticRestartRequestIsRejected)
   config = addBoolConfigField(std::move(config), "restart-from-u", true);
   writeTextFile(configPath, config);
 
-  EXPECT_NE(runCommand(shellExecutable(binary) + " " + quotePath(configPath)), 0);
+  // The rejection must be a clean exit code, not a crash inside the error path.
+  EXPECT_EQ(exitCodeOf(runCommand(shellExecutable(binary) + " " + quotePath(configPath))), 1);
+}
+
+TEST(RunIPCSimCliGTest, EarlyConfigErrorsExitCleanly)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+  ScopedTempDir tempDir;
+
+  // Errors raised before the runner configures logging used to dereference a
+  // null logger and crash with SIGSEGV; each must exit with status 1 instead.
+  const fs::path missingConfig = tempDir.path() / "does-not-exist.json";
+  EXPECT_EQ(exitCodeOf(runCommand(shellExecutable(binary) + " " + quotePath(missingConfig))), 1);
+
+  const fs::path badSimType = tempDir.path() / "bad-sim-type.json";
+  writeTextFile(badSimType, replaceTextOnce(makeShellIPCConfig(tempDir.path(), 1),
+    "\"sim-type\": \"dynamic\"", "\"sim-type\": \"bogus\""));
+  EXPECT_EQ(exitCodeOf(runCommand(shellExecutable(binary) + " " + quotePath(badSimType))), 1);
+
+  const fs::path missingGravity = tempDir.path() / "missing-g.json";
+  writeTextFile(missingGravity, "{\n  \"scale\": 1.0\n}\n");
+  EXPECT_EQ(exitCodeOf(runCommand(shellExecutable(binary) + " " + quotePath(missingGravity))), 1);
 }
 
 TEST(RunIPCSimCliGTest, InvalidDynamicRestartStatesAreRejected)

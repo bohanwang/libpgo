@@ -38,6 +38,10 @@ public:
   int getNumSurfaceTriangles() const { return surfaceIPCCore_.getNumSurfaceTriangles(); }
   bool isSurfaceVertexDeformable(int vi) const { return surfaceIPCCore_.isSurfaceVertexDeformable(vi); }
   void validateCollisionFreeState(EigenSupport::ConstRefVecXd simulationDisplacements) const;
+  void updateFriction(EigenSupport::ConstRefVecXd referenceDisplacements,
+    EigenSupport::ConstRefVecXd laggedDisplacements, double timestep);
+  double getFrictionCoeff() const { return surfaceIPCCore_.getParameters().frictionCoeff; }
+  std::size_t getNumFrictionPairs() const { return surfaceIPCCore_.getNumFrictionPairs(); }
 
 private:
   virtual double computeSurfaceEnergy(EigenSupport::ConstRefVecXd surfacePositions) const override;

@@ -2,6 +2,8 @@
 
 // Optional process-level logging used by the simulation CLI wrappers.
 #include "configFileJSON.h"
+#include "NewtonSolver.h"
+#include "pgoLogging.h"
 
 #include <cstdio>
 #include <cerrno>
@@ -95,6 +97,23 @@ spdlog::level::level_enum resolveConfiguredLogLevel(const ConfigFileJSON &config
     return spdlog::level::err;
 
   throw std::invalid_argument("Unsupported loglevel: " + configuredLevel);
+}
+
+bool newtonStatusIsFatal(int status, const std::string &context)
+{
+  using NonlinearOptimization::NewtonSolver;
+  if (status == NewtonSolver::SOLVE_CONVERGED)
+    return false;
+
+  if (status == NewtonSolver::SOLVE_NOT_CONVERGED) {
+    SPDLOG_LOGGER_WARN(Logging::lgr(),
+      "{}: Newton stopped before reaching the gradient tolerance; continuing with the returned state.", context);
+    return false;
+  }
+
+  SPDLOG_LOGGER_ERROR(Logging::lgr(), "{}: Newton failed with status {} ({}); stopping.",
+    context, status, NewtonSolver::solveStatusName(status));
+  return true;
 }
 
 ScopedRunSimCliLogRedirect::ScopedRunSimCliLogRedirect(const std::string &logFilename)

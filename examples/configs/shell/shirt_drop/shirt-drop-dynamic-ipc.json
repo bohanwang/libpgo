@@ -48,6 +48,9 @@
   "output": "../../../generated/output/shirt-drop-dynamic-ipc",
   "ipc-heuristic": true,
   "contact-model": "ipc",
+  "contact-friction-coeff": 0.3,
+  "ipc-friction-epsv": 0.001,
+  "ipc-friction-iterations": 1,
   "shell-zero-rest-curvature": true,
   "shell-youngs-modulus": 10000.0,
   "shell-bending-youngs-modulus": 100

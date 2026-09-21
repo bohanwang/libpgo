@@ -10,6 +10,7 @@ copyright to Bohan Wang
 #include "ipc/geometry/ipcDistancePrimitives.h"
 #include "ipc/geometry/ipcHessianProjection.h"
 #include "ipc/core/surfaceIPCPairs.h"
+#include "ipc/core/surfaceIPCFriction.h"
 #include "ipc/topology/surfaceIPCTopology.h"
 #include "potentialEnergy.h"
 
@@ -43,6 +44,8 @@ public:
     // Newton solves use a blockwise PSD approximation by default. Disable
     // this only when the unprojected, energy-consistent barrier Hessian is required.
     bool projectHessianToPSD = true;
+    double frictionCoeff = 0.0;
+    double frictionEpsV = 1e-3;  // tangential speed regularization, in length/second
   };
 
   SurfaceIPCCore() = default;
@@ -55,6 +58,11 @@ public:
 
   void setMesh(const MXd &V, const MXi &F);
   void setMesh(const MXd &V, const MXi &F, const std::vector<uint8_t> &vertexIsDeformableMask);
+
+  // Call before each time step / lagging iteration, never inside a Newton solve.
+  void updateFriction(EigenSupport::ConstRefVecXd referencePositions,
+    EigenSupport::ConstRefVecXd laggedPositions, double timestep);
+  std::size_t getNumFrictionPairs() const { return friction_.numPairs(); }
 
   double computeEnergy(EigenSupport::ConstRefVecXd x_surf) const;
   void computeGradient(EigenSupport::ConstRefVecXd x_surf, EigenSupport::RefVecXd g_surf) const;
@@ -95,6 +103,10 @@ private:
   double eps_ee = 0.0;
   double slackness = 1.0;
   bool projectHessianToPSD = true;
+  double frictionCoeff = 0.0;
+  double frictionEpsV = 1e-3;
+  SurfaceIPCFriction friction_;
+  bool frictionReady_ = false;
   bool hasMesh_ = false;
   SurfaceIPCTopology topology_;
   mutable std::vector<PTPair> ptPairs_;

@@ -45,6 +45,18 @@ public:
     int addDamping = 0;
   };
 
+  // Return codes of solve(). They describe the returned state, not the stop
+  // reason: a solve that exhausts its iterations but ends below the gradient
+  // tolerance is converged, and a solve that stops after a failed line search
+  // above the tolerance is not.
+  enum SolveStatus
+  {
+    SOLVE_CONVERGED = 0,          // gradient infinity norm below epsilon at the returned state
+    SOLVE_NOT_CONVERGED = 1,      // stopped early (iteration limit, tiny step, failed line search) with a finite state
+    SOLVE_NUMERICAL_FAILURE = 2,  // non-finite energy, gradient, or step; the last finite iterate is returned
+  };
+  static const char *solveStatusName(int status);
+
   NewtonSolver(const double *x, SolverParam sp, PotentialEnergy_const_p energy_,
     const std::vector<int> &fixedDOFs, const double *fixedValues_ = nullptr);
 
@@ -55,6 +67,9 @@ public:
   void setStepFunc(StepFunc func) { stepFunc = func; }
 
   const EigenSupport::VXd &getx() const { return x; }
+  // Why the last solve() left its iteration loop, e.g. "gradient_tolerance".
+  const char *getLastStopReason() const { return lastStopReason; }
+  double getLastGradientNorm() const { return lastGradientNorm; }
 
 protected:
   void filterVector(EigenSupport::VXd &v);
@@ -85,6 +100,8 @@ protected:
   double historyGradNormMin;
 
   StepFunc stepFunc;
+  const char *lastStopReason = "not_run";
+  double lastGradientNorm = -1.0;
 };
 }  // namespace NonlinearOptimization
 }  // namespace pgo

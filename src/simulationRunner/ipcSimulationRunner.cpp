@@ -16,6 +16,7 @@
 #include <fmt/format.h>
 
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <memory>
@@ -49,6 +50,11 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
   using namespace pgo;
   namespace ES = EigenSupport;
 
+  // Logging::lgr() is null until init(); ConfigFileJSON, the runner, and the
+  // catch block below all log through it, so it must exist before anything
+  // that can fail. The level is re-applied once the config has been read.
+  pgo::Logging::init();
+
   try {
     ConfigFileJSON jconfig;
     if (jconfig.open(configFilename.string().c_str()) != true)
@@ -73,6 +79,8 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
       const std::filesystem::path logPath = outputFolder / "runIPCSim.log";
       logRedirect = std::make_unique<RunSim::ScopedRunSimCliLogRedirect>(logPath.string());
     }
+    // Re-create the sinks after the optional redirect so the configured level
+    // and terminal detection apply to the final stdout.
     pgo::Logging::init(nullptr, RunSim::resolveConfiguredLogLevel(jconfig));
 
     if (!restartFromU)
@@ -84,6 +92,16 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
     const bool useVolumePath = hasTetMesh || hasCubicMesh;
 
     RunIPCSim::IpcSimulationContext context = useVolumePath ? RunIPCSim::buildVolumeIpcSimulation(jconfig) : RunIPCSim::buildShellIpcSimulation(jconfig);
+    const bool frictionEnabled = context.collisionHandler->getFrictionCoeff() > 0;
+    const int frictionIterations = jconfig.getValue<int>("ipc-friction-iterations", 0, 1);
+    if (frictionIterations < 1)
+      throw std::invalid_argument("`ipc-friction-iterations` must be a positive integer.");
+    const double timestep = (simType == "dynamic" || frictionEnabled) ? jconfig.getDouble("timestep", 1) : 1.0;
+    if (!std::isfinite(timestep) || timestep <= 0)
+      throw std::invalid_argument("`timestep` must be finite and strictly positive.");
+    std::cout << "IPC friction: mu=" << context.collisionHandler->getFrictionCoeff()
+              << ", epsv=" << jconfig.getValue<double>("ipc-friction-epsv", 0, 1e-3)
+              << ", iterations=" << frictionIterations << std::endl;
 
     const int n3 = static_cast<int>(context.simulationRestPosition.size());
     const int n = n3 / 3;
@@ -113,11 +131,21 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
       energyAll->addPotentialEnergy(context.collisionHandler);
       energyAll->init();
 
-      NonlinearOptimization::NewtonSolver::SolverParam solverParam;
-      NonlinearOptimization::NewtonSolver solver(
-        u.data(), solverParam, energyAll, std::vector<int>(), nullptr);
-      if (solver.solve(u.data(), solverMaxIter, solverEps, 2) != 0)
-        return 1;
+      // A static solve is one load increment relative to the initial state.
+      const ES::VXd reference = u;
+      for (int iteration = 0; iteration < (frictionEnabled ? frictionIterations : 1); ++iteration) {
+        if (frictionEnabled) {
+          context.collisionHandler->updateFriction(reference, u, timestep);
+          std::cout << "IPC friction iteration " << iteration << ": contacts="
+                    << context.collisionHandler->getNumFrictionPairs() << std::endl;
+        }
+        NonlinearOptimization::NewtonSolver::SolverParam solverParam;
+        NonlinearOptimization::NewtonSolver solver(
+          u.data(), solverParam, energyAll, std::vector<int>(), nullptr);
+        if (RunSim::newtonStatusIsFatal(solver.solve(u.data(), solverMaxIter, solverEps, 2),
+              fmt::format("Static IPC solve, friction iteration {}", iteration)))
+          return 1;
+      }
       if (!u.allFinite())
         throw std::runtime_error("Static IPC solve produced non-finite displacement.");
 
@@ -132,10 +160,11 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
     const ES::V3d initialVel = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("init-vel", 1).data());
     if (!initialVel.allFinite())
       throw std::invalid_argument("`init-vel` must contain exactly three finite values.");
-    const double timestep = jconfig.getDouble("timestep", 1);
     const std::array<double, 2> dampingParams = jconfig.getValue<std::array<double, 2>>("damping-params", 1);
     const int numSimSteps = jconfig.getInt("num-timestep", 1);
     const int frameGap = jconfig.getInt("dump-interval", 1);
+    if (numSimSteps < 0 || frameGap < 1)
+      throw std::invalid_argument("`num-timestep` must be non-negative and `dump-interval` must be positive.");
 
     std::shared_ptr<Simulation::ImplicitBackwardEulerTimeIntegrator> intg =
       std::make_shared<Simulation::ImplicitBackwardEulerTimeIntegrator>(context.M, context.elasticEnergy,
@@ -196,10 +225,40 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
 
       intg->addGeneralImplicitForceModel(context.collisionHandler, 0, 0);
       intg->setqState(u, uvel, uacc);
-      intg->doTimestep(1, 3, 1);
+      if (frictionEnabled) {
+        context.collisionHandler->updateFriction(u, u, timestep);
+        std::cout << "IPC friction frame " << framei << ", iteration 0: contacts="
+                  << context.collisionHandler->getNumFrictionPairs() << std::endl;
+        intg->doTimestep(0, 3, 1);
+        if (RunSim::newtonStatusIsFatal(intg->getSolverReturn(), fmt::format("Frame {}, friction iteration 0", framei)))
+          return 1;
+        ES::VXd lagged = intg->getLastSolution();
+        for (int iteration = 1; iteration < frictionIterations; ++iteration) {
+          context.collisionHandler->updateFriction(u, lagged, timestep);
+          std::cout << "IPC friction frame " << framei << ", iteration " << iteration
+                    << ": contacts=" << context.collisionHandler->getNumFrictionPairs() << std::endl;
+          NonlinearOptimization::NewtonSolver::SolverParam solverParam;
+          NonlinearOptimization::NewtonSolver solver(
+            lagged.data(), solverParam, intg->getInternalEnergy(), std::vector<int>(), nullptr);
+          if (RunSim::newtonStatusIsFatal(solver.solve(lagged.data(), solverMaxIter, solverEps, 2),
+                fmt::format("Frame {}, friction iteration {}", framei, iteration)))
+            return 1;
+        }
+        // Commit only once: all lagging iterations share x_n, v_n and the same
+        // incremental inertia/elastic potential, including on a restarted run.
+        intg->setSolution(lagged);
+        intg->proceedTimestep();
+      }
+      else {
+        intg->doTimestep(1, 3, 1);
+        if (RunSim::newtonStatusIsFatal(intg->getSolverReturn(), fmt::format("Frame {}", framei)))
+          return 1;
+      }
       intg->getq(u);
       intg->getqvel(uvel);
       intg->getqacc(uacc);
+      if (!u.allFinite() || !uvel.allFinite() || !uacc.allFinite())
+        throw std::runtime_error("Dynamic IPC solve produced a non-finite state.");
 
       ES::MXd uMat(n3, 3);
       uMat.col(0) = u;

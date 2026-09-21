@@ -17,6 +17,84 @@ Static sampled volume configurations exercise the elastic, attachment, and
 gravity solve, but sampled contact is not added to their Newton energy. The
 runner prints an explicit warning. Sampled shell simulation is not supported.
 
+## IPC friction
+
+IPC supports regularized Coulomb friction for self-contact and stationary
+external triangle meshes, on all three simulation mesh types. Set:
+
+```json
+"contact-friction-coeff": 0.3,
+"ipc-friction-epsv": 0.001,
+"ipc-friction-iterations": 1
+```
+
+The coefficient defaults to zero, preserving frictionless behavior in existing
+configurations. `ipc-friction-epsv` is the positive tangential speed threshold
+in simulation length units per second (default `0.001`). The displacement
+threshold used by backward Euler is `timestep * ipc-friction-epsv`.
+The shirt-drop example enables friction with the values above.
+
+`ipc-friction-iterations` is a positive number of Newton solves per time step
+(default `1`). Closest points, tangent planes, and barrier normal forces are
+frozen for each solve. With one iteration they come from the previous time
+step; newly formed contacts contribute friction starting in the following
+step. Extra iterations refresh these quantities using the preceding solution,
+while keeping the time-step reference displacement and inertia fixed.
+Two to four iterations can improve the lagged approximation at extra cost.
+
+Static friction is evaluated over one load increment, measured from
+`init-disp`, using the configured positive `timestep` for regularization.
+Use at least two iterations to include contacts first formed during the static
+solve. This does not implement a history of quasi-static load increments.
+
+The implementation follows the [IPC paper, section 5](https://ipc-sim.github.io/file/IPC-paper-350ppi.pdf),
+[technical supplement, sections 8–9](https://ipc-sim.github.io/file/IPC-supplement-A-technical.pdf),
+and [IPC Toolkit's smoothing functions](https://github.com/ipc-sim/ipc-toolkit/blob/main/src/ipc/friction/smooth_friction_mollifier.cpp).
+It uses the same cubic smoothing law as this repository's sampled contact,
+with normal force obtained from the weighted IPC barrier. Point–triangle and
+edge–edge closest-feature cases are supported. The zero-slip Hessian uses its
+analytic finite limit. Friction is mapped through the existing surface embedding;
+external vertices remain fixed. CCD continues to limit collision-free steps.
+
+Backward Euler evaluates its inertial/damping quadratic in the displacement
+increment from the previous state. This is equivalent to the original energy
+up to an additive constant, with the same forces and Hessian, but avoids
+subtracting large nearly equal terms when resolving small frictional steps.
+
+To run the full manifest with friction enabled and validate every state
+and OBJ file, first build `runIPCSim`, `runSim`, and `cubicMesher`, then run:
+
+```bash
+python3 examples/scripts/generate_cubic_veg.py --build-dir build/<your-build>
+python3 examples/scripts/test_contact_demos.py \
+  --build-dir build/<your-build> \
+  --output-dir examples/generated/friction-validation \
+  --cores 64 --jobs 8 --friction-coeff 0.3 --friction-epsv 1e-4 \
+  --static-sampled-ipc-companions
+```
+
+This Linux runner uses disjoint CPU affinities and writes isolated configs,
+logs, per-case `result.json` and `newton-solves.csv` files, and a live `REPORT.md`
+and `progress.json`. The coefficient applies to both IPC and sampled demos;
+`--friction-epsv` sets their velocity regularization using the appropriate
+configuration field. Newton's convergence tolerance is unchanged unless
+`--solver-eps` is also supplied. `--max-steps N` explicitly requests a shorter
+smoke run; the default runs every configured step. Use a fresh output directory
+for each suite.
+
+The solver reports its stop reason and recomputes the gradient at the returned
+state. A solve has converged when the infinity norm of that gradient is below
+`solver-eps`. `NewtonSolver::solve` returns `SOLVE_CONVERGED`,
+`SOLVE_NOT_CONVERGED` (iteration limit, tiny step, or failed line search with a
+finite state), or `SOLVE_NUMERICAL_FAILURE` (non-finite energy, gradient, or
+step). The runners stop with a nonzero exit code on a numerical failure and log
+a warning for each solve that stops short of the tolerance, so process success
+still does not establish convergence of every step.
+The two original static sampled dragon demos exercise no contact, as explained
+in the capability table. `--static-sampled-ipc-companions` adds two separately
+named IPC tests of those scenes using the dynamic dragon example's barrier
+parameters, while retaining the original sampled runs.
+
 ## Example index
 
 | Scene | Meshes | Contact models | Modes | Coverage |

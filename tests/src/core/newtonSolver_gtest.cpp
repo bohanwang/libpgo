@@ -14,8 +14,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace
@@ -49,6 +51,63 @@ public:
     hessian.makeCompressed();
   }
 
+  void getDOFs(std::vector<int> &dofs) const override { dofs = { 0 }; }
+  int getNumDOFs() const override { return 1; }
+};
+
+// -0.5 x^2: the Newton direction always increases the energy.
+class ConcaveEnergy final : public NO::PotentialEnergy
+{
+public:
+  double func(ES::ConstRefVecXd x) const override { return -0.5 * x[0] * x[0]; }
+  void gradient(ES::ConstRefVecXd x, ES::RefVecXd gradient) const override { gradient[0] = -x[0]; }
+  void hessian(ES::ConstRefVecXd, ES::SpMatD &hessian) const override { hessian.coeffRef(0, 0) = -1.0; }
+  void createHessian(ES::SpMatD &hessian) const override
+  {
+    hessian.resize(1, 1);
+    hessian.insert(0, 0) = 0.0;
+    hessian.makeCompressed();
+  }
+  void getDOFs(std::vector<int> &dofs) const override { dofs = { 0 }; }
+  int getNumDOFs() const override { return 1; }
+};
+
+// 0.5 (x + 1)^2 for x >= 3 and +inf below: Newton from x = 3 always steps into
+// the wall, so every trial step has infinite energy and the line search fails.
+class WallEnergy final : public NO::PotentialEnergy
+{
+public:
+  double func(ES::ConstRefVecXd x) const override
+  {
+    return x[0] >= 3.0 ? 0.5 * (x[0] + 1.0) * (x[0] + 1.0) : std::numeric_limits<double>::infinity();
+  }
+  void gradient(ES::ConstRefVecXd x, ES::RefVecXd gradient) const override { gradient[0] = x[0] + 1.0; }
+  void hessian(ES::ConstRefVecXd, ES::SpMatD &hessian) const override { hessian.coeffRef(0, 0) = 1.0; }
+  void createHessian(ES::SpMatD &hessian) const override
+  {
+    hessian.resize(1, 1);
+    hessian.insert(0, 0) = 0.0;
+    hessian.makeCompressed();
+  }
+  void getDOFs(std::vector<int> &dofs) const override { dofs = { 0 }; }
+  int getNumDOFs() const override { return 1; }
+};
+
+class NonFiniteGradientEnergy final : public NO::PotentialEnergy
+{
+public:
+  double func(ES::ConstRefVecXd x) const override { return 0.5 * x[0] * x[0]; }
+  void gradient(ES::ConstRefVecXd, ES::RefVecXd gradient) const override
+  {
+    gradient[0] = std::numeric_limits<double>::quiet_NaN();
+  }
+  void hessian(ES::ConstRefVecXd, ES::SpMatD &hessian) const override { hessian.coeffRef(0, 0) = 1.0; }
+  void createHessian(ES::SpMatD &hessian) const override
+  {
+    hessian.resize(1, 1);
+    hessian.insert(0, 0) = 0.0;
+    hessian.makeCompressed();
+  }
   void getDOFs(std::vector<int> &dofs) const override { dofs = { 0 }; }
   int getNumDOFs() const override { return 1; }
 };
@@ -164,7 +223,8 @@ TEST(NewtonSolverGTest, FixedTopologyKeepsSymbolicFactorizationAcrossIterations)
   solver.setStepFunc([&](const ES::VXd &, int) {
     solverAddresses.push_back(solver.solverAddress());
   });
-  ASSERT_EQ(solver.solve(&x, 3, 0.0, 0), 0);
+  // A zero tolerance can never be met, so the solve ends at the iteration limit.
+  ASSERT_EQ(solver.solve(&x, 3, 0.0, 0), NO::NewtonSolver::SOLVE_NOT_CONVERGED);
 
   ASSERT_EQ(solverAddresses.size(), 3u);
   for (const void *address : solverAddresses)
@@ -182,6 +242,101 @@ TEST(NewtonSolverGTest, PotentialEnergyDefaultMaxStepSizeIsOne)
   EXPECT_DOUBLE_EQ(energy.computeMaxStepSize(x, dx), 1.0);
 }
 
+TEST(NewtonSolverGTest, ReportsGradientAtReturnedStateAndDistinguishesIterationLimit)
+{
+  pgo::Logging::init();
+  const auto energy = std::make_shared<FixedQuarticEnergy>();
+  NO::NewtonSolver::SolverParam params;
+  double x = 3.0;
+  NO::NewtonSolver solver(&x, params, energy, {});
+
+  testing::internal::CaptureStdout();
+  const int limitedReturn = solver.solve(&x, 1, 1e-4, 1);
+  const std::string limitedLog = testing::internal::GetCapturedStdout();
+  EXPECT_EQ(limitedReturn, NO::NewtonSolver::SOLVE_NOT_CONVERGED);
+  EXPECT_STREQ(solver.getLastStopReason(), "iteration_limit");
+  EXPECT_DOUBLE_EQ(solver.getLastGradientNorm(), 8.0);
+  EXPECT_NEAR(x, 2.0, 1e-12);
+  EXPECT_NE(limitedLog.find("stop=iteration_limit, iteration=1, gradient_inf=8,"), std::string::npos);
+  EXPECT_NE(limitedLog.find("converged=false, status=not_converged"), std::string::npos);
+
+  testing::internal::CaptureStdout();
+  const int convergedReturn = solver.solve(&x, 50, 1e-4, 1);
+  const std::string convergedLog = testing::internal::GetCapturedStdout();
+  EXPECT_EQ(convergedReturn, NO::NewtonSolver::SOLVE_CONVERGED);
+  EXPECT_STREQ(solver.getLastStopReason(), "gradient_tolerance");
+  EXPECT_LT(std::abs(x * x * x), 1e-4);
+  EXPECT_NE(convergedLog.find("stop=gradient_tolerance"), std::string::npos);
+  EXPECT_NE(convergedLog.find("converged=true, status=converged"), std::string::npos);
+}
+
+TEST(NewtonSolverGTest, StopsAfterFailedLineSearchRegardlessOfVerbosity)
+{
+  pgo::Logging::init();
+  // Every trial step hits the wall, so the backtracking line search returns
+  // its full, infinitely expensive step and the solve must stop at the first
+  // iteration without applying it, for any verbosity level.
+  for (int verbose : { 0, 1, 2 }) {
+    const auto energy = std::make_shared<WallEnergy>();
+    NO::NewtonSolver::SolverParam params;
+    params.lsm = NO::NewtonSolver::LSM_BACKTRACK;
+    double x = 3.0;
+    NO::NewtonSolver solver(&x, params, energy, {});
+    int iterationsRun = 0;
+    solver.setStepFunc([&](const ES::VXd &, int) { ++iterationsRun; });
+
+    testing::internal::CaptureStdout();
+    const int status = solver.solve(&x, 20, 1e-8, verbose);
+    testing::internal::GetCapturedStdout();
+
+    EXPECT_EQ(status, NO::NewtonSolver::SOLVE_NOT_CONVERGED) << "verbose=" << verbose;
+    EXPECT_STREQ(solver.getLastStopReason(), "line_search_failed") << "verbose=" << verbose;
+    EXPECT_EQ(iterationsRun, 0) << "verbose=" << verbose;
+    EXPECT_DOUBLE_EQ(x, 3.0) << "verbose=" << verbose;
+    EXPECT_DOUBLE_EQ(solver.getLastGradientNorm(), 4.0) << "verbose=" << verbose;
+  }
+
+  // On a concave energy the backtracking halves the step until its energy
+  // change drops below roundoff, so the solve ends through either the failed
+  // line search or the tiny-step exit. Both must stop at the first iteration.
+  for (int verbose : { 0, 1, 2 }) {
+    const auto energy = std::make_shared<ConcaveEnergy>();
+    NO::NewtonSolver::SolverParam params;
+    double x = 3.0;
+    NO::NewtonSolver solver(&x, params, energy, {});
+    int iterationsRun = 0;
+    solver.setStepFunc([&](const ES::VXd &, int) { ++iterationsRun; });
+
+    testing::internal::CaptureStdout();
+    const int status = solver.solve(&x, 20, 1e-8, verbose);
+    testing::internal::GetCapturedStdout();
+
+    const std::string reason = solver.getLastStopReason();
+    EXPECT_EQ(status, NO::NewtonSolver::SOLVE_NOT_CONVERGED) << "verbose=" << verbose;
+    EXPECT_TRUE(reason == "line_search_failed" || reason == "tiny_step") << "verbose=" << verbose << " reason=" << reason;
+    EXPECT_EQ(iterationsRun, 0) << "verbose=" << verbose;
+    EXPECT_DOUBLE_EQ(x, 3.0) << "verbose=" << verbose;
+  }
+}
+
+TEST(NewtonSolverGTest, ReportsNumericalFailureInsteadOfAborting)
+{
+  pgo::Logging::init();
+  const auto energy = std::make_shared<NonFiniteGradientEnergy>();
+  NO::NewtonSolver::SolverParam params;
+  double x = 3.0;
+  NO::NewtonSolver solver(&x, params, energy, {});
+
+  testing::internal::CaptureStdout();
+  const int status = solver.solve(&x, 5, 1e-8, 0);
+  testing::internal::GetCapturedStdout();
+
+  EXPECT_EQ(status, NO::NewtonSolver::SOLVE_NUMERICAL_FAILURE);
+  EXPECT_STREQ(solver.getLastStopReason(), "non_finite_energy");
+  EXPECT_STREQ(NO::NewtonSolver::solveStatusName(status), "numerical_failure");
+  EXPECT_DOUBLE_EQ(x, 3.0);
+}
+
 TEST(NewtonSolverGTest, DynamicTopologyRebuildsChangingHessianPatterns)
 {
   pgo::Logging::init();
@@ -193,7 +348,7 @@ TEST(NewtonSolverGTest, DynamicTopologyRebuildsChangingHessianPatterns)
   ES::VXd x(2);
   x << 3.0, 2.0;
   NO::NewtonSolver solver(x.data(), params, energy, {});
-  ASSERT_EQ(solver.solve(x.data(), 4, 0.0, 0), 0);
+  ASSERT_EQ(solver.solve(x.data(), 4, 0.0, 0), NO::NewtonSolver::SOLVE_NOT_CONVERGED);
 
   ASSERT_EQ(energy->hessianDirectCalls(), 4);
   ASSERT_EQ(energy->hessianNonzeroCounts().size(), 4u);
@@ -301,7 +456,7 @@ TEST(NewtonSolverGTest, StaticIpcSelfContactUsesCcdMaxStepAndProducesFiniteResul
   const std::vector<double> fixedValues(fixedDOFs.size(), 0.0);
   NO::NewtonSolver solver(displacements.data(), params, aggregate, fixedDOFs, fixedValues.data());
 
-  ASSERT_EQ(solver.solve(displacements.data(), 12, 1e-8, 0), 0);
+  ASSERT_NE(solver.solve(displacements.data(), 12, 1e-8, 0), NO::NewtonSolver::SOLVE_NUMERICAL_FAILURE);
   EXPECT_TRUE(displacements.allFinite());
   const double finalEnergy = aggregate->func(displacements);
   EXPECT_TRUE(std::isfinite(finalEnergy));

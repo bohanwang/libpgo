@@ -47,3 +47,8 @@ add_executable(sampledStaticContact_gtest sampledStaticContact_gtest.cpp)
 target_link_libraries(sampledStaticContact_gtest PRIVATE GTest::gtest_main contact)
 set_property(TARGET sampledStaticContact_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(sampledStaticContact_gtest)
+
+add_executable(surfaceIPCFriction_gtest surfaceIPCFriction_gtest.cpp)
+target_link_libraries(surfaceIPCFriction_gtest PRIVATE GTest::gtest_main contact)
+set_property(TARGET surfaceIPCFriction_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(surfaceIPCFriction_gtest)

@@ -32,6 +32,7 @@ protected:
   // internal buffers
   EigenSupport::SpMatD A, D;
   EigenSupport::VXd b;
+  EigenSupport::VXd stepReference;
 
   EigenSupport::VXd z;
   EigenSupport::VXd qz, qz1, qz2, temp0, zero;

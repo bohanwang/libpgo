@@ -30,6 +30,7 @@ ImplicitBackwardEulerTimeIntegrator::ImplicitBackwardEulerTimeIntegrator(
   zero.setZero(n3);
 
   temp0 = q;
+  stepReference = q;
   qz = q;
   qz1 = qz;
   qz2 = qz;
@@ -186,8 +187,12 @@ void ImplicitBackwardEulerTimeIntegrator::updateA()
 
 void ImplicitBackwardEulerTimeIntegrator::updateb()
 {
-  // b = fext + 1/h M qvel + A q
-  // (the A*q term comes from changing the optimization variable from du to u)
+  // Evaluate the inertial quadratic in x - q_n to avoid cancellation between
+  // large A*x and A*q_n terms. The unknown and all material/contact energies
+  // still use the full displacement x. Keep this reference fixed after commit
+  // as well, until the next step's energy is assembled.
+  stepReference = q;
+  // b = fext + 1/h M qvel
   // 1/h M qvel
   ES::mv(MasK, qvel, b);
   // cblas_dscal(n3, 1.0 / timestep, b.data(), 1);
@@ -197,8 +202,6 @@ void ImplicitBackwardEulerTimeIntegrator::updateb()
   // cblas_daxpy(n3, 1.0, fext.data(), 1, b.data(), 1);
   b += f_ext;
 
-  // += A q (shift from du to u variable)
-  ES::mv(A, q, b, 1.0, 1.0);
 }
 
 void ImplicitBackwardEulerTimeIntegrator::finiteDifferenceTestIntegratorEnergy(ES::ConstRefVecXd x) const

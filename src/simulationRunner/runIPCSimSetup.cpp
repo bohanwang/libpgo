@@ -132,6 +132,8 @@ Contact::CIPC::SurfaceIPCCore::Parameters makeShellIPCParams(
   }
   ipcParams.eps_ee = 0.0;
   ipcParams.slackness = 1.0;
+  ipcParams.frictionCoeff = jconfig.getValue<double>("contact-friction-coeff", 0, 0.0);
+  ipcParams.frictionEpsV = jconfig.getValue<double>("ipc-friction-epsv", 0, 1e-3);
 
   return ipcParams;
 }
@@ -153,6 +155,8 @@ Contact::CIPC::SurfaceIPCCore::Parameters makeVolumeIPCParams(const pgo::ConfigF
   ipcParams.kappa = jconfig.getDouble("ipc-kappa", 1);
   ipcParams.eps_ee = 0.0;
   ipcParams.slackness = 1.0;
+  ipcParams.frictionCoeff = jconfig.getValue<double>("contact-friction-coeff", 0, 0.0);
+  ipcParams.frictionEpsV = jconfig.getValue<double>("ipc-friction-epsv", 0, 1e-3);
   return ipcParams;
 }
 
