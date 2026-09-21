@@ -4,6 +4,7 @@
 
 #include "EigenSupport.h"
 #include "barycentricCoordinates.h"
+#include "boundingBox.h"
 #include "configFileJSON.h"
 #include "deformationModelEnergy.h"
 #include "embeddedSurfaceIPCPotentialEnergy.h"
@@ -1129,6 +1130,70 @@ TEST(RunIPCSimCliGTest, CubicNonUnitScaleSmokeSucceeds)
   ASSERT_EQ(runCommand(command.str()), 0);
   EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "deform0000.u"));
   EXPECT_TRUE(fs::exists(tempDir.path() / "cubic-output" / "ret0000.obj"));
+}
+
+TEST(RunIPCSimSetupGTest, RelativeDhatScalesWithSurfaceBoundingBoxDiagonal)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "relative-dhat.json";
+
+  auto diagonalOf = [](const fs::path &objPath, double scale) {
+    pgo::Mesh::TriMeshGeo mesh;
+    EXPECT_TRUE(mesh.load(objPath.string()));
+    for (int vi = 0; vi < mesh.numVertices(); ++vi)
+      mesh.pos(vi) *= scale;
+    return pgo::Mesh::BoundingBox(mesh.positions()).sides().norm();
+  };
+
+  // shell path
+  {
+    nlohmann::json config = nlohmann::json::parse(makeShellIPCConfig(tempDir.path(), 1, false));
+    config["ipc-dhat-relative"] = 0.002;
+    config["ipc-kappa"] = 3000.0;
+    writeTextFile(configPath, config.dump(2));
+    pgo::ConfigFileJSON jconfig;
+    ASSERT_TRUE(jconfig.open(configPath.string().c_str()));
+    const auto context = pgo::RunIPCSim::buildShellIpcSimulation(jconfig);
+    const double diagonal = diagonalOf(fs::path(kShellExampleDir) / "shell.obj", 1.0);
+    EXPECT_GT(diagonal, 0.0);
+    EXPECT_DOUBLE_EQ(context.collisionHandler->getIPCParameters().dhat, 0.002 * diagonal);
+    EXPECT_DOUBLE_EQ(context.collisionHandler->getIPCParameters().kappa, 3000.0);
+  }
+
+  // tet path, with a non-unit scene scale applied before the box is measured
+  for (double scale : { 1.0, 2.5 }) {
+    nlohmann::json config = nlohmann::json::parse(makeTetIPCConfig(tempDir.path(), 1, scale, false));
+    config["ipc-dhat-relative"] = 0.01;
+    config["ipc-kappa"] = 10.0;
+    writeTextFile(configPath, config.dump(2));
+    pgo::ConfigFileJSON jconfig;
+    ASSERT_TRUE(jconfig.open(configPath.string().c_str()));
+    const auto context = pgo::RunIPCSim::buildVolumeIpcSimulation(jconfig);
+    const double diagonal = diagonalOf(tetIPCExampleDir() / "box.obj", scale);
+    EXPECT_GT(diagonal, 0.0);
+    EXPECT_DOUBLE_EQ(context.collisionHandler->getIPCParameters().dhat, 0.01 * diagonal) << "scale=" << scale;
+  }
+
+  // invalid combinations
+  for (const auto &[key, value] : std::vector<std::pair<std::string, double>>{
+         { "ipc-dhat-relative", 0.0 }, { "ipc-dhat-relative", -0.002 }, { "ipc-dhat", 0.0 } }) {
+    nlohmann::json config = nlohmann::json::parse(makeTetIPCConfig(tempDir.path(), 1, 1.0, false));
+    config[key] = value;
+    config["ipc-kappa"] = 10.0;
+    writeTextFile(configPath, config.dump(2));
+    pgo::ConfigFileJSON jconfig;
+    ASSERT_TRUE(jconfig.open(configPath.string().c_str()));
+    EXPECT_THROW(pgo::RunIPCSim::buildVolumeIpcSimulation(jconfig), std::invalid_argument) << key << "=" << value;
+  }
+  {
+    nlohmann::json config = nlohmann::json::parse(makeTetIPCConfig(tempDir.path(), 1));
+    config["ipc-dhat-relative"] = 0.002;  // together with the absolute ipc-dhat already present
+    writeTextFile(configPath, config.dump(2));
+    pgo::ConfigFileJSON jconfig;
+    ASSERT_TRUE(jconfig.open(configPath.string().c_str()));
+    EXPECT_THROW(pgo::RunIPCSim::buildVolumeIpcSimulation(jconfig), std::invalid_argument);
+  }
 }
 
 TEST(RunIPCSimSetupGTest, TetEmbeddingMatrixMatchesBarycentricBaseline)

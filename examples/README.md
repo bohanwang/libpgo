@@ -95,6 +95,26 @@ in the capability table. `--static-sampled-ipc-companions` adds two separately
 named IPC tests of those scenes using the dynamic dragon example's barrier
 parameters, while retaining the original sampled runs.
 
+## IPC barrier distance
+
+Without `ipc-heuristic`, the barrier distance comes from exactly one of
+
+```json
+"ipc-dhat": 0.002
+"ipc-dhat-relative": 0.002
+```
+
+`ipc-dhat` is an absolute distance in simulation units. `ipc-dhat-relative`
+multiplies the diagonal of the deformable surface's bounding box (measured
+after `scale`), which keeps dhat below the mesh's own feature size regardless
+of the model's size. That matters: IPC only excludes primitives that share a
+vertex from self-contact, so a dhat comparable to the local edge length turns
+neighboring triangles into permanent barrier pairs. The bunny example, whose
+bounding-box diagonal is about 0.25 with triangle heights down to 1.2 mm, had
+6037 such pairs at frame 0 with `ipc-dhat = 0.002`; it now uses
+`ipc-dhat-relative = 0.002` (dhat about 5e-4) and starts contact-free.
+`ipc-kappa` is always given explicitly and is not rescaled with dhat.
+
 ## Deterministic assembly
 
 Parallel assembly is not bit-reproducible by default: element and contact-pair

@@ -40,6 +40,7 @@ public:
   void validateCollisionFreeState(EigenSupport::ConstRefVecXd simulationDisplacements) const;
   void updateFriction(EigenSupport::ConstRefVecXd referenceDisplacements,
     EigenSupport::ConstRefVecXd laggedDisplacements, double timestep);
+  SurfaceIPCCore::Parameters getIPCParameters() const { return surfaceIPCCore_.getParameters(); }
   double getFrictionCoeff() const { return surfaceIPCCore_.getParameters().frictionCoeff; }
   std::size_t getNumFrictionPairs() const { return surfaceIPCCore_.getNumFrictionPairs(); }
   // See SurfaceIPCCore::setDeterministic.

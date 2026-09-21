@@ -38,7 +38,7 @@
   "elastic-material": "stable-neo",
   "dump-interval": 10,
   "output": "../../../generated/output/bunny-tet-ipc",
-  "ipc-dhat": 0.002,
+  "ipc-dhat-relative": 0.002,
   "ipc-kappa": 3000.0,
   "enable-material-max-step": true,
   "contact-model": "ipc"

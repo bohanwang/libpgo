@@ -21,6 +21,8 @@
 #include "ipc/core/surfaceIPCCore.h"
 #include "volumetricMesh.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -113,21 +115,53 @@ ShellMaterial parseShellMaterial(const pgo::ConfigFileJSON &jconfig)
   return material;
 }
 
+// The barrier distance comes from exactly one of two fields: `ipc-dhat`, an
+// absolute distance, or `ipc-dhat-relative`, a fraction of the deformable
+// surface's bounding-box diagonal (measured after `scale`). The relative form
+// keeps dhat below the mesh's own feature size on meshes of any size, which
+// avoids spurious barrier pairs between neighboring surface primitives.
+double parseConfiguredDhat(const pgo::ConfigFileJSON &jconfig, const pgo::Mesh::BoundingBox &surfaceBox, std::string &source)
+{
+  const bool hasAbsolute = jconfig.exist("ipc-dhat");
+  const bool hasRelative = jconfig.exist("ipc-dhat-relative");
+  if (hasAbsolute && hasRelative)
+    throwConfigError("`ipc-dhat` and `ipc-dhat-relative` are mutually exclusive; specify one of them.");
+
+  if (hasRelative) {
+    const double fraction = jconfig.getDouble("ipc-dhat-relative", 1);
+    if (!std::isfinite(fraction) || fraction <= 0.0)
+      throwConfigError("`ipc-dhat-relative` must be finite and strictly positive.");
+    const double diagonal = surfaceBox.sides().norm();
+    if (!std::isfinite(diagonal) || diagonal <= 0.0)
+      throwConfigError("`ipc-dhat-relative` requires a surface mesh with a non-degenerate bounding box.");
+    source = fmt::format("relative ({} x bounding-box diagonal {})", fraction, diagonal);
+    return fraction * diagonal;
+  }
+
+  if (!hasAbsolute)
+    throwConfigError("Missing required field `ipc-dhat` (or `ipc-dhat-relative`).");
+  source = "config";
+  const double dhat = jconfig.getDouble("ipc-dhat", 1);
+  if (!std::isfinite(dhat) || dhat <= 0.0)
+    throwConfigError("`ipc-dhat` must be finite and strictly positive.");
+  return dhat;
+}
+
 Contact::CIPC::SurfaceIPCCore::Parameters makeShellIPCParams(
-  const pgo::ConfigFileJSON &jconfig, const pgo::Mesh::BoundingBox &surfaceBox, const ShellMaterial &material)
+  const pgo::ConfigFileJSON &jconfig, const pgo::Mesh::BoundingBox &surfaceBox, const ShellMaterial &material,
+  std::string &dhatSource)
 {
   Contact::CIPC::SurfaceIPCCore::Parameters ipcParams;
   const bool ipcHeuristic = jconfig.exist("ipc-heuristic") ? jconfig.getValue<bool>("ipc-heuristic", 1) : false;
   if (ipcHeuristic) {
     ipcParams.dhat = surfaceBox.sides().norm() * 1e-3;
     ipcParams.kappa = material.membraneStiffness * material.thickness;
+    dhatSource = "heuristic";
   }
   else {
-    if (!jconfig.exist("ipc-dhat"))
-      throwConfigError("Missing required field `ipc-dhat`.");
+    ipcParams.dhat = parseConfiguredDhat(jconfig, surfaceBox, dhatSource);
     if (!jconfig.exist("ipc-kappa"))
       throwConfigError("Missing required field `ipc-kappa`.");
-    ipcParams.dhat = jconfig.getDouble("ipc-dhat", 1);
     ipcParams.kappa = jconfig.getDouble("ipc-kappa", 1);
   }
   ipcParams.eps_ee = 0.0;
@@ -138,20 +172,19 @@ Contact::CIPC::SurfaceIPCCore::Parameters makeShellIPCParams(
   return ipcParams;
 }
 
-Contact::CIPC::SurfaceIPCCore::Parameters makeVolumeIPCParams(const pgo::ConfigFileJSON &jconfig)
+Contact::CIPC::SurfaceIPCCore::Parameters makeVolumeIPCParams(
+  const pgo::ConfigFileJSON &jconfig, const pgo::Mesh::BoundingBox &surfaceBox, std::string &dhatSource)
 {
   const bool ipcHeuristic = jconfig.exist("ipc-heuristic") ? jconfig.getValue<bool>("ipc-heuristic", 1) : false;
   if (ipcHeuristic) {
     throwConfigError(
-      "runIPCSim phase1D tet/cubic IPC currently requires explicit `ipc-dhat` and `ipc-kappa`; `ipc-heuristic=true` is shell-only.");
+      "runIPCSim phase1D tet/cubic IPC currently requires explicit `ipc-dhat` (or `ipc-dhat-relative`) and `ipc-kappa`; `ipc-heuristic=true` is shell-only.");
   }
-  if (!jconfig.exist("ipc-dhat"))
-    throwConfigError("Missing required field `ipc-dhat`.");
-  if (!jconfig.exist("ipc-kappa"))
-    throwConfigError("Missing required field `ipc-kappa`.");
 
   Contact::CIPC::SurfaceIPCCore::Parameters ipcParams;
-  ipcParams.dhat = jconfig.getDouble("ipc-dhat", 1);
+  ipcParams.dhat = parseConfiguredDhat(jconfig, surfaceBox, dhatSource);
+  if (!jconfig.exist("ipc-kappa"))
+    throwConfigError("Missing required field `ipc-kappa`.");
   ipcParams.kappa = jconfig.getDouble("ipc-kappa", 1);
   ipcParams.eps_ee = 0.0;
   ipcParams.slackness = 1.0;
@@ -263,7 +296,8 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   const bool ipcHeuristic = jconfig.exist("ipc-heuristic") ? jconfig.getValue<bool>("ipc-heuristic", 1) : false;
   const bool enableMaterialMaxStep = parseEnableMaterialMaxStep(jconfig);
   const bool zeroRestCurvature = jconfig.exist("shell-zero-rest-curvature") ? jconfig.getValue<bool>("shell-zero-rest-curvature", 1) : false;
-  const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeShellIPCParams(jconfig, surfaceBox, shellMaterial);
+  std::string dhatSource;
+  const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeShellIPCParams(jconfig, surfaceBox, shellMaterial, dhatSource);
 
   std::cout << "runIPCSim phase1D shell material: elastic-material=" << shellMaterial.name << ", element-params=[";
   for (std::size_t i = 0; i < shellMaterial.elementParams.size(); ++i)
@@ -273,7 +307,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
             << ", shell-zero-rest-curvature=" << (zeroRestCurvature ? "true" : "false") << std::endl;
   std::cout << "runIPCSim phase1D shell IPC parameters: "
             << "ipc-heuristic=" << (ipcHeuristic ? "true" : "false") << ", "
-            << "source=" << (ipcHeuristic ? "heuristic" : "config") << ", "
+            << "source=" << dhatSource << ", "
             << "enable-material-max-step=" << (enableMaterialMaxStep ? "true" : "false") << ", "
             << "ipc-dhat=" << ipcParams.dhat << ", "
             << "ipc-kappa=" << ipcParams.kappa << ", "
@@ -374,18 +408,8 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
     throwConfigError("Missing required field `fixed-vertices`.");
 
   const double scale = parseScale(jconfig);
-  const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeVolumeIPCParams(jconfig);
   const SolidDeformationModel::DeformationModelElasticMaterial elasticMat = parseVolumeElasticMaterial(jconfig);
   const bool enableMaterialMaxStep = parseEnableMaterialMaxStep(jconfig);
-
-  std::cout << "runIPCSim phase1D volume IPC parameters: "
-            << "ipc-heuristic=false, "
-            << "source=config, "
-            << "enable-material-max-step=" << (enableMaterialMaxStep ? "true" : "false") << ", "
-            << "ipc-dhat=" << ipcParams.dhat << ", "
-            << "ipc-kappa=" << ipcParams.kappa << ", "
-            << "eps_ee=" << ipcParams.eps_ee << ", "
-            << "slackness=" << ipcParams.slackness << std::endl;
 
   const RunSim::ResolvedRunSimPaths resolvedPaths = RunSim::resolveRunSimPaths(jconfig);
   std::unique_ptr<VolumetricMeshes::VolumetricMesh> volumetricMesh =
@@ -394,6 +418,21 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   pgo::Mesh::TriMeshGeo surfaceMesh;
   ES::VXd surfaceRestPositions;
   loadSurfaceMeshAndRestPositions(resolvedPaths.surfaceMeshFilename, scale, surfaceMesh, surfaceRestPositions);
+
+  // dhat may be relative to the (scaled) surface bounding box, so the surface
+  // mesh is loaded first.
+  const pgo::Mesh::BoundingBox surfaceBox(surfaceMesh.positions());
+  std::string dhatSource;
+  const Contact::CIPC::SurfaceIPCCore::Parameters ipcParams = makeVolumeIPCParams(jconfig, surfaceBox, dhatSource);
+
+  std::cout << "runIPCSim phase1D volume IPC parameters: "
+            << "ipc-heuristic=false, "
+            << "source=" << dhatSource << ", "
+            << "enable-material-max-step=" << (enableMaterialMaxStep ? "true" : "false") << ", "
+            << "ipc-dhat=" << ipcParams.dhat << ", "
+            << "ipc-kappa=" << ipcParams.kappa << ", "
+            << "eps_ee=" << ipcParams.eps_ee << ", "
+            << "slackness=" << ipcParams.slackness << std::endl;
 
   pgo::InterpolationCoordinates::BarycentricCoordinates bc(
     surfaceMesh.numVertices(), surfaceRestPositions.data(), volumetricMesh.get());
