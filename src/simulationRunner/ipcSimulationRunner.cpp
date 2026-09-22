@@ -132,6 +132,13 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
       energyAll->addPotentialEnergy(context.elasticEnergy);
       for (const auto &pullingEnergy : context.pullingEnergies)
         energyAll->addPotentialEnergy(pullingEnergy);
+      // A static solve is one load increment, so a trajectory is applied at
+      // its last key; release times do not apply.
+      for (auto &trajectoryPulling : context.trajectoryPullings) {
+        const ES::VXd target = trajectoryPulling.targetAt(trajectoryPulling.track.times.back());
+        trajectoryPulling.energy->setTargetPos(target.data());
+        energyAll->addPotentialEnergy(trajectoryPulling.energy);
+      }
       energyAll->addPotentialEnergy(externalForcesEnergy, -1.0);
       energyAll->addPotentialEnergy(context.collisionHandler);
       energyAll->init();
@@ -177,6 +184,8 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
 
     for (auto &pullingEnergy : context.pullingEnergies)
       intg->addImplicitForceModel(pullingEnergy, 0, 0);
+    for (auto &trajectoryPulling : context.trajectoryPullings)
+      intg->addImplicitForceModel(trajectoryPulling.energy, 0, 0);
 
     intg->setExternalForce(fext.data());
 
@@ -243,6 +252,24 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
         const ES::VXd curTgt = context.pullingTargetRests[pi] * (1.0 - ratio) + context.pullingTargets[pi] * ratio;
         context.pullingEnergies[pi]->setTargetPos(curTgt.data());
         std::cout << "Frame " << framei << ", attachment " << pi << " target: " << curTgt.transpose().head(3) << std::endl;
+      }
+
+      // Trajectory attachments: frame k is the state at t = k * timestep, the
+      // same rule as the interpolated movement above. A released track keeps
+      // its energy with zero stiffness, which is also what a restart sees.
+      const double frameTime = static_cast<double>(framei) * timestep;
+      for (auto &trajectoryPulling : context.trajectoryPullings) {
+        if (!trajectoryPulling.track.isActiveAt(frameTime)) {
+          if (!trajectoryPulling.released) {
+            trajectoryPulling.energy->setCoeff(0.0);
+            trajectoryPulling.released = true;
+            std::cout << "Frame " << framei << ", trajectory attachment `" << trajectoryPulling.track.name
+                      << "` released at t=" << frameTime << " s" << std::endl;
+          }
+          continue;
+        }
+        const ES::VXd target = trajectoryPulling.targetAt(frameTime);
+        trajectoryPulling.energy->setTargetPos(target.data());
       }
 
       intg->addGeneralImplicitForceModel(context.collisionHandler, 0, 0);

@@ -6,6 +6,7 @@ set(SIMULATION_RUNNER_SOURCES
   runSimFEMSetup.cpp
   runSimVolumeMeshIO.cpp
   runIPCExternalObjects.cpp
+  runSimVertexTrajectory.cpp
   runIPCSimSetup.cpp)
 
 set(SIMULATION_RUNNER_HEADERS
@@ -14,6 +15,7 @@ set(SIMULATION_RUNNER_HEADERS
   runSimFEMSetup.h
   runSimVolumeMeshIO.h
   runIPCExternalObjects.h
+  runSimVertexTrajectory.h
   runIPCSimSetup.h)
 
 add_libpgo_lib(simulationRunner "${SIMULATION_RUNNER_SOURCES}" "${SIMULATION_RUNNER_HEADERS}")

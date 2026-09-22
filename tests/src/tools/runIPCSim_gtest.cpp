@@ -12,6 +12,7 @@
 #include "pgoLogging.h"
 #include "runIPCSimSetup.h"
 #include "runIPCExternalObjects.h"
+#include "runSimVertexTrajectory.h"
 #include "runSimCliLogging.h"
 #include "runSimVolumeMeshIO.h"
 #include "simulationRunner.h"
@@ -882,6 +883,50 @@ TEST(RunIPCSimCliGTest, RisingExternalPlaneLiftsClothWithFrictionAndRestartMatch
   EXPECT_LT((resumed.col(2) - frictional.col(2)).norm(), 1e-4);
 }
 
+TEST(RunIPCSimCliGTest, TrajectoryAttachmentFollowsKeysThenReleases)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path cloth = tempDir.path() / "cloth.obj";
+  writeTextFile(cloth,
+    "v -.1 0 -.1\nv .1 0 -.1\nv .1 0 .1\nv -.1 0 .1\nf 1 3 2\nf 1 4 3\n");
+  // vertex 0 rises by 0.1 over 0.04 s (2.5 m/s), holds, and is released at 0.06 s
+  const fs::path trajectoryPath = tempDir.path() / "lift.json";
+  writeTextFile(trajectoryPath, R"({
+    "format": "pgo-vertex-trajectory", "version": 1, "space": "position",
+    "tracks": [ { "name": "lift", "vertices": [0], "release-time": 0.06,
+      "keys": [ { "t": 0.0, "p": [[-0.1, 0.0, -0.1]] }, { "t": 0.04, "p": [[-0.1, 0.1, -0.1]] } ] } ] })");
+  nlohmann::json config = nlohmann::json::parse(makeShellIPCConfig(tempDir.path(), 50));
+  config["surface-mesh"] = cloth.generic_string();
+  config["fixed-vertices"] = nlohmann::json::array({ { { "trajectory", trajectoryPath.generic_string() }, { "coeff", 1e4 } } });
+  config["ipc-external-objects"] = nlohmann::json::array();
+  config["timestep"] = .002;
+  config["ipc-dhat"] = .02;
+  config["ipc-kappa"] = 1.0;
+  config["shell-youngs-modulus"] = 1000;
+  config["shell-bending-youngs-modulus"] = 1000;
+  config["shell-areal-density"] = 1.0;
+  config["solver-eps"] = 1e-8;
+  config["solver-max-iter"] = 100;
+  const fs::path output = tempDir.path() / "lift-output";
+  config["output"] = output.generic_string();
+  const fs::path configPath = tempDir.path() / "lift-config.json";
+  writeTextFile(configPath, config.dump(2));
+  ASSERT_EQ(pgo::SimulationRunner::runIPCSimulationFromConfig(configPath), 0);
+
+  auto vertex0Y = [&](int frame) {
+    ES::MXd state;
+    EXPECT_EQ(ES::readMatrix((output / fmt::format("deform{:04d}.u", frame)).string().c_str(), state), 0);
+    return state(1, 0);
+  };
+  // frame k is the state at t = k * 0.002: halfway up at frame 10, at the top from frame 20 on
+  EXPECT_NEAR(vertex0Y(10), 0.05, 2e-3);
+  EXPECT_NEAR(vertex0Y(20), 0.10, 2e-3);
+  EXPECT_NEAR(vertex0Y(29), 0.10, 2e-3);
+  // released at t = 0.06 (frame 30); by frame 49 it has fallen for 0.038 s, about 7 mm
+  EXPECT_LT(vertex0Y(49), 0.095);
+}
+
 TEST(RunIPCSimCliGTest, ExternalObjectPlacedInsideTheClothIsRejected)
 {
   const fs::path binary = runIPCSimBinaryPath();
@@ -1424,6 +1469,156 @@ TEST(RunIPCSimSetupGTest, ShellZeroRestCurvatureMakesCurvedRestCarryBendingEnerg
   const double restEnergyFlatRest = context.elasticEnergy->func(zero);
   EXPECT_GT(restEnergyFlatRest, 1e-6);
   EXPECT_TRUE(std::isfinite(restEnergyFlatRest));
+}
+
+TEST(RunIPCSimSetupGTest, VertexTrajectoryLoaderParsesSamplesAndValidates)
+{
+  const std::string valid = R"({
+    "format": "pgo-vertex-trajectory", "version": 1, "space": "position", "interpolation": "linear",
+    "tracks": [
+      { "name": "clamp", "vertices": [7, 3], "release-time": 1.5,
+        "keys": [
+          { "t": 0.0, "p": [[0, 0, 0], [1, 0, 0]] },
+          { "t": 1.0, "p": [[0, 2, 0], [1, 2, 0]] },
+          { "t": 2.0, "p": [[0, 2, 4], [1, 2, 4]] } ] },
+      { "vertices": [5], "keys": [ { "t": 0.5, "p": [[9, 9, 9]] } ] } ] })";
+  const auto trajectory = pgo::RunSim::parseVertexTrajectory(valid, "test");
+  ASSERT_EQ(trajectory.tracks.size(), 2u);
+  EXPECT_EQ(trajectory.space, pgo::RunSim::VertexTrajectory::Space::Position);
+  const auto &clamp = trajectory.tracks[0];
+  EXPECT_EQ(clamp.name, "clamp");
+  // vertices are stored ascending and the positions follow them
+  ASSERT_EQ(clamp.vertices, (std::vector<int>{ 3, 7 }));
+  EXPECT_DOUBLE_EQ(clamp.keyPositions[0][0], 1.0);
+  EXPECT_DOUBLE_EQ(clamp.keyPositions[0][3], 0.0);
+  ASSERT_TRUE(clamp.releaseTime.has_value());
+  EXPECT_DOUBLE_EQ(*clamp.releaseTime, 1.5);
+  EXPECT_TRUE(clamp.isActiveAt(1.49));
+  EXPECT_FALSE(clamp.isActiveAt(1.5));
+  // hold before the first key, interpolate between keys, hold after the last
+  EXPECT_DOUBLE_EQ(clamp.sampleAt(-1.0)[1], 0.0);
+  EXPECT_DOUBLE_EQ(clamp.sampleAt(0.25)[1], 0.5);
+  EXPECT_DOUBLE_EQ(clamp.sampleAt(0.25)[4], 0.5);
+  EXPECT_DOUBLE_EQ(clamp.sampleAt(1.5)[2], 2.0);
+  EXPECT_DOUBLE_EQ(clamp.sampleAt(1.5)[1], 2.0);
+  EXPECT_DOUBLE_EQ(clamp.sampleAt(9.0)[2], 4.0);
+  EXPECT_DOUBLE_EQ(clamp.peakSpeed(), 4.0);
+  EXPECT_DOUBLE_EQ(trajectory.lastKeyTime(), 2.0);
+  const auto &single = trajectory.tracks[1];
+  EXPECT_EQ(single.name, "tracks[1]");
+  EXPECT_FALSE(single.releaseTime.has_value());
+  EXPECT_TRUE(single.isActiveAt(1e9));
+  EXPECT_DOUBLE_EQ(single.sampleAt(3.0)[0], 9.0);
+  EXPECT_DOUBLE_EQ(single.peakSpeed(), 0.0);
+
+  auto rejects = [](const std::string &text) {
+    EXPECT_THROW(pgo::RunSim::parseVertexTrajectory(text, "test"), std::invalid_argument) << text;
+  };
+  rejects("not json");
+  rejects(R"({"format": "other", "version": 1, "tracks": [{"vertices": [0], "keys": [{"t": 0, "p": [[0,0,0]]}]}]})");
+  rejects(R"({"format": "pgo-vertex-trajectory", "version": 2, "tracks": [{"vertices": [0], "keys": [{"t": 0, "p": [[0,0,0]]}]}]})");
+  rejects(R"({"format": "pgo-vertex-trajectory", "version": 1, "space": "world", "tracks": [{"vertices": [0], "keys": [{"t": 0, "p": [[0,0,0]]}]}]})");
+  rejects(R"({"format": "pgo-vertex-trajectory", "version": 1, "interpolation": "cubic", "tracks": [{"vertices": [0], "keys": [{"t": 0, "p": [[0,0,0]]}]}]})");
+  rejects(R"({"format": "pgo-vertex-trajectory", "version": 1, "tracks": []})");
+  rejects(R"({"format": "pgo-vertex-trajectory", "version": 1, "tracks": [{"vertices": [], "keys": [{"t": 0, "p": []}]}]})");
+  rejects(R"({"format": "pgo-vertex-trajectory", "version": 1, "tracks": [{"vertices": [0], "keys": []}]})");
+  rejects(R"({"format": "pgo-vertex-trajectory", "version": 1, "tracks": [{"vertices": [0], "keys": [{"t": 0, "p": [[0,0]]}]}]})");
+  rejects(R"({"format": "pgo-vertex-trajectory", "version": 1, "tracks": [{"vertices": [0], "keys": [{"t": 0, "p": [[0,0,0],[1,1,1]]}]}]})");
+  rejects(R"({"format": "pgo-vertex-trajectory", "version": 1, "tracks": [{"vertices": [0], "keys": [{"t": 1, "p": [[0,0,0]]}, {"t": 1, "p": [[0,0,0]]}]}]})");
+  rejects(R"({"format": "pgo-vertex-trajectory", "version": 1, "tracks": [{"vertices": [0, 0], "keys": [{"t": 0, "p": [[0,0,0],[0,0,0]]}]}]})");
+  rejects(R"({"format": "pgo-vertex-trajectory", "version": 1, "tracks": [{"vertices": [-1], "keys": [{"t": 0, "p": [[0,0,0]]}]}]})");
+  rejects(R"({"format": "pgo-vertex-trajectory", "version": 1, "tracks": [{"vertices": [0], "keys": [{"t": 0, "p": [[0,0,0]]}]}, {"vertices": [0], "keys": [{"t": 0, "p": [[0,0,0]]}]}]})");
+  rejects(R"({"format": "pgo-vertex-trajectory", "version": 1, "tracks": [{"vertices": [0], "release-time": "soon", "keys": [{"t": 0, "p": [[0,0,0]]}]}]})");
+  EXPECT_THROW(pgo::RunSim::loadVertexTrajectory("/nonexistent/trajectory.json"), std::invalid_argument);
+}
+
+TEST(RunIPCSimSetupGTest, InitialSurfaceMeshSetsPerVertexInitialDisplacement)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-initial.json";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+
+  // an initial mesh with the rest topology, every vertex shifted by (1, 2, 3) * index
+  pgo::Mesh::TriMeshGeo rest;
+  ASSERT_TRUE(rest.load((fs::path(kShellExampleDir) / "shell.obj").string()));
+  pgo::Mesh::TriMeshGeo initial = rest;
+  for (int vi = 0; vi < initial.numVertices(); ++vi)
+    initial.pos(vi) += ES::V3d(1.0, 2.0, 3.0) * 1e-3 * vi;
+  const fs::path initialPath = tempDir.path() / "initial.obj";
+  ASSERT_TRUE(initial.save(initialPath.string()));
+
+  config.handle()["initial-surface-mesh"] = initialPath.generic_string();
+  config.handle()["init-disp"] = { 0.5, 0.0, 0.0 };
+  config.handle()["scale"] = 2.0;
+  const auto context = pgo::RunIPCSim::buildShellIpcSimulation(config);
+  ASSERT_EQ(context.initialDisplacement.size(), 3 * rest.numVertices());
+  for (int vi = 0; vi < rest.numVertices(); ++vi) {
+    const ES::V3d expected = ES::V3d(0.5, 0.0, 0.0) + 2.0 * ES::V3d(1.0, 2.0, 3.0) * 1e-3 * vi;
+    EXPECT_LT((context.initialDisplacement.segment<3>(3 * vi) - expected).norm(), 1e-12) << vi;
+  }
+
+  // a mesh with a different vertex count is rejected, and so is the volume path
+  pgo::Mesh::TriMeshGeo wrong = rest;
+  wrong.addPos(ES::V3d(0, 0, 0));
+  const fs::path wrongPath = tempDir.path() / "wrong.obj";
+  ASSERT_TRUE(wrong.save(wrongPath.string()));
+  config.handle()["initial-surface-mesh"] = wrongPath.generic_string();
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+
+  const fs::path tetConfigPath = tempDir.path() / "tet-initial.json";
+  writeTextFile(tetConfigPath, makeTetIPCConfig(tempDir.path(), 0));
+  pgo::ConfigFileJSON tetConfig;
+  ASSERT_TRUE(tetConfig.open(tetConfigPath.string().c_str()));
+  tetConfig.handle()["initial-surface-mesh"] = initialPath.generic_string();
+  EXPECT_THROW(pgo::RunIPCSim::buildVolumeIpcSimulation(tetConfig), std::invalid_argument);
+}
+
+TEST(RunIPCSimSetupGTest, TrajectoryFixedVerticesBuildOnePullingPerTrack)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-trajectory.json";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
+  const fs::path trajectoryPath = tempDir.path() / "trajectory.json";
+  writeTextFile(trajectoryPath, R"({
+    "format": "pgo-vertex-trajectory", "version": 1, "space": "displacement",
+    "tracks": [
+      { "name": "a", "vertices": [0, 1], "release-time": 0.2,
+        "keys": [ { "t": 0.0, "p": [[0, 0, 0], [0, 0, 0]] }, { "t": 0.1, "p": [[0, 0.1, 0], [0, 0.1, 0]] } ] },
+      { "name": "b", "vertices": [2], "keys": [ { "t": 0.0, "p": [[0.01, 0, 0]] } ] } ] })");
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  config.handle()["fixed-vertices"] = nlohmann::json::array({ { { "trajectory", trajectoryPath.generic_string() }, { "coeff", 500.0 } } });
+  config.handle()["scale"] = 2.0;
+  const auto context = pgo::RunIPCSim::buildShellIpcSimulation(config);
+  EXPECT_TRUE(context.pullingEnergies.empty());
+  ASSERT_EQ(context.trajectoryPullings.size(), 2u);
+  const auto &a = context.trajectoryPullings[0];
+  EXPECT_EQ(a.track.name, "a");
+  EXPECT_DOUBLE_EQ(a.coeff, 500.0);
+  EXPECT_EQ(a.space, pgo::RunSim::VertexTrajectory::Space::Displacement);
+  // displacement space: target = scaled rest + scale * displacement
+  const ES::VXd target = a.targetAt(0.05);
+  ASSERT_EQ(target.size(), 6);
+  for (int i = 0; i < 2; ++i) {
+    const ES::V3d rest = context.simulationRestPosition.segment<3>(3 * a.track.vertices[i]);
+    EXPECT_LT((target.segment<3>(3 * i) - (rest + ES::V3d(0.0, 0.1, 0.0))).norm(), 1e-12);
+  }
+  EXPECT_FALSE(a.track.isActiveAt(0.2));
+  EXPECT_TRUE(context.trajectoryPullings[1].track.isActiveAt(1e6));
+
+  // an entry cannot mix the two forms, and out-of-range vertices are rejected
+  config.handle()["fixed-vertices"] = nlohmann::json::array({ { { "trajectory", trajectoryPath.generic_string() },
+    { "filename", (fs::path(kShellExampleDir) / "shell-fixed.txt").generic_string() }, { "movement", { 0, 0, 0 } }, { "coeff", 1.0 } } });
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  writeTextFile(trajectoryPath, R"({"format": "pgo-vertex-trajectory", "version": 1,
+    "tracks": [ { "vertices": [999999], "keys": [ { "t": 0.0, "p": [[0, 0, 0]] } ] } ] })");
+  config.handle()["fixed-vertices"] = nlohmann::json::array({ { { "trajectory", trajectoryPath.generic_string() }, { "coeff", 1.0 } } });
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
 }
 
 TEST(RunIPCSimSetupGTest, KinematicExternalObjectIsPlacedPerFrameLikeTheSampledRunner)

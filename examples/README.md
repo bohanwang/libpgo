@@ -150,6 +150,62 @@ Deformation of an object with fixed triangle topology is supported through
 `EmbeddedSurfaceIPCPotentialEnergy::updateExternalSurface`; the config exposes
 translation only.
 
+## Prescribed vertex trajectories
+
+A `fixed-vertices` entry can follow a recorded trajectory instead of a
+constant `movement`:
+
+```json
+"fixed-vertices": [
+  { "trajectory": "../../../assets/shell/towel_grasp/grasp-trajectory.json", "coeff": 1e4 }
+]
+```
+
+An entry takes either `filename` plus `movement` or `trajectory`, never both;
+`coeff` is the attachment stiffness in either case. The trajectory file is
+JSON:
+
+```json
+{
+  "format": "pgo-vertex-trajectory",
+  "version": 1,
+  "space": "position",
+  "interpolation": "linear",
+  "tracks": [
+    { "name": "left-gripper", "vertices": [1221, 1222], "release-time": 11.4,
+      "keys": [
+        { "t": 0.00, "p": [[0.5678, 0.1394, 0.8329], [0.5647, 0.1548, 0.8308]] },
+        { "t": 0.02, "p": [[0.5677, 0.1395, 0.8328], [0.5646, 0.1549, 0.8307]] } ] }
+  ]
+}
+```
+
+A track groups vertices that share keyframes, so a gripper holding two
+vertices is one rigid clamp. Each key has the simulation time `t` in seconds
+and one position per track vertex, in `vertices` order; the speed between keys
+is therefore explicit and is logged per track. `space` is `position`
+(coordinates in the mesh file's frame before `scale`, like the surface mesh)
+or `displacement` (offsets from rest, also before `scale`). Only linear
+interpolation exists. Times must increase strictly, a vertex may appear in one
+track only, and vertex indices follow the fixed-vertex text files.
+
+At frame k the target is the trajectory at t = k * `timestep`, the same rule
+as the interpolated `movement`. Sampling holds the first key before it and the
+last key after it. From `release-time` on, the track's vertices are free; the
+attachment stays in the system with zero stiffness, so a restarted run makes
+the same decisions. Static solves use the last key and ignore release times.
+`runSim` rejects trajectory entries; they are an IPC runner feature.
+
+## Initial surface state
+
+`initial-surface-mesh` names an OBJ with the topology of `surface-mesh` whose
+positions are the deformable surface at t = 0. The runner turns it into a
+per-vertex initial displacement (after `scale`) and adds the uniform
+`init-disp`. It is available for shell simulations; tet and cubic simulations
+start from `init-disp` or a restart state. The
+[`towel_grasp`](configs/shell/towel_grasp/README.md) example starts from a
+folded towel this way.
+
 ## IPC start-state check
 
 Before the first step, when restarting from a state file, and after every
@@ -200,6 +256,7 @@ runners; the sampled contact energies are not covered by it.
 | [`dragon`](configs/volume/dragon/README.md) | tet, cubic | sampled | static | Static volume solve without contact |
 | [`shell_hang`](configs/shell/shell_hang/README.md) | shell | IPC | dynamic, static | Shell FEM through the IPC runner |
 | [`shirt-drop`](configs/shell/shirt_drop/) | shell | IPC | dynamic | Garment falling onto a ground plane |
+| [`towel_grasp`](configs/shell/towel_grasp/README.md) | shell | IPC | dynamic | Recorded two-arm grasp trajectory, folded initial state, release onto a table |
 
 Every simulation JSON has a sibling `*-animation.json`. Cubic configurations
 depend on meshes generated locally with

@@ -61,7 +61,12 @@ ResolvedRunSimPaths resolveRunSimPaths(const ConfigFileJSON &jconfig)
 
   if (jconfig.exist("fixed-vertices")) {
     for (const auto &fv : jconfig.handle()["fixed-vertices"]) {
-      paths.fixedVertexFilenames.push_back(jconfig.resolvePath(fv["filename"].get<std::string>()));
+      // Trajectory entries (`trajectory` instead of `filename`) keep their slot
+      // empty so entry indices stay aligned with the config array.
+      if (fv.is_object() && fv.contains("filename") && fv["filename"].is_string())
+        paths.fixedVertexFilenames.push_back(jconfig.resolvePath(fv["filename"].get<std::string>()));
+      else
+        paths.fixedVertexFilenames.push_back(std::string());
     }
   }
 

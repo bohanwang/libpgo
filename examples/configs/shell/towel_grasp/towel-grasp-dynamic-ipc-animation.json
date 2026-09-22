@@ -1,0 +1,14 @@
+{
+  "meshes": [
+    {
+      "name": "towel-grasp-dynamic-ipc",
+      "driving-mesh": "../../../assets/shell/towel_grasp/towel-rest.obj",
+      "sequence": "../../../generated/output/towel-grasp-dynamic-ipc/ret{:04d}.obj",
+      "sequence-type": "objmesh",
+      "sequence-range": [
+        0,
+        825
+      ]
+    }
+  ]
+}

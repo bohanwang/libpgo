@@ -198,7 +198,11 @@ int pgo::SimulationRunner::runSampledSimulationFromConfig(
   std::vector<ES::VXd> pullingTargets, pullingTargetRests;
   Mesh::TriMeshGeo tempMesh;
   int fixedVertexFileIndex = 0;
+  if (jconfig.exist("initial-surface-mesh"))
+    throw std::invalid_argument("`initial-surface-mesh` is supported by runIPCSim shell simulations only.");
   for (const auto &fv : jconfig.handle()["fixed-vertices"]) {
+    if (fv.contains("trajectory"))
+      throw std::invalid_argument("`fixed-vertices` trajectory entries are supported by runIPCSim only; runSim takes `filename` + `movement`.");
     std::string filename = resolvedPaths.fixedVertexFilenames[fixedVertexFileIndex++];
     std::array<double, 3> movement = fv["movement"].get<std::array<double, 3>>();
     double attachmentCoeff = fv["coeff"].get<double>();

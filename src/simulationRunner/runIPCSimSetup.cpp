@@ -207,16 +207,81 @@ void loadSurfaceMeshAndRestPositions(const std::string &surfaceMeshFilename, dou
     surfaceRestPositions.segment<3>(vi * 3) = surfaceMesh.pos(vi);
 }
 
-void buildPullingConstraints(const pgo::ConfigFileJSON &jconfig, const std::vector<std::string> &fixedVertexFilenames,
-  const ES::VXd &simulationRestPosition, const ES::SpMatD &K,
-  std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> &pullingEnergies,
-  std::vector<ES::VXd> &pullingTargets, std::vector<ES::VXd> &pullingTargetRests)
+// Entries without a `filename` (trajectory entries) get an empty string so the
+// entry indices stay aligned with the config array.
+std::vector<std::string> resolveFixedVertexFilenames(const pgo::ConfigFileJSON &jconfig)
 {
-  int fixedVertexFileIndex = 0;
+  std::vector<std::string> filenames;
   for (const auto &fv : jconfig.handle()["fixed-vertices"]) {
-    const std::string &filename = fixedVertexFilenames.at(fixedVertexFileIndex++);
-    const std::array<double, 3> movement = fv["movement"].get<std::array<double, 3>>();
+    if (fv.is_object() && fv.contains("filename") && fv["filename"].is_string())
+      filenames.push_back(jconfig.resolvePath(fv["filename"].get<std::string>()));
+    else
+      filenames.push_back(std::string());
+  }
+  return filenames;
+}
+
+void buildPullingConstraints(const pgo::ConfigFileJSON &jconfig, const std::vector<std::string> &fixedVertexFilenames,
+  const ES::VXd &simulationRestPosition, const ES::SpMatD &K, double scale,
+  std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> &pullingEnergies,
+  std::vector<ES::VXd> &pullingTargets, std::vector<ES::VXd> &pullingTargetRests,
+  std::vector<TrajectoryPulling> &trajectoryPullings)
+{
+  const int numSimulationVertices = static_cast<int>(simulationRestPosition.size() / 3);
+  int entryIndex = 0;
+  for (const auto &fv : jconfig.handle()["fixed-vertices"]) {
+    const std::string entryLabel = "fixed-vertices[" + std::to_string(entryIndex) + "]";
+    const std::string &filename = fixedVertexFilenames.at(entryIndex++);
+    if (!fv.is_object())
+      throwConfigError(entryLabel + " must be an object.");
+    const bool hasTrajectory = fv.contains("trajectory");
+    const bool hasFile = fv.contains("filename") || fv.contains("movement");
+    if (hasTrajectory && hasFile)
+      throwConfigError(entryLabel + " must use either `filename` + `movement` or `trajectory`, not both.");
+    if (!hasTrajectory && !hasFile)
+      throwConfigError(entryLabel + " requires `filename` + `movement` or `trajectory`.");
+    if (!fv.contains("coeff") || !fv["coeff"].is_number())
+      throwConfigError(entryLabel + " requires a numeric `coeff`.");
     const double attachmentCoeff = fv["coeff"].get<double>();
+    if (!std::isfinite(attachmentCoeff) || attachmentCoeff < 0.0)
+      throwConfigError(entryLabel + ".coeff must be finite and non-negative.");
+
+    if (hasTrajectory) {
+      if (!fv["trajectory"].is_string())
+        throwConfigError(entryLabel + ".trajectory must be a file path.");
+      const std::string trajectoryPath = jconfig.resolvePath(fv["trajectory"].get<std::string>());
+      RunSim::VertexTrajectory trajectory = RunSim::loadVertexTrajectory(trajectoryPath);
+      for (RunSim::VertexTrajectoryTrack &track : trajectory.tracks) {
+        for (int v : track.vertices) {
+          if (v >= numSimulationVertices)
+            throwConfigError(entryLabel + " trajectory track `" + track.name + "` references vertex " + std::to_string(v) +
+              ", but the simulation mesh has " + std::to_string(numSimulationVertices) + " vertices.");
+        }
+        TrajectoryPulling pulling;
+        pulling.space = trajectory.space;
+        pulling.scale = scale;
+        pulling.coeff = attachmentCoeff;
+        pulling.restPositions.resize(3 * track.numVertices());
+        for (int i = 0; i < track.numVertices(); ++i)
+          pulling.restPositions.segment<3>(3 * i) = simulationRestPosition.segment<3>(3 * track.vertices[i]);
+        pulling.track = std::move(track);
+        const ES::VXd initialTarget = pulling.targetAt(0.0);
+        pulling.energy = std::make_shared<ConstraintPotentialEnergies::MultipleVertexPulling>(
+          K, simulationRestPosition.data(), pulling.track.numVertices(), pulling.track.vertices.data(),
+          initialTarget.data(), nullptr, 1);
+        pulling.energy->setCoeff(attachmentCoeff);
+        std::cout << "runIPCSim trajectory attachment `" << pulling.track.name << "`: "
+                  << pulling.track.numVertices() << " vertices, " << pulling.track.numKeys() << " keys over ["
+                  << pulling.track.times.front() << ", " << pulling.track.times.back() << "] s, peak speed "
+                  << pulling.track.peakSpeed() * scale << " per s, release "
+                  << (pulling.track.releaseTime ? fmt::format("at {} s", *pulling.track.releaseTime) : std::string("never"))
+                  << ", coeff=" << attachmentCoeff << std::endl;
+        trajectoryPullings.push_back(std::move(pulling));
+      }
+      continue;
+    }
+
+    const std::array<double, 3> movement = fv["movement"].get<std::array<double, 3>>();
 
     std::vector<int> fixedVertices;
     if (BasicIO::read1DText(filename.c_str(), std::back_inserter(fixedVertices)) != 0) {
@@ -271,6 +336,14 @@ void rejectRemovedFloorConfig(const pgo::ConfigFileJSON &jconfig)
     throwConfigError("Analytic IPC floor fields were removed; use `ipc-external-objects` floor geometry instead.");
 }
 }  // namespace
+
+ES::VXd TrajectoryPulling::targetAt(double time) const
+{
+  ES::VXd target = track.sampleAt(time) * scale;
+  if (space == RunSim::VertexTrajectory::Space::Displacement)
+    target += restPositions;
+  return target;
+}
 
 IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
 {
@@ -357,15 +430,45 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   elasticEnergy->createHessian(*pullingHessianBase);
   elasticEnergy->hessian(zero, *pullingHessianBase);
 
-  std::vector<std::string> fixedVertexFilenames;
-  for (const auto &fv : jconfig.handle()["fixed-vertices"])
-    fixedVertexFilenames.push_back(jconfig.resolvePath(fv["filename"].get<std::string>()));
+  const std::vector<std::string> fixedVertexFilenames = resolveFixedVertexFilenames(jconfig);
 
   std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> pullingEnergies;
   std::vector<ES::VXd> pullingTargets;
   std::vector<ES::VXd> pullingTargetRests;
+  std::vector<TrajectoryPulling> trajectoryPullings;
   buildPullingConstraints(jconfig, fixedVertexFilenames, simulationRestPosition,
-    *pullingHessianBase, pullingEnergies, pullingTargets, pullingTargetRests);
+    *pullingHessianBase, scale, pullingEnergies, pullingTargets, pullingTargetRests, trajectoryPullings);
+
+  // `initial-surface-mesh`: the same mesh in its state at t = 0, which becomes a
+  // per-vertex initial displacement on top of the uniform `init-disp`.
+  ES::VXd initialDisplacement = makeInitialDisplacement(n, initialDisp);
+  if (jconfig.exist("initial-surface-mesh")) {
+    const std::string initialMeshFilename = jconfig.getResolvedPath("initial-surface-mesh", 1);
+    pgo::Mesh::TriMeshGeo initialMesh;
+    if (!initialMesh.load(initialMeshFilename))
+      throw std::runtime_error("Failed to load initial surface mesh: " + initialMeshFilename);
+    if (initialMesh.numVertices() != surfaceMesh.numVertices() || initialMesh.numTriangles() != surfaceMesh.numTriangles()) {
+      throwConfigError(fmt::format(
+        "`initial-surface-mesh` must have the vertex and triangle counts of `surface-mesh` ({} vertices, {} triangles), got {} and {}.",
+        surfaceMesh.numVertices(), surfaceMesh.numTriangles(), initialMesh.numVertices(), initialMesh.numTriangles()));
+    }
+    for (int fi = 0; fi < surfaceMesh.numTriangles(); ++fi) {
+      for (int j = 0; j < 3; ++j) {
+        if (initialMesh.tri(fi)[j] != surfaceMesh.tri(fi)[j])
+          throwConfigError(fmt::format("`initial-surface-mesh` triangle {} differs from `surface-mesh`; the files must share topology.", fi));
+      }
+    }
+    double maxInitialOffset = 0.0;
+    for (int vi = 0; vi < n; ++vi) {
+      if (!initialMesh.pos(vi).allFinite())
+        throwConfigError("`initial-surface-mesh` contains a non-finite vertex.");
+      const ES::V3d offset = scale * initialMesh.pos(vi) - surfaceRestPositions.segment<3>(3 * vi);
+      initialDisplacement.segment<3>(3 * vi) += offset;
+      maxInitialOffset = std::max(maxInitialOffset, offset.norm());
+    }
+    std::cout << "runIPCSim initial-surface-mesh: " << initialMeshFilename
+              << ", max vertex offset from rest " << maxInitialOffset << std::endl;
+  }
 
   ES::SpMatD M;
   libiglInterface::computeMassMatrix(surfaceMesh, M, 1, 1);
@@ -381,7 +484,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   IpcSimulationContext context;
   context.M = std::move(M);
   context.simulationRestPosition = std::move(simulationRestPosition);
-  context.initialDisplacement = makeInitialDisplacement(n, initialDisp);
+  context.initialDisplacement = std::move(initialDisplacement);
   context.surfaceRestPositions = std::move(surfaceRestPositions);
   context.surfaceFromSimulationDispMap = W;
   context.simulationMeshOwner = simMesh;
@@ -392,6 +495,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   context.pullingEnergies = std::move(pullingEnergies);
   context.pullingTargets = std::move(pullingTargets);
   context.pullingTargetRests = std::move(pullingTargetRests);
+  context.trajectoryPullings = std::move(trajectoryPullings);
   context.surfaceMesh = std::move(surfaceMesh);
   context.collisionHandler =
     std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(
@@ -464,9 +568,13 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> pullingEnergies;
   std::vector<ES::VXd> pullingTargets;
   std::vector<ES::VXd> pullingTargetRests;
+  if (jconfig.exist("initial-surface-mesh"))
+    throwConfigError("`initial-surface-mesh` is supported by shell simulations only; tet/cubic simulations use `init-disp` or a restart state.");
+
+  std::vector<TrajectoryPulling> trajectoryPullings;
   buildPullingConstraints(jconfig, resolvedPaths.fixedVertexFilenames, initialized.restPosition,
-    *pullingHessianBase,
-    pullingEnergies, pullingTargets, pullingTargetRests);
+    *pullingHessianBase, scale,
+    pullingEnergies, pullingTargets, pullingTargetRests, trajectoryPullings);
 
   ES::MXd V;
   ES::MXi F;
@@ -489,6 +597,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   context.pullingEnergies = std::move(pullingEnergies);
   context.pullingTargets = std::move(pullingTargets);
   context.pullingTargetRests = std::move(pullingTargetRests);
+  context.trajectoryPullings = std::move(trajectoryPullings);
   context.surfaceMesh = std::move(surfaceMesh);
   context.collisionHandler =
     std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(
