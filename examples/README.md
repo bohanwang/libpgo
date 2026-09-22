@@ -19,7 +19,7 @@ runner prints an explicit warning. Sampled shell simulation is not supported.
 
 ## IPC friction
 
-IPC supports regularized Coulomb friction for self-contact and stationary
+IPC supports regularized Coulomb friction for self-contact and kinematic
 external triangle meshes, on all three simulation mesh types. Set:
 
 ```json
@@ -54,7 +54,8 @@ It uses the same cubic smoothing law as this repository's sampled contact,
 with normal force obtained from the weighted IPC barrier. Point–triangle and
 edge–edge closest-feature cases are supported. The zero-slip Hessian uses its
 analytic finite limit. Friction is mapped through the existing surface embedding;
-external vertices remain fixed. CCD continues to limit collision-free steps.
+external vertices are fixed within a frame, so friction acts relative to the
+object's current placement. CCD continues to limit collision-free steps.
 
 Backward Euler evaluates its inertial/damping quadratic in the displacement
 increment from the previous state. This is equivalent to the original energy
@@ -115,10 +116,45 @@ bounding-box diagonal is about 0.25 with triangle heights down to 1.2 mm, had
 `ipc-dhat-relative = 0.002` (dhat about 5e-4) and starts contact-free.
 `ipc-kappa` is always given explicitly and is not rescaled with dhat.
 
+## IPC external objects
+
+`ipc-external-objects` lists kinematic triangle meshes that the simulated
+surface collides with. Each entry takes `filename`, an optional positive
+`scale`, an optional `initial-translation`, and an optional `movement`:
+
+```json
+"ipc-external-objects": [
+  { "filename": "../../../assets/common/bottom.obj", "scale": 1.0,
+    "initial-translation": [0, 0, 0], "movement": [0, 0.05, 0] }
+]
+```
+
+The objects follow the same model as `runSim`'s `external-objects`. They have
+no degrees of freedom and take no forces. Inside a frame they are frozen; the
+runner places them between frames at `initial + movement * k / (N - 1)` for
+frame `k` of an `N`-frame run, so the full movement is reached at the last
+frame, a one-frame run keeps the initial placement, and a restarted run sees
+the same placements. Static solves keep the initial placement. The barrier,
+CCD, and friction all act between the simulated surface and the objects.
+Because the object is static within a frame, friction resists motion relative
+to its current placement and does not drag the simulated surface along.
+Objects are never tested against themselves or each other, so an external
+mesh may self-intersect or overlap another one.
+
+Each placement must leave the simulated surface outside the objects. A jump
+that lands an object inside the simulated surface is reported through the
+start-state check below and stops the run; keep per-frame movement below the
+current gap. A jump that passes completely through the surface cannot be
+detected by a state check, since the object is not swept between frames.
+Deformation of an object with fixed triangle topology is supported through
+`EmbeddedSurfaceIPCPotentialEnergy::updateExternalSurface`; the config exposes
+translation only.
+
 ## IPC start-state check
 
-Before the first step, and again when restarting from a state file, the IPC
-runner validates the collision surface at the starting displacement. It
+Before the first step, when restarting from a state file, and after every
+placement of a moving external object, the IPC runner validates the collision
+surface at the current displacement. It
 rejects any point-triangle or edge-edge pair at zero distance, and any edge
 that passes through a triangle it does not share a vertex with, using the exact
 segment-triangle predicate. The second test is necessary: two triangles that

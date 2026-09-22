@@ -375,7 +375,8 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   ES::MXi F;
   Mesh::triMeshGeoToMatrices(surfaceMesh, V, F);
   const ES::SpMatD W = makeIdentityEmbedding(n3);
-  Contact::CIPC::IPCCollisionSurfaceData collisionSurface = prepareIPCCollisionSurface(V, F, W, jconfig);
+  IPCPreparedCollisionSurface preparedSurface = prepareIPCCollisionSurface(V, F, W, jconfig);
+  const Contact::CIPC::IPCCollisionSurfaceData &collisionSurface = preparedSurface.surface;
 
   IpcSimulationContext context;
   context.M = std::move(M);
@@ -396,6 +397,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
     std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(
       collisionSurface.vertices, collisionSurface.triangles, collisionSurface.displacementMap,
       collisionSurface.vertexIsDeformable, ipcParams);
+  context.kinematicExternalObjects = std::move(preparedSurface.kinematicObjects);
   return context;
 }
 
@@ -469,7 +471,8 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
   ES::MXd V;
   ES::MXi F;
   Mesh::triMeshGeoToMatrices(surfaceMesh, V, F);
-  Contact::CIPC::IPCCollisionSurfaceData collisionSurface = prepareIPCCollisionSurface(V, F, W, jconfig);
+  IPCPreparedCollisionSurface preparedSurface = prepareIPCCollisionSurface(V, F, W, jconfig);
+  const Contact::CIPC::IPCCollisionSurfaceData &collisionSurface = preparedSurface.surface;
 
   IpcSimulationContext context;
   context.M = std::move(M);
@@ -491,6 +494,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
     std::make_shared<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy>(
       collisionSurface.vertices, collisionSurface.triangles, collisionSurface.displacementMap,
       collisionSurface.vertexIsDeformable, ipcParams);
+  context.kinematicExternalObjects = std::move(preparedSurface.kinematicObjects);
   return context;
 }
 }  // namespace pgo::RunIPCSim

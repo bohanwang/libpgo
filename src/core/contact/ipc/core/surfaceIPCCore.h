@@ -99,6 +99,11 @@ public:
 
   void validateCollisionFreeSurfacePositions(EigenSupport::ConstRefVecXd x_surf) const;
 
+  // Recompute the barrier and friction weights (areas, edge lengths) at the
+  // given positions after kinematic vertices were moved between frames. Drops
+  // the prepared pairs and requires a new updateFriction() before evaluation.
+  void updateSurfaceMeasures(EigenSupport::ConstRefVecXd x_surf);
+
 private:
   void findCollisionPairs(const VXd &positions) const;
   void sortPairsCanonically(std::vector<PTPair> &ptPairs, std::vector<EEPair> &eePairs) const;

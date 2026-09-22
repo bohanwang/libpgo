@@ -32,6 +32,11 @@ struct SurfaceIPCTopology
   void setMesh(const EigenSupport::MXd &V, const EigenSupport::MXi &F);
   void setMesh(const EigenSupport::MXd &V, const EigenSupport::MXi &F,
     const std::vector<uint8_t> &vertexIsDeformableMask);
+  // Recompute triangle areas, vertex areas and edge lengths at the given
+  // flattened positions (3 * numVerts). Used when kinematic external vertices
+  // are moved or deformed between frames so the barrier and friction weights
+  // follow the current geometry.
+  void updateMeasures(EigenSupport::ConstRefVecXd positions);
   int numSurfaceDOFs() const { return 3 * numVerts; }
   bool isVertexDeformable(int vi) const { return vertexIsDeformable[vi] != 0; }
   bool triangleContainsDeformableVertex(int fi) const { return triangleHasDeformableVertex[fi] != 0; }

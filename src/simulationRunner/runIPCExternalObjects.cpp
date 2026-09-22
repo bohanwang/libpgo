@@ -127,8 +127,6 @@ std::vector<IPCExternalObjectSpec> parseIPCExternalObjectSpecs(
     spec.initialTranslation = parseOptionalFiniteVector(
       object, "initial-translation", ES::V3d::Zero(), label);
     spec.movement = parseOptionalFiniteVector(object, "movement", ES::V3d::Zero(), label);
-    if (spec.movement.cwiseAbs().maxCoeff() != 0.0)
-      throwConfigError(label + " currently supports only `movement == [0, 0, 0]`.");
 
     specs.push_back(std::move(spec));
   }
@@ -160,7 +158,14 @@ std::vector<Contact::CIPC::IPCExternalSurface> loadIPCExternalSurfaces(
   return externalSurfaces;
 }
 
-Contact::CIPC::IPCCollisionSurfaceData prepareIPCCollisionSurface(
+ES::MXd IPCKinematicExternalObject::positionsAt(double ratio) const
+{
+  ES::MXd positions = baseVertices;
+  positions.rowwise() += (movement * ratio).transpose();
+  return positions;
+}
+
+IPCPreparedCollisionSurface prepareIPCCollisionSurface(
   const ES::MXd &deformableVertices,
   const ES::MXi &deformableTriangles,
   const ES::SpMatD &deformableDisplacementMap,
@@ -168,8 +173,40 @@ Contact::CIPC::IPCCollisionSurfaceData prepareIPCCollisionSurface(
 {
   const std::vector<IPCExternalObjectSpec> specs = parseIPCExternalObjectSpecs(config);
   const std::vector<Contact::CIPC::IPCExternalSurface> surfaces = loadIPCExternalSurfaces(specs);
-  return Contact::CIPC::assembleIPCCollisionSurface(
+
+  IPCPreparedCollisionSurface prepared;
+  prepared.surface = Contact::CIPC::assembleIPCCollisionSurface(
     deformableVertices, deformableTriangles, deformableDisplacementMap, surfaces);
+  if (prepared.surface.externalRanges.size() != specs.size())
+    throw std::logic_error("Collision surface assembly did not report one range per external object.");
+
+  prepared.kinematicObjects.reserve(specs.size());
+  for (std::size_t i = 0; i < specs.size(); ++i) {
+    IPCKinematicExternalObject object;
+    object.baseVertices = surfaces[i].vertices;
+    object.movement = specs[i].movement;
+    object.firstSurfaceVertex = prepared.surface.externalRanges[i].firstVertex;
+    prepared.kinematicObjects.push_back(std::move(object));
+  }
+  return prepared;
+}
+
+void placeIPCKinematicObjects(
+  Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy &collisionHandler,
+  const std::vector<IPCKinematicExternalObject> &objects,
+  int frame, int numSimSteps)
+{
+  if (frame < 0)
+    throw std::invalid_argument("Kinematic object placement requires a non-negative frame index.");
+  // Same denominator as the sampled runner and the attachment targets: a
+  // one-frame run does not divide by zero and leaves the object at its base.
+  const double stepDenom = numSimSteps > 1 ? static_cast<double>(numSimSteps - 1) : 1.0;
+  const double ratio = static_cast<double>(frame) / stepDenom;
+  for (const IPCKinematicExternalObject &object : objects) {
+    if (!object.moves())
+      continue;
+    collisionHandler.updateExternalSurface(object.firstSurfaceVertex, object.positionsAt(ratio));
+  }
 }
 
 }  // namespace pgo::RunIPCSim

@@ -5,6 +5,7 @@
 #include "potentialEnergies.h"
 #include "testCIPCHelpers.h"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <numeric>
@@ -446,6 +447,71 @@ TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, RejectsInterpenetratingInitialState
   const auto [Vs, Fs] = makeTwoTriangleMesh();
   EmbeddedSurfaceIPCPotentialEnergy separated(Vs, Fs, makeIdentityEmbedding(18), makeParams());
   EXPECT_NO_THROW(separated.validateCollisionFreeState(zeroU));
+}
+
+TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, UpdateExternalSurfaceMovesOnlyExternalVerticesAndRefreshesTheBarrier)
+{
+  const auto [V, F] = makeTwoTriangleMesh();
+  const std::vector<uint8_t> mask = { 1, 1, 1, 0, 0, 0 };
+  EmbeddedSurfaceIPCPotentialEnergy adapter(V, F, makeDynamicOnlyEmbedding(), mask, makeParams());
+  const ES::VXd zeroU = ES::VXd::Zero(9);
+
+  // triangle 1 sits about 0.045 above triangle 0, inside dhat = 0.1
+  const double energyAtRest = adapter.func(zeroU);
+  ASSERT_GT(energyAtRest, 0.0);
+
+  // deformable vertices cannot be moved through the kinematic path
+  EXPECT_THROW(adapter.updateExternalSurface(0, V.topRows<3>()), std::invalid_argument);
+  EXPECT_THROW(adapter.updateExternalSurface(2, V.bottomRows<3>()), std::invalid_argument);
+  // the range must stay inside the surface and be N x 3
+  EXPECT_THROW(adapter.updateExternalSurface(4, V.bottomRows<3>()), std::invalid_argument);
+  EXPECT_THROW(adapter.updateExternalSurface(3, ES::MXd::Zero(3, 2)), std::invalid_argument);
+  EXPECT_DOUBLE_EQ(adapter.func(zeroU), energyAtRest);
+
+  // moving the external triangle out of reach removes the barrier ...
+  ES::MXd farAway = V.bottomRows<3>();
+  farAway.col(2).array() += 1.0;
+  adapter.updateExternalSurface(3, farAway);
+  EXPECT_DOUBLE_EQ(adapter.func(zeroU), 0.0);
+  for (int vi = 3; vi < 6; ++vi)
+    EXPECT_DOUBLE_EQ(adapter.getSurfaceRestPositions()[3 * vi + 2], V(vi, 2) + 1.0);
+  for (int vi = 0; vi < 3; ++vi)
+    EXPECT_DOUBLE_EQ(adapter.getSurfaceRestPositions()[3 * vi + 2], V(vi, 2));
+
+  // ... and bringing it closer than the original placement raises it
+  ES::MXd closer = V.bottomRows<3>();
+  closer.col(2).array() -= 0.02;
+  adapter.updateExternalSurface(3, closer);
+  EXPECT_GT(adapter.func(zeroU), energyAtRest);
+
+  // a prepared gradient follows the new placement rather than a stale cache
+  ES::VXd gradient = ES::VXd::Zero(adapter.getNumDOFs());
+  adapter.gradient(zeroU, gradient);
+  const ES::VXd direction = ES::VXd::Ones(9);
+  const double h = 1e-6;
+  const double fd = (adapter.func(zeroU + h * direction) - adapter.func(zeroU - h * direction)) / (2 * h);
+  EXPECT_NEAR(gradient.dot(direction), fd, 1e-5 * std::max(1.0, std::abs(fd)));
+}
+
+TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, UpdateExternalSurfaceRequiresANewFrictionUpdate)
+{
+  const auto [V, F] = makeTwoTriangleMesh();
+  const std::vector<uint8_t> mask = { 1, 1, 1, 0, 0, 0 };
+  SurfaceIPCCore::Parameters params = makeParams();
+  params.frictionCoeff = 0.3;
+  EmbeddedSurfaceIPCPotentialEnergy adapter(V, F, makeDynamicOnlyEmbedding(), mask, params);
+  const ES::VXd zeroU = ES::VXd::Zero(9);
+
+  adapter.updateFriction(zeroU, zeroU, 0.01);
+  EXPECT_NO_THROW(adapter.func(zeroU));
+
+  ES::MXd moved = V.bottomRows<3>();
+  moved.col(2).array() -= 0.01;
+  adapter.updateExternalSurface(3, moved);
+  // The lagged friction pairs were built against the old placement.
+  EXPECT_THROW(adapter.func(zeroU), std::logic_error);
+  adapter.updateFriction(zeroU, zeroU, 0.01);
+  EXPECT_NO_THROW(adapter.func(zeroU));
 }
 
 TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, ReusesPreparedPairsAcrossEnergyGradientHessianForSameState)

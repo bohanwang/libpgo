@@ -810,6 +810,119 @@ TEST(RunIPCSimCliGTest, FrictionReducesSlidingAndRestartMatchesUninterruptedRun)
   EXPECT_LT((resumed.col(2) - frictional.col(2)).norm(), 1e-4);
 }
 
+TEST(RunIPCSimCliGTest, RisingExternalPlaneLiftsClothWithFrictionAndRestartMatches)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path plane = tempDir.path() / "plane.obj";
+  const fs::path cloth = tempDir.path() / "cloth.obj";
+  writeExternalPlane(plane);
+  writeTextFile(cloth,
+    "v -.1 .019 -.1\nv .1 .019 -.1\nv .1 .019 .1\nv -.1 .019 .1\nf 1 3 2\nf 1 4 3\n");
+  nlohmann::json config = nlohmann::json::parse(makeShellIPCConfig(tempDir.path(), 40));
+  config["surface-mesh"] = cloth.generic_string();
+  config["fixed-vertices"] = nlohmann::json::array();
+  // The plane rises by 0.05 over the run: 0.05 * k / 39 at frame k.
+  config["ipc-external-objects"] = nlohmann::json::array(
+    { { { "filename", plane.generic_string() }, { "movement", { 0.0, 0.05, 0.0 } } } });
+  config["init-vel"] = { .2, 0, 0 };
+  config["timestep"] = .002;
+  config["ipc-dhat"] = .02;
+  config["ipc-kappa"] = 1.0;
+  config["shell-youngs-modulus"] = 1000;
+  config["shell-bending-youngs-modulus"] = 1000;
+  config["shell-areal-density"] = 1.0;
+  config["solver-eps"] = 1e-8;
+  config["solver-max-iter"] = 100;
+  config["ipc-friction-iterations"] = 2;
+  config["deterministic-assembly"] = true;
+  const fs::path configPath = tempDir.path() / "rising.json";
+
+  auto mean = [](const ES::MXd &state, int column) {
+    double sum = 0;
+    for (int i = 0; i < 4; ++i)
+      sum += state(3 * i + column, 0);
+    return sum / 4;
+  };
+
+  ES::MXd frictionless, frictional;
+  for (double mu : { 0.0, .5 }) {
+    const fs::path output = tempDir.path() / (mu == 0 ? "frictionless" : "frictional");
+    config["output"] = output.generic_string();
+    config["contact-friction-coeff"] = mu;
+    writeTextFile(configPath, config.dump(2));
+    ASSERT_EQ(pgo::SimulationRunner::runIPCSimulationFromConfig(configPath), 0);
+    ES::MXd &state = mu == 0 ? frictionless : frictional;
+    ASSERT_EQ(ES::readMatrix((output / "deform0039.u").string().c_str(), state), 0);
+    ASSERT_TRUE(state.allFinite());
+    // Every cloth vertex ends above the plane's final height of 0.05; the
+    // cloth started at 0.019, so it was carried up by the kinematic object.
+    for (int i = 0; i < 4; ++i)
+      EXPECT_GT(.019 + state(3 * i + 1, 0), 0.05);
+    EXPECT_GT(mean(state, 1), 0.031);
+  }
+  // Friction acts against the moving object: sliding is reduced as on a fixed plane.
+  EXPECT_GT(mean(frictionless, 0), 0.0);
+  EXPECT_LT(mean(frictional, 0), .7 * mean(frictionless, 0));
+
+  // A restart places the object from the frame index, so the resumed run
+  // matches the uninterrupted one.
+  const fs::path restartOutput = tempDir.path() / "restart";
+  fs::create_directories(restartOutput);
+  fs::copy_file(tempDir.path() / "frictional/deform0019.u", restartOutput / "deform0019.u");
+  config["output"] = restartOutput.generic_string();
+  config["contact-friction-coeff"] = .5;
+  config["restart-from-u"] = true;
+  writeTextFile(configPath, config.dump(2));
+  ASSERT_EQ(pgo::SimulationRunner::runIPCSimulationFromConfig(configPath), 0);
+  ES::MXd resumed;
+  ASSERT_EQ(ES::readMatrix((restartOutput / "deform0039.u").string().c_str(), resumed), 0);
+  EXPECT_LT((resumed.col(0) - frictional.col(0)).norm(), 1e-8);
+  EXPECT_LT((resumed.col(1) - frictional.col(1)).norm(), 1e-6);
+  EXPECT_LT((resumed.col(2) - frictional.col(2)).norm(), 1e-4);
+}
+
+TEST(RunIPCSimCliGTest, ExternalObjectPlacedInsideTheClothIsRejected)
+{
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path wall = tempDir.path() / "wall.obj";
+  const fs::path cloth = tempDir.path() / "cloth.obj";
+  // a vertical wall in the plane x = 0, larger than the cloth
+  writeTextFile(wall, "v 0 -1 -1\nv 0 1 -1\nv 0 1 1\nv 0 -1 1\nf 1 3 2\nf 1 4 3\n");
+  writeTextFile(cloth,
+    "v -.1 .019 -.1\nv .1 .019 -.1\nv .1 .019 .1\nv -.1 .019 .1\nf 1 3 2\nf 1 4 3\n");
+  nlohmann::json config = nlohmann::json::parse(makeShellIPCConfig(tempDir.path(), 2));
+  config["surface-mesh"] = cloth.generic_string();
+  config["fixed-vertices"] = nlohmann::json::array();
+  config["g"] = { 0, 0, 0 };
+  // frame 0: wall at x = -0.5, clear of the cloth; frame 1: wall at x = 0,
+  // cutting through the cloth's interior
+  config["ipc-external-objects"] = nlohmann::json::array(
+    { { { "filename", wall.generic_string() }, { "initial-translation", { -0.5, 0.0, 0.0 } }, { "movement", { 0.5, 0.0, 0.0 } } } });
+  config["ipc-dhat"] = .02;
+  config["ipc-kappa"] = 1.0;
+  config["shell-youngs-modulus"] = 1000;
+  config["shell-bending-youngs-modulus"] = 1000;
+  config["shell-areal-density"] = 1.0;
+  const fs::path output = tempDir.path() / "wall-output";
+  config["output"] = output.generic_string();
+  const fs::path configPath = tempDir.path() / "wall.json";
+  writeTextFile(configPath, config.dump(2));
+
+  EXPECT_NE(runCommand(shellExecutable(binary) + " --log " + quotePath(configPath)), 0);
+  const fs::path logPath = output / "runIPCSim.log";
+  ASSERT_TRUE(fs::exists(logPath));
+  const std::string contents = readTextFile(logPath);
+  EXPECT_NE(contents.find("not intersection-free"), std::string::npos) << contents;
+  // frame 0 was solved and written before the frame-1 placement was rejected
+  EXPECT_TRUE(fs::exists(output / "deform0000.u"));
+  EXPECT_FALSE(fs::exists(output / "deform0001.u"));
+}
+
 TEST(RunIPCSimCliGTest, DeterministicAssemblyReproducesStatesBitwiseAcrossRuns)
 {
   initializeRunIPCSimTestEnvironment();
@@ -1313,6 +1426,52 @@ TEST(RunIPCSimSetupGTest, ShellZeroRestCurvatureMakesCurvedRestCarryBendingEnerg
   EXPECT_TRUE(std::isfinite(restEnergyFlatRest));
 }
 
+TEST(RunIPCSimSetupGTest, KinematicExternalObjectIsPlacedPerFrameLikeTheSampledRunner)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-kinematic.json";
+  const fs::path externalPath = tempDir.path() / "external-plane.obj";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
+  writeExternalPlane(externalPath, -0.2);
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  addIPCExternalObject(config, externalPath, nlohmann::json::array({ 0.0, 0.1, 0.0 }));
+  const auto specs = pgo::RunIPCSim::parseIPCExternalObjectSpecs(config);
+  ASSERT_EQ(specs.size(), 1u);
+  EXPECT_DOUBLE_EQ(specs[0].movement[1], 0.1);
+
+  const auto context = pgo::RunIPCSim::buildShellIpcSimulation(config);
+  ASSERT_EQ(context.kinematicExternalObjects.size(), 1u);
+  const auto &object = context.kinematicExternalObjects[0];
+  EXPECT_TRUE(object.moves());
+  EXPECT_EQ(object.firstSurfaceVertex, context.surfaceMesh.numVertices());
+  EXPECT_EQ(object.baseVertices.rows(), 4);
+  EXPECT_DOUBLE_EQ(object.baseVertices(0, 1), -0.2);
+
+  auto externalY = [&](int localVertex) {
+    return context.collisionHandler->getSurfaceRestPositions()[3 * (object.firstSurfaceVertex + localVertex) + 1];
+  };
+  auto deformableY = [&]() {
+    return context.collisionHandler->getSurfaceRestPositions()[1];
+  };
+  const double deformableYAtRest = deformableY();
+
+  // frame k of an 11-frame run: base + movement * k / 10
+  pgo::RunIPCSim::placeIPCKinematicObjects(*context.collisionHandler, context.kinematicExternalObjects, 5, 11);
+  for (int lv = 0; lv < 4; ++lv)
+    EXPECT_NEAR(externalY(lv), -0.2 + 0.05, 1e-15);
+  pgo::RunIPCSim::placeIPCKinematicObjects(*context.collisionHandler, context.kinematicExternalObjects, 10, 11);
+  for (int lv = 0; lv < 4; ++lv)
+    EXPECT_NEAR(externalY(lv), -0.1, 1e-15);
+  // a one-frame run keeps the base placement, and frame 0 is always the base
+  pgo::RunIPCSim::placeIPCKinematicObjects(*context.collisionHandler, context.kinematicExternalObjects, 0, 1);
+  for (int lv = 0; lv < 4; ++lv)
+    EXPECT_DOUBLE_EQ(externalY(lv), -0.2);
+  EXPECT_DOUBLE_EQ(deformableY(), deformableYAtRest);
+}
+
 TEST(RunIPCSimSetupGTest, ShellExternalObjectBuildsCombinedCollisionSurfaceOnly)
 {
   initializeRunIPCSimTestEnvironment();
@@ -1451,7 +1610,14 @@ TEST(RunIPCSimSetupGTest, ExternalObjectValidationRejectsUnsupportedInputs)
     nlohmann::json::array({ 0.0, std::numeric_limits<double>::infinity(), 0.0 }));
   EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
 
+  // kinematic movement is accepted; malformed movement is not
   addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, 0.1, 0.0 }));
+  EXPECT_NO_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config));
+  addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, 0.1 }));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, "bad", 0.0 }));
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+  addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, std::numeric_limits<double>::infinity(), 0.0 }));
   EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
   addIPCExternalObject(config, validPath, nlohmann::json::array({ 0.0, 0.0 }));
   EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);

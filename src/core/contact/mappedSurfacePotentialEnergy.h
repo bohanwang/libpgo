@@ -44,6 +44,9 @@ public:
 
 protected:
   void validateSimulationDisplacementSize(EigenSupport::ConstRefVecXd simulationDisplacements) const;
+  // Overwrite the rest positions of the contiguous vertex range starting at
+  // firstVertex with the rows of positions (N x 3).
+  void overwriteSurfaceRestPositions(int firstVertex, const EigenSupport::MXd &positions);
   VXd computeSurfaceDisplacementsFromSimulationDisplacements(EigenSupport::ConstRefVecXd simulationDisplacements) const;
   VXd computeSurfacePositionsFromSimulationDisplacements(EigenSupport::ConstRefVecXd simulationDisplacements) const;
 

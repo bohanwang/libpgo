@@ -43,6 +43,20 @@ MappedSurfacePotentialEnergy::MappedSurfacePotentialEnergy(
   std::iota(simulationDOFs_.begin(), simulationDOFs_.end(), 0);
 }
 
+void MappedSurfacePotentialEnergy::overwriteSurfaceRestPositions(int firstVertex, const EigenSupport::MXd &positions)
+{
+  const Eigen::Index numSurfaceVertices = surfaceRestPositions_.size() / 3;
+  if (positions.cols() != 3)
+    throw std::invalid_argument("Surface rest position update requires an N x 3 matrix.");
+  if (firstVertex < 0 || positions.rows() < 0 || firstVertex + positions.rows() > numSurfaceVertices)
+    throw std::invalid_argument("Surface rest position update addresses vertices outside the collision surface.");
+  if (!positions.allFinite())
+    throw std::invalid_argument("Surface rest position update requires finite positions.");
+
+  for (Eigen::Index r = 0; r < positions.rows(); ++r)
+    surfaceRestPositions_.segment<3>(3 * (firstVertex + r)) = positions.row(r).transpose();
+}
+
 void MappedSurfacePotentialEnergy::validateSimulationDisplacementSize(EigenSupport::ConstRefVecXd simulationDisplacements) const
 {
   if (simulationDisplacements.size() != surfaceFromSimulationDispMap_.cols())

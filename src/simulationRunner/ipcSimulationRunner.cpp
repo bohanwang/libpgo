@@ -16,6 +16,7 @@
 #include "runSimCliLogging.h"
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <filesystem>
@@ -51,6 +52,9 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
   using namespace pgo;
   namespace ES = EigenSupport;
 
+  // Declared outside the try block so that a failure is written to the log
+  // file before the console is restored.
+  std::unique_ptr<RunSim::ScopedRunSimCliLogRedirect> logRedirect;
   try {
     ConfigFileJSON jconfig;
     if (jconfig.open(configFilename.string().c_str()) != true)
@@ -70,7 +74,6 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
 
     std::filesystem::create_directories(outputFolder);
 
-    std::unique_ptr<RunSim::ScopedRunSimCliLogRedirect> logRedirect;
     if (enableCliLog) {
       const std::filesystem::path logPath = outputFolder / "runIPCSim.log";
       logRedirect = std::make_unique<RunSim::ScopedRunSimCliLogRedirect>(logPath.string());
@@ -211,12 +214,29 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
     else if (frameStart < 0)
       std::cout << "Starting from frame 0." << std::endl;
 
+    // Kinematic external objects are frozen inside a frame and placed between
+    // frames, as in the sampled runner. Placement is a function of the frame
+    // index, so a restarted run sees the same object positions.
+    const bool anyKinematicObjectMoves = std::any_of(
+      context.kinematicExternalObjects.begin(), context.kinematicExternalObjects.end(),
+      [](const RunIPCSim::IPCKinematicExternalObject &object) { return object.moves(); });
+    RunIPCSim::placeIPCKinematicObjects(*context.collisionHandler, context.kinematicExternalObjects,
+      frameStart + 1, numSimSteps);
     context.collisionHandler->validateCollisionFreeState(u);
 
     const double ratioDenom = numSimSteps > 1 ? static_cast<double>(numSimSteps - 1) : 1.0;
 
     for (int framei = frameStart + 1; framei < numSimSteps; ++framei) {
       intg->clearGeneralImplicitForceModel();
+
+      if (framei > frameStart + 1 && anyKinematicObjectMoves) {
+        RunIPCSim::placeIPCKinematicObjects(*context.collisionHandler, context.kinematicExternalObjects,
+          framei, numSimSteps);
+        // The object jumped to its new placement. The barrier can push the
+        // simulated surface away from it, but not out of it, so a placement
+        // that lands inside the simulated surface is an error here.
+        context.collisionHandler->validateCollisionFreeState(u);
+      }
 
       const double ratio = numSimSteps > 1 ? static_cast<double>(framei) / ratioDenom : 1.0;
       for (std::size_t pi = 0; pi < context.pullingEnergies.size(); ++pi) {
@@ -276,6 +296,11 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
   }
   catch (const std::exception &err) {
     SPDLOG_LOGGER_ERROR(Logging::lgr(), "{}", err.what());
+    if (logRedirect) {
+      // The message above went to the log file; repeat it on the console.
+      logRedirect.reset();
+      std::cerr << err.what() << std::endl;
+    }
     return 1;
   }
 

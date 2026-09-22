@@ -2,6 +2,7 @@
 
 // Reusable IPC simulation setup extracted from the command-line tool.
 #include "EigenSupport.h"
+#include "runIPCExternalObjects.h"
 #include "triMeshGeo.h"
 
 #include <memory>
@@ -51,6 +52,8 @@ struct IpcSimulationContext
   std::vector<EigenSupport::VXd> pullingTargetRests;
   pgo::Mesh::TriMeshGeo surfaceMesh;
   std::shared_ptr<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy> collisionHandler;
+  // Kinematic `ipc-external-objects`, placed per frame by the runner.
+  std::vector<IPCKinematicExternalObject> kinematicExternalObjects;
 };
 
 IpcSimulationContext buildShellIpcSimulation(const ConfigFileJSON &jconfig);

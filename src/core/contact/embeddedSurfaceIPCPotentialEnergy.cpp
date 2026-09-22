@@ -5,6 +5,7 @@ copyright to Bohan Wang
 #include "embeddedSurfaceIPCPotentialEnergy.h"
 
 #include <stdexcept>
+#include <string>
 
 namespace pgo
 {
@@ -52,6 +53,23 @@ void EmbeddedSurfaceIPCPotentialEnergy::validateCollisionFreeState(
 {
   surfaceIPCCore_.validateCollisionFreeSurfacePositions(
     computeSurfacePositionsFromSimulationDisplacements(simulationDisplacements));
+}
+
+void EmbeddedSurfaceIPCPotentialEnergy::updateExternalSurface(int firstVertex, const EigenSupport::MXd &positions)
+{
+  const int numSurfaceVertices = getNumSurfaceVertices();
+  if (positions.cols() != 3)
+    throw std::invalid_argument("updateExternalSurface requires an N x 3 position matrix.");
+  if (firstVertex < 0 || firstVertex + positions.rows() > numSurfaceVertices)
+    throw std::invalid_argument("updateExternalSurface addresses vertices outside the collision surface.");
+  for (Eigen::Index r = 0; r < positions.rows(); ++r) {
+    if (isSurfaceVertexDeformable(firstVertex + static_cast<int>(r)))
+      throw std::invalid_argument("updateExternalSurface can only move external (non-deformable) surface vertices; vertex " +
+        std::to_string(firstVertex + r) + " is deformable.");
+  }
+
+  overwriteSurfaceRestPositions(firstVertex, positions);
+  surfaceIPCCore_.updateSurfaceMeasures(getSurfaceRestPositions());
 }
 
 void EmbeddedSurfaceIPCPotentialEnergy::updateFriction(

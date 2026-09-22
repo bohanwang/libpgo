@@ -47,10 +47,17 @@ IPCCollisionSurfaceData assembleIPCCollisionSurface(
 
   Eigen::Index vertexOffset = deformableVertices.rows();
   Eigen::Index triangleOffset = deformableTriangles.rows();
+  data.externalRanges.reserve(externalSurfaces.size());
   for (const IPCExternalSurface &surface : externalSurfaces) {
     data.vertices.middleRows(vertexOffset, surface.vertices.rows()) = surface.vertices;
     data.triangles.middleRows(triangleOffset, surface.triangles.rows()) =
       surface.triangles.array() + static_cast<int>(vertexOffset);
+    IPCExternalSurfaceRange range;
+    range.firstVertex = static_cast<int>(vertexOffset);
+    range.numVertices = static_cast<int>(surface.vertices.rows());
+    range.firstTriangle = static_cast<int>(triangleOffset);
+    range.numTriangles = static_cast<int>(surface.triangles.rows());
+    data.externalRanges.push_back(range);
     vertexOffset += surface.vertices.rows();
     triangleOffset += surface.triangles.rows();
   }

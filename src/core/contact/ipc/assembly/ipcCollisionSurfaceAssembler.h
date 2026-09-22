@@ -14,6 +14,15 @@ struct IPCExternalSurface
   EigenSupport::MXi triangles;
 };
 
+// Where one external surface landed inside the combined collision surface.
+struct IPCExternalSurfaceRange
+{
+  int firstVertex = 0;
+  int numVertices = 0;
+  int firstTriangle = 0;
+  int numTriangles = 0;
+};
+
 struct IPCCollisionSurfaceData
 {
   EigenSupport::MXd vertices;
@@ -23,6 +32,9 @@ struct IPCCollisionSurfaceData
   // deformable vertex may have locally zero mapping rows; an external vertex
   // must have zero mapping rows.
   std::vector<uint8_t> vertexIsDeformable;
+  // One entry per external surface, in input order; deformable vertices and
+  // triangles come first, so every range starts after them.
+  std::vector<IPCExternalSurfaceRange> externalRanges;
 };
 
 IPCCollisionSurfaceData assembleIPCCollisionSurface(

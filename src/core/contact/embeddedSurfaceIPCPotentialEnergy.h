@@ -43,6 +43,14 @@ public:
   SurfaceIPCCore::Parameters getIPCParameters() const { return surfaceIPCCore_.getParameters(); }
   double getFrictionCoeff() const { return surfaceIPCCore_.getParameters().frictionCoeff; }
   std::size_t getNumFrictionPairs() const { return surfaceIPCCore_.getNumFrictionPairs(); }
+  // Kinematic external objects. Replaces the positions of the contiguous
+  // external (non-deformable) vertex range starting at firstVertex, keeping
+  // the triangle topology. Mirrors the sampled handler's updateExternalSurface:
+  // the object is frozen inside a frame and moved or deformed between frames.
+  // Barrier and friction weights are recomputed, the prepared pairs are
+  // dropped, and updateFriction() must run again before the next solve.
+  // Deformable vertices cannot be moved this way.
+  void updateExternalSurface(int firstVertex, const EigenSupport::MXd &positions);
   // See SurfaceIPCCore::setDeterministic.
   void setDeterministic(bool on) { surfaceIPCCore_.setDeterministic(on); }
   bool isDeterministic() const { return surfaceIPCCore_.isDeterministic(); }

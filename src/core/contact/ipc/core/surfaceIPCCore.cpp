@@ -281,6 +281,14 @@ void SurfaceIPCCore::validateCollisionFreeSurfacePositions(
   invalidatePreparedState();
 }
 
+void SurfaceIPCCore::updateSurfaceMeasures(EigenSupport::ConstRefVecXd x_surf)
+{
+  validateSurfaceState(x_surf, "measure positions");
+  topology_.updateMeasures(x_surf);
+  invalidatePreparedState();
+  frictionReady_ = false;
+}
+
 void SurfaceIPCCore::validateSurfaceState(EigenSupport::ConstRefVecXd x_surf, const char *argumentName) const
 {
   if (!hasMesh_)

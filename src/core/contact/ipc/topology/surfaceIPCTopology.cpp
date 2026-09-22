@@ -66,11 +66,30 @@ void SurfaceIPCTopology::setMesh(const EigenSupport::MXd &V, const EigenSupport:
       isVertexDeformable(edge[0]) || isVertexDeformable(edge[1]));
   }
 
+  EigenSupport::VXd positions(static_cast<Eigen::Index>(numVerts) * 3);
+  for (int vi = 0; vi < numVerts; ++vi)
+    positions.segment<3>(3 * vi) = V.row(vi).transpose();
+  updateMeasures(positions);
+}
+
+void SurfaceIPCTopology::updateMeasures(EigenSupport::ConstRefVecXd positions)
+{
+  if (positions.size() != numSurfaceDOFs())
+    throw std::invalid_argument("SurfaceIPCTopology measure update requires 3 * numVerts positions.");
+  if (!positions.allFinite())
+    throw std::invalid_argument("SurfaceIPCTopology measure update requires finite positions.");
+
+  const int nTri = static_cast<int>(triangles.size());
+  const int nEdge = static_cast<int>(edges.size());
+  auto vtx = [&](int vi) -> EigenSupport::V3d {
+    return positions.segment<3>(3 * vi);
+  };
+
   triArea.resize(nTri);
   for (int fi = 0; fi < nTri; ++fi) {
-    EigenSupport::V3d v0 = V.row(triangles[fi][0]).transpose();
-    EigenSupport::V3d v1 = V.row(triangles[fi][1]).transpose();
-    EigenSupport::V3d v2 = V.row(triangles[fi][2]).transpose();
+    const EigenSupport::V3d v0 = vtx(triangles[fi][0]);
+    const EigenSupport::V3d v1 = vtx(triangles[fi][1]);
+    const EigenSupport::V3d v2 = vtx(triangles[fi][2]);
     triArea[fi] = 0.5 * (v1 - v0).cross(v2 - v0).norm();
   }
 
@@ -82,11 +101,8 @@ void SurfaceIPCTopology::setMesh(const EigenSupport::MXd &V, const EigenSupport:
   }
 
   edgeLength.resize(nEdge);
-  for (int ei = 0; ei < nEdge; ++ei) {
-    EigenSupport::V3d e0 = V.row(edges[ei][0]).transpose();
-    EigenSupport::V3d e1 = V.row(edges[ei][1]).transpose();
-    edgeLength[ei] = (e1 - e0).norm();
-  }
+  for (int ei = 0; ei < nEdge; ++ei)
+    edgeLength[ei] = (vtx(edges[ei][1]) - vtx(edges[ei][0])).norm();
 }
 
 }  // namespace CIPC
