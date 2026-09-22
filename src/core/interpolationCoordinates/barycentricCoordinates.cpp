@@ -38,6 +38,8 @@
 
 #include <cassert>
 #include <iostream>
+#include <stdexcept>
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <queue>
@@ -127,7 +129,7 @@ void BarycentricCoordinates::initializeInterpolationWeights(int numLocations_, c
 }
 
 BarycentricCoordinates::BarycentricCoordinates(int numLocations_, int numElementVertices_, const int *indices_, const double *weights_,
-  const int *elementIndices_)
+  const int *elementIndices_, int numCageVertices_)
 {
   numLocations = numLocations_;
   numElementVertices = numElementVertices_;
@@ -138,14 +140,37 @@ BarycentricCoordinates::BarycentricCoordinates(int numLocations_, int numElement
   elements.resize(numLocations, -1);
   if (elementIndices_)
     elements.assign(elementIndices_, elementIndices_ + numLocations);
+  resolveNumCageVertices(numCageVertices_);
 }
 
 BarycentricCoordinates::BarycentricCoordinates(const std::vector<Vec4i> &tetVtxIndices, const std::vector<Vec4d> &tetWeights,
-  const int *elementIndices):
+  const int *elementIndices, int numCageVertices_):
   BarycentricCoordinates(std::min(tetVtxIndices.size(), tetWeights.size()), 4,
-    (const int *)tetVtxIndices.data(), (const double *)tetWeights.data(), elementIndices)
+    (const int *)tetVtxIndices.data(), (const double *)tetWeights.data(), elementIndices, numCageVertices_)
 {
   PGO_ALOG(tetVtxIndices.size() == tetWeights.size());
+}
+
+void BarycentricCoordinates::resolveNumCageVertices(int requested)
+{
+  if (requested >= 0) {
+    setNumCageVertices(requested);
+    return;
+  }
+  // Unknown cage: the smallest cage that contains every referenced vertex.
+  int maxIndex = -1;
+  for (int idx : indices)
+    maxIndex = std::max(maxIndex, idx);
+  numCageVertices = maxIndex + 1;
+}
+
+void BarycentricCoordinates::setNumCageVertices(int numCageVertices_)
+{
+  for (int idx : indices) {
+    if (idx < 0 || idx >= numCageVertices_)
+      throw std::invalid_argument("BarycentricCoordinates: an embedding vertex index exceeds the cage vertex count.");
+  }
+  numCageVertices = numCageVertices_;
 }
 
 void BarycentricCoordinates::deform(const double *verticesDisp, double *locationDisp) const
@@ -164,7 +189,12 @@ int BarycentricCoordinates::saveInterpolationWeights(const std::string &filename
 
 ES::SpMatD BarycentricCoordinates::generateInterpolationMatrix() const
 {
-  PGO_ALOG(numCageVertices > 0);
+  if (numCageVertices <= 0)
+    throw std::invalid_argument("BarycentricCoordinates: the cage vertex count is unknown; construct from a mesh or pass numCageVertices.");
+  for (int idx : indices) {
+    if (idx < 0 || idx >= numCageVertices)
+      throw std::invalid_argument("BarycentricCoordinates: an embedding vertex index exceeds the cage vertex count.");
+  }
 
   return ES::createWeightMatrix(numLocations * 3, numCageVertices * 3,
       numLocations, numElementVertices, nullptr, getEmbeddingVertexIndices().data(), getEmbeddingWeights().data(), 3);
@@ -189,7 +219,7 @@ ES::SpMatD BarycentricCoordinates::generateInterpolationMatrix() const
     weights.push_back(w);                                                                                                         \
   } while (0)
 
-BarycentricCoordinates::BarycentricCoordinates(const std::string &filename)
+BarycentricCoordinates::BarycentricCoordinates(const std::string &filename, int numCageVertices_)
 {
   std::ifstream fin(filename.c_str(), std::ios::binary);
   if (!fin) {
@@ -245,4 +275,5 @@ BarycentricCoordinates::BarycentricCoordinates(const std::string &filename)
   std::cout << "Loaded " << numLocations << " locations from file " << filename << " with numElementVertices = " << numElementVertices << "." << std::endl;
   PGO_ALOG((int)indices.size() == numLocations * numElementVertices);
   PGO_ALOG((int)weights.size() == numLocations * numElementVertices);
+  resolveNumCageVertices(numCageVertices_);
 }

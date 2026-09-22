@@ -41,13 +41,19 @@ std::ptrdiff_t ConfigFileJSON::findMatchedToken(const std::string &str, std::ptr
 
   std::ptrdiff_t endIdx = (std::ptrdiff_t)str.size();
   if (tkLeft == tkRight) {
+    const std::ptrdiff_t openIdx = start;
     start++;
 
     // we traverse the string
     while (start < endIdx) {
-      // if the char matches the right
-      if (str[start] == tkRight && start - 1 >= 0 && str[start - 1] != '\\') {
-        return start;
+      if (str[start] == tkRight) {
+        // A quote is escaped only by an odd number of preceding backslashes:
+        // "a\\" ends in an escaped backslash followed by a real closing quote.
+        std::ptrdiff_t numBackslashes = 0;
+        for (std::ptrdiff_t k = start - 1; k > openIdx && str[k] == '\\'; k--)
+          numBackslashes++;
+        if (numBackslashes % 2 == 0)
+          return start;
       }
 
       start++;

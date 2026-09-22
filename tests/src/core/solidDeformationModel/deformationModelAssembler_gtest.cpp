@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
 #include "deformationModelAssembler.h"
+#include "deformationModelEnergy.h"
+#include "potentialEnergies.h"
 #include "deformationModel.h"
 #include "deformationModelManager.h"
 #include "pgoLogging.h"
@@ -288,6 +290,68 @@ TEST(DeformationModelAssemblerGTest, DeterministicAssemblyMatchesDefaultAndRepro
   const AssemblerCase shell = makeShellCase();
   ASSERT_NE(shell.mesh, nullptr);
   expectDeterministicAssemblyMatches(shell);
+}
+
+TEST(DeformationModelAssemblerGTest, EnergyWithAggregateOffsetIndexesItsOwnDOFs)
+{
+  pgo::Logging::init();
+  const AssemblerCase c = makeVolumetricCase(makeSingleElementTetSimulationMesh());
+  ES::VXd rest(c.assembler->getNumDOFs());
+  for (int vi = 0; vi < c.mesh->getNumVertices(); vi++) {
+    double p[3];
+    c.mesh->getVertex(vi, p);
+    rest.segment<3>(vi * 3) = ES::V3d(p[0], p[1], p[2]);
+  }
+  const int n = c.assembler->getNumDOFs();
+  const ES::VXd u = c.x - rest;  // displacement of the perturbed state
+
+  auto makeEnergy = [&](int offset) {
+    auto energy = std::make_shared<pgo::SolidDeformationModel::DeformationModelEnergy>(c.assembler, &rest, offset);
+    energy->setPlasticParams(c.plasticParams);
+    energy->setElasticParams(c.elasticParams);
+    return energy;
+  };
+
+  const auto reference = makeEnergy(0);
+  const double energy0 = reference->func(u);
+  ES::VXd gradient0 = ES::VXd::Zero(n);
+  reference->gradient(u, gradient0);
+  ES::SpMatD hessian0;
+  reference->createHessian(hessian0);
+  reference->hessian(u, hessian0);
+  EXPECT_GT(gradient0.norm(), 0.0);
+
+  // Placed after 5 unrelated DOFs inside an aggregate, the energy must see the
+  // same local vector and scatter into DOFs 5..5+n.
+  constexpr int offset = 5;
+  pgo::NonlinearOptimization::PotentialEnergies aggregate(offset + n);
+  aggregate.addPotentialEnergy(makeEnergy(offset));
+  aggregate.init();
+
+  ES::VXd xAll = ES::VXd::Constant(offset + n, 7.0);  // garbage in the unrelated DOFs
+  xAll.tail(n) = u;
+  EXPECT_NEAR(aggregate.func(xAll), energy0, 1e-12 * std::max(1.0, std::abs(energy0)));
+
+  ES::VXd gradientAll = ES::VXd::Zero(offset + n);
+  aggregate.gradient(xAll, gradientAll);
+  EXPECT_EQ(gradientAll.head(offset).norm(), 0.0);
+  EXPECT_LT((gradientAll.tail(n) - gradient0).norm(), 1e-12 * std::max(1.0, gradient0.norm()));
+
+  ES::SpMatD hessianAll;
+  aggregate.createHessian(hessianAll);
+  aggregate.hessian(xAll, hessianAll);
+  const ES::MXd block = ES::MXd(hessianAll).block(offset, offset, n, n);
+  EXPECT_LT((block - ES::MXd(hessian0)).norm(), 1e-12 * std::max(1.0, ES::MXd(hessian0).norm()));
+  EXPECT_EQ(ES::MXd(hessianAll).topLeftCorner(offset, offset).norm(), 0.0);
+
+  // the material step limit is evaluated on the same local slice
+  ES::VXd du = ES::VXd::Zero(n);
+  du.segment<3>(9) = ES::V3d(0.0, 0.0, -2.0);  // pushes the apex through the base plane
+  ES::VXd duAll = ES::VXd::Zero(offset + n);
+  duAll.tail(n) = du;
+  const double alpha0 = reference->computeMaxStepSize(u, du);
+  EXPECT_LT(alpha0, 1.0);
+  EXPECT_DOUBLE_EQ(aggregate.computeMaxStepSize(xAll, duAll), alpha0);
 }
 
 TEST(DeformationModelAssemblerGTest, TetAssemblerRegression)

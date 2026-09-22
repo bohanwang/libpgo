@@ -516,11 +516,22 @@ inline NpyArrayInfo parse_npy_header(const std::string &header)
     throw std::runtime_error("Could not find fortran_order in header");
   }
 
-  auto pos_f_val = header.find_first_of("TrueFals", pos_f);
+  // The value follows the key's colon; searching from the key itself would
+  // match the 'r' inside "fortran_order".
+  auto pos_f_colon = header.find(':', pos_f + key_fortran.size());
+  if (pos_f_colon == std::string::npos) {
+    throw std::runtime_error("Could not parse fortran_order value");
+  }
+  auto pos_f_val = header.find_first_of("TF", pos_f_colon);
   if (pos_f_val == std::string::npos) {
     throw std::runtime_error("Could not parse fortran_order value");
   }
-  info.fortran_order = (header.compare(pos_f_val, 4, "True") == 0);
+  if (header.compare(pos_f_val, 4, "True") == 0)
+    info.fortran_order = true;
+  else if (header.compare(pos_f_val, 5, "False") == 0)
+    info.fortran_order = false;
+  else
+    throw std::runtime_error("Could not parse fortran_order value");
 
   // Find "shape"
   std::string key_shape = "shape";
@@ -627,10 +638,6 @@ int EigenSupport::readNPY(const char *filename, Eigen::PlainObjectBase<Derived> 
   const size_t cols = info.cols;
   const size_t total_elems = rows * cols;
 
-  if (info.fortran_order) {
-    std::cerr << "Fortran-order arrays not supported in this simple loader";
-  }
-
   if constexpr (std::is_same<typename Derived::Scalar, float>::value) {
     if (info.dtype == "<f4") {
       // double
@@ -680,10 +687,11 @@ int EigenSupport::readNPY(const char *filename, Eigen::PlainObjectBase<Derived> 
     return 1;
   }
 
+  // C order stores rows contiguously, Fortran order stores columns contiguously.
   mat.resize(rows, cols);
   for (int ri = 0; ri < (int)rows; ri++) {
     for (int ci = 0; ci < (int)cols; ci++) {
-      mat(ri, ci) = data[ri * cols + ci];
+      mat(ri, ci) = info.fortran_order ? data[ci * rows + ri] : data[ri * cols + ci];
     }
   }
 

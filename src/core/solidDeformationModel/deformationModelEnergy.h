@@ -18,6 +18,9 @@ class DeformationModelAssembler;
 class DeformationModelEnergy : public NonlinearOptimization::PotentialEnergy
 {
 public:
+  // offset is the position of this energy's first DOF inside an aggregate
+  // (see PotentialEnergies); func/gradient/hessian always take and return
+  // vectors of this energy's own DOFs, i.e. of size getNumDOFs().
   DeformationModelEnergy(std::shared_ptr<DeformationModelAssembler> fma, const EigenSupport::VXd *restPosition = nullptr, int offset = 0);
   virtual ~DeformationModelEnergy();
 

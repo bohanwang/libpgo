@@ -83,6 +83,12 @@ CenterOfMassMatchingEnergy::CenterOfMassMatchingEnergy(const pgo::Mesh::TetMeshG
   m_tet = tetInit;
   m_tgtCoM = tgtCoM;
   m_projMat = projMat;
+
+  // Every vertex coordinate of the tet mesh is a DOF of this energy; the
+  // aggregate energy relies on this list to gather and scatter values.
+  allDOFs.resize(static_cast<std::size_t>(vtxInit.rows()) * 3);
+  std::iota(allDOFs.begin(), allDOFs.end(), 0);
+  hessTemplate.resize(static_cast<Eigen::Index>(allDOFs.size()), static_cast<Eigen::Index>(allDOFs.size()));
 }
 
 CenterOfMassMatchingEnergy::~CenterOfMassMatchingEnergy()

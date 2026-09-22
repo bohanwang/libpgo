@@ -14,6 +14,7 @@
 #include "tetMeshDeformationModel.h"
 #include "triMeshGeo.h"
 #include "cubicMeshDeformationModel.h"
+#include "materialMaxStepPolynomialUtils.h"
 
 #include <algorithm>
 #include <array>
@@ -574,4 +575,30 @@ TEST(DeformationModelEnergyMaxStepGTest, TRBDF2TakesMinWithOtherEnergy)
   integrator.addGeneralImplicitForceModel(std::make_shared<FixedMaxStepEnergy>(fixture.restPositions.size(), 0.2));
   integrator.assembleImplicitModels();
   EXPECT_DOUBLE_EQ(integrator.getTRStageEnergy()->computeMaxStepSize(x, dx), 0.2);
+}
+
+TEST(DeformationModelEnergyMaxStepGTest, SafetyClampNeverPassesTheFeasibleBound)
+{
+  using namespace pgo::SolidDeformationModel;
+  // Linear "determinant" 1e-6 - 2e6 alpha: feasible up to alpha = 5e-13, which
+  // is below the 1e-12 minimum clamp. The clamp must not round past the root.
+  pgo::BasicAlgorithms::CubicPolynomial poly;
+  poly.c0 = 1e-6;
+  poly.c1 = -2e6;
+  const ConservativeFeasibleAlphaResult result = findConservativeFeasibleAlpha(poly, 0.0);
+  EXPECT_FALSE(result.illegalInitialState);
+  EXPECT_GT(result.alpha, 0.0);
+  EXPECT_LE(result.alpha, 5e-13);
+  EXPECT_GE(poly.eval(result.alpha), 0.0);
+
+  // ordinary roots keep the interior safety factor
+  pgo::BasicAlgorithms::CubicPolynomial half;
+  half.c0 = 0.5;
+  half.c1 = -1.0;
+  EXPECT_NEAR(findConservativeFeasibleAlpha(half, 0.0).alpha, 0.5 * kMaterialMaxStepInteriorSafety, 1e-12);
+
+  EXPECT_LE(applyMaterialMaxStepSafetyClamp(5e-13), 5e-13);
+  EXPECT_DOUBLE_EQ(applyMaterialMaxStepSafetyClamp(2e-12), 2e-12 * kMaterialMaxStepInteriorSafety);
+  EXPECT_DOUBLE_EQ(applyMaterialMaxStepSafetyClamp(1.5), 1.0);
+  EXPECT_DOUBLE_EQ(applyMaterialMaxStepSafetyClamp(0.0), 0.0);
 }

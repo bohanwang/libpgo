@@ -1,10 +1,14 @@
 #include "animationLoader.h"
 #include "abcWriter.h"
 
+#include "EigenSupport.h"
 #include "configFileJSON.h"
 #include "pgoLogging.h"
 #include "generateSurfaceMesh.h"
 #include "boundingVolumeTree.h"
+
+#include <filesystem>
+#include <iostream>
 
 using namespace pgo;
 using namespace pgo::AnimationIO;
@@ -69,8 +73,27 @@ int AnimationLoader::load(const char *filename)
     }
 
     if (aseq.displayMeshFilename.length()) {
-      // load obj mesh
-      // scale by embedded scale
+      // The display (render) mesh is a separate OBJ embedded into the driving
+      // mesh below; it is scaled by the embedded scale.
+      Mesh::TriMeshGeo displayMesh;
+      if (displayMesh.load(aseq.displayMeshFilename) != true) {
+        SPDLOG_LOGGER_ERROR(Logging::lgr(), "Failed to load display mesh file: {}", aseq.displayMeshFilename);
+        return 1;
+      }
+      if (displayMesh.numVertices() <= 0 || displayMesh.numTriangles() <= 0) {
+        SPDLOG_LOGGER_ERROR(Logging::lgr(), "Display mesh {} has no geometry.", aseq.displayMeshFilename);
+        return 1;
+      }
+
+      aseq.displayMeshV.resize(displayMesh.numVertices() * 3);
+      for (int vi = 0; vi < displayMesh.numVertices(); vi++)
+        aseq.displayMeshV.segment<3>(vi * 3) = displayMesh.pos(vi) * embeddedScale;
+
+      aseq.displayMeshF.resize(displayMesh.numTriangles());
+      for (int fi = 0; fi < displayMesh.numTriangles(); fi++) {
+        const auto &tri = displayMesh.tri(fi);
+        aseq.displayMeshF[fi] = { tri[0], tri[1], tri[2] };
+      }
     }
     else {
       if (aseq.drivingMeshFilename.find(".obj") != std::string::npos) {
@@ -98,6 +121,23 @@ int AnimationLoader::load(const char *filename)
       }
     }
 
+    const int numDrivingVertices = aseq.triMesh ? aseq.triMesh->numVertices() : (aseq.tetMesh ? aseq.tetMesh->getNumVertices() : 0);
+    if (numDrivingVertices <= 0) {
+      SPDLOG_LOGGER_ERROR(Logging::lgr(), "Driving mesh {} must be an .obj or .veg file with vertices.", aseq.drivingMeshFilename);
+      return 1;
+    }
+    const int n3 = numDrivingVertices * 3;
+
+    if (aseq.sequenceRange.size() != 2 || aseq.sequenceRange[1] <= aseq.sequenceRange[0]) {
+      SPDLOG_LOGGER_ERROR(Logging::lgr(), "sequence-range for {} must be [first, last) with last > first.", aseq.name);
+      return 1;
+    }
+    const int numFrames = aseq.sequenceRange[1] - aseq.sequenceRange[0];
+
+    // <name>-uAll.u next to the config caches the driving displacements
+    // (rows: driving DOFs, columns: frames, before displacement scaling).
+    // save-cache (default 1) enables both writing and reusing it; names
+    // containing "temp" never use the cache.
     std::string uCacheFilename = jconfig.resolvePath(fmt::format("{}-uAll.u", aseq.name));
     size_t foundTemp = aseq.name.find("temp");
     int saveCache = saveCacheGlobal;
@@ -106,92 +146,98 @@ int AnimationLoader::load(const char *filename)
         saveCache = 0;
     }
 
-    if (saveCache == 0 || std::filesystem::exists(uCacheFilename) == false) {
+    if (saveCache && std::filesystem::exists(uCacheFilename)) {
+      ES::MXd cached;
+      if (ES::readMatrix(uCacheFilename.c_str(), cached) != 0) {
+        SPDLOG_LOGGER_ERROR(Logging::lgr(), "Failed to read displacement cache {}; delete it to rebuild it from the sequence.", uCacheFilename);
+        return 1;
+      }
+      if (cached.rows() != n3 || cached.cols() != numFrames) {
+        SPDLOG_LOGGER_ERROR(Logging::lgr(),
+          "Displacement cache {} is {}x{} but the sequence needs {}x{}; delete it to rebuild it from the sequence.",
+          uCacheFilename, cached.rows(), cached.cols(), n3, numFrames);
+        return 1;
+      }
+      SPDLOG_LOGGER_INFO(Logging::lgr(), "Using cached displacements from {}", uCacheFilename);
+      aseq.drivingDisplacements = cached;
+    }
+    else {
+      aseq.drivingDisplacements.resize(n3, numFrames);
+
       if (aseq.sequenceType == "objmesh") {
-        ES::VXd restPositions(aseq.triMesh->numVertices() * 3);
+        if (!aseq.triMesh) {
+          SPDLOG_LOGGER_ERROR(Logging::lgr(), "sequence-type objmesh requires an .obj driving mesh ({}).", aseq.name);
+          return 1;
+        }
+        ES::VXd restPositions(n3);
         for (int vi = 0; vi < aseq.triMesh->numVertices(); vi++) {
           restPositions.segment<3>(vi * 3) = aseq.triMesh->pos(vi);
         }
 
-        std::vector<ES::VXd> disp;
+        // Every frame in the range must exist: a skipped frame would shift all
+        // later samples in the fixed-rate Alembic time sampling.
         for (int i = aseq.sequenceRange[0]; i < aseq.sequenceRange[1]; i++) {
+          const std::string frameFilename = fmt::format(fmt::runtime(aseq.sequenceName), i);
           Mesh::TriMeshGeo frameMesh;
-          if (frameMesh.load(fmt::format(fmt::runtime(aseq.sequenceName), i)) != true) {
-            SPDLOG_LOGGER_WARN(Logging::lgr(), "Failed to load frame mesh: {}", fmt::format(fmt::runtime(aseq.sequenceName), i));
-            continue;
+          if (frameMesh.load(frameFilename) != true) {
+            SPDLOG_LOGGER_ERROR(Logging::lgr(), "Failed to load frame mesh: {}", frameFilename);
+            return 1;
+          }
+          if (frameMesh.numVertices() != numDrivingVertices) {
+            SPDLOG_LOGGER_ERROR(Logging::lgr(), "Frame mesh {} has {} vertices but the driving mesh has {}.",
+              frameFilename, frameMesh.numVertices(), numDrivingVertices);
+            return 1;
           }
 
-          ES::VXd positions(frameMesh.numVertices() * 3);
+          ES::VXd positions(n3);
           for (int vi = 0; vi < frameMesh.numVertices(); vi++) {
             positions.segment<3>(vi * 3) = frameMesh.pos(vi);
           }
 
-          disp.emplace_back(positions - restPositions);
+          aseq.drivingDisplacements.col(i - aseq.sequenceRange[0]) = positions - restPositions;
           std::cout << i << ' ' << std::flush;
         }
-        aseq.drivingDisplacements.resize(disp[0].size(), disp.size());
-        for (size_t i = 0; i < disp.size(); i++) {
-          aseq.drivingDisplacements.col(i) = disp[i];
-        }
+        std::cout << std::endl;
       }
       else if (aseq.sequenceType == "u") {
-        // for (int i = m.sequenceRange[0]; i < m.sequenceRange[1]; i++) {
-        //   std::string uFilename = fmt::format(m.sequenceName, i);
-
-        //   std::vector<double> mat;
-        //   int nr, nc;
-        //   int ret = ReadMatrixFromDisk(uFilename.c_str(), nr, nc, mat);
-        //   if (ret != 0)
-        //     continue;
-
-        //   ALOG(static_cast<int>(m.objMesh->getNumVertices()) * 3 == nr && nc == 1);
-
-        //   m.displacements.emplace_back(std::move(mat));
-
-        //   LG_ << i << ' ';
-        // }
-
-        // LG_ << '\n';
+        // One displacement matrix file per frame (driving DOFs x 1).
+        for (int i = aseq.sequenceRange[0]; i < aseq.sequenceRange[1]; i++) {
+          const std::string uFilename = fmt::format(fmt::runtime(aseq.sequenceName), i);
+          ES::MXd u;
+          if (ES::readMatrix(uFilename.c_str(), u) != 0) {
+            SPDLOG_LOGGER_ERROR(Logging::lgr(), "Failed to load displacement file: {}", uFilename);
+            return 1;
+          }
+          if (u.rows() != n3 || u.cols() < 1) {
+            SPDLOG_LOGGER_ERROR(Logging::lgr(), "Displacement file {} is {}x{} but {} rows are required.", uFilename, u.rows(), u.cols(), n3);
+            return 1;
+          }
+          aseq.drivingDisplacements.col(i - aseq.sequenceRange[0]) = u.col(0);
+        }
       }
       else if (aseq.sequenceType == "uall") {
-        // std::string uFilename = m.sequenceName;
-        // std::vector<double> mat;
-        // int nr, nc;
-        // int ret = ReadMatrixFromDisk(uFilename.c_str(), nr, nc, mat);
-        // if (ret != 0)
-        //   continue;
-
-        // ALOG(static_cast<int>(m.objMesh->getNumVertices()) * 3 == nr);
-
-        // for (int i = m.sequenceRange[0]; i < m.sequenceRange[1] && i < nc; i++) {
-        //   std::vector<double> thisMat;
-        //   thisMat.assign(mat.data() + i * nr, mat.data() + (i + 1) * nr);
-        //   m.displacements.emplace_back(std::move(thisMat));
-        //   LG_ << i << ' ';
-        // }
-        // LG_ << '\n';
+        // One matrix file holding every frame as a column (driving DOFs x frames).
+        ES::MXd uAll;
+        if (ES::readMatrix(aseq.sequenceName.c_str(), uAll) != 0) {
+          SPDLOG_LOGGER_ERROR(Logging::lgr(), "Failed to load displacement file: {}", aseq.sequenceName);
+          return 1;
+        }
+        if (uAll.rows() != n3 || uAll.cols() < aseq.sequenceRange[1]) {
+          SPDLOG_LOGGER_ERROR(Logging::lgr(), "Displacement file {} is {}x{} but {} rows and at least {} columns are required.",
+            aseq.sequenceName, uAll.rows(), uAll.cols(), n3, aseq.sequenceRange[1]);
+          return 1;
+        }
+        aseq.drivingDisplacements = uAll.middleCols(aseq.sequenceRange[0], numFrames);
+      }
+      else {
+        SPDLOG_LOGGER_ERROR(Logging::lgr(), "Unsupported sequence-type `{}` for {}; expected objmesh, u or uall.", aseq.sequenceType, aseq.name);
+        return 1;
       }
 
-      // std::vector<double> uAll;
-      // for (const auto &uframe : m.displacements) {
-      //   uAll.insert(uAll.end(), uframe.begin(), uframe.end());
-      // }
-
-      // if (foundTemp == std::string::npos) {
-      //   std::filesystem::path uAllPath = std::filesystem::path(outputDir) / std::filesystem::path(fmt::format("{}-uAll.u", m.name));
-      //   WriteMatrixToDisk(uAllPath.string().c_str(), (int)m.objMesh->getNumVertices() * 3, (int)m.displacements.size(), uAll.data());
-      // }
-    }
-    else {
-      // std::vector<double> uAll;
-      // int nr, nc;
-      // int ret = ReadMatrixFromDisk(uAllPath.string().c_str(), nr, nc, uAll);
-      // ALOG(ret == 0 && nr == static_cast<int>(m.objMesh->getNumVertices()) * 3);
-
-      // int n3 = (int)m.objMesh->getNumVertices() * 3;
-      // for (int i = 0; i < nc; i++) {
-      //   m.displacements.emplace_back(uAll.data() + i * n3, uAll.data() + (i + 1) * n3);
-      // }
+      if (saveCache) {
+        if (ES::writeMatrix(uCacheFilename.c_str(), aseq.drivingDisplacements) != 0)
+          SPDLOG_LOGGER_WARN(Logging::lgr(), "Failed to write displacement cache {}", uCacheFilename);
+      }
     }
 
     aseq.drivingDisplacements *= displacementScale;
@@ -261,7 +307,22 @@ int AnimationLoader::load(const char *filename)
 
 int AnimationLoader::saveABC(const char *prefix)
 {
+  if (seqs.empty()) {
+    SPDLOG_LOGGER_ERROR(Logging::lgr(), "No animation sequences loaded; nothing to write.");
+    return 1;
+  }
+
   for (const auto &aseq : seqs) {
+    if (aseq.displayMeshV.size() == 0 || aseq.displayMeshF.empty() || aseq.displayDisplacements.cols() == 0) {
+      SPDLOG_LOGGER_ERROR(Logging::lgr(), "Sequence {} has no geometry or no frames; refusing to write an empty archive.", aseq.name);
+      return 1;
+    }
+    if (aseq.displayDisplacements.rows() != aseq.displayMeshV.size()) {
+      SPDLOG_LOGGER_ERROR(Logging::lgr(), "Sequence {} displacements ({} rows) do not match its display mesh ({} DOFs).",
+        aseq.name, aseq.displayDisplacements.rows(), aseq.displayMeshV.size());
+      return 1;
+    }
+
     std::vector<std::vector<float>> disp(aseq.displayDisplacements.cols(), std::vector<float>());
     std::vector<float> pos(aseq.displayMeshV.size());
 

@@ -17,6 +17,16 @@ if(TARGET convertAnimation)
   gtest_discover_tests(convertAnimation_gtest)
 endif()
 
+if(TARGET mergeCloseVertices)
+  add_executable(mergeCloseVertices_gtest mergeCloseVertices_gtest.cpp)
+  target_link_libraries(mergeCloseVertices_gtest PRIVATE GTest::gtest_main)
+  add_dependencies(mergeCloseVertices_gtest mergeCloseVertices)
+  target_compile_definitions(mergeCloseVertices_gtest PRIVATE
+    PGO_TEST_MERGE_CLOSE_VERTICES_BIN="$<TARGET_FILE:mergeCloseVertices>")
+  set_property(TARGET mergeCloseVertices_gtest PROPERTY FOLDER "tests/gtest")
+  gtest_discover_tests(mergeCloseVertices_gtest)
+endif()
+
 add_executable(runSim_gtest
   runSim_gtest.cpp)
 target_link_libraries(runSim_gtest PRIVATE

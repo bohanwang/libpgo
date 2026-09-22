@@ -135,7 +135,9 @@ std::size_t mergeCloseVertices(Mesh &mesh, double eps)
     std::array<VD, 3> tri;
     int k = 0;
     for (auto h : CGAL::halfedges_around_face(halfedge(f, mesh), mesh)) {
-      tri[k++] = target(h, mesh);
+      if (k < 3)
+        tri[k] = target(h, mesh);
+      ++k;  // count every corner; polygons with more than three are skipped below
     }
     if (k != 3)
       continue;  // ensure triangle
@@ -204,16 +206,14 @@ int main(int argc, char **argv)
     // default: 0.5 of the min edge length
     double min_len = 1e100;
     for (FD f : faces(mesh)) {
-      std::array<Point, 10> tri;
-      int k = 0;
-      for (auto h : CGAL::halfedges_around_face(halfedge(f, mesh), mesh)) {
-        tri[k] = mesh.point(target(h, mesh));
-        k = (k + 1) % 10;
-      }
+      std::vector<Point> corners;
+      for (auto h : CGAL::halfedges_around_face(halfedge(f, mesh), mesh))
+        corners.push_back(mesh.point(target(h, mesh)));
 
+      const int k = static_cast<int>(corners.size());
       for (int i = 0; i < k; ++i) {
         int j = (i + 1) % k;
-        double d = std::sqrt(CGAL::squared_distance(tri[i], tri[j]));
+        double d = std::sqrt(CGAL::squared_distance(corners[i], corners[j]));
         if (d < min_len)
           min_len = d;
       }

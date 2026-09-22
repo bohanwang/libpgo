@@ -43,6 +43,8 @@ public:
   int load(const char *filename);
   int saveABC(const char *prefix);
 
+  const std::vector<AnimationSequence> &sequences() const { return seqs; }
+
 private:
   std::vector<AnimationSequence> seqs;
 };

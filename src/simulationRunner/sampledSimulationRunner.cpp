@@ -338,18 +338,24 @@ int pgo::SimulationRunner::runSampledSimulationFromConfig(
 
     ES::mv(W, u, usurf);
 
+    // A single-step run applies the full attachment movement and object
+    // movement in that step instead of dividing by zero.
+    const double stepDenom = numSimSteps > 1 ? static_cast<double>(numSimSteps - 1) : 1.0;
+
     for (size_t eobji = 0; eobji < kinematicObjects.size(); eobji++) {
-      ES::V3d movement = kinematicObjectMovements[eobji] / (numSimSteps - 1) * (frameStart + 1);
+      ES::V3d movement = kinematicObjectMovements[eobji] / stepDenom * (frameStart + 1);
       for (int vi = 0; vi < kinematicObjects[eobji].numVertices(); vi++) {
         kinematicObjects[eobji].pos(vi) += movement;
       }
-      externalContactHandler->updateExternalSurface(eobji, kinematicObjectsRef[eobji]);
+      // The handler only exists when contact is enabled (contact-stiffness > 0).
+      if (externalContactHandler)
+        externalContactHandler->updateExternalSurface(eobji, kinematicObjectsRef[eobji]);
     }
 
     for (int framei = frameStart + 1; framei < numSimSteps; framei++) {
       intg->clearGeneralImplicitForceModel();
 
-      double ratio = (double)framei / (numSimSteps - 1);
+      double ratio = numSimSteps > 1 ? (double)framei / stepDenom : 1.0;
       for (size_t pi = 0; pi < pullingEnergies.size(); pi++) {
         ES::VXd restTgt = pullingTargetRests[pi];
         ES::VXd curTgt = restTgt * (1 - ratio) + pullingTargets[pi] * ratio;
@@ -483,11 +489,12 @@ int pgo::SimulationRunner::runSampledSimulationFromConfig(
       }
 
       for (size_t eobji = 0; eobji < kinematicObjects.size(); eobji++) {
-        ES::V3d movement = kinematicObjectMovements[eobji] / (numSimSteps - 1);
+        ES::V3d movement = kinematicObjectMovements[eobji] / stepDenom;
         for (int vi = 0; vi < kinematicObjects[eobji].numVertices(); vi++) {
           kinematicObjects[eobji].pos(vi) += movement;
         }
-        externalContactHandler->updateExternalSurface(eobji, kinematicObjectsRef[eobji]);
+        if (externalContactHandler)
+          externalContactHandler->updateExternalSurface(eobji, kinematicObjectsRef[eobji]);
       }
 
       ES::MXd uMat(n3, 3);

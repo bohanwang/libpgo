@@ -49,7 +49,11 @@ double applyMaterialMaxStepSafetyClamp(double alpha)
     return 1.0;
   }
 
-  return std::max(kMaterialMaxStepMinClamp, std::min(1.0, alpha * kMaterialMaxStepInteriorSafety));
+  // Shrink strictly inside the feasible interval. The minimum clamp keeps a
+  // vanishing bound from stalling the solver with an exactly zero step, but it
+  // must never move the result past the feasible bound itself.
+  const double interior = std::min(1.0, alpha * kMaterialMaxStepInteriorSafety);
+  return std::min(alpha, std::max(kMaterialMaxStepMinClamp, interior));
 }
 
 ConservativeFeasibleAlphaResult findConservativeFeasibleAlpha(const BasicAlgorithms::CubicPolynomial &poly, double eps)

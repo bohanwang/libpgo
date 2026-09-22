@@ -7,7 +7,7 @@ set_property(TARGET simulationMesh_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(simulationMesh_gtest)
 
 add_executable(deformationModelAssembler_gtest deformationModelAssembler_gtest.cpp)
-target_link_libraries(deformationModelAssembler_gtest PRIVATE GTest::gtest_main solidDeformationModel volumetricMesh mesh)
+target_link_libraries(deformationModelAssembler_gtest PRIVATE GTest::gtest_main solidDeformationModel nonlinearOptimization volumetricMesh mesh)
 target_compile_definitions(deformationModelAssembler_gtest PRIVATE
   LIBPGO_TEST_TORUS_VEG="${CMAKE_SOURCE_DIR}/examples/assets/common/torus-tet.veg"
   LIBPGO_TEST_SHELL_OBJ="${CMAKE_SOURCE_DIR}/examples/assets/shell/shell.obj"

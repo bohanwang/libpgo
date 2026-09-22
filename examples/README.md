@@ -197,5 +197,15 @@ mkdir -p <abc-output-directory>
 uv run pgo-dump-abc <animation-config.json> <abc-output-directory>
 ```
 
+The converter fails with a nonzero exit code, instead of writing an empty or
+mistimed archive, when a frame in `sequence-range` is missing, a frame's vertex
+count differs from the driving mesh, the `display-mesh` cannot be loaded, or
+the `sequence-type` is unknown. Supported types are `objmesh` (one OBJ per
+frame), `u` (one displacement matrix file per frame, `.u` format) and `uall`
+(a single matrix whose columns are the frames). With `save-cache` (default 1)
+the driving displacements are stored next to the config as `<name>-uAll.u` and
+reused on later conversions; delete that file after regenerating the frames,
+because a cache whose size does not match the sequence is rejected.
+
 Follow the README inside a scene config directory when it provides additional
 setup instructions or reference results.

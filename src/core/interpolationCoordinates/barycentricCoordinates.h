@@ -52,17 +52,22 @@ class BarycentricCoordinates : public InterpolationCoordinatesBase
 public:
   BarycentricCoordinates() {}
 
-  // Load from file. No element indices are available.
-  BarycentricCoordinates(const std::string &filename);
+  // Load from file. No element indices are available. The file stores only
+  // (vertex index, weight) pairs, so pass the cage's vertex count when it has
+  // vertices beyond the largest referenced index; otherwise it is inferred as
+  // the largest referenced index + 1.
+  BarycentricCoordinates(const std::string &filename, int numCageVertices = -1);
 
   // Compute barycentric coordinates and element indices.
   BarycentricCoordinates(int numLocations, const double *locations, const VolumetricMeshes::VolumetricMesh *volumetricMesh);
 
   // Initialize with only element vertex indices and weights. No element indices are available.
+  // numCageVertices < 0 infers the cage size as the largest referenced index + 1.
   BarycentricCoordinates(int numLocations, int numElementVertices, const int *elementVertexIndices, const double *weights,
-    const int *elementIndices = nullptr);
+    const int *elementIndices = nullptr, int numCageVertices = -1);
 
-  BarycentricCoordinates(const std::vector<EigenSupport::V4i> &tetVtxIndices, const std::vector<EigenSupport::V4d> &tetWeights, const int *elementIndices = nullptr);
+  BarycentricCoordinates(const std::vector<EigenSupport::V4i> &tetVtxIndices, const std::vector<EigenSupport::V4d> &tetWeights,
+    const int *elementIndices = nullptr, int numCageVertices = -1);
 
   virtual ~BarycentricCoordinates() {}
 
@@ -89,10 +94,16 @@ public:
   // Save weights to file.
   int saveInterpolationWeights(const std::string &filename) const;
 
+  // Number of columns (vertices) of the cage the weights refer to.
+  int getNumCageVertices() const { return numCageVertices; }
+  void setNumCageVertices(int numCageVertices_);
+
+  // Throws std::invalid_argument when the cage size is unknown or an index exceeds it.
   EigenSupport::SpMatD generateInterpolationMatrix() const;
 
 protected:
   void initializeInterpolationWeights(int numLocations_, const double *locations, const VolumetricMeshes::VolumetricMesh *volumetricMesh);
+  void resolveNumCageVertices(int requested);
   int numLocations = 0;
   int numElementVertices = 0;
   int numCageVertices = 0;

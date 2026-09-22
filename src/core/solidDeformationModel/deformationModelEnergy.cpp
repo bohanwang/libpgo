@@ -46,35 +46,38 @@ DeformationModelEnergy::~DeformationModelEnergy()
 {
 }
 
+// x, grad and hess are expressed in this energy's own DOFs (size getNumDOFs()).
+// The constructor offset only places those DOFs inside an aggregate such as
+// PotentialEnergies, which gathers them before calling these methods.
 double DeformationModelEnergy::func(EigenSupport::ConstRefVecXd x) const
 {
   if (restPosition.size()) {
-    ES::VXd p = restPosition + x.segment(allDOFs[0], restPosition.size());
+    ES::VXd p = restPosition + x.head(restPosition.size());
     return forceModelAssembler->computeEnergy(p.data(), plasticParams.data(), elasticParams.data());
   }
   else
-    return forceModelAssembler->computeEnergy(x.data() + allDOFs[0], plasticParams.data(), elasticParams.data());
+    return forceModelAssembler->computeEnergy(x.data(), plasticParams.data(), elasticParams.data());
 }
 
 void DeformationModelEnergy::gradient(EigenSupport::ConstRefVecXd x, EigenSupport::RefVecXd grad) const
 {
   if (restPosition.size()) {
-    ES::VXd p = restPosition + x.segment(allDOFs[0], restPosition.size());
+    ES::VXd p = restPosition + x.head(restPosition.size());
     forceModelAssembler->computeGradient(p.data(), plasticParams.data(), elasticParams.data(), grad.data());
   }
   else {
-    forceModelAssembler->computeGradient(x.data() + allDOFs[0], plasticParams.data(), elasticParams.data(), grad.data());
+    forceModelAssembler->computeGradient(x.data(), plasticParams.data(), elasticParams.data(), grad.data());
   }
 }
 
 void DeformationModelEnergy::hessian(EigenSupport::ConstRefVecXd x, EigenSupport::SpMatD &hess) const
 {
   if (restPosition.size()) {
-    ES::VXd p = restPosition + x.segment(allDOFs[0], restPosition.size());
+    ES::VXd p = restPosition + x.head(restPosition.size());
     forceModelAssembler->computeHessian(p.data(), plasticParams.data(), elasticParams.data(), hess);
   }
   else {
-    forceModelAssembler->computeHessian(x.data() + allDOFs[0], plasticParams.data(), elasticParams.data(), hess);
+    forceModelAssembler->computeHessian(x.data(), plasticParams.data(), elasticParams.data(), hess);
   }
 }
 
@@ -89,14 +92,13 @@ double DeformationModelEnergy::computeMaxStepSize(EigenSupport::ConstRefVecXd x,
     return 1.0;
   }
 
-  const int offset = allDOFs.empty() ? 0 : allDOFs[0];
   const int numDOFs = getNumDOFs();
 
-  const ES::VXd dxLocal = assembleDirectionSlice(dx, offset, numDOFs);
+  const ES::VXd dxLocal = assembleDirectionSlice(dx, 0, numDOFs);
   if (dxLocal.size() == 0 || dxLocal.squaredNorm() == 0.0) {
     return 1.0;
   }
 
-  const ES::VXd absolutePositions = assembleAbsolutePositions(x, restPosition, offset, numDOFs);
+  const ES::VXd absolutePositions = assembleAbsolutePositions(x, restPosition, 0, numDOFs);
   return forceModelAssembler->computeMaxStepObservation(absolutePositions.data(), dxLocal.data()).alpha;
 }

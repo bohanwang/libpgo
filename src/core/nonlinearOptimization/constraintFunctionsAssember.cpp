@@ -185,6 +185,10 @@ void ConstraintFunctionsAssembler::jacobian(ES::ConstRefVecXd x, ES::SpMatD &jac
 
 void ConstraintFunctionsAssembler::hessian(ES::ConstRefVecXd x, ES::ConstRefVecXd lambda, ES::SpMatD &hess) const
 {
+  // Like every ConstraintFunctions implementation, write the full value rather
+  // than accumulating onto whatever the caller's matrix holds.
+  memset(hess.valuePtr(), 0, sizeof(double) * hess.nonZeros());
+
   for (size_t i = 0; i < constraints1D.size(); i++) {
     if (buf->constraints1D_H[i].nonZeros() == 0)
       continue;
@@ -217,8 +221,11 @@ void ConstraintFunctionsAssembler::hessianVector(ES::ConstRefVecXd x, ES::ConstR
     ES::mv(buf->hess, vec, hessVec);
 
     ES::VXd temp(hessVec.size());
-    for (size_t i = 0; i < constraints1D.size(); i++) {
-      constraintsND[i]->hessianVector(x, lambda, vec, temp);
+    for (size_t i = 0; i < constraintsND.size(); i++) {
+      const ES::IDX dim = constraintNDOffsets[i + 1] - constraintNDOffsets[i];
+      const ES::IDX start = constraintNDOffsets[i];
+      temp.setZero();
+      constraintsND[i]->hessianVector(x, lambda.segment(start, dim), vec, temp);
       hessVec += temp;
     }
   }

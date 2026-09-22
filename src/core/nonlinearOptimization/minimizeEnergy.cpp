@@ -517,11 +517,17 @@ int EnergyOptimizer::minimizeUsingNewton(EigenSupport::RefVecXd x, PotentialEner
     (void)clow, (void)chi;
   }
 
+  // A DOF whose bounds coincide is held at that value; the solver needs both
+  // the indices and the values.
   std::vector<int> fixedDOFs;
+  std::vector<double> fixedValues;
   fixedDOFs.reserve(energy->getNumDOFs());
-  for (int i = 0; i < energy->getNumDOFs(); i++)
-    if (xlow[i] == xhi[i])
+  for (int i = 0; i < energy->getNumDOFs(); i++) {
+    if (xlow[i] == xhi[i]) {
       fixedDOFs.push_back((int)i);
+      fixedValues.push_back(xlow[i]);
+    }
+  }
 
   std::shared_ptr<const PotentialEnergy> L;
   if (constraints) {
@@ -531,11 +537,8 @@ int EnergyOptimizer::minimizeUsingNewton(EigenSupport::RefVecXd x, PotentialEner
     L = energy;
   }
 
-  NewtonSolver::SolverParam solverParam;
-  solverParam.lsm = NewtonSolver::LSM_SIMPLE;
-  // solverParam.lsm = NewtonSolver::LSM_BRENTS;
-  // solverParam.sst = NewtonSolver::SST_SUBITERATION_ONE;
-  NewtonSolver solver(x.data(), solverParam, L, fixedDOFs);
+  // The solver reads getNumDOFs() entries from its initial vector, which for a
+  // Lagrangian includes the multipliers, so build the full vector first.
   ES::VXd xinit(L->getNumDOFs());
   xinit.head(energy->getNumDOFs()) = x;
 
@@ -545,6 +548,12 @@ int EnergyOptimizer::minimizeUsingNewton(EigenSupport::RefVecXd x, PotentialEner
     else
       xinit.tail(constraints->getNumConstraints()) = ES::VXd::Zero(constraints->getNumConstraints());
   }
+
+  NewtonSolver::SolverParam solverParam;
+  solverParam.lsm = NewtonSolver::LSM_SIMPLE;
+  // solverParam.lsm = NewtonSolver::LSM_BRENTS;
+  // solverParam.sst = NewtonSolver::SST_SUBITERATION_ONE;
+  NewtonSolver solver(xinit.data(), solverParam, L, fixedDOFs, fixedValues.empty() ? nullptr : fixedValues.data());
 
   int ret = solver.solve(xinit.data(), maxIter, eps, verbose);
 

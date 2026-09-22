@@ -136,10 +136,19 @@ int pgo::TetgenInterface::computeTetMesh(const Mesh::TriMeshGeo &mesh, const std
   }
 
   if (tout.numberoftetrahedra > 0) {
+    // With the -o2 switch TetGen emits ten nodes per tetrahedron (corners plus
+    // edge midpoints); this pipeline only consumes linear tetrahedra.
+    if (tout.numberofcorners != 4) {
+      std::cerr << "TetGen produced " << tout.numberofcorners
+                << " nodes per tetrahedron; second-order (o2) output is not supported. Remove 'o2' from the switches.\n";
+      return 1;
+    }
+
+    const int stride = tout.numberofcorners;
     tet.resize(tout.numberoftetrahedra, 4);
     for (int i = 0; i < tout.numberoftetrahedra; i++) {
       for (int j = 0; j < 4; j++) {
-        tet(i, j) = tout.tetrahedronlist[i * 4 + j];
+        tet(i, j) = tout.tetrahedronlist[i * stride + j];
       }
     }
 

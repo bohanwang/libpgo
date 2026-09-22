@@ -3,6 +3,8 @@
 #include <gmsh.h>
 
 #include <iostream>
+#include <stdexcept>
+#include <unordered_map>
 #include <vector>
 
 namespace pgo::VolumetricMeshes
@@ -25,6 +27,12 @@ TetMesh loadMshFile(const char *filename)
   std::vector<pgo::Vec3d> vertices(nodeTags.size());
   std::vector<pgo::Vec4i> elements;
 
+  // Node tags are unique but need not be contiguous or ordered, so element
+  // connectivity must be mapped through the tag -> array index table rather
+  // than assumed to be tag - 1.
+  std::unordered_map<std::size_t, int> tagToIndex;
+  tagToIndex.reserve(nodeTags.size());
+
   // Each node has (x, y, z)
   for (size_t i = 0; i < nodeTags.size(); ++i) {
     double x = nodeCoords[3 * i + 0];
@@ -32,6 +40,7 @@ TetMesh loadMshFile(const char *filename)
     double z = nodeCoords[3 * i + 2];
 
     vertices[i] = pgo::Vec3d(x, y, z);
+    tagToIndex[nodeTags[i]] = static_cast<int>(i);
   }
 
   // 4. Retrieve element connectivity
@@ -42,7 +51,13 @@ TetMesh loadMshFile(const char *filename)
   for (size_t i = 0; i < elemTags.size(); ++i) {
     pgo::Vec4i tet;
     for (int j = 0; j < 4; ++j) {
-      tet[j] = static_cast<int>(elemNodes[4 * i + j] - 1);  // convert to 0-based index
+      const std::size_t tag = elemNodes[4 * i + j];
+      auto it = tagToIndex.find(tag);
+      if (it == tagToIndex.end()) {
+        gmsh::finalize();
+        throw std::runtime_error("loadMshFile: tetrahedron " + std::to_string(elemTags[i]) + " references unknown node tag " + std::to_string(tag));
+      }
+      tet[j] = it->second;
     }
     elements.push_back(tet);
   }

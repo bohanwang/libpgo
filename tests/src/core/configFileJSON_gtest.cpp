@@ -127,3 +127,33 @@ TEST(ConfigFileJSONGTest, PreservesLegacyTokenHelpers)
   EXPECT_EQ(config.getPathFromKey("asset-path", "asset", "/tmp/assets"), "/tmp/assets/mesh.obj");
   EXPECT_EQ(pgo::ConfigFileJSON::getPathFromInput("{asset}/mesh.obj", "asset", "/tmp/assets"), "/tmp/assets/mesh.obj");
 }
+
+TEST(ConfigFileJSONGTest, StringsEndingInEscapedBackslashAreParsed)
+{
+  namespace fs = std::filesystem;
+  const fs::path dir = fs::temp_directory_path() /
+    ("libpgo-configFileJSON-gtest-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  fs::create_directories(dir);
+  const fs::path configPath = dir / "backslash.json";
+  {
+    std::ofstream out(configPath);
+    ASSERT_TRUE(out.is_open());
+    // "C:\\Users\\" ends in an escaped backslash followed by a real closing
+    // quote; "a//b" contains a comment marker inside a string; the trailing
+    // "// note" is a real comment that must still be stripped.
+    out << "{\n"
+        << "  \"dir\": \"C:\\\\Users\\\\\",\n"
+        << "  \"url\": \"a//b\", // note\n"
+        << "  \"n\": 1\n"
+        << "}\n";
+  }
+
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+  EXPECT_EQ(config.getString("dir"), "C:\\Users\\");
+  EXPECT_EQ(config.getString("url"), "a//b");
+  EXPECT_EQ(config.getInt("n"), 1);
+
+  std::error_code ec;
+  fs::remove_all(dir, ec);
+}

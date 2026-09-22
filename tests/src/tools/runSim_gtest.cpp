@@ -602,3 +602,107 @@ TEST(RunSimVolumeMeshIOGTest, SelfContactRejectsMalformedEmbeddingArrays)
       1, &input.embeddingVertexIndices, &input.embeddingWeights);
   }, "embedding");
 }
+
+namespace
+{
+class SampledRunTempDir
+{
+public:
+  SampledRunTempDir()
+  {
+    dir_ = fs::temp_directory_path() /
+      ("libpgo-runSim-sampled-gtest-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(dir_);
+  }
+  ~SampledRunTempDir()
+  {
+    std::error_code ec;
+    fs::remove_all(dir_, ec);
+  }
+  const fs::path &path() const { return dir_; }
+
+private:
+  fs::path dir_;
+};
+
+// A dynamic sampled-contact configuration on the tet box with the fixture floor
+// as an external object; the caller adjusts the fields under test.
+std::string sampledBoxConfig(const fs::path &outputDir, int numTimesteps, double contactStiffness,
+  const std::string &fixedVertexFile, const std::string &fixedMovement)
+{
+  const fs::path floor = tetExampleDir() / "bottom-large.obj";
+  std::ostringstream json;
+  json << "{\n"
+       << "  \"tet-mesh\": \"" << fs::path(kTetBoxVegPath).generic_string() << "\",\n"
+       << "  \"surface-mesh\": \"" << fs::path(kTetBoxObjPath).generic_string() << "\",\n"
+       << "  \"fixed-vertices\": [";
+  if (!fixedVertexFile.empty())
+    json << "{ \"filename\": \"" << fixedVertexFile << "\", \"movement\": " << fixedMovement << ", \"coeff\": 1e5 }";
+  json << "],\n"
+       << "  \"external-objects\": [ { \"filename\": \"" << floor.generic_string() << "\", \"movement\": [0, 0.01, 0] } ],\n"
+       << "  \"g\": [0, -9.81, 0],\n  \"init-vel\": [0, 0, 0],\n  \"init-disp\": [0, 0, 0],\n  \"scale\": 1.0,\n"
+       << "  \"timestep\": 0.001,\n  \"num-timestep\": " << numTimesteps << ",\n  \"damping-params\": [0, 0],\n"
+       << "  \"sim-type\": \"dynamic\",\n  \"contact-model\": \"sampled\",\n"
+       << "  \"contact-stiffness\": " << contactStiffness << ",\n  \"contact-sample\": 2,\n"
+       << "  \"contact-friction-coeff\": 0.0,\n  \"contact-vel-eps\": 1e-5,\n"
+       << "  \"solver-eps\": 1e-4,\n  \"solver-max-iter\": 10,\n  \"elastic-material\": \"stable-neo\",\n"
+       << "  \"dump-interval\": 1,\n  \"output\": \"" << outputDir.generic_string() << "\"\n}\n";
+  return json.str();
+}
+
+void writeSampledConfig(const fs::path &path, const std::string &contents)
+{
+  std::ofstream out(path);
+  ASSERT_TRUE(out.is_open());
+  out << contents;
+}
+
+void expectFiniteState(const fs::path &statePath, int rows)
+{
+  ASSERT_TRUE(fs::exists(statePath)) << statePath;
+  ES::MXd state;
+  ASSERT_EQ(ES::readMatrix(statePath.string().c_str(), state), 0);
+  EXPECT_EQ(state.rows(), rows);
+  EXPECT_TRUE(state.allFinite());
+}
+}  // namespace
+
+TEST(RunSimSampledGTest, ExternalObjectsWithZeroContactStiffnessDoNotCrash)
+{
+  pgo::Logging::init();
+  SampledRunTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "no-contact.json";
+  const fs::path outputDir = tempDir.path() / "out";
+  // contact-stiffness 0 disables the contact handler while the external object
+  // (and its per-frame movement) stays in the config
+  writeSampledConfig(configPath, sampledBoxConfig(outputDir, 2, 0.0, "", "[0, 0, 0]"));
+
+  ASSERT_EQ(pgo::SimulationRunner::runSampledSimulationFromConfig(configPath), 0);
+  pgo::VolumetricMeshes::TetMesh tetMesh(kTetBoxVegPath);
+  expectFiniteState(outputDir / "deform0001.u", tetMesh.getNumVertices() * 3);
+}
+
+TEST(RunSimSampledGTest, SingleStepRunAppliesTheFullMovementWithoutNaN)
+{
+  pgo::Logging::init();
+  SampledRunTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "one-step.json";
+  const fs::path outputDir = tempDir.path() / "out";
+  const fs::path fixedFile = tempDir.path() / "fixed.txt";
+  {
+    std::ofstream out(fixedFile);
+    ASSERT_TRUE(out.is_open());
+    out << "0\n";
+  }
+  // one time step: attachment interpolation and object movement used to divide by numSimSteps - 1 = 0
+  writeSampledConfig(configPath, sampledBoxConfig(outputDir, 1, 1e5, fixedFile.generic_string(), "[0, -0.02, 0]"));
+
+  ASSERT_EQ(pgo::SimulationRunner::runSampledSimulationFromConfig(configPath), 0);
+  pgo::VolumetricMeshes::TetMesh tetMesh(kTetBoxVegPath);
+  const fs::path statePath = outputDir / "deform0000.u";
+  expectFiniteState(statePath, tetMesh.getNumVertices() * 3);
+  ES::MXd state;
+  ASSERT_EQ(ES::readMatrix(statePath.string().c_str(), state), 0);
+  // the pulled vertex moved toward its full target within the single step
+  EXPECT_LT(state(1, 0), 0.0);
+}

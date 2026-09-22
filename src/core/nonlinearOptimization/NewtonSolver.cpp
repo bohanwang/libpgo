@@ -4,6 +4,7 @@
 #include "lineSearch.h"
 #include "pgoLogging.h"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -75,6 +76,9 @@ NewtonSolver::NewtonSolver(const double *x_, SolverParam sp, PotentialEnergy_con
     };
 
     lineSearchHandle->nativeLineSearch = std::make_shared<LineSearch>(n3, evalFunc);
+    // solve() scales the direction by the CCD/material bound first, so only
+    // alpha in [0, 1] is certified feasible.
+    lineSearchHandle->nativeLineSearch->setBounds(0.0, 1.0);
   }
 }
 
@@ -373,6 +377,17 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
           }
 
           alpha *= 0.5;
+        }
+      }
+
+      // The bracketing searches may still report a point outside [0, 1]; never
+      // apply a step beyond the certified direction.
+      if (solverParam.lsm == LSM_GOLDEN || solverParam.lsm == LSM_BRENTS) {
+        const double clampedAlpha = std::clamp(alpha, 0.0, 1.0);
+        if (clampedAlpha != alpha) {
+          alpha = clampedAlpha;
+          lineSearchx.noalias() = x + deltax * alpha;
+          eng1 = energy->func(lineSearchx);
         }
       }
 

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "NewtonSolver.h"
+#include "minimizeEnergy.h"
 #include "deformationModelAssembler.h"
 #include "deformationModel.h"
 #include "deformationModelEnergy.h"
@@ -110,6 +111,51 @@ public:
   }
   void getDOFs(std::vector<int> &dofs) const override { dofs = { 0 }; }
   int getNumDOFs() const override { return 1; }
+};
+
+// 0.5 (x - 10)^2 whose feasibility bound certifies only a quarter of the
+// Newton step, mimicking a CCD or material limit.
+class BoundedQuadraticEnergy final : public NO::PotentialEnergy
+{
+public:
+  double func(ES::ConstRefVecXd x) const override { return 0.5 * (x[0] - 10.0) * (x[0] - 10.0); }
+  void gradient(ES::ConstRefVecXd x, ES::RefVecXd gradient) const override { gradient[0] = x[0] - 10.0; }
+  void hessian(ES::ConstRefVecXd, ES::SpMatD &hessian) const override { hessian.coeffRef(0, 0) = 1.0; }
+  void createHessian(ES::SpMatD &hessian) const override
+  {
+    hessian.resize(1, 1);
+    hessian.insert(0, 0) = 0.0;
+    hessian.makeCompressed();
+  }
+  void getDOFs(std::vector<int> &dofs) const override { dofs = { 0 }; }
+  int getNumDOFs() const override { return 1; }
+  double computeMaxStepSize(ES::ConstRefVecXd, ES::ConstRefVecXd) const override { return 0.25; }
+};
+
+// 0.5 |x - (3, 4)|^2 with a fixed-topology 2x2 Hessian.
+class TwoDofQuadraticEnergy final : public NO::PotentialEnergy
+{
+public:
+  double func(ES::ConstRefVecXd x) const override { return 0.5 * ((x[0] - 3.0) * (x[0] - 3.0) + (x[1] - 4.0) * (x[1] - 4.0)); }
+  void gradient(ES::ConstRefVecXd x, ES::RefVecXd gradient) const override
+  {
+    gradient[0] = x[0] - 3.0;
+    gradient[1] = x[1] - 4.0;
+  }
+  void hessian(ES::ConstRefVecXd, ES::SpMatD &hessian) const override
+  {
+    hessian.coeffRef(0, 0) = 1.0;
+    hessian.coeffRef(1, 1) = 1.0;
+  }
+  void createHessian(ES::SpMatD &hessian) const override
+  {
+    hessian.resize(2, 2);
+    hessian.insert(0, 0) = 0.0;
+    hessian.insert(1, 1) = 0.0;
+    hessian.makeCompressed();
+  }
+  void getDOFs(std::vector<int> &dofs) const override { dofs = { 0, 1 }; }
+  int getNumDOFs() const override { return 2; }
 };
 
 class InspectableNewtonSolver final : public NO::NewtonSolver
@@ -317,6 +363,47 @@ TEST(NewtonSolverGTest, StopsAfterFailedLineSearchRegardlessOfVerbosity)
     EXPECT_EQ(iterationsRun, 0) << "verbose=" << verbose;
     EXPECT_DOUBLE_EQ(x, 3.0) << "verbose=" << verbose;
   }
+}
+
+TEST(NewtonSolverGTest, BracketingLineSearchesStayWithinTheFeasibleStep)
+{
+  pgo::Logging::init();
+  // The Newton step is 10 and the certified fraction is 0.25, so no accepted
+  // step may move x beyond 2.5. Unbounded golden/Brent bracketing would expand
+  // past that toward the unconstrained minimum at 10.
+  for (auto lsm : { NO::NewtonSolver::LSM_GOLDEN, NO::NewtonSolver::LSM_BRENTS }) {
+    const auto energy = std::make_shared<BoundedQuadraticEnergy>();
+    NO::NewtonSolver::SolverParam params;
+    params.lsm = lsm;
+    double x = 0.0;
+    NO::NewtonSolver solver(&x, params, energy, {});
+
+    testing::internal::CaptureStdout();
+    solver.solve(&x, 1, 1e-8, 0);
+    testing::internal::GetCapturedStdout();
+
+    EXPECT_LE(x, 2.5 + 1e-9) << "lsm=" << lsm;
+    EXPECT_GT(x, 2.0) << "lsm=" << lsm;  // the energy keeps decreasing up to the bound
+  }
+}
+
+TEST(NewtonSolverGTest, MinimizeWithNewtonHoldsFixedBoundsAtTheirValue)
+{
+  pgo::Logging::init();
+  const auto energy = std::make_shared<TwoDofQuadraticEnergy>();
+  ES::VXd x(2), xlow(2), xhi(2);
+  x << 0.0, 0.0;
+  // equal bounds fix DOF 0 at 1; DOF 1 is free
+  xlow << 1.0, -1e9;
+  xhi << 1.0, 1e9;
+
+  testing::internal::CaptureStdout();
+  const int status = NO::EnergyOptimizer::minimize(x, energy, xlow, xhi, NO::EnergyOptimizer::SolverType::ST_NEWTON, 20, 1e-10, 0);
+  testing::internal::GetCapturedStdout();
+
+  EXPECT_EQ(status, NO::NewtonSolver::SOLVE_CONVERGED);
+  EXPECT_DOUBLE_EQ(x[0], 1.0);
+  EXPECT_NEAR(x[1], 4.0, 1e-9);
 }
 
 TEST(NewtonSolverGTest, ReportsNumericalFailureInsteadOfAborting)

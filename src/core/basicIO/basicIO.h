@@ -84,7 +84,7 @@ int write1DBinary(const char *filename, Iter itBeg, Iter itEnd)
     return 1;
 
   for (auto it = itBeg; it != itEnd; ++it) {
-    typename std::iter_value_t<Iter> &refVal = *it;
+    const typename std::iter_value_t<Iter> &refVal = *it;
     outfile.write((const char *)&refVal, sizeof(refVal));
   }
 
@@ -106,7 +106,7 @@ int read1DBinary(const char *filename, Iter itBeg, size_t maxAllowedCount = 0ull
 
   typename output_iterator_traits<Iter>::value_type tempScalar;
   size_t count = 0ull;
-  while (!infile.eof() && count < maxAllowedCount && infile.read((char *)tempScalar, sizeof(tempScalar))) {
+  while (!infile.eof() && count < maxAllowedCount && infile.read((char *)&tempScalar, sizeof(tempScalar))) {
     (*itBeg) = tempScalar;
     ++itBeg;
     ++count;
