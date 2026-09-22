@@ -109,8 +109,18 @@ ShellMaterial parseShellMaterial(const pgo::ConfigFileJSON &jconfig)
     throwConfigError("runIPCSim phase1D shell path only supports `elastic-material = koiter-stvk`.");
   const double E = parseOptionalPositive(jconfig, "shell-youngs-modulus", 1000000.0);
   const double bendingE = parseOptionalPositive(jconfig, "shell-bending-youngs-modulus", E);
+  // The Koiter St. Venant-Kirchhoff model converts each modulus to Lame
+  // constants with its Poisson's ratio; 1/(1 - 2 nu) requires nu < 0.5.
+  auto parsePoisson = [&](const char *key, double defaultValue) {
+    const double nu = jconfig.getValue<double>(key, 0, defaultValue);
+    if (!std::isfinite(nu) || nu <= -1.0 || nu >= 0.5)
+      throwConfigError(std::string("`") + key + "` must be finite and in (-1, 0.5).");
+    return nu;
+  };
+  const double nu = parsePoisson("shell-poisson-ratio", 0.4);
+  const double bendingNu = parsePoisson("shell-bending-poisson-ratio", nu);
   material.type = SolidDeformationModel::DeformationModelElasticMaterial::KOITER_STVK;
-  material.elementParams = { E, 0.4, bendingE, 0.4, material.thickness };
+  material.elementParams = { E, nu, bendingE, bendingNu, material.thickness };
   material.membraneStiffness = E;
   return material;
 }

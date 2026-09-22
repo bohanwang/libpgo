@@ -150,6 +150,30 @@ Deformation of an object with fixed triangle topology is supported through
 `EmbeddedSurfaceIPCPotentialEnergy::updateExternalSurface`; the config exposes
 translation only.
 
+## Shell material
+
+Shell simulations use `elastic-material: koiter-stvk` with these keys:
+
+| Key | Meaning | Default |
+| --- | --- | --- |
+| `shell-youngs-modulus` | membrane modulus E, Pa | 1e6 |
+| `shell-poisson-ratio` | membrane Poisson ratio, in (-1, 0.5) | 0.4 |
+| `shell-bending-youngs-modulus` | bending modulus E_b, Pa | E |
+| `shell-bending-poisson-ratio` | bending Poisson ratio, in (-1, 0.5) | `shell-poisson-ratio` |
+| `shell-thickness` | h, metres | 3e-3 |
+| `shell-areal-density` | kg/m2, scales the lumped triangle mass matrix | 100 |
+| `shell-zero-rest-curvature` | flat rest curvature instead of the loaded mesh's | false |
+
+The model converts each modulus and Poisson ratio to 3D Lame constants and
+evaluates a Koiter energy on twice the Green strain of the first fundamental
+form, and on the change of the second fundamental form scaled by h^3 / 12.
+The config values are therefore nominal: the effective in-plane Young's
+modulus is 4 E / (1 - nu^2), the effective in-plane Poisson ratio is
+nu / (1 - nu), and the bending rigidity of a cylindrical bend is
+E_b (1 - nu_b) / ((1 + nu_b)(1 - 2 nu_b)) h^3 / 12. The
+[`towel_grasp`](configs/shell/towel_grasp/README.md) README works an example
+from measured cloth data.
+
 ## Prescribed vertex trajectories
 
 A `fixed-vertices` entry can follow a recorded trajectory instead of a

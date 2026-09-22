@@ -35,14 +35,31 @@ nothing here is a ground-truth comparison.
 - The `fixed-vertices` entry uses a `trajectory` file. Frame k is the state at
   t = k * 0.002 s; 8251 steps cover the 16.5 s timeline and `dump-interval`
   10 writes 826 OBJ frames aligned with the recorded 50 Hz frames.
-- Material: the source lists stretch and shear moduli of 4000 Pa for its
-  visual reference and 1e5 Pa for its rejected candidate, plus a bending
-  stiffness of 1.42e-6. With the 1.6 mm thickness, the 4000 Pa membrane would
-  stretch about 25 percent under the towel's own weight, so this config uses
-  1e5 Pa for the membrane. The bending modulus 3500 Pa reproduces the source's
-  bending stiffness through E h^3 / (12 (1 - nu^2)). Neither value is
-  calibrated; change `shell-youngs-modulus` to 4000 to match the source's
-  visual reference exactly.
+- Material: the source package lists stretch and shear moduli of 4000 Pa for
+  its visual reference, 1e5 Pa for its rejected candidate, and a bending
+  stiffness of 1.42e-6 N m, and marks all of them as uncalibrated. Measured
+  cotton fabrics of similar weight give a different picture. Wang, O'Brien and
+  Ramamoorthi (SIGGRAPH 2011) list a 60 percent cotton knit at 0.187 kg/m2,
+  close to this towel's 0.201 kg/m2, whose ARCSim material file has bending
+  stiffness coefficients of 7e-6 to 39e-6 N m and stretching coefficients of
+  tens to a few hundred N/m in the linear regime; other cloth-simulation
+  measurements put cotton stretch stiffness at about 1000 to 2000 N/m and
+  Kawabata bending rigidity of light woven cotton at 0.05 to 0.2 gf cm2/cm,
+  which is 5e-6 to 2e-5 N m. Measured pseudo Poisson ratios of woven cotton
+  are 0.2 to 0.5. This config targets a membrane stiffness E h of 1000 N/m,
+  a bending rigidity of 1e-5 N m and an in-plane Poisson ratio of 0.4 (the
+  source's bending value is about seven times softer than that range).
+- Mapping to the config keys: libpgo's Koiter St. Venant-Kirchhoff model
+  converts each modulus to 3D Lame constants with `shell-poisson-ratio` and
+  applies them to twice the Green strain, so the config values are not the
+  physical ones. With config values E, nu and E_b the effective in-plane
+  Young's modulus is 4 E / (1 - nu^2), the effective in-plane Poisson ratio is
+  nu / (1 - nu), and the bending rigidity for a cylindrical bend is
+  E_b (1 - nu) / ((1 + nu)(1 - 2 nu)) h^3 / 12. Inverting these for the
+  targets above with h = 1.6 mm gives `shell-poisson-ratio` 0.29,
+  `shell-youngs-modulus` 1.4e5 and `shell-bending-youngs-modulus` 2.3e4.
+  To reproduce the source's bending stiffness instead, use 3200 for the
+  bending modulus.
 - Contact: `ipc-heuristic` picks dhat as 1e-3 of the bounding-box diagonal
   (about 0.9 mm, below the 4 mm table clearance and the 22 mm layer gap) and
   kappa from the membrane stiffness. Friction 0.65 applies to the table and

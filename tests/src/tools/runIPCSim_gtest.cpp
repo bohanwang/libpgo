@@ -1471,6 +1471,44 @@ TEST(RunIPCSimSetupGTest, ShellZeroRestCurvatureMakesCurvedRestCarryBendingEnerg
   EXPECT_TRUE(std::isfinite(restEnergyFlatRest));
 }
 
+TEST(RunIPCSimSetupGTest, ShellPoissonRatioIsConfigurableAndValidated)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "shell-poisson.json";
+  writeTextFile(configPath, makeShellIPCConfig(tempDir.path(), 0));
+  pgo::ConfigFileJSON config;
+  ASSERT_TRUE(config.open(configPath.string().c_str()));
+
+  auto elementParams = [&]() {
+    testing::internal::CaptureStdout();
+    const auto context = pgo::RunIPCSim::buildShellIpcSimulation(config);
+    const std::string log = testing::internal::GetCapturedStdout();
+    const std::size_t start = log.find("element-params=[");
+    EXPECT_NE(start, std::string::npos) << log;
+    return log.substr(start, log.find("]", start) - start + 1);
+  };
+
+  // default: 0.4 for both membrane and bending
+  EXPECT_NE(elementParams().find(", 0.4, ") , std::string::npos);
+  config.handle()["shell-poisson-ratio"] = 0.3;
+  std::string params = elementParams();
+  EXPECT_NE(params.find(", 0.3, "), std::string::npos) << params;
+  EXPECT_EQ(params.find(", 0.4, "), std::string::npos) << params;  // bending follows the membrane value
+  config.handle()["shell-bending-poisson-ratio"] = 0.1;
+  params = elementParams();
+  EXPECT_NE(params.find(", 0.3, "), std::string::npos) << params;
+  EXPECT_NE(params.find(", 0.1, "), std::string::npos) << params;
+
+  for (double bad : { 0.5, 0.75, -1.0, std::numeric_limits<double>::infinity() }) {
+    config.handle()["shell-poisson-ratio"] = bad;
+    EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument) << bad;
+  }
+  config.handle()["shell-poisson-ratio"] = 0.3;
+  config.handle()["shell-bending-poisson-ratio"] = 0.5;
+  EXPECT_THROW(pgo::RunIPCSim::buildShellIpcSimulation(config), std::invalid_argument);
+}
+
 TEST(RunIPCSimSetupGTest, VertexTrajectoryLoaderParsesSamplesAndValidates)
 {
   const std::string valid = R"({
