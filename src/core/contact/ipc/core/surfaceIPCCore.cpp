@@ -13,6 +13,7 @@ copyright to Bohan Wang
 #include <tbb/parallel_sort.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -258,6 +259,23 @@ void SurfaceIPCCore::validateCollisionFreeSurfacePositions(
         "IPC initial collision surface is not strictly collision-free: zero/non-finite edge-edge distance for edge (" +
         std::to_string(pair.ea0) + ", " + std::to_string(pair.ea1) + ").");
     }
+  }
+
+  // The distance checks above only detect touching primitives. Surfaces that
+  // already pass through each other have strictly positive point-triangle and
+  // edge-edge distances, zero barrier energy, and are then held in place by
+  // CCD, so they must be rejected by an explicit intersection test.
+  std::vector<std::array<int, 2>> crossings;
+  SurfaceIPCSelfBroadPhase().findIntersectingEdgeTrianglePairs(topology_, x_surf, crossings);
+  if (!crossings.empty()) {
+    const std::array<int, 2> &edge = topology_.edges[crossings.front()[0]];
+    const std::array<int, 3> &tri = topology_.triangles[crossings.front()[1]];
+    throw std::invalid_argument(
+      "IPC initial collision surface is not intersection-free: edge (" +
+      std::to_string(edge[0]) + ", " + std::to_string(edge[1]) + ") passes through triangle " +
+      std::to_string(crossings.front()[1]) + " (" + std::to_string(tri[0]) + ", " + std::to_string(tri[1]) + ", " +
+      std::to_string(tri[2]) + "); " + std::to_string(crossings.size()) +
+      " intersecting edge-triangle pair(s) in total. The barrier cannot separate surfaces that already interpenetrate.");
   }
 
   invalidatePreparedState();

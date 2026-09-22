@@ -635,3 +635,45 @@ TEST(DeformationModelEnergyMaxStepGTest, NegativelyOrientedRestTetIsLegalAndLimi
   EXPECT_DOUBLE_EQ(reversed.energy->computeMaxStepSize(zeroU, stretch), 1.0);
   EXPECT_DOUBLE_EQ(forward.energy->computeMaxStepSize(zeroU, stretch), 1.0);
 }
+
+TEST(DeformationModelEnergyMaxStepGTest, TinyTetIsLimitedExactlyLikeItsUnitSizedCopy)
+{
+  // A 0.1 mm tet has det(Dm) = 1e-12, so in det(Ds) units its whole volume sat
+  // inside the limiter's absolute 1e-12 boundary tolerance and a step ending
+  // on an inverted element passed as "on the boundary" with alpha = 1. The
+  // limiter now works in det(F) units and must be scale invariant.
+  const double scale = 1e-4;
+  const std::vector<double> unitVertices = {
+    0.0, 0.0, 0.0,
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+  };
+  std::vector<double> tinyVertices = unitVertices;
+  for (double &v : tinyVertices)
+    v *= scale;
+
+  EnergyFixture unit = makeTetFixture(unitVertices, { 0, 1, 2, 3 });
+  EnergyFixture tiny = makeTetFixture(tinyVertices, { 0, 1, 2, 3 });
+  const ES::VXd zeroU = ES::VXd::Zero(12);
+
+  // Push the apex 1.5 heights downward: det(Ds(1)) = -0.5 det(Dm), which for
+  // the tiny tet is -5e-13, inside the old absolute tolerance band.
+  const ES::VXd unitDx = makeTetFlipDirection(4, 3, -1.5);
+  const ES::VXd tinyDx = makeTetFlipDirection(4, 3, -1.5 * scale);
+  EXPECT_LT(tetDeterminant(*tiny.mesh, 0, tiny.restPositions + tinyDx), 0.0);
+  EXPECT_GT(tetDeterminant(*tiny.mesh, 0, tiny.restPositions + tinyDx), -1e-12);
+
+  const double unitAlpha = unit.energy->computeMaxStepSize(zeroU, unitDx);
+  const double tinyAlpha = tiny.energy->computeMaxStepSize(zeroU, tinyDx);
+  EXPECT_LT(unitAlpha, 1.0);
+  EXPECT_GT(unitAlpha, 0.0);
+  EXPECT_NEAR(tinyAlpha, unitAlpha, 1e-9);
+  EXPECT_GT(tetDeterminant(*tiny.mesh, 0, tiny.restPositions + tinyAlpha * tinyDx), 0.0);
+
+  // The recovery path is scale invariant too: an already inverted tiny tet is
+  // reported as illegal, not accepted because its determinant is "small".
+  const ES::VXd invertedU = makeTetFlipDirection(4, 3, -2.0 * scale);
+  const auto observation = tiny.assembler->computeMaxStepObservation((tiny.restPositions + invertedU).eval().data(), tinyDx.data());
+  EXPECT_TRUE(observation.hasIllegalInitialState);
+}

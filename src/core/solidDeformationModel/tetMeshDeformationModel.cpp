@@ -148,34 +148,26 @@ void TetMeshDeformationModel::computeF(const double *x, int materialLocationIDs,
 
 DeformationModel::LocalMaxStepResult TetMeshDeformationModel::computeLocalMaxStepSize(const double *x_local, const double *dx_local) const
 {
+  // Measure the step in deformation-gradient units. det(F) = det(Ds) / det(Dm)
+  // equals 1 at rest for every element size and orientation, so the relative
+  // threshold kTetRelativeDetEps and the absolute root tolerance used by
+  // findConservativeFeasibleAlpha keep their meaning for arbitrarily small
+  // tets. In det(Ds) units both were swamped by the element volume of
+  // millimetre-scale meshes, which let a full step end on an inverted element.
+  // Dividing by det(Dm) also makes a negatively oriented rest tet legal
+  // without any explicit orientation handling.
   double Ds0[9];
   double deltaDs[9];
-  double Dm[9];
-  double restLocal[12];
-
-  for (int i = 0; i < 4; i++) {
-    restLocal[i * 3 + 0] = ind->restX[i][0];
-    restLocal[i * 3 + 1] = ind->restX[i][1];
-    restLocal[i * 3 + 2] = ind->restX[i][2];
-  }
-
   computeDs(x_local, Ds0);
   computeDs(dx_local, deltaDs);
-  computeDm(restLocal, Dm);
 
-  const double detDm = Eigen::Map<const ES::M3d>(Dm).determinant();
-  // det(F) = det(Ds) / det(Dm): a negatively oriented rest tetrahedron is
-  // uninverted while det(Ds) < 0. Flip the edge matrices for that case so the
-  // polynomial measures orientation relative to the rest configuration rather
-  // than absolute handedness (det(-M) = -det(M) for 3x3 matrices).
-  if (detDm < 0.0) {
-    for (int k = 0; k < 9; k++) {
-      Ds0[k] = -Ds0[k];
-      deltaDs[k] = -deltaDs[k];
-    }
-  }
-  const double eps = kTetRelativeDetEps * std::abs(detDm);
-  const auto poly = buildDeterminantCubicFromAffineMatrixPath(Ds0, deltaDs, eps);
+  double F0[9];
+  double deltaF[9];
+  (Eigen::Map<ES::M3d>(F0)) = Eigen::Map<const ES::M3d>(Ds0) * ind->restDmInv;
+  (Eigen::Map<ES::M3d>(deltaF)) = Eigen::Map<const ES::M3d>(deltaDs) * ind->restDmInv;
+
+  const double eps = kTetRelativeDetEps;
+  const auto poly = buildDeterminantCubicFromAffineMatrixPath(F0, deltaF, eps);
   const ConservativeFeasibleAlphaResult alphaResult = findConservativeFeasibleAlpha(poly, eps);
 
   LocalMaxStepResult result;

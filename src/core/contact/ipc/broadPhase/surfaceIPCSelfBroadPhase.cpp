@@ -6,6 +6,7 @@ copyright to Bohan Wang
 
 #include "../geometry/ipcDistancePrimitives.h"
 #include "ipc/broadPhase/spatialHashGrid.h"
+#include "predicates.h"
 
 #include <tbb/blocked_range.h>
 #include <tbb/enumerable_thread_specific.h>
@@ -175,6 +176,103 @@ void SurfaceIPCSelfBroadPhase::buildPairs(
     for (auto &lp : tls_pairs)
       eePairs.insert(eePairs.end(), lp.begin(), lp.end());
   }
+}
+
+void SurfaceIPCSelfBroadPhase::findIntersectingEdgeTrianglePairs(
+  const SurfaceIPCTopology &topology,
+  EigenSupport::ConstRefVecXd positions,
+  std::vector<std::array<int, 2>> &intersections) const
+{
+  intersections.clear();
+
+  const int nTri = (int)topology.triangles.size();
+  const int nEdge = (int)topology.edges.size();
+  if (nTri == 0 || nEdge == 0)
+    return;
+
+  auto getV = [&](int i) -> V3d {
+    return positions.segment<3>(3 * i);
+  };
+  auto getP = [&](int i) -> const double * {
+    return positions.data() + 3 * i;
+  };
+
+  // Boxes are built without the dhat inflation: a crossing point lies inside
+  // both primitives, so their exact boxes overlap. A tiny pad keeps a crossing
+  // point that sits exactly on a box face from being lost to rounding.
+  double extent = 0.0;
+  for (int fi = 0; fi < nTri; ++fi) {
+    const auto &tri = topology.triangles[fi];
+    for (int k = 0; k < 3; ++k)
+      extent = std::max(extent, getV(tri[k]).cwiseAbs().maxCoeff());
+  }
+  const double pad = 1e-12 * std::max(extent, 1.0);
+
+  std::vector<SpatialHashGrid::AABB> triBox(nTri);
+  tbb::parallel_for(tbb::blocked_range<int>(0, nTri),
+    [&](const tbb::blocked_range<int> &r) {
+      for (int fi = r.begin(); fi < r.end(); ++fi) {
+        const auto &tri = topology.triangles[fi];
+        triBox[fi].init(getV(tri[0]), pad);
+        triBox[fi].expand(getV(tri[1]), pad);
+        triBox[fi].expand(getV(tri[2]), pad);
+      }
+    });
+
+  std::vector<SpatialHashGrid::AABB> edgeBox(nEdge);
+  tbb::parallel_for(tbb::blocked_range<int>(0, nEdge),
+    [&](const tbb::blocked_range<int> &r) {
+      for (int ei = r.begin(); ei < r.end(); ++ei) {
+        edgeBox[ei].init(getV(topology.edges[ei][0]), pad);
+        edgeBox[ei].expand(getV(topology.edges[ei][1]), pad);
+      }
+    });
+
+  double avgBoxDiag = 0;
+  for (const auto &aabb : triBox)
+    avgBoxDiag += (aabb.hi - aabb.lo).norm();
+  const double cellSize = std::max(avgBoxDiag / nTri, 1e-6);
+
+  SpatialHashGrid triHash(nTri);
+  triHash.setCellSize(cellSize);
+  for (int fi = 0; fi < nTri; ++fi)
+    triHash.insert(triBox[fi], fi);
+
+  tbb::enumerable_thread_specific<std::vector<int>> tls_visited(
+    [nTri]() { return std::vector<int>(nTri, 0); });
+  tbb::enumerable_thread_specific<std::vector<int>> tls_candidates;
+  tbb::enumerable_thread_specific<std::vector<std::array<int, 2>>> tls_hits;
+
+  tbb::parallel_for(tbb::blocked_range<int>(0, nEdge),
+    [&](const tbb::blocked_range<int> &range) {
+      auto &visited = tls_visited.local();
+      auto &candidates = tls_candidates.local();
+      auto &hits = tls_hits.local();
+
+      for (int ei = range.begin(); ei < range.end(); ++ei) {
+        candidates.clear();
+        triHash.query(edgeBox[ei], -1, visited, ei + 1, candidates);
+
+        const int a0 = topology.edges[ei][0], a1 = topology.edges[ei][1];
+        for (int fi : candidates) {
+          const auto &tri = topology.triangles[fi];
+          if (a0 == tri[0] || a0 == tri[1] || a0 == tri[2] ||
+            a1 == tri[0] || a1 == tri[1] || a1 == tri[2])
+            continue;
+          if (!topology.edgeContainsDeformableVertex(ei) && !topology.triangleContainsDeformableVertex(fi))
+            continue;
+          if (!edgeBox[ei].overlaps(triBox[fi]))
+            continue;
+
+          if (pgo::Mesh::intersectSegTri(getP(a0), getP(a1), getP(tri[0]), getP(tri[1]), getP(tri[2])))
+            hits.push_back({ ei, fi });
+        }
+      }
+    });
+
+  for (auto &lh : tls_hits)
+    intersections.insert(intersections.end(), lh.begin(), lh.end());
+  std::sort(intersections.begin(), intersections.end());
 }
 
 }  // namespace CIPC

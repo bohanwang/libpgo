@@ -9,6 +9,7 @@
 #include <memory>
 #include <numeric>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace
@@ -407,6 +408,44 @@ TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, RejectsCoincidentInitialCollisionSt
     V, F, makeDynamicOnlyEmbedding(), std::vector<uint8_t>{ 1, 1, 1, 0, 0, 0 }, makeParams());
 
   EXPECT_THROW(adapter.validateCollisionFreeState(ES::VXd::Zero(9)), std::invalid_argument);
+}
+
+TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, RejectsInterpenetratingInitialStateThatHasZeroBarrierEnergy)
+{
+  // Triangle 1 stands in the plane y = 0.2 and passes through the interior of
+  // triangle 0 in the plane z = 0. Every point-triangle and edge-edge distance
+  // is at least 0.2 > dhat, so the barrier is exactly zero and the old
+  // distance-only validation accepted the state.
+  ES::MXd V(6, 3);
+  V <<
+    0.0, 0.0, 0.0,
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.2, 0.2, -0.5,
+    0.2, 0.2, 0.5,
+    0.4, 0.2, 0.5;
+  ES::MXi F(2, 3);
+  F <<
+    0, 1, 2,
+    3, 4, 5;
+
+  EmbeddedSurfaceIPCPotentialEnergy adapter(V, F, makeIdentityEmbedding(18), makeParams());
+  const ES::VXd zeroU = ES::VXd::Zero(18);
+  EXPECT_DOUBLE_EQ(adapter.func(zeroU), 0.0);
+
+  try {
+    adapter.validateCollisionFreeState(zeroU);
+    FAIL() << "interpenetrating start state was accepted";
+  }
+  catch (const std::invalid_argument &e) {
+    EXPECT_NE(std::string(e.what()).find("not intersection-free"), std::string::npos) << e.what();
+    EXPECT_NE(std::string(e.what()).find("triangle 0"), std::string::npos) << e.what();
+  }
+
+  // the separated pair used by the other tests still passes
+  const auto [Vs, Fs] = makeTwoTriangleMesh();
+  EmbeddedSurfaceIPCPotentialEnergy separated(Vs, Fs, makeIdentityEmbedding(18), makeParams());
+  EXPECT_NO_THROW(separated.validateCollisionFreeState(zeroU));
 }
 
 TEST(EmbeddedSurfaceIPCPotentialEnergyGTest, ReusesPreparedPairsAcrossEnergyGradientHessianForSameState)

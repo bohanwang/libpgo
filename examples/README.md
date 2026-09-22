@@ -115,6 +115,20 @@ bounding-box diagonal is about 0.25 with triangle heights down to 1.2 mm, had
 `ipc-dhat-relative = 0.002` (dhat about 5e-4) and starts contact-free.
 `ipc-kappa` is always given explicitly and is not rescaled with dhat.
 
+## IPC start-state check
+
+Before the first step, and again when restarting from a state file, the IPC
+runner validates the collision surface at the starting displacement. It
+rejects any point-triangle or edge-edge pair at zero distance, and any edge
+that passes through a triangle it does not share a vertex with, using the exact
+segment-triangle predicate. The second test is necessary: two triangles that
+pierce each other have strictly positive point-triangle and edge-edge
+distances, so the barrier energy is zero there and CCD then prevents the
+surfaces from ever separating. States produced by a sampled-contact run, by an
+overlapping external object, or by a self-intersecting input mesh are reported
+with the offending edge and triangle instead of being simulated. Pairs whose
+vertices are all static are ignored.
+
 ## Deterministic assembly
 
 Parallel assembly is not bit-reproducible by default: element and contact-pair
