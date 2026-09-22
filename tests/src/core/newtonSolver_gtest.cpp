@@ -163,7 +163,7 @@ class InspectableNewtonSolver final : public NO::NewtonSolver
 public:
   using NewtonSolver::NewtonSolver;
 
-  const void *solverAddress() const { return solver.get(); }
+  const void *solverAddress() const { return linearSolverAddress(); }
 };
 
 class DynamicQuarticEnergy final : public NO::PotentialEnergy
@@ -251,6 +251,50 @@ private:
   mutable double minimumReturnedAlpha_ = 1.0;
 };
 }  // namespace
+
+TEST(NewtonSolverGTest, LinearSolverSelectionPrefersPardisoAndSolvesIdenticallyOnEveryBackend)
+{
+  using NS = NO::NewtonSolver;
+  // the default resolves to the best backend of this build
+  const NS::LinearSolverType resolved = NS::resolveLinearSolver(NS::LS_DEFAULT);
+#if defined(PGO_HAS_ORIG_PARDISO)
+  EXPECT_EQ(resolved, NS::LS_PARDISO);
+  EXPECT_FALSE(NS::isLinearSolverAvailable(NS::LS_MKL_PARDISO));  // shared `pardiso` entry point
+#elif defined(PGO_HAS_MKL)
+  EXPECT_EQ(resolved, NS::LS_MKL_PARDISO);
+#else
+  EXPECT_EQ(resolved, NS::LS_EIGEN_LDLT);
+#endif
+  EXPECT_TRUE(NS::isLinearSolverAvailable(NS::LS_EIGEN_LDLT));
+  EXPECT_STREQ(NS::linearSolverName(NS::LS_PARDISO), "pardiso");
+
+  // unavailable requests and bad defaults are rejected
+  for (NS::LinearSolverType type : { NS::LS_PARDISO, NS::LS_MKL_PARDISO }) {
+    if (!NS::isLinearSolverAvailable(type))
+      EXPECT_THROW(NS::resolveLinearSolver(type), std::invalid_argument);
+  }
+  NS::LinearSolverDefaults bad;
+  bad.pardisoThreadLimit = 0;
+  EXPECT_THROW(NS::setLinearSolverDefaults(bad), std::invalid_argument);
+
+  // every available backend minimizes the same problem to the same point
+  const auto energy = std::make_shared<TwoDofQuadraticEnergy>();
+  std::vector<ES::VXd> solutions;
+  for (NS::LinearSolverType type : { NS::LS_PARDISO, NS::LS_MKL_PARDISO, NS::LS_EIGEN_LDLT }) {
+    if (!NS::isLinearSolverAvailable(type))
+      continue;
+    ES::VXd x = ES::VXd::Zero(2);
+    NS::SolverParam param;
+    param.linearSolver = type;
+    NO::NewtonSolver solver(x.data(), param, energy, {});
+    EXPECT_EQ(solver.getLinearSolverType(), type);
+    EXPECT_EQ(solver.solve(x.data(), 20, 1e-12, 0), NS::SOLVE_CONVERGED) << NS::linearSolverName(type);
+    solutions.push_back(x);
+  }
+  ASSERT_GE(solutions.size(), 1u);
+  for (const ES::VXd &x : solutions)
+    EXPECT_LT((x - solutions.front()).norm(), 1e-10);
+}
 
 TEST(NewtonSolverGTest, FixedTopologyKeepsSymbolicFactorizationAcrossIterations)
 {

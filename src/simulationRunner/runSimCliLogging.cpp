@@ -98,6 +98,37 @@ spdlog::level::level_enum resolveConfiguredLogLevel(const ConfigFileJSON &config
   throw std::invalid_argument("Unsupported loglevel: " + configuredLevel);
 }
 
+void applyLinearSolverConfig(const ConfigFileJSON &config)
+{
+  using NonlinearOptimization::NewtonSolver;
+  NewtonSolver::LinearSolverDefaults defaults = NewtonSolver::getLinearSolverDefaults();
+  if (config.exist("linear-solver")) {
+    const std::string name = config.getString("linear-solver");
+    if (name == "default")
+      defaults.type = NewtonSolver::LS_DEFAULT;
+    else if (name == "pardiso")
+      defaults.type = NewtonSolver::LS_PARDISO;
+    else if (name == "mkl-pardiso")
+      defaults.type = NewtonSolver::LS_MKL_PARDISO;
+    else if (name == "eigen")
+      defaults.type = NewtonSolver::LS_EIGEN_LDLT;
+    else
+      throw std::invalid_argument("`linear-solver` must be one of default, pardiso, mkl-pardiso, eigen; got `" + name + "`.");
+  }
+  if (config.exist("pardiso-deterministic"))
+    defaults.pardisoDeterministic = config.getValue<bool>("pardiso-deterministic", 1);
+  if (config.exist("pardiso-thread-limit")) {
+    const int limit = config.getInt("pardiso-thread-limit", 1);
+    if (limit < 1)
+      throw std::invalid_argument("`pardiso-thread-limit` must be a positive integer.");
+    defaults.pardisoThreadLimit = limit;
+  }
+  NewtonSolver::setLinearSolverDefaults(defaults);
+  std::cout << "linear-solver=" << NewtonSolver::linearSolverName(NewtonSolver::resolveLinearSolver(defaults.type))
+            << ", pardiso-deterministic=" << (defaults.pardisoDeterministic ? "true" : "false")
+            << ", pardiso-thread-limit=" << defaults.pardisoThreadLimit << std::endl;
+}
+
 bool newtonStatusIsFatal(int status, const std::string &context)
 {
   using NonlinearOptimization::NewtonSolver;

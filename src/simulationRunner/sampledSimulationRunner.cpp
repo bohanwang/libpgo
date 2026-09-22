@@ -73,6 +73,7 @@ int pgo::SimulationRunner::runSampledSimulationFromConfig(
   // Logging is initialized by the process entry point; only the configured
   // level is applied here.
   pgo::Logging::setLevel(RunSim::resolveConfiguredLogLevel(jconfig));
+  RunSim::applyLinearSolverConfig(jconfig);
   pgo::Mesh::initPredicates();
 
   RunSim::ResolvedRunSimPaths resolvedPaths;

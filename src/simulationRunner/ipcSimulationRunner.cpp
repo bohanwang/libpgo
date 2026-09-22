@@ -81,6 +81,7 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
     // Logging is initialized by the process entry point; only the configured
     // level is applied here.
     pgo::Logging::setLevel(RunSim::resolveConfiguredLogLevel(jconfig));
+    RunSim::applyLinearSolverConfig(jconfig);
 
     if (!restartFromU)
       std::cout << "restart-from-u=false; existing output files will be overwritten as frames are written." << std::endl;

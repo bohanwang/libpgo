@@ -9,6 +9,8 @@
 #include <iostream>
 #include <limits>
 #include <numeric>
+#include <stdexcept>
+#include <string>
 #include <chrono>
 
 using namespace pgo;
@@ -44,9 +46,102 @@ const char *NewtonSolver::solveStatusName(int status)
   }
 }
 
+namespace
+{
+NewtonSolver::LinearSolverDefaults &linearSolverDefaultsStorage()
+{
+  static NewtonSolver::LinearSolverDefaults defaults;
+  return defaults;
+}
+}  // namespace
+
+const char *NewtonSolver::linearSolverName(LinearSolverType type)
+{
+  switch (type) {
+  case LS_DEFAULT:
+    return "default";
+  case LS_PARDISO:
+    return "pardiso";
+  case LS_MKL_PARDISO:
+    return "mkl-pardiso";
+  case LS_EIGEN_LDLT:
+    return "eigen";
+  default:
+    return "unknown";
+  }
+}
+
+bool NewtonSolver::isLinearSolverAvailable(LinearSolverType type)
+{
+  switch (type) {
+  case LS_PARDISO:
+#if defined(PGO_HAS_ORIG_PARDISO)
+    return true;
+#else
+    return false;
+#endif
+  case LS_MKL_PARDISO:
+#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
+    return true;
+#else
+    return false;
+#endif
+  case LS_EIGEN_LDLT:
+    return true;
+  default:
+    return false;
+  }
+}
+
+NewtonSolver::LinearSolverType NewtonSolver::resolveLinearSolver(LinearSolverType requested)
+{
+  LinearSolverType type = requested;
+  if (type == LS_DEFAULT)
+    type = linearSolverDefaultsStorage().type;
+  if (type == LS_DEFAULT) {
+    if (isLinearSolverAvailable(LS_PARDISO))
+      type = LS_PARDISO;
+    else if (isLinearSolverAvailable(LS_MKL_PARDISO))
+      type = LS_MKL_PARDISO;
+    else
+      type = LS_EIGEN_LDLT;
+  }
+  if (!isLinearSolverAvailable(type))
+    throw std::invalid_argument(std::string("NewtonSolver linear solver `") + linearSolverName(type) + "` is not part of this build.");
+  return type;
+}
+
+void NewtonSolver::setLinearSolverDefaults(const LinearSolverDefaults &defaults)
+{
+  if (defaults.type != LS_DEFAULT && !isLinearSolverAvailable(defaults.type))
+    throw std::invalid_argument(std::string("NewtonSolver linear solver `") + linearSolverName(defaults.type) + "` is not part of this build.");
+  if (defaults.pardisoThreadLimit < 1)
+    throw std::invalid_argument("NewtonSolver pardisoThreadLimit must be at least 1.");
+  linearSolverDefaultsStorage() = defaults;
+}
+
+NewtonSolver::LinearSolverDefaults NewtonSolver::getLinearSolverDefaults()
+{
+  return linearSolverDefaultsStorage();
+}
+
 NewtonSolver::NewtonSolver(const double *x_, SolverParam sp, PotentialEnergy_const_p energy_, const std::vector<int> &fixedDOFs_, const double *fixedValues_):
   energy(energy_), solverParam(sp)
 {
+  const LinearSolverDefaults &defaults = linearSolverDefaultsStorage();
+  linearSolverType = resolveLinearSolver(sp.linearSolver);
+  pardisoDeterministic = sp.pardisoDeterministic < 0 ? defaults.pardisoDeterministic : (sp.pardisoDeterministic != 0);
+  pardisoThreadLimit = sp.pardisoThreadLimit > 0 ? sp.pardisoThreadLimit : defaults.pardisoThreadLimit;
+  static bool announced = false;
+  if (!announced) {
+    announced = true;
+    if (linearSolverType == LS_PARDISO)
+      SPDLOG_LOGGER_INFO(pgo::Logging::lgr(), "NewtonSolver linear solver: Panua PARDISO ({}, thread limit {})",
+        pardisoDeterministic ? "deterministic" : "non-deterministic", pardisoThreadLimit);
+    else
+      SPDLOG_LOGGER_INFO(pgo::Logging::lgr(), "NewtonSolver linear solver: {}", linearSolverName(linearSolverType));
+  }
+
   n3 = (int)energy->getNumDOFs();
   allDOFs.resize(energy->getNumDOFs());
   std::iota(allDOFs.begin(), allDOFs.end(), 0);
@@ -106,22 +201,98 @@ void NewtonSolver::setFixedDOFs(const std::vector<int> &fixedDOFs_, const double
       ES::removeRowsCols(sysFull, fixedDOFs, A11);
       ES::removeRowsCols(sysFull, A11, fixedDOFs, A11Mapping);
 
-#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
-      solver = std::make_shared<ES::EigenMKLPardisoSupport>(A11, ES::EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
-        ES::EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
-      solver->analyze(A11);
-#elif defined(PGO_HAS_ORIG_PARDISO)
-      solver = std::make_shared<ES::EigenOrigPardisoSupport>(A11, ES::EigenOrigPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
-        ES::EigenOrigPardisoSupport::ReorderingType::NESTED_DISSECTION_4, 0, 0, 0, 0, 0, 0);
-      solver->analyze(A11);
-#else
-      solver = std::make_shared<EigenSupport::SymSolver>();
-      solver->analyzePattern(A11);
-#endif
+      createLinearSolver();
     }
   }
 
   fixedValues = ES::Mp<const ES::VXd>(fixedValues_, fixedDOFs_.size());
+}
+
+bool NewtonSolver::hasLinearSolver() const
+{
+  switch (linearSolverType) {
+#if defined(PGO_HAS_ORIG_PARDISO)
+  case LS_PARDISO:
+    return pardisoSolver != nullptr;
+#endif
+#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
+  case LS_MKL_PARDISO:
+    return mklSolver != nullptr;
+#endif
+  case LS_EIGEN_LDLT:
+    return eigenSolver != nullptr;
+  default:
+    return false;
+  }
+}
+
+const void *NewtonSolver::linearSolverAddress() const
+{
+  switch (linearSolverType) {
+#if defined(PGO_HAS_ORIG_PARDISO)
+  case LS_PARDISO:
+    return pardisoSolver.get();
+#endif
+#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
+  case LS_MKL_PARDISO:
+    return mklSolver.get();
+#endif
+  case LS_EIGEN_LDLT:
+    return eigenSolver.get();
+  default:
+    return nullptr;
+  }
+}
+
+void NewtonSolver::createLinearSolver()
+{
+  switch (linearSolverType) {
+#if defined(PGO_HAS_ORIG_PARDISO)
+  case LS_PARDISO:
+    pardisoSolver = std::make_shared<ES::EigenOrigPardisoSupport>(A11, ES::EigenOrigPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
+      ES::EigenOrigPardisoSupport::ReorderingType::NESTED_DISSECTION_4, 0, 0, 0, 0, 0, 0);
+    pardisoSolver->setDeterministic(pardisoDeterministic, pardisoThreadLimit);
+    pardisoSolver->analyze(A11);
+    return;
+#endif
+#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
+  case LS_MKL_PARDISO:
+    mklSolver = std::make_shared<ES::EigenMKLPardisoSupport>(A11, ES::EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
+      ES::EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
+    mklSolver->analyze(A11);
+    return;
+#endif
+  case LS_EIGEN_LDLT:
+    eigenSolver = std::make_shared<EigenSupport::SymSolver>();
+    eigenSolver->analyzePattern(A11);
+    return;
+  default:
+    throw std::logic_error("NewtonSolver: unresolved linear solver type.");
+  }
+}
+
+void NewtonSolver::solveLinearSystem()
+{
+  switch (linearSolverType) {
+#if defined(PGO_HAS_ORIG_PARDISO)
+  case LS_PARDISO:
+    pardisoSolver->factorize(A11);
+    pardisoSolver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
+    return;
+#endif
+#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
+  case LS_MKL_PARDISO:
+    mklSolver->factorize(A11);
+    mklSolver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
+    return;
+#endif
+  case LS_EIGEN_LDLT:
+    eigenSolver->factorize(A11);
+    deltaxSmall.noalias() = eigenSolver->solve(rhs);
+    return;
+  default:
+    throw std::logic_error("NewtonSolver: unresolved linear solver type.");
+  }
 }
 
 int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
@@ -273,31 +444,10 @@ int NewtonSolver::solve(double *x_, int numIter, double epsilon, int verbose)
     // }
     // std::cout << std::endl;
 
-    if (!energy->isHessianTopologyFixed() || solver == nullptr) {
-#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
-      solver = std::make_shared<ES::EigenMKLPardisoSupport>(A11, ES::EigenMKLPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
-        ES::EigenMKLPardisoSupport::ReorderingType::NESTED_DISSECTION, 0, 0, 0, 0, 0, 0);
-      solver->analyze(A11);
-#elif defined(PGO_HAS_ORIG_PARDISO)
-      solver = std::make_shared<ES::EigenOrigPardisoSupport>(A11, ES::EigenOrigPardisoSupport::MatrixType::REAL_SYM_INDEFINITE,
-        ES::EigenOrigPardisoSupport::ReorderingType::NESTED_DISSECTION_4, 0, 0, 0, 0, 0, 0);
-      solver->analyze(A11);
-#else
-      solver = std::make_shared<EigenSupport::SymSolver>();
-      solver->analyzePattern(A11);
-#endif
-    }
+    if (!energy->isHessianTopologyFixed() || !hasLinearSolver())
+      createLinearSolver();
 
-#if defined(PGO_HAS_MKL) && !defined(PGO_HAS_ORIG_PARDISO)
-    solver->factorize(A11);
-    solver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
-#elif defined(PGO_HAS_ORIG_PARDISO)
-    solver->factorize(A11);
-    solver->solve(A11, deltaxSmall.data(), rhs.data(), 1);
-#else
-    solver->factorize(A11);
-    deltaxSmall.noalias() = solver->solve(rhs);
-#endif
+    solveLinearSystem();
 
     if (verbose >= 3 && iter % printGap == 0)
       std::cout << (A11 * deltaxSmall - rhs).norm() << ' ' << rhs.norm() << std::endl;

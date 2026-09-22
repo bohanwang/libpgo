@@ -22,6 +22,13 @@ spdlog::level::level_enum resolveConfiguredLogLevel(const ConfigFileJSON &config
 // a warning and returns false so the run continues with the returned state.
 bool newtonStatusIsFatal(int status, const std::string &context);
 
+// Applies the optional linear-solver keys of a runner config to the Newton
+// solver's process defaults: `linear-solver` ("default", "pardiso",
+// "mkl-pardiso", "eigen"), `pardiso-deterministic` (bool, default true) and
+// `pardiso-thread-limit` (positive integer, default 64). Throws
+// std::invalid_argument for unknown or unavailable choices.
+void applyLinearSolverConfig(const ConfigFileJSON &config);
+
 class ScopedRunSimCliLogRedirect
 {
 public:

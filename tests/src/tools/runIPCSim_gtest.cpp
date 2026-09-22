@@ -8,6 +8,7 @@
 #include "configFileJSON.h"
 #include "deformationModelEnergy.h"
 #include "embeddedSurfaceIPCPotentialEnergy.h"
+#include "NewtonSolver.h"
 #include "initPredicates.h"
 #include "pgoLogging.h"
 #include "runIPCSimSetup.h"
@@ -967,6 +968,99 @@ TEST(RunIPCSimCliGTest, ExternalObjectPlacedInsideTheClothIsRejected)
   EXPECT_TRUE(fs::exists(output / "deform0000.u"));
   EXPECT_FALSE(fs::exists(output / "deform0001.u"));
 }
+
+TEST(RunIPCSimSetupGTest, LinearSolverConfigIsAppliedAndValidated)
+{
+  using NS = pgo::NonlinearOptimization::NewtonSolver;
+  const NS::LinearSolverDefaults saved = NS::getLinearSolverDefaults();
+  struct Restore
+  {
+    NS::LinearSolverDefaults defaults;
+    ~Restore() { NS::setLinearSolverDefaults(defaults); }
+  } restore{ saved };
+
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "solver.json";
+  auto apply = [&](const nlohmann::json &fields) {
+    writeTextFile(configPath, fields.dump(2));
+    pgo::ConfigFileJSON config;
+    if (!config.open(configPath.string().c_str()))
+      throw std::runtime_error("cannot open config");
+    pgo::RunSim::applyLinearSolverConfig(config);
+    return NS::getLinearSolverDefaults();
+  };
+
+  NS::LinearSolverDefaults d = apply({ { "linear-solver", "eigen" }, { "pardiso-deterministic", false }, { "pardiso-thread-limit", 8 } });
+  EXPECT_EQ(d.type, NS::LS_EIGEN_LDLT);
+  EXPECT_FALSE(d.pardisoDeterministic);
+  EXPECT_EQ(d.pardisoThreadLimit, 8);
+  d = apply({ { "linear-solver", "default" } });
+  EXPECT_EQ(d.type, NS::LS_DEFAULT);
+  EXPECT_FALSE(d.pardisoDeterministic);  // untouched keys keep their previous values
+  EXPECT_THROW(apply({ { "linear-solver", "bogus" } }), std::invalid_argument);
+  EXPECT_THROW(apply({ { "pardiso-thread-limit", 0 } }), std::invalid_argument);
+#if defined(PGO_HAS_ORIG_PARDISO)
+  EXPECT_EQ(apply({ { "linear-solver", "pardiso" } }).type, NS::LS_PARDISO);
+  EXPECT_THROW(apply({ { "linear-solver", "mkl-pardiso" } }), std::invalid_argument);
+#endif
+}
+
+#if defined(PGO_HAS_ORIG_PARDISO)
+TEST(RunIPCSimCliGTest, DeterministicPardisoReproducesStatesBitwiseAcrossThreadCounts)
+{
+  // PARDISO's IPARM(34) mode promises the identical solution for any thread
+  // count up to the configured limit. With deterministic assembly on top, two
+  // runs with different OMP_NUM_THREADS must write identical state files.
+  const fs::path binary = runIPCSimBinaryPath();
+  ASSERT_FALSE(binary.empty());
+  ASSERT_TRUE(fs::exists(binary));
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path plane = tempDir.path() / "plane.obj";
+  const fs::path cloth = tempDir.path() / "cloth.obj";
+  writeExternalPlane(plane);
+  writeTextFile(cloth,
+    "v -.1 .019 -.1\nv .1 .019 -.1\nv .1 .019 .1\nv -.1 .019 .1\nf 1 3 2\nf 1 4 3\n");
+  nlohmann::json config = nlohmann::json::parse(makeShellIPCConfig(tempDir.path(), 12));
+  config["surface-mesh"] = cloth.generic_string();
+  config["fixed-vertices"] = nlohmann::json::array();
+  config["ipc-external-objects"] = nlohmann::json::array({ { { "filename", plane.generic_string() } } });
+  config["init-vel"] = { .2, 0, 0 };
+  config["timestep"] = .002;
+  config["ipc-dhat"] = .02;
+  config["ipc-kappa"] = 1.0;
+  config["shell-youngs-modulus"] = 1000;
+  config["shell-bending-youngs-modulus"] = 1000;
+  config["shell-areal-density"] = 1.0;
+  config["solver-eps"] = 1e-8;
+  config["solver-max-iter"] = 100;
+  config["contact-friction-coeff"] = .5;
+  config["ipc-friction-iterations"] = 2;
+  config["deterministic-assembly"] = true;
+  config["linear-solver"] = "pardiso";
+  config["pardiso-deterministic"] = true;
+  config["pardiso-thread-limit"] = 64;
+
+  std::vector<std::string> states;
+  for (const char *threads : { "4", "32" }) {
+    const fs::path output = tempDir.path() / (std::string("threads-") + threads);
+    config["output"] = output.generic_string();
+    const fs::path configPath = tempDir.path() / (std::string("threads-") + threads + ".json");
+    writeTextFile(configPath, config.dump(2));
+    ASSERT_EQ(runCommand(std::string("OMP_NUM_THREADS=") + threads + " " + shellExecutable(binary) + " " + quotePath(configPath)), 0);
+    std::string concatenated;
+    for (int frame = 0; frame < 12; ++frame) {
+      const fs::path state = output / fmt::format("deform{:04d}.u", frame);
+      ASSERT_TRUE(fs::exists(state));
+      concatenated += readTextFile(state);
+    }
+    states.push_back(std::move(concatenated));
+  }
+  ASSERT_EQ(states.size(), 2u);
+  EXPECT_FALSE(states[0].empty());
+  EXPECT_TRUE(states[0] == states[1]);
+}
+#endif
 
 TEST(RunIPCSimCliGTest, DeterministicAssemblyReproducesStatesBitwiseAcrossRuns)
 {

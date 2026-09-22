@@ -245,6 +245,35 @@ overlapping external object, or by a self-intersecting input mesh are reported
 with the offending edge and triangle instead of being simulated. Pairs whose
 vertices are all static are ignored.
 
+## Linear solver
+
+Both runners accept optional solver keys:
+
+```json
+"linear-solver": "default",
+"pardiso-deterministic": true,
+"pardiso-thread-limit": 64
+```
+
+`linear-solver` selects the direct solver behind every Newton solve:
+`default` prefers Panua PARDISO when the build includes it, then Intel MKL
+PARDISO, then Eigen's LDLT; `pardiso`, `mkl-pardiso` and `eigen` request one
+explicitly and fail with a message when it is not part of the build. A build
+with Panua PARDISO has no MKL PARDISO option, because both libraries export
+the same `pardiso` entry point.
+
+With Panua PARDISO, `pardiso-deterministic` (default true) applies the
+user guide's recipe for an identical solution independent of the number of
+processors (IPARM(34) = 1 with METIS reordering, the two-level parallel
+factorization and solve, and sequential METIS reordering), and
+`pardiso-thread-limit` (default 64) is the guide's IPARM(3), the upper limit of
+processors for which the results coincide. Any `OMP_NUM_THREADS` up to that
+limit then produces bit-identical solves; if the runtime would use more
+threads than the limit, the limit is raised to the team size, since a lower
+value corrupts the factorization. Together with `deterministic-assembly`,
+runs with different thread counts write identical state files, which the
+runIPCSim tests check.
+
 ## Deterministic assembly
 
 Parallel assembly is not bit-reproducible by default: element and contact-pair

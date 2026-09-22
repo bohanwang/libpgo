@@ -6,6 +6,7 @@
 
 #include <omp.h>
 
+#include <algorithm>
 #include <iostream>
 #include <chrono>
 #include <thread>
@@ -25,12 +26,13 @@ namespace
 {
 // Panua PARDISO sizes its per-thread work arrays from iparm[2] but runs its
 // parallel regions with the team size of its embedded OpenMP runtime, i.e.
-// OMP_NUM_THREADS when set and otherwise every available processor. The two
-// values must agree; the previous hard-coded 64 crashed the factorization on a
-// 512-processor machine unless OMP_NUM_THREADS happened to be set. The OpenMP
-// runtime linked here resolves OMP_NUM_THREADS and the affinity mask the same
-// way, so its default team size is the value PARDISO will actually use.
-int pardisoNumThreads()
+// OMP_NUM_THREADS when set and otherwise every available processor. iparm[2]
+// must never be below that team size; a hard-coded 64 crashed the
+// factorization on a 512-processor machine unless OMP_NUM_THREADS happened to
+// be set. The OpenMP runtime linked here resolves OMP_NUM_THREADS and the
+// affinity mask the same way, so its default team size is the value PARDISO
+// will actually use.
+int openMPTeamSize()
 {
   const int numThreads = omp_get_max_threads();
   return numThreads > 0 ? numThreads : 1;
@@ -170,7 +172,7 @@ void EigenOrigPardisoSupport::setParam()
   // iparm[0]=1 means we provide our own parameters (already set by pardisoinit default, overriding below)
   iparm[0] = 1;
   iparm[1] = static_cast<int>(rtype);  // matrix re-ordering algorithm
-  iparm[2] = pardisoNumThreads();      // number of threads; must match the OpenMP team size
+  iparm[2] = openMPTeamSize();         // number of threads; refined by applyParallelParams()
 
   iparm[3] = 0;                      // default value for CG
   iparm[4] = 0;                      // No user fill-in permutation
@@ -241,6 +243,35 @@ void EigenOrigPardisoSupport::setParam()
   iparm[53] = 0;  // Dense columns
   for (int i = 54; i < 64; i++) {
     iparm[i] = 0;
+  }
+
+  applyParallelParams();
+}
+
+void EigenOrigPardisoSupport::setDeterministic(bool on, int threadLimit_)
+{
+  deterministic = on;
+  threadLimit = std::max(1, threadLimit_);
+  applyParallelParams();
+}
+
+void EigenOrigPardisoSupport::applyParallelParams()
+{
+  // See setDeterministic() for the manual's conditions (IPARM(2), (3), (24),
+  // (25), (28), (34)). The parameter names below are 0-based.
+  const int teamSize = openMPTeamSize();
+  if (deterministic) {
+    iparm[1] = 2;                                  // METIS nested dissection, required by IPARM(34)
+    iparm[2] = std::max(threadLimit, teamSize);    // upper processor limit for identical results, never below the team
+    iparm[23] = 1;                                 // two-level parallel factorization
+    iparm[24] = 1;                                 // parallel forward/backward solve
+    iparm[27] = 0;                                 // sequential METIS reordering
+    iparm[33] = 1;                                 // identical solution independent of the number of processors
+  }
+  else {
+    iparm[1] = static_cast<int>(rtype);
+    iparm[2] = teamSize;
+    iparm[33] = 0;
   }
 }
 
