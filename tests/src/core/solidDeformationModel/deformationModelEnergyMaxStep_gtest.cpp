@@ -602,3 +602,36 @@ TEST(DeformationModelEnergyMaxStepGTest, SafetyClampNeverPassesTheFeasibleBound)
   EXPECT_DOUBLE_EQ(applyMaterialMaxStepSafetyClamp(1.5), 1.0);
   EXPECT_DOUBLE_EQ(applyMaterialMaxStepSafetyClamp(0.0), 0.0);
 }
+
+TEST(DeformationModelEnergyMaxStepGTest, NegativelyOrientedRestTetIsLegalAndLimitedLikeItsMirror)
+{
+  const std::vector<double> vertices = {
+    0.0, 0.0, 0.0,
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+  };
+  // Same geometry, vertices 1 and 2 swapped: det(Dm) < 0 while F = I at rest.
+  EnergyFixture reversed = makeTetFixture(vertices, { 0, 2, 1, 3 });
+  EnergyFixture forward = makeTetFixture(vertices, { 0, 1, 2, 3 });
+  const ES::VXd zeroU = ES::VXd::Zero(12);
+
+  const auto atRest = reversed.assembler->computeMaxStepObservation(reversed.restPositions.data(), zeroU.data());
+  EXPECT_FALSE(atRest.hasIllegalInitialState);
+  EXPECT_DOUBLE_EQ(atRest.alpha, 1.0);
+
+  // pushing the apex through the base plane inverts either tet at alpha = 0.5
+  ES::VXd du = ES::VXd::Zero(12);
+  du.segment<3>(9) = ES::V3d(0.0, 0.0, -2.0);
+  const double reversedAlpha = reversed.energy->computeMaxStepSize(zeroU, du);
+  const double forwardAlpha = forward.energy->computeMaxStepSize(zeroU, du);
+  EXPECT_GT(reversedAlpha, 0.0);
+  EXPECT_LT(reversedAlpha, 1.0);
+  EXPECT_NEAR(reversedAlpha, forwardAlpha, 1e-12);
+
+  // a harmless stretch keeps the full step for both orientations
+  ES::VXd stretch = ES::VXd::Zero(12);
+  stretch.segment<3>(9) = ES::V3d(0.0, 0.0, 0.5);
+  EXPECT_DOUBLE_EQ(reversed.energy->computeMaxStepSize(zeroU, stretch), 1.0);
+  EXPECT_DOUBLE_EQ(forward.energy->computeMaxStepSize(zeroU, stretch), 1.0);
+}

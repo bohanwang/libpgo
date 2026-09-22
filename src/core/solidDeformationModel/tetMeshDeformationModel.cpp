@@ -164,6 +164,16 @@ DeformationModel::LocalMaxStepResult TetMeshDeformationModel::computeLocalMaxSte
   computeDm(restLocal, Dm);
 
   const double detDm = Eigen::Map<const ES::M3d>(Dm).determinant();
+  // det(F) = det(Ds) / det(Dm): a negatively oriented rest tetrahedron is
+  // uninverted while det(Ds) < 0. Flip the edge matrices for that case so the
+  // polynomial measures orientation relative to the rest configuration rather
+  // than absolute handedness (det(-M) = -det(M) for 3x3 matrices).
+  if (detDm < 0.0) {
+    for (int k = 0; k < 9; k++) {
+      Ds0[k] = -Ds0[k];
+      deltaDs[k] = -deltaDs[k];
+    }
+  }
   const double eps = kTetRelativeDetEps * std::abs(detDm);
   const auto poly = buildDeterminantCubicFromAffineMatrixPath(Ds0, deltaDs, eps);
   const ConservativeFeasibleAlphaResult alphaResult = findConservativeFeasibleAlpha(poly, eps);

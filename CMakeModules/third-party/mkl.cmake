@@ -44,17 +44,20 @@ if(PGO_USE_MKL)
         vml_mc3
         vml_avx2
         vml_avx512)
-      set(
-        _pgo_mkl_dispatch_library
-        "${MKL_ROOT}/lib/libmkl_${_pgo_mkl_dispatch_name}.so.2"
-      )
-      if(NOT EXISTS "${_pgo_mkl_dispatch_library}")
+      # The SONAME version changes between oneMKL releases (.so.2 up to 2025,
+      # .so.3 from 2026), so discover the versioned file instead of assuming it.
+      file(GLOB _pgo_mkl_dispatch_candidates
+        "${MKL_ROOT}/lib/libmkl_${_pgo_mkl_dispatch_name}.so.[0-9]*")
+      list(LENGTH _pgo_mkl_dispatch_candidates _pgo_mkl_dispatch_count)
+      if(_pgo_mkl_dispatch_count EQUAL 0)
         message(
           FATAL_ERROR
           "Required oneMKL dispatch library is missing: "
-          "${_pgo_mkl_dispatch_library}"
+          "${MKL_ROOT}/lib/libmkl_${_pgo_mkl_dispatch_name}.so.<version>"
         )
       endif()
+      list(SORT _pgo_mkl_dispatch_candidates COMPARE NATURAL ORDER DESCENDING)
+      list(GET _pgo_mkl_dispatch_candidates 0 _pgo_mkl_dispatch_library)
       list(APPEND _pgo_mkl_dispatch_libraries "${_pgo_mkl_dispatch_library}")
     endforeach()
     target_link_libraries(

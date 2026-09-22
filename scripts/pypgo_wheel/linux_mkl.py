@@ -60,20 +60,24 @@ def restore(wheel: Path) -> None:
         library_dir = library_dirs[0]
 
         for component in MKL_DISPATCH_COMPONENTS:
+            # The SONAME version follows the oneMKL release (.so.2, .so.3, ...);
+            # restore whichever version auditwheel renamed.
             pattern = re.compile(
-                rf"^libmkl_{re.escape(component)}-[0-9a-f]+\.so\.2$"
+                rf"^libmkl_{re.escape(component)}-[0-9a-f]+\.so\.(?P<version>[0-9]+)$"
             )
             candidates = [
-                path for path in library_dir.iterdir() if pattern.match(path.name)
+                (path, match.group("version"))
+                for path in library_dir.iterdir()
+                if (match := pattern.match(path.name)) is not None
             ]
             if len(candidates) != 1:
                 raise RuntimeError(
                     f"expected one repaired libmkl_{component} library, "
-                    f"found {candidates}"
+                    f"found {[path for path, _ in candidates]}"
                 )
 
-            repaired = candidates[0]
-            original_name = f"libmkl_{component}.so.2"
+            repaired, soname_version = candidates[0]
+            original_name = f"libmkl_{component}.so.{soname_version}"
             restored = library_dir / original_name
             repaired_name = repaired.name
             repaired.rename(restored)

@@ -53,6 +53,13 @@ target_link_libraries(barycentricCoordinates_gtest PRIVATE GTest::gtest_main int
 set_property(TARGET barycentricCoordinates_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(barycentricCoordinates_gtest)
 
+if(TARGET Gmsh::Gmsh)
+  add_executable(loadMshFile_gtest loadMshFile_gtest.cpp)
+  target_link_libraries(loadMshFile_gtest PRIVATE GTest::gtest_main volumetricMesh Gmsh::Gmsh)
+  set_property(TARGET loadMshFile_gtest PROPERTY FOLDER "tests/gtest")
+  gtest_discover_tests(loadMshFile_gtest)
+endif()
+
 if(TARGET tetgenInterface)
   add_executable(tetgenInterface_gtest tetgenInterface_gtest.cpp)
   target_link_libraries(tetgenInterface_gtest PRIVATE GTest::gtest_main tetgenInterface mesh)
