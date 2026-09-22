@@ -47,8 +47,10 @@ nothing here is a ground-truth comparison.
   Kawabata bending rigidity of light woven cotton at 0.05 to 0.2 gf cm2/cm,
   which is 5e-6 to 2e-5 N m. Measured pseudo Poisson ratios of woven cotton
   are 0.2 to 0.5. This config targets a membrane stiffness E h of 1000 N/m,
-  a bending rigidity of 1e-5 N m and an in-plane Poisson ratio of 0.4 (the
-  source's bending value is about seven times softer than that range).
+  an in-plane Poisson ratio of 0.4, and a bending rigidity of 1e-4 N m, ten
+  times the light-cotton value, chosen after a run at 1e-5 N m looked too
+  limp for a terry towel (the source's bending value is about seven times
+  softer than even the light-cotton range).
 - Mapping to the config keys: libpgo's Koiter St. Venant-Kirchhoff model
   converts each modulus to 3D Lame constants with `shell-poisson-ratio` and
   applies them to twice the Green strain, so the config values are not the
@@ -57,9 +59,9 @@ nothing here is a ground-truth comparison.
   nu / (1 - nu), and the bending rigidity for a cylindrical bend is
   E_b (1 - nu) / ((1 + nu)(1 - 2 nu)) h^3 / 12. Inverting these for the
   targets above with h = 1.6 mm gives `shell-poisson-ratio` 0.29,
-  `shell-youngs-modulus` 1.4e5 and `shell-bending-youngs-modulus` 2.3e4.
-  To reproduce the source's bending stiffness instead, use 3200 for the
-  bending modulus.
+  `shell-youngs-modulus` 1.4e5 and `shell-bending-youngs-modulus` 2.3e5
+  (2.3e4 for the light-cotton bending rigidity of 1e-5 N m, 3200 for the
+  source's).
 - Contact: `ipc-heuristic` picks dhat as 1e-3 of the bounding-box diagonal
   (about 0.9 mm, below the 4 mm table clearance and the 22 mm layer gap) and
   kappa from the membrane stiffness. Friction 0.65 applies to the table and
