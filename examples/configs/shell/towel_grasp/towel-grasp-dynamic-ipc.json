@@ -29,7 +29,7 @@
   "shell-thickness": 0.0016,
   "shell-areal-density": 0.2012,
   "shell-poisson-ratio": 0.29,
-  "shell-youngs-modulus": 140000.0,
+  "shell-youngs-modulus": 1400000.0,
   "shell-bending-youngs-modulus": 230000.0,
   "shell-zero-rest-curvature": true,
   "dump-interval": 10,
