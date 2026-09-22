@@ -4,6 +4,8 @@
 
 #include "EigenOrigPardisoSupport.h"
 
+#include <omp.h>
+
 #include <iostream>
 #include <chrono>
 #include <thread>
@@ -18,6 +20,22 @@ inline double dura(const hclockPt &t1, const hclockPt &t2)
 {
   return static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count()) / 1e6;
 }
+
+namespace
+{
+// Panua PARDISO sizes its per-thread work arrays from iparm[2] but runs its
+// parallel regions with the team size of its embedded OpenMP runtime, i.e.
+// OMP_NUM_THREADS when set and otherwise every available processor. The two
+// values must agree; the previous hard-coded 64 crashed the factorization on a
+// 512-processor machine unless OMP_NUM_THREADS happened to be set. The OpenMP
+// runtime linked here resolves OMP_NUM_THREADS and the affinity mask the same
+// way, so its default team size is the value PARDISO will actually use.
+int pardisoNumThreads()
+{
+  const int numThreads = omp_get_max_threads();
+  return numThreads > 0 ? numThreads : 1;
+}
+}  // namespace
 
 /* Original PARDISO prototypes (Panua Technologies) */
 /* PARDISO prototype. */
@@ -152,7 +170,7 @@ void EigenOrigPardisoSupport::setParam()
   // iparm[0]=1 means we provide our own parameters (already set by pardisoinit default, overriding below)
   iparm[0] = 1;
   iparm[1] = static_cast<int>(rtype);  // matrix re-ordering algorithm
-  iparm[2] = 64;                       // number of threads
+  iparm[2] = pardisoNumThreads();      // number of threads; must match the OpenMP team size
 
   iparm[3] = 0;                      // default value for CG
   iparm[4] = 0;                      // No user fill-in permutation
