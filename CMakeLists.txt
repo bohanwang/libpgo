@@ -87,7 +87,7 @@ add_custom_target(copy_compile_commands_json
 )
 
 if (PGO_ENABLE_CUDA)
-  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DEFINED CMAKE_CUDA_HOST_COMPILER)
     if(EXISTS "/usr/bin/g++")
       message(STATUS "Set CUDA host compiler: /usr/bin/g++")
       set(CMAKE_CUDA_HOST_COMPILER /usr/bin/g++)
@@ -95,7 +95,9 @@ if (PGO_ENABLE_CUDA)
     endif()
   endif()
 
-  set(CMAKE_CUDA_ARCHITECTURES native)
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures for libpgo")
+  endif()
   enable_language(CUDA)
 endif()
 

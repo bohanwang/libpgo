@@ -31,6 +31,12 @@ foreach(lib ${PGO_GLOBAL_LIBRARY_TARGETS})
   add_subdirectory(core/${lib})
 endforeach()
 
+if(PGO_ENABLE_CUDA)
+  add_subdirectory(core/nonlinearOptimization/cuda)
+  add_subdirectory(core/solidDeformationModel/cuda)
+  add_subdirectory(core/contact/ipc/cuda)
+endif()
+
 add_subdirectory(simulationRunner)
 
 if(PGO_UI)

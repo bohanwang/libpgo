@@ -12,6 +12,7 @@ set(SIMULATION_RUNNER_SOURCES
 set(SIMULATION_RUNNER_HEADERS
   simulationRunner.h
   runSimCliLogging.h
+  runSimTiming.h
   runSimFEMSetup.h
   runSimVolumeMeshIO.h
   runIPCExternalObjects.h
@@ -37,3 +38,9 @@ target_link_libraries(simulationRunner PUBLIC
   simulation
   solidDeformationModel
   volumetricMesh)
+
+if(PGO_ENABLE_CUDA)
+  target_sources(simulationRunner PRIVATE cudaIpcSimulationRunner.cpp cudaIpcSimulationRunner.h)
+  target_compile_definitions(simulationRunner PRIVATE PGO_HAS_CUDA_IPC)
+  target_link_libraries(simulationRunner PRIVATE cudaNonlinearOptimization cudaSolidDeformationModel cudaKoiterDeformationModel cudaContact)
+endif()

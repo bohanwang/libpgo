@@ -1,0 +1,30 @@
+{
+  "case": "box-contact-dynamic-tet",
+  "original_num_timestep": 1001,
+  "timestep": 0.001,
+  "solver_tolerance": 1e-06,
+  "solver_max_iterations": 300,
+  "original_fixed_movement": [
+    0,
+    -0.1,
+    0
+  ],
+  "damping": [
+    0.01,
+    0.01
+  ],
+  "failed_gradient_inf": 8.727636810590411e-06,
+  "failed_stop": "line_search_failed",
+  "failed_runner_sha256": "ab3dcfbc6f41a5ca54e3cde28519dd4be0d115c3bbc13517b7da121d7f577771",
+  "fixtures": {
+    "damping-contact-0172.u": {
+      "source": "/mnt/data01/bohan/libpgo/examples/generated/cuda-volumetric-20261002-r3/box-contact-dynamic-tet/output/deform0172.u",
+      "sha256": "64ad017b1ad7dd1462e293b2dff6eb6e037f1a60cd194cee5bf7411363a7bfc7"
+    },
+    "damping-contact-0173-failed.u": {
+      "source": "/tmp/pgo-cuda-newton-replay/box-contact-dynamic-tet-173-original-chord-v5/output/rejected/frame0173-refinement00/step0000.u",
+      "sha256": "3f1cd100a2bbf0c6cba9bc3cad3eef46e1ffbd4571f3986a624315999326540c"
+    }
+  },
+  "test_time_interval": "The restart test solves only frame173. Shortening num-timestep to174 and scaling movement by173/1000 retains the same linear pulling target throughout the172-to173 interval; the test checks both endpoints. Full example validation retains the original1001-frame configuration."
+}

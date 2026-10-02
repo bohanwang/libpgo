@@ -501,6 +501,8 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
   context.deformationModelManagerOwner = dmm;
   context.deformationModelAssemblerOwner = assembler;
   context.elasticEnergy = elasticEnergy;
+  context.elasticParameters = std::move(elasticParams);
+  context.zeroShellRestCurvature = zeroRestCurvature;
   context.pullingHessianBaseOwner = std::move(pullingHessianBase);
   context.pullingEnergies = std::move(pullingEnergies);
   context.pullingTargets = std::move(pullingTargets);
@@ -512,6 +514,7 @@ IpcSimulationContext buildShellIpcSimulation(const pgo::ConfigFileJSON &jconfig)
       collisionSurface.vertices, collisionSurface.triangles, collisionSurface.displacementMap,
       collisionSurface.vertexIsDeformable, ipcParams);
   context.kinematicExternalObjects = std::move(preparedSurface.kinematicObjects);
+  context.collisionSurface = std::move(preparedSurface.surface);
   return context;
 }
 
@@ -614,6 +617,7 @@ IpcSimulationContext buildVolumeIpcSimulation(const pgo::ConfigFileJSON &jconfig
       collisionSurface.vertices, collisionSurface.triangles, collisionSurface.displacementMap,
       collisionSurface.vertexIsDeformable, ipcParams);
   context.kinematicExternalObjects = std::move(preparedSurface.kinematicObjects);
+  context.collisionSurface = std::move(preparedSurface.surface);
   return context;
 }
 }  // namespace pgo::RunIPCSim

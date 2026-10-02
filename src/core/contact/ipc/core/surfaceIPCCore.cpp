@@ -320,8 +320,9 @@ double SurfaceIPCCore::computeMaxStepSize(EigenSupport::ConstRefVecXd x, EigenSu
 {
   validateSurfaceState(x, "surface positions");
   validateSurfaceState(dx, "surface displacement");
-  const double alpha = SurfaceIPCMaxStep().compute(topology_, x, dx, dhat, slackness);
-  return std::max(alpha, 1e-12);
+  // A zero bound signals an invalid or uncertifiable segment. Raising it would
+  // defeat the CCD routine's conservative failure handling.
+  return SurfaceIPCMaxStep().compute(topology_, x, dx, dhat, slackness);
 }
 
 // =========================================================================

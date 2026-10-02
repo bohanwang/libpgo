@@ -12,9 +12,22 @@ int pgo::CudaUtilities::initDevice(int deviceID)
     return 1;
   }
 
-  int device = deviceID;  // Select the first device (you can modify this to select a specific device)
-  cudaDeviceProp deviceProp;
-  cudaGetDeviceProperties(&deviceProp, device);
+  if (deviceID < 0 || deviceID >= deviceCount) {
+    SPDLOG_LOGGER_ERROR(pgo::Logging::lgr(), "CUDA device {} is outside [0, {}).", deviceID, deviceCount);
+    return 1;
+  }
+  const int device = deviceID;
+  err = cudaSetDevice(device);
+  if (err != cudaSuccess) {
+    SPDLOG_LOGGER_ERROR(pgo::Logging::lgr(), "Failed to set CUDA device {}: {}", device, cudaGetErrorString(err));
+    return 1;
+  }
+  cudaDeviceProp deviceProp{};
+  err = cudaGetDeviceProperties(&deviceProp, device);
+  if (err != cudaSuccess) {
+    SPDLOG_LOGGER_ERROR(pgo::Logging::lgr(), "Failed to query CUDA device {}: {}", device, cudaGetErrorString(err));
+    return 1;
+  }
   SPDLOG_LOGGER_INFO(pgo::Logging::lgr(), "Using CUDA device {}: {}", device, deviceProp.name);
   SPDLOG_LOGGER_INFO(pgo::Logging::lgr(), "  Total global memory: {} bytes ({} MB)",
     deviceProp.totalGlobalMem, deviceProp.totalGlobalMem / (1024 * 1024));
@@ -22,14 +35,6 @@ int pgo::CudaUtilities::initDevice(int deviceID)
   SPDLOG_LOGGER_INFO(pgo::Logging::lgr(), "  Multiprocessor count: {}", deviceProp.multiProcessorCount);
   SPDLOG_LOGGER_INFO(pgo::Logging::lgr(), "  Max shared memory per block: {} bytes ({} KB)",
     deviceProp.sharedMemPerBlockOptin, deviceProp.sharedMemPerBlockOptin / 1024);
-
-  return 0;
-
-  err = cudaSetDevice(device);
-  if (err != cudaSuccess) {
-    SPDLOG_LOGGER_ERROR(pgo::Logging::lgr(), "Failed to set CUDA device {}: {}", device, cudaGetErrorString(err));
-    return 1;
-  }
 
   return 0;  // Success
 }

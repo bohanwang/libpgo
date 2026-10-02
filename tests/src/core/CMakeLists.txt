@@ -12,6 +12,13 @@ target_link_libraries(newtonSolver_gtest PRIVATE GTest::gtest_main nonlinearOpti
 set_property(TARGET newtonSolver_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(newtonSolver_gtest)
 
+if(PGO_ENABLE_CUDA)
+  add_executable(cudaNewtonSolver_gtest cudaNewtonSolver_gtest.cpp cudaEnergyChange_gtest.cpp)
+  target_link_libraries(cudaNewtonSolver_gtest PRIVATE GTest::gtest_main cudaNonlinearOptimization)
+  set_property(TARGET cudaNewtonSolver_gtest PROPERTY FOLDER "tests/gtest")
+  gtest_discover_tests(cudaNewtonSolver_gtest PROPERTIES LABELS "cuda")
+endif()
+
 if(APPLE AND TARGET BLAS::BLAS)
   add_executable(accelerateRuntimeSmoke accelerateRuntimeSmoke.c)
   target_link_libraries(accelerateRuntimeSmoke PRIVATE BLAS::BLAS)

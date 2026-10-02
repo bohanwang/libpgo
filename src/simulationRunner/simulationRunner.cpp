@@ -18,8 +18,11 @@ int pgo::SimulationRunner::runSimulationFromConfig(const std::filesystem::path &
     const std::string contactModel =
       config.exist("contact-model") ? config.getString("contact-model") : "sampled";
 
-    if (contactModel == "sampled")
+    if (contactModel == "sampled") {
+      if (config.exist("simulation-backend") && config.getString("simulation-backend") != "cpu")
+        throw std::invalid_argument("The CUDA simulation backend requires `contact-model = ipc`.");
       return runSampledSimulationFromConfig(configFilename);
+    }
     if (contactModel == "ipc")
       return runIPCSimulationFromConfig(configFilename);
 

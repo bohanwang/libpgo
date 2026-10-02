@@ -17,6 +17,221 @@ Static sampled volume configurations exercise the elastic, attachment, and
 gravity solve, but sampled contact is not added to their Newton energy. The
 runner prints an explicit warning. Sampled shell simulation is not supported.
 
+## CUDA IPC
+
+The CUDA backend supports tetrahedral and eight-node cubic `stable-neo` and `stvk-vol` solids,
+`koiter-stvk` shells, regularized Coulomb friction, embedded collision surfaces, static or backward-Euler solves,
+gravity, pulling trajectories, prescribed external objects, Rayleigh mass/stiffness damping, and
+the existing state/restart files. CPU remains the default. Select CUDA with
+`"simulation-backend": "cuda"` and optionally `"cuda-device": 0`.
+
+The [CUDA parameter reference](CUDA_PARAMETERS.md) lists every exposed Newton,
+PCG, IPC and material-validity setting, including defaults, units, allowed ranges,
+C++-only controls and fixed implementation choices.
+
+Build with an NVIDIA CUDA toolkit and run the box example:
+
+```bash
+cmake --preset base_cuda_release -DCMAKE_CUDA_ARCHITECTURES=native
+cmake --build --preset base_cuda_release --target runIPCSim
+build/base_cuda_release/bin/runIPCSim examples/configs/volume/box/box-tet-ipc-cuda.json --log
+```
+
+For a build without GPU visibility, set an explicit CUDA architecture supported
+by the intended GPU (for example `90` for H200). CUDA is optional; builds with
+`PGO_ENABLE_CUDA=OFF` have no dependency on the selected libuipc sources.
+
+The CUDA box config uses the original box mesh, embedded surface, obstacle,
+material and solver tolerance, and runs 750 timesteps through impact. It writes
+states and meshes to `examples/generated/output/box-tet-ipc-cuda/`.
+
+Material evaluation, projected Hessian products, contact geometry and assembly,
+CCD, and Jacobi-PCG run on the device. Host code controls Newton/backtracking,
+updates prescribed inputs, and handles checkpoints. The contact law retains
+libpgo's normalized log barrier and geometric weights. Only the required
+libuipc distance/CCD, LBVH topology, eigenprojection and PCG kernels are imported; see
+[the import manifest](../third-party/libuipc/IMPORTS.md).
+
+When material max-step protection is enabled, cubic feasibility defaults to
+`cuda-cubic-validity: "gauss"`, matching the CPU's eight FEM quadrature points.
+This preserves the original material and checks positive determinants at those
+points throughout each displacement chord. It does not guarantee positivity
+between the quadrature points: corners can invert while Newton converges and
+the embedded contact surface remains collision-free. These whole-cell failures
+are reported separately by the trajectory checker.
+Set `cuda-cubic-validity: "whole-cell"` to additionally require positive Jacobians
+throughout each trilinear cell. Directed interval bounds and bounded subdivision
+certify this stronger condition; an inconclusive bound shortens or rejects the
+step. This adds a feasibility restriction, without adding restoring forces to
+the material. Initial states must pass the selected enabled feasibility checks
+before Newton can report convergence. Each run writes `material-validity.json`
+to record its criterion.
+Restarts retain this metadata and reject changes to the criterion. A cubic
+restart imported from an older run without metadata requires an explicit
+`cuda-cubic-validity` setting; earlier states must be checked independently.
+
+The backend uses GPU Morton LBVH queries with outward-rounded double AABBs,
+checked candidate-buffer growth, and cached element/contact Hessians. Stronger
+preconditioners remain follow-up work. Other materials and deterministic assembly
+are rejected explicitly. Use the CPU backend for those options. Optional `cuda-pcg-max-iter` and
+`cuda-pcg-tolerance` control the inner solver; `solver-eps` still measures the
+Newton gradient infinity norm. The final log reports contact counts, convergence,
+Newton/PCG iterations and elapsed time.
+Line search evaluates component energy changes directly so small corrections
+remain measurable after large rigid motion. After 20 Newton iterations, the
+solver can try the unprojected tangent; PCG curvature and descent checks fall
+back to the projected tangent when needed. The per-frame CSV records these
+attempts, accepted directions, and fallbacks.
+`cuda-exact-hessian-start-iteration` changes when these attempts begin (default
+`20`; a negative value disables them). This changes the search direction,
+while the original energy, gradient tolerance and collision checks still govern
+acceptance.
+`cuda-pcg-batch-size` optionally keeps PCG reduction scalars on the GPU and polls
+after a bounded batch (`1`–`64`; default `0` uses host scalars). Each iteration
+still checks curvature, finite values and residual tolerance. A terminal result
+freezes the PCG state, and the final true residual is checked before Newton uses
+the direction.
+`cuda-stagnation-window` optionally detects a sequence of rounded, tiny updates
+whose gradient norms stagnate after physical-chord clipping (`0` disables it).
+The solver first tries bounded residual recovery; otherwise it reports a failed
+solve so the dynamic runner can retry a smaller physical step. This early-failure
+heuristic never declares convergence. The attempt CSV records its count and
+full-precision step and residual ratios.
+`cuda-stagnation-tolerance` sets the relative-change threshold for both gradient
+norms in that optional detector (default `64 * epsilon(double)`). It must be
+finite and strictly between zero and one. A larger value can detect plateaus
+whose residual evaluations vary slightly despite tiny represented motion. This
+setting affects early failure and recovery only; `solver-eps` remains the
+convergence threshold. Record any explicit value with the solver strategy when
+comparing trajectories.
+If rounding prevents a near-stationary Newton direction from reducing the
+residual, a bounded coordinate correction minimizes the linearized residual
+using exact Hessian columns. It is accepted only within the existing energy
+roundoff bound, with a measured residual reduction and certified motion. The
+`residual_correction_*` CSV counters expose these attempts; the original Newton
+tolerance still determines convergence.
+Set `cuda-solver-verbose` to `2` to include per-iteration step and line-search
+diagnostics when investigating convergence.
+
+For timing a bounded invocation, `runIPCSim` accepts `--max-frames N` and
+`--timing-csv PATH` on either backend. The frame limit preserves the configured
+`num-timestep` and loading schedules, including after a checkpoint restart.
+Timing rows separate compute from state/mesh exports and record convergence and
+commit status. Compute includes runner work and rejected attempts; startup and
+final invocation checks remain part of process wall time. The paired benchmark
+helper is `scripts/benchmark_cuda_examples.py`.
+
+GPU tests are labeled `cuda`; run them on a machine with a visible GPU:
+
+```bash
+cmake --build --preset base_cuda_release --target cudaNewtonSolver_gtest cudaDeformationModelEnergy_gtest cudaKoiterDeformationModelEnergy_gtest cudaEmbeddedSurfaceIPCPotentialEnergy_gtest cudaSurfaceIPCFrictionPotentialEnergy_gtest cudaIPCSim_gtest
+ctest --test-dir build/base_cuda_release -L cuda --output-on-failure
+```
+
+### Validating complete CUDA examples
+
+The validation criterion is that **every timestep reaches its configured Newton
+gradient tolerance and the trajectory remains collision-free**. A successful
+process exit, finite states, or a plausible animation is insufficient. The CUDA
+runner writes full-precision per-timestep diagnostics to `newton-solves.csv` in
+the output directory; this file covers the current invocation, including original
+frame indices after a restart. Verbosity `2` also records individual Newton
+iterations and line-search steps in the run log.
+
+For dynamic simulation, the CUDA runner also checks motion from the physical
+step's starting state to each Newton trial. If a dynamic interval cannot converge with certified motion,
+it retries that interval with twice as many backward Euler substeps. The
+configured timestep remains the output interval and maximum integration step;
+`cuda-max-timestep-refinements` limits the number of halvings (default `8`, range
+`0`–`12`). Every accepted physical substep must be certified. An exhausted retry
+budget fails without committing that frame. The actual trajectory follows all
+recorded substeps; a direct shortcut between coarse frame endpoints may cross
+the mesh even when that physical path is clear. The frame CSV retains the
+separate `macroframe_chord_certified` diagnostic. Do not interpolate such a
+shortcut in a downstream consumer.
+`newton-attempts.csv` records accepted and rejected solves, including each friction
+lagging iteration and its frozen pair count; `newton-substeps.csv`
+records accepted physical times and intermediate state files. Matching surfaces
+are exported for every accepted step as `substeps/frame####-step####.obj`, in
+addition to the configured coarse mesh dumps. The renderer selects these actual
+states at uniform physical times without interpolating their geometry. The frame CSV's
+gradient is the maximum over all accepted solves, including friction lagging
+iterations, and iteration counts sum those solves. Energy and final
+linear-solver/step diagnostics refer to the last solve.
+`max_substep_newton_iterations` is the largest individual solve count. Every
+lagging iteration keeps the physical step's reference, inertia, and damping
+fixed; only the final solution advances time. Each solve retains the configured
+tolerance and iteration cap.
+The independent checker validates every recorded physical segment, endpoint,
+and prescribed-object movement. It reports coarse shortcuts separately. A
+missing or invalid row in a present physical manifest fails validation; legacy
+outputs without a manifest use their macroframe chords as the trajectory.
+
+Static equilibrium keeps the full configured load throughout Newton. Its
+`static-newton-path.json` records the input and every accepted optimization
+iterate for each friction lagging solve, with states in `newton-path/`.
+Every actual rounded Newton transition is certified on the GPU and independently
+checked by the CPU validator. Every terminal solve must meet the configured
+tolerance; intermediate iterates are not physical timesteps or converged states.
+This explicit path is authoritative for static validation, with the direct
+initial-to-final chord reported separately as a diagnostic. The static
+`newton-substeps.csv` row is terminal-state metadata. Missing or conflicting
+entries in either present manifest fail validation. Static videos show the
+final equilibrium and do not assign physical times to Newton iterates.
+
+`scripts/validate_cuda_examples.py` prepares isolated copies of the original box,
+box-with-sphere, and bunny configurations by default; `--volume-ipc` selects all
+11 canonical volumetric IPC configurations, including cubic, dragon, static
+contact and damped dynamic contact. `--shell-ipc` selects the four canonical
+hanging-cloth, shirt and towel configurations. Preparation preserves their physics,
+tolerances, timestep counts, and mesh dump intervals. Its `prepare`, `run`, and
+`summarize` commands accept `--destination` and `--cases`; prepared configurations
+contain an explicit `cuda-device` that can be adjusted for the available GPUs.
+Explicit PCG accuracy/batching and exact-tangent start options are recorded as numerical
+strategies in each report; the source material, contact law, Newton tolerance,
+iteration cap and time schedule must still match.
+Summarizing produces an HTML report, CSV tables, convergence plots, and links to
+the raw logs and videos. It exits nonzero while any selected case fails or is
+incomplete.
+Frame iteration totals count accepted solves. `newton-attempt-work.csv` also
+records completed rejected attempts from the verbose log, so their Newton and
+PCG work is included when assessing runtime. Interrupted attempts remain in the
+raw log and are excluded from these completed-attempt totals.
+
+Build `validateIPCTrajectory` alongside `runIPCSim`, then independently check each
+completed trajectory on the CPU:
+
+```bash
+build/base_cuda_release/bin/validateIPCTrajectory path/to/config.json --swept --report path/to/collision-validation.json
+```
+
+The checker examines every saved state for self/obstacle intersections and
+nonpositive element Jacobians. Tetrahedra use determinant extrema. Cubic checks
+follow the explicitly configured or recorded validity criterion: Gauss-point
+validity matches the CPU model, while whole-cell validity additionally uses
+outward-rounded interval bounds and tensor Bernstein subdivision over the
+entire cell. Whole-cell diagnostics are retained when Gauss-point validity is
+selected. Use `--cubic-validity gauss` or `--cubic-validity whole-cell` to select
+the checking criterion explicitly. Historical runs without a configured or
+recorded criterion retain whole-cell checking. With `--swept`, these
+checks cover the actual piecewise linear trajectory along with independent CPU
+CCD. A physical-substep manifest always requires these swept checks, including
+when `--swept` is omitted.
+In Gauss mode, the report separately counts unique elements with confirmed
+negative Jacobian witnesses and lists their IDs and affected frames. Cells
+whose whole-cell check is inconclusive are reported separately; a failed
+positivity certificate alone does not establish an inversion. These counts
+describe the recorded path, excluding diagnostic coarse-frame shortcuts.
+Passing cubic determinant certificates report conservative lower bounds; failed
+certificates are labeled as uncertified diagnostics. A segment
+on the actual path that CCD cannot certify is reported as a validation failure, separately from a
+detected intersection. `scripts/render_cuda_validation.py`, run with a Python
+environment containing Blender's `bpy`, renders the saved OBJ frames and configured
+obstacles to MP4; its overlays state simulation time and playback speed.
+For a partial diagnostic, use the checker's `--first-frame` and `--last-frame`
+options. These retain the original prescribed-motion timing; editing
+`num-timestep` to inspect a prefix can change that timing.
+
 ## IPC friction
 
 IPC supports regularized Coulomb friction for self-contact and kinematic

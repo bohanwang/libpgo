@@ -24,7 +24,7 @@
 #include <cstdlib>
 #include <filesystem>
 #ifndef _WIN32
-#include <sys/wait.h>
+#  include <sys/wait.h>
 #endif
 #include <fstream>
 #include <iomanip>
@@ -495,6 +495,36 @@ TEST(RunIPCSimCliGTest, LogFlagWritesCliOutputIntoOutputDirectory)
   EXPECT_EQ(contents.find("finalAlpha"), std::string::npos);
   EXPECT_EQ(contents.find("lastMaterialAlpha"), std::string::npos);
   EXPECT_EQ(contents.find("lastContactAlpha"), std::string::npos);
+}
+
+TEST(RunIPCSimCliGTest, BoundedInvocationOptionsAreValidatedAndCLIStopsCleanly)
+{
+  initializeRunIPCSimTestEnvironment();
+  ScopedTempDir tempDir;
+  const fs::path configPath = tempDir.path() / "bounded.json";
+  auto config = nlohmann::json::parse(makeShellIPCConfig(tempDir.path(), 3));
+  config["g"] = { 0, 0, 0 };
+  config["linear-solver"] = "eigen";
+  writeTextFile(configPath, config.dump(2));
+  pgo::SimulationRunner::IPCSimulationRunOptions options;
+  for (int limit : { -2, 0 }) {
+    options.maxFrames = limit;
+    EXPECT_NE(pgo::SimulationRunner::runIPCSimulationFromConfig(configPath, false, options), 0);
+  }
+  const fs::path timing = tempDir.path() / "timing.csv";
+  const std::string command = shellExecutable(runIPCSimBinaryPath()) + " " + quotePath(configPath) +
+    " --max-frames 1 --timing-csv " + quotePath(timing) + " > " + quotePath(tempDir.path() / "bounded.log") + " 2>&1";
+  ASSERT_EQ(exitCodeOf(runCommand(command)), 0);
+  EXPECT_TRUE(fs::exists(tempDir.path() / "shell-output/deform0000.u"));
+  EXPECT_FALSE(fs::exists(tempDir.path() / "shell-output/deform0001.u"));
+  std::ifstream stream(timing);
+  std::string header, row, extra;
+  ASSERT_TRUE(std::getline(stream, header));
+  ASSERT_TRUE(std::getline(stream, row));
+  EXPECT_NE(header.find("terminal_status,all_solver_status_converged"), std::string::npos);
+  EXPECT_EQ(row.substr(0, 2), "0,");
+  EXPECT_FALSE(std::getline(stream, extra));
+  EXPECT_EQ(nlohmann::json::parse(readTextFile(configPath)).at("num-timestep"), 3);
 }
 
 TEST(RunIPCSimCliGTest, DefaultRunPreservesUnrelatedOutputAndOverwritesFrames)
@@ -1584,7 +1614,7 @@ TEST(RunIPCSimSetupGTest, ShellPoissonRatioIsConfigurableAndValidated)
   };
 
   // default: 0.4 for both membrane and bending
-  EXPECT_NE(elementParams().find(", 0.4, ") , std::string::npos);
+  EXPECT_NE(elementParams().find(", 0.4, "), std::string::npos);
   config.handle()["shell-poisson-ratio"] = 0.3;
   std::string params = elementParams();
   EXPECT_NE(params.find(", 0.3, "), std::string::npos) << params;
@@ -2026,8 +2056,7 @@ TEST(RunIPCSimCliGTest, EarlyConfigErrorsExitCleanly)
   EXPECT_EQ(exitCodeOf(runCommand(shellExecutable(binary) + " " + quotePath(missingConfig))), 1);
 
   const fs::path badSimType = tempDir.path() / "bad-sim-type.json";
-  writeTextFile(badSimType, replaceTextOnce(makeShellIPCConfig(tempDir.path(), 1),
-    "\"sim-type\": \"dynamic\"", "\"sim-type\": \"bogus\""));
+  writeTextFile(badSimType, replaceTextOnce(makeShellIPCConfig(tempDir.path(), 1), "\"sim-type\": \"dynamic\"", "\"sim-type\": \"bogus\""));
   EXPECT_EQ(exitCodeOf(runCommand(shellExecutable(binary) + " " + quotePath(badSimType))), 1);
 
   const fs::path missingGravity = tempDir.path() / "missing-g.json";

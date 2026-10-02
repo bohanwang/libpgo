@@ -13,7 +13,10 @@ copyright to Bohan Wang
 #include <tbb/parallel_reduce.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cmath>
 #include <functional>
+#include <limits>
 #include <vector>
 
 namespace pgo
@@ -31,6 +34,10 @@ double SurfaceIPCMaxStep::compute(
   double dhat,
   double slackness) const
 {
+  if (x.size() != topology.numSurfaceDOFs() || dx.size() != x.size() ||
+    !x.allFinite() || !dx.allFinite() || !(x + dx).allFinite() ||
+    !std::isfinite(dhat) || dhat <= 0 || !std::isfinite(slackness) || slackness <= 0 || slackness > 1)
+    return 0.0;
   const VXd pos = VXd(x);
 
   auto getV = [&](int i) -> V3d {
@@ -47,6 +54,7 @@ double SurfaceIPCMaxStep::compute(
   std::vector<SpatialHashGrid::AABB> triBox(nTri);
   std::vector<SpatialHashGrid::AABB> edgeBox(nEdge);
   double cellSize = 0.0;
+  std::atomic<bool> invalidBounds{ false };
 
   {
     // Build swept-volume AABBs (parallel)
@@ -56,33 +64,42 @@ double SurfaceIPCMaxStep::compute(
           V3d p0 = getV(vi), p1 = p0 + getdV(vi);
           vertBox[vi].init(p0, 0.0);
           vertBox[vi].expand(p1);
+          // Enclose the exact represented-input trajectory, including endpoint
+          // addition rounding. A narrow-phase certificate is useless if an
+          // inward-rounded swept box discarded the colliding primitive pair.
+          for (int axis = 0; axis < 3; ++axis) {
+            const long double radius = 4 * std::numeric_limits<double>::epsilon() *
+              (std::abs(static_cast<long double>(p0[axis])) + std::abs(static_cast<long double>(getdV(vi)[axis])));
+            vertBox[vi].lo[axis] = std::nextafter(static_cast<double>(static_cast<long double>(vertBox[vi].lo[axis]) - radius),
+              -std::numeric_limits<double>::infinity());
+            vertBox[vi].hi[axis] = std::nextafter(static_cast<double>(static_cast<long double>(vertBox[vi].hi[axis]) + radius),
+              std::numeric_limits<double>::infinity());
+          }
+          if (!vertBox[vi].lo.allFinite() || !vertBox[vi].hi.allFinite())
+            invalidBounds.store(true, std::memory_order_relaxed);
         }
       });
+    if (invalidBounds.load(std::memory_order_relaxed))
+      return 0.0;
 
     tbb::parallel_for(tbb::blocked_range<int>(0, nTri),
       [&](const tbb::blocked_range<int> &r) {
         for (int fi = r.begin(); fi < r.end(); ++fi) {
           auto &tri = topology.triangles[fi];
-          V3d v0 = getV(tri[0]), v1 = getV(tri[1]), v2 = getV(tri[2]);
-          V3d d0 = getdV(tri[0]), d1 = getdV(tri[1]), d2 = getdV(tri[2]);
-          triBox[fi].init(v0, 0.0);
-          triBox[fi].expand(v1);
-          triBox[fi].expand(v2);
-          triBox[fi].expand(v0 + d0);
-          triBox[fi].expand(v1 + d1);
-          triBox[fi].expand(v2 + d2);
+          triBox[fi] = vertBox[tri[0]];
+          for (int k = 1; k < 3; ++k) {
+            triBox[fi].expand(vertBox[tri[k]].lo);
+            triBox[fi].expand(vertBox[tri[k]].hi);
+          }
         }
       });
 
     tbb::parallel_for(tbb::blocked_range<int>(0, nEdge),
       [&](const tbb::blocked_range<int> &r) {
         for (int ei = r.begin(); ei < r.end(); ++ei) {
-          V3d a0 = getV(topology.edges[ei][0]), a1 = getV(topology.edges[ei][1]);
-          V3d da0 = getdV(topology.edges[ei][0]), da1 = getdV(topology.edges[ei][1]);
-          edgeBox[ei].init(a0, 0.0);
-          edgeBox[ei].expand(a1);
-          edgeBox[ei].expand(a0 + da0);
-          edgeBox[ei].expand(a1 + da1);
+          edgeBox[ei] = vertBox[topology.edges[ei][0]];
+          edgeBox[ei].expand(vertBox[topology.edges[ei][1]].lo);
+          edgeBox[ei].expand(vertBox[topology.edges[ei][1]].hi);
         }
       });
 
@@ -97,6 +114,8 @@ double SurfaceIPCMaxStep::compute(
       std::plus<double>());
     cellSize = nTri > 0 ? std::max(avgBoxDiag / nTri, 1e-6) : std::max(1e-6, dhat);
   }
+  if (!std::isfinite(cellSize))
+    return 0.0;
 
   double alpha = 1.0;
 
@@ -217,7 +236,9 @@ double SurfaceIPCMaxStep::compute(
             double toi = ccd::pointTriangleCCD(p, t0, t1, t2,
               dp, dt0, dt1, dt2,
               0.0, localAlpha);
-            if (toi < localAlpha)
+            if (!std::isfinite(toi) || toi < 0)
+              localAlpha = 0.0;
+            else if (toi < localAlpha)
               localAlpha = toi * slackness;
           }
         }
@@ -268,7 +289,9 @@ double SurfaceIPCMaxStep::compute(
             double toi = ccd::edgeEdgeCCD(va0, va1, vb0, vb1,
               da0, da1, db0, db1,
               0.0, localAlpha);
-            if (toi < localAlpha)
+            if (!std::isfinite(toi) || toi < 0)
+              localAlpha = 0.0;
+            else if (toi < localAlpha)
               localAlpha = toi * slackness;
           }
         }

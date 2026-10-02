@@ -7,6 +7,27 @@ target_compile_definitions(cubicMesher_gtest PRIVATE
 set_property(TARGET cubicMesher_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(cubicMesher_gtest)
 
+add_executable(hexJacobianValidation_gtest hexJacobianValidation_gtest.cpp)
+target_link_libraries(hexJacobianValidation_gtest PRIVATE GTest::gtest_main)
+target_include_directories(hexJacobianValidation_gtest PRIVATE ${CMAKE_SOURCE_DIR}/src/tools/runSim)
+set_property(TARGET hexJacobianValidation_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(hexJacobianValidation_gtest)
+
+add_executable(triangleAreaValidation_gtest triangleAreaValidation_gtest.cpp)
+target_link_libraries(triangleAreaValidation_gtest PRIVATE GTest::gtest_main)
+target_include_directories(triangleAreaValidation_gtest PRIVATE ${CMAKE_SOURCE_DIR}/src/tools/runSim)
+set_property(TARGET triangleAreaValidation_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(triangleAreaValidation_gtest)
+
+add_executable(validateIPCTrajectory_gtest validateIPCTrajectory_gtest.cpp)
+target_link_libraries(validateIPCTrajectory_gtest PRIVATE GTest::gtest_main simulationRunner)
+add_dependencies(validateIPCTrajectory_gtest validateIPCTrajectory)
+target_compile_definitions(validateIPCTrajectory_gtest PRIVATE
+  PGO_TEST_VALIDATE_IPC_TRAJECTORY_BIN="$<TARGET_FILE:validateIPCTrajectory>"
+  PGO_TEST_VALIDATOR_BOX_DIR="${CMAKE_SOURCE_DIR}/examples/assets/volume/box")
+set_property(TARGET validateIPCTrajectory_gtest PROPERTY FOLDER "tests/gtest")
+gtest_discover_tests(validateIPCTrajectory_gtest)
+
 if(TARGET convertAnimation)
   add_executable(convertAnimation_gtest convertAnimation_gtest.cpp)
   target_link_libraries(convertAnimation_gtest PRIVATE GTest::gtest_main)
@@ -72,3 +93,21 @@ target_compile_definitions(runIPCSim_gtest PRIVATE
 add_dependencies(runIPCSim_gtest runIPCSim libpgo_test_cubic_assets)
 set_property(TARGET runIPCSim_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(runIPCSim_gtest)
+
+if(PGO_ENABLE_CUDA)
+  add_executable(cudaElasticEquivalence cudaElasticEquivalence.cpp)
+  target_link_libraries(cudaElasticEquivalence PRIVATE simulationRunner cudaSolidDeformationModel cudaKoiterDeformationModel CUDA::cudart)
+  target_include_directories(cudaElasticEquivalence PRIVATE ${CMAKE_SOURCE_DIR}/tests/src/core/solidDeformationModel)
+  set_property(TARGET cudaElasticEquivalence PROPERTY FOLDER "tests/measurements")
+
+  add_executable(cudaIPCSim_gtest cudaIPCSim_gtest.cpp)
+  target_link_libraries(cudaIPCSim_gtest PRIVATE GTest::gtest_main simulationRunner CUDA::cudart)
+  add_dependencies(cudaIPCSim_gtest validateIPCTrajectory libpgo_test_cubic_assets)
+  target_compile_definitions(cudaIPCSim_gtest PRIVATE
+    PGO_TEST_VALIDATE_IPC_TRAJECTORY_BIN="$<TARGET_FILE:validateIPCTrajectory>"
+    PGO_CUDA_TEST_BOX_DIR="${CMAKE_SOURCE_DIR}/examples/assets/volume/box"
+    PGO_CUDA_TEST_CUBIC_BOX_VEG="${LIBPGO_TEST_CUBIC_BOX_VEG}"
+    PGO_CUDA_TEST_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/tests/assets/cudaIPC")
+  set_property(TARGET cudaIPCSim_gtest PROPERTY FOLDER "tests/gtest")
+  gtest_discover_tests(cudaIPCSim_gtest PROPERTIES LABELS "cuda")
+endif()

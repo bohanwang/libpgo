@@ -14,6 +14,10 @@
 #include "potentialEnergies.h"
 #include "runIPCSimSetup.h"
 #include "runSimCliLogging.h"
+#include "runSimTiming.h"
+#ifdef PGO_HAS_CUDA_IPC
+#  include "cudaIpcSimulationRunner.h"
+#endif
 #include <fmt/format.h>
 
 #include <algorithm>
@@ -49,6 +53,13 @@ void saveSurface(const pgo::RunIPCSim::IpcSimulationContext &context,
 int pgo::SimulationRunner::runIPCSimulationFromConfig(
   const std::filesystem::path &configFilename, bool enableCliLog)
 {
+  return runIPCSimulationFromConfig(configFilename, enableCliLog, IPCSimulationRunOptions{});
+}
+
+int pgo::SimulationRunner::runIPCSimulationFromConfig(
+  const std::filesystem::path &configFilename, bool enableCliLog,
+  const IPCSimulationRunOptions &options)
+{
   using namespace pgo;
   namespace ES = EigenSupport;
 
@@ -59,6 +70,18 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
     ConfigFileJSON jconfig;
     if (jconfig.open(configFilename.string().c_str()) != true)
       return 1;
+
+    const std::string backend = jconfig.exist("simulation-backend") ? jconfig.getString("simulation-backend") : "cpu";
+    if (backend == "cuda") {
+#ifdef PGO_HAS_CUDA_IPC
+      return runCudaIPCSimulation(jconfig, enableCliLog, options);
+#else
+      throw std::invalid_argument("CUDA IPC is unavailable in this build; configure with PGO_ENABLE_CUDA=ON.");
+#endif
+    }
+    if (backend != "cpu")
+      throw std::invalid_argument("`simulation-backend` must be `cpu` or `cuda`.");
+    RunSim::IPCSimulationTiming timing(options);
 
     const ES::V3d extAcc = ES::Mp<ES::V3d>(jconfig.getValue<std::array<double, 3>>("g", 1).data());
     const double scale = jconfig.getDouble("scale", 1);
@@ -122,6 +145,7 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
     ES::mv(context.M, g, fext);
 
     if (simType == "static") {
+      RunSim::IPCSimulationFrameTimer frameTiming(timing, 0);
       ES::VXd u = context.initialDisplacement;
       const std::filesystem::path statePath = outputFolder / "deform0000.u";
       context.collisionHandler->validateCollisionFreeState(u);
@@ -155,18 +179,23 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
         NonlinearOptimization::NewtonSolver::SolverParam solverParam;
         NonlinearOptimization::NewtonSolver solver(
           u.data(), solverParam, energyAll, std::vector<int>(), nullptr);
-        if (RunSim::newtonStatusIsFatal(solver.solve(u.data(), solverMaxIter, solverEps, 2),
+        const int status = solver.solve(u.data(), solverMaxIter, solverEps, 2);
+        frameTiming.recordSolve(status);
+        if (RunSim::newtonStatusIsFatal(status,
               fmt::format("Static IPC solve, friction iteration {}", iteration)))
           return 1;
       }
       if (!u.allFinite())
         throw std::runtime_error("Static IPC solve produced non-finite displacement.");
 
-      ES::MXd state = ES::MXd::Zero(n3, 3);
-      state.col(0) = u;
-      if (ES::writeMatrix(statePath.string().c_str(), state) != 0)
-        throw std::runtime_error("Failed to save static IPC state: " + statePath.string());
-      saveSurface(context, u, scale, outputFolder / "ret0000.obj");
+      frameTiming.output([&]() {
+        ES::MXd state = ES::MXd::Zero(n3, 3);
+        state.col(0) = u;
+        if (ES::writeMatrix(statePath.string().c_str(), state) != 0)
+          throw std::runtime_error("Failed to save static IPC state: " + statePath.string());
+        saveSurface(context, u, scale, outputFolder / "ret0000.obj");
+      });
+      frameTiming.finish(true, frameTiming.allSolvesConverged());
       return 0;
     }
 
@@ -230,13 +259,23 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
     const bool anyKinematicObjectMoves = std::any_of(
       context.kinematicExternalObjects.begin(), context.kinematicExternalObjects.end(),
       [](const RunIPCSim::IPCKinematicExternalObject &object) { return object.moves(); });
+    // The first placement precedes the loop in the CPU route. Attribute its
+    // cost to that first frame, matching subsequent frames and the CUDA route,
+    // without changing the original placement/validation ordering.
+    using TimingClock = RunSim::IPCSimulationFrameTimer::Clock;
+    const auto initialPlacementBegin = timing.enabled() ? TimingClock::now() : TimingClock::time_point{};
     RunIPCSim::placeIPCKinematicObjects(*context.collisionHandler, context.kinematicExternalObjects,
       frameStart + 1, numSimSteps);
     context.collisionHandler->validateCollisionFreeState(u);
+    const double initialPlacementSeconds = timing.enabled() ? std::chrono::duration<double>(TimingClock::now() - initialPlacementBegin).count() : 0.0;
 
     const double ratioDenom = numSimSteps > 1 ? static_cast<double>(numSimSteps - 1) : 1.0;
 
-    for (int framei = frameStart + 1; framei < numSimSteps; ++framei) {
+    int executedFrames = 0;
+    for (int framei = frameStart + 1; framei < numSimSteps &&
+         (options.maxFrames < 0 || executedFrames < options.maxFrames);
+         ++framei) {
+      RunSim::IPCSimulationFrameTimer frameTiming(timing, framei, framei == frameStart + 1 ? initialPlacementSeconds : 0.0);
       intg->clearGeneralImplicitForceModel();
 
       if (framei > frameStart + 1 && anyKinematicObjectMoves) {
@@ -280,6 +319,7 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
         std::cout << "IPC friction frame " << framei << ", iteration 0: contacts="
                   << context.collisionHandler->getNumFrictionPairs() << std::endl;
         intg->doTimestep(0, 3, 1);
+        frameTiming.recordSolve(intg->getSolverReturn());
         if (RunSim::newtonStatusIsFatal(intg->getSolverReturn(), fmt::format("Frame {}, friction iteration 0", framei)))
           return 1;
         ES::VXd lagged = intg->getLastSolution();
@@ -290,7 +330,9 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
           NonlinearOptimization::NewtonSolver::SolverParam solverParam;
           NonlinearOptimization::NewtonSolver solver(
             lagged.data(), solverParam, intg->getInternalEnergy(), std::vector<int>(), nullptr);
-          if (RunSim::newtonStatusIsFatal(solver.solve(lagged.data(), solverMaxIter, solverEps, 2),
+          const int status = solver.solve(lagged.data(), solverMaxIter, solverEps, 2);
+          frameTiming.recordSolve(status);
+          if (RunSim::newtonStatusIsFatal(status,
                 fmt::format("Frame {}, friction iteration {}", framei, iteration)))
             return 1;
         }
@@ -301,6 +343,7 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
       }
       else {
         intg->doTimestep(1, 3, 1);
+        frameTiming.recordSolve(intg->getSolverReturn());
         if (RunSim::newtonStatusIsFatal(intg->getSolverReturn(), fmt::format("Frame {}", framei)))
           return 1;
       }
@@ -310,16 +353,20 @@ int pgo::SimulationRunner::runIPCSimulationFromConfig(
       if (!u.allFinite() || !uvel.allFinite() || !uacc.allFinite())
         throw std::runtime_error("Dynamic IPC solve produced a non-finite state.");
 
-      ES::MXd uMat(n3, 3);
-      uMat.col(0) = u;
-      uMat.col(1) = uvel;
-      uMat.col(2) = uacc;
-      const std::filesystem::path statePath = outputFolder / fmt::format("deform{:04d}.u", framei);
-      if (ES::writeMatrix(statePath.string().c_str(), uMat) != 0)
-        throw std::runtime_error("Failed to save dynamic IPC state: " + statePath.string());
-      if (framei % frameGap == 0)
-        saveSurface(context, u, scale,
-          outputFolder / fmt::format("ret{:04d}.obj", framei / frameGap));
+      frameTiming.output([&]() {
+        ES::MXd uMat(n3, 3);
+        uMat.col(0) = u;
+        uMat.col(1) = uvel;
+        uMat.col(2) = uacc;
+        const std::filesystem::path statePath = outputFolder / fmt::format("deform{:04d}.u", framei);
+        if (ES::writeMatrix(statePath.string().c_str(), uMat) != 0)
+          throw std::runtime_error("Failed to save dynamic IPC state: " + statePath.string());
+        if (framei % frameGap == 0)
+          saveSurface(context, u, scale,
+            outputFolder / fmt::format("ret{:04d}.obj", framei / frameGap));
+      });
+      frameTiming.finish(true, frameTiming.allSolvesConverged());
+      ++executedFrames;
     }
   }
   catch (const std::exception &err) {

@@ -1,0 +1,17 @@
+Source: https://github.com/spiriMirror/libuipc
+Pinned revision: 9c748a759bb9952a7aeedd59076a70591dc61d6c
+License: Apache-2.0; retain import-root LICENSE and NOTICE.
+
+pcg_kernels.cuh adapts update_xr_kernel and update_p_kernel from
+src/backends/cuda/linear_system/linear_pcg.cu at the pinned revision.
+Changes: raw device pointers replace cuda_tool vector views; Float becomes
+double; names and namespace match PGO; surrounding engine registration,
+configuration, logging and debug export dependencies are omitted.
+
+PGO's cudaNewtonSolver.cu follows the zero-initial-guess Jacobi-PCG recurrence
+from LinearPCG::pcg in that source: r=b, z=P*r, p=z, alpha=(r*z)/(p*A*p),
+fused x/r updates, z=P*r, beta=(r_new*z_new)/(r*z), p=z+beta*p.
+Local additions: explicit nonpositive-curvature/nonfinite detection,
+regularization retries, Euclidean relative/absolute residual tolerance and
+true-residual verification. cuBLAS supplies device dot/norm reductions.
+No SimSystem, upstream World/Scene API or whole backend is linked.

@@ -16,6 +16,12 @@ namespace CIPC
 namespace ccd
 {
 
+// Certify the linear world-space trajectories defined by the represented
+// positions and displacements. A zero/partial bound also represents numerical
+// uncertainty; it must never be rounded upward into a certified full step.
+// The primitive API does not infer errors from an upstream embedding map.
+// When the complete chord cannot be certified, its returned prefix retains
+// a fraction of the initial certified clear gap at the prefix endpoint.
 double pointTriangleCCD(const EigenSupport::V3d &p, const EigenSupport::V3d &t0,
   const EigenSupport::V3d &t1, const EigenSupport::V3d &t2,
   const EigenSupport::V3d &dp, const EigenSupport::V3d &dt0,

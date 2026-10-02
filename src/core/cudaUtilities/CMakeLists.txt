@@ -6,6 +6,7 @@ set(CUDA_UTILITIES_HEADERS
   cudaVec.h
   cudaInit.h
   cudaLinearMappedMemory.h
+  cudaDeviceBuffer.h
 )
 
 set(CUDA_UTILITIES_SOURCES

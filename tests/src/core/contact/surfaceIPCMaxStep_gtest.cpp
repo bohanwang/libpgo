@@ -130,3 +130,35 @@ TEST(SurfaceIPCMaxStepGTest, FullyExternalGeometryDoesNotLimitStep)
   topology.setMesh(V, F, std::vector<uint8_t>(6, 0));
   EXPECT_DOUBLE_EQ(SurfaceIPCMaxStep().compute(topology, x, dx, 0.1, 0.9), 1.0);
 }
+
+TEST(SurfaceIPCMaxStepGTest, InvalidSweptGeometryCannotReturnAnUnrestrictedStep)
+{
+  const auto [vertices, triangles] = makeTwoTriangleMesh();
+  SurfaceIPCTopology topology;
+  topology.setMesh(vertices, triangles);
+  const ES::VXd x = flattenPositions(vertices);
+  const ES::VXd zero = ES::VXd::Zero(x.size());
+  ES::VXd invalid = x;
+  invalid[0] = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_DOUBLE_EQ(SurfaceIPCMaxStep().compute(topology, invalid, zero, 0.1, 0.9), 0.0);
+  invalid = zero;
+  invalid[0] = std::numeric_limits<double>::infinity();
+  EXPECT_DOUBLE_EQ(SurfaceIPCMaxStep().compute(topology, x, invalid, 0.1, 0.9), 0.0);
+  const ES::VXd huge = ES::VXd::Constant(x.size(), 1e308);
+  EXPECT_DOUBLE_EQ(SurfaceIPCMaxStep().compute(topology, huge, huge, 0.1, 0.9), 0.0);
+}
+
+TEST(SurfaceIPCMaxStepGTest, SurfaceCorePreservesAZeroCCDBound)
+{
+  const auto [vertices, triangles] = makeTwoTriangleMesh();
+  SurfaceIPCCore core;
+  SurfaceIPCCore::Parameters parameters;
+  parameters.dhat = 0.1;
+  core.setParameters(parameters);
+  core.setMesh(vertices, triangles);
+  ES::VXd x = flattenPositions(vertices);
+  // Superpose the second triangle on the first. Topologically disjoint
+  // coincident primitives require an exact zero bound, including zero motion.
+  x.tail<9>() = x.head<9>();
+  EXPECT_DOUBLE_EQ(core.computeMaxStepSize(x, ES::VXd::Zero(x.size())), 0.0);
+}

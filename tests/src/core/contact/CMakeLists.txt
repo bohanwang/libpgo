@@ -52,3 +52,17 @@ add_executable(surfaceIPCFriction_gtest surfaceIPCFriction_gtest.cpp)
 target_link_libraries(surfaceIPCFriction_gtest PRIVATE GTest::gtest_main contact)
 set_property(TARGET surfaceIPCFriction_gtest PROPERTY FOLDER "tests/gtest")
 gtest_discover_tests(surfaceIPCFriction_gtest)
+if(PGO_ENABLE_CUDA)
+  add_executable(cudaEmbeddedSurfaceIPCPotentialEnergy_gtest
+    cudaEmbeddedSurfaceIPCPotentialEnergy_gtest.cpp cudaIPCContinuousCollision_test.cu)
+  target_link_libraries(cudaEmbeddedSurfaceIPCPotentialEnergy_gtest PRIVATE GTest::gtest_main cudaContact)
+  target_compile_options(cudaEmbeddedSurfaceIPCPotentialEnergy_gtest PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:-UEIGEN_USE_MKL_ALL;-UEIGEN_USE_BLAS;-UEIGEN_USE_LAPACKE>)
+  set_property(TARGET cudaEmbeddedSurfaceIPCPotentialEnergy_gtest PROPERTY FOLDER "tests/gtest")
+  gtest_discover_tests(cudaEmbeddedSurfaceIPCPotentialEnergy_gtest PROPERTIES LABELS "cuda")
+
+  add_executable(cudaSurfaceIPCFrictionPotentialEnergy_gtest cudaSurfaceIPCFrictionPotentialEnergy_gtest.cpp)
+  target_link_libraries(cudaSurfaceIPCFrictionPotentialEnergy_gtest PRIVATE GTest::gtest_main cudaContact)
+  set_property(TARGET cudaSurfaceIPCFrictionPotentialEnergy_gtest PROPERTY FOLDER "tests/gtest")
+  gtest_discover_tests(cudaSurfaceIPCFrictionPotentialEnergy_gtest PROPERTIES LABELS "cuda")
+endif()

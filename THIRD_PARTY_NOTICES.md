@@ -27,6 +27,7 @@ and wheel audits can reproduce the same license set.
 | GoogleTest | 1.15.2, SHA-256 `f179ec217f9b3b3f3c6e8b02d3e7eda997b49e4ce26d6b235c9053bec9c0bf9f` | BSD-3-Clause | Tests only |
 | Imath | 3.2.2, SHA-256 `b4275d83fb95521510e389b8d13af10298ed5bed1c8e13efd961d91b1105e462` | BSD-3-Clause | Statically linked into Alembic-enabled builds |
 | libigl | commit `477e15a3d566a21f415aa5ee62992b12a836b01b` | MPL-2.0 | Python/full; copyleft modules are not enabled |
+| libuipc (selected CUDA sources) | commit `9c748a759bb9952a7aeedd59076a70591dc61d6c` | Apache-2.0; retained upstream and derived-source notices | CUDA IPC only; see `third-party/libuipc/IMPORTS.md`, `LICENSE`, and `NOTICE` |
 | libcmaes | commit `4598001f8174a0f2b90fc8983f819c8d047af26f` | Apache-2.0 or LGPL-3.0-or-later | Optional utility; not in default wheels |
 | nlohmann/json | 3.11.3, SHA-256 `0d8ef5af7f9794e3263480193c491549b2ba6cc74bb018906202ada498a79406` | MIT | Core |
 | NLopt | 2.10.0, SHA-256 `7bae1edca94c104a72b8d1126770c95963cfaf4530ad880295aae2ecdaa928e1` | LGPL-2.1-or-later | Optional utility; not in default wheels |

@@ -64,6 +64,9 @@ struct IpcSimulationContext
   std::shared_ptr<SolidDeformationModel::DeformationModelManager> deformationModelManagerOwner;
   std::shared_ptr<SolidDeformationModel::DeformationModelAssembler> deformationModelAssemblerOwner;
   std::shared_ptr<SolidDeformationModel::DeformationModelEnergy> elasticEnergy;
+  // Per-element shell parameters shared by CPU and device execution models.
+  EigenSupport::VXd elasticParameters;
+  bool zeroShellRestCurvature = false;
   std::shared_ptr<EigenSupport::SpMatD> pullingHessianBaseOwner;
   std::vector<std::shared_ptr<ConstraintPotentialEnergies::MultipleVertexPulling>> pullingEnergies;
   std::vector<EigenSupport::VXd> pullingTargets;
@@ -71,6 +74,8 @@ struct IpcSimulationContext
   std::vector<TrajectoryPulling> trajectoryPullings;
   pgo::Mesh::TriMeshGeo surfaceMesh;
   std::shared_ptr<Contact::CIPC::EmbeddedSurfaceIPCPotentialEnergy> collisionHandler;
+  // Shared collision geometry, embedding and ownership for execution backends.
+  Contact::CIPC::IPCCollisionSurfaceData collisionSurface;
   // Kinematic `ipc-external-objects`, placed per frame by the runner.
   std::vector<IPCKinematicExternalObject> kinematicExternalObjects;
 };
